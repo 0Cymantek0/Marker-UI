@@ -66,8 +66,8 @@ backend/alembic/versions/__pycache__/
 htmlcov/
 .pytest_cache/
 
-# Model cache (large files)
-models/
+# Model cache (large files, repo-root only)
+/models/
 *.pt
 *.bin
 *.onnx
@@ -75,3 +75,9 @@ models/
 AGENTS.md
 dummy.pdf
 .playwright-mcp/
+
+# Planning docs (work-in-progress, not for commit)
+planning/
+
+# Reference clones (read-only, developer use only)
+references/markitdown/
