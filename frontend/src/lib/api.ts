@@ -81,6 +81,7 @@ export interface ModelConfig {
   max_retries?: number
   max_output_tokens?: number
   timeout?: number
+  vision_capable?: boolean
 }
 
 export interface LLMProvider {
@@ -116,6 +117,7 @@ export interface BackendLLMConfig {
   azure_deployment_name?: string | null
   ollama_base_url?: string | null
   ollama_model?: string | null
+  vlm_model?: string | null
 }
 
 export interface BackendJobStatus {

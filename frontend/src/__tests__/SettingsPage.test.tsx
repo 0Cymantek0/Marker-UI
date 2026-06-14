@@ -190,4 +190,54 @@ describe('SettingsPage component', () => {
 
     expect(api.resetModels).not.toHaveBeenCalled()
   })
+
+  it('renders a vision toggle per model in the models drawer', async () => {
+    render(<SettingsPage />)
+    await screen.findByText('Configured Service Providers')
+
+    const modelsButtons = screen.getAllByRole('button', { name: /Models \(\d+\)/ })
+    await act(async () => {
+      fireEvent.click(modelsButtons[0]!)
+    })
+
+    expect(await screen.findByText('Gemini Models')).toBeInTheDocument()
+
+    const visionToggles = screen.getAllByRole('switch', { name: /vision capability/i })
+    expect(visionToggles.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('toggling vision flag updates model and persists on save', async () => {
+    vi.mocked(api.saveLLMProviders).mockClear()
+    vi.mocked(api.saveLLMProviders).mockResolvedValue(mockProviders)
+
+    render(<SettingsPage />)
+    await screen.findByText('Configured Service Providers')
+
+    const modelsButtons = screen.getAllByRole('button', { name: /Models \(\d+\)/ })
+    await act(async () => {
+      fireEvent.click(modelsButtons[0]!)
+    })
+
+    expect(await screen.findByText('Gemini Models')).toBeInTheDocument()
+
+    const visionToggle = screen.getByRole('switch', { name: /vision capability for gemini-2\.0-flash/i })
+    expect(visionToggle).toHaveAttribute('aria-checked', 'false')
+
+    await act(async () => {
+      fireEvent.click(visionToggle)
+    })
+
+    expect(visionToggle).toHaveAttribute('aria-checked', 'true')
+
+    const saveBtn = screen.getByRole('button', { name: 'Save Models' })
+    await act(async () => {
+      fireEvent.click(saveBtn)
+    })
+
+    expect(api.saveLLMProviders).toHaveBeenCalledTimes(1)
+    const savedArg = vi.mocked(api.saveLLMProviders).mock.calls[0]![0]
+    const geminiSaved = savedArg.find((p) => p.id === 'gemini')
+    const target = geminiSaved?.models.find((m) => m.model_id === 'gemini-2.0-flash')
+    expect(target?.vision_capable).toBe(true)
+  })
 })

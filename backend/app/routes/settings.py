@@ -627,8 +627,8 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "api_key": encrypt_value(get_old("gemini_api_key")) if get_old("gemini_api_key") else None,
             "fallback_api_keys": [],
             "models": [
-                {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output},
-                {"model_id": "gemini-2.0-pro-exp-02-05", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output}
+                {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
+                {"model_id": "gemini-2.0-pro-exp-02-05", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
         },
         {
@@ -638,8 +638,8 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "api_key": encrypt_value(get_old("claude_api_key")) if get_old("claude_api_key") else None,
             "fallback_api_keys": [],
             "models": [
-                {"model_id": get_old("claude_model_name") or "claude-3-7-sonnet-20250219", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output},
-                {"model_id": "claude-3-5-sonnet-20241022", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output}
+                {"model_id": get_old("claude_model_name") or "claude-3-7-sonnet-20250219", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
+                {"model_id": "claude-3-5-sonnet-20241022", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
         },
         {
@@ -650,8 +650,8 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("openai_base_url") or "https://api.openai.com/v1",
             "fallback_api_keys": [],
             "models": [
-                {"model_id": get_old("openai_model") or "gpt-4o-mini", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output},
-                {"model_id": "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output}
+                {"model_id": get_old("openai_model") or "gpt-4o-mini", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
+                {"model_id": "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
         },
         {
@@ -661,7 +661,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("ollama_base_url") or "http://localhost:11434",
             "fallback_api_keys": [],
             "models": [
-                {"model_id": get_old("ollama_model") or "llama3.2-vision", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output}
+                {"model_id": get_old("ollama_model") or "llama3.2-vision", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
         },
         {
@@ -672,7 +672,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("azure_endpoint") or "",
             "fallback_api_keys": [],
             "models": [
-                {"model_id": get_old("azure_deployment_name") or "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output}
+                {"model_id": get_old("azure_deployment_name") or "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
         },
         {
@@ -683,7 +683,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("vertex_location") or "us-central1",
             "fallback_api_keys": [],
             "models": [
-                {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output}
+                {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
         }
     ]

@@ -209,6 +209,7 @@ class ModelConfig(BaseModel):
     max_retries: Optional[int] = None
     max_output_tokens: Optional[int] = None
     timeout: Optional[int] = None
+    vision_capable: bool = False
 
 
 class LLMProvider(BaseModel):

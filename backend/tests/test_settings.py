@@ -422,3 +422,122 @@ class TestLLMConnectionEndpoint:
             from app.core.api_manager import get_secret
             assert get_secret("gemini_api_key") == "new-gemini-plaintext-key"
 
+
+# ===========================================================================
+# Vision-capable models & vlm_model setting
+# ===========================================================================
+
+
+class TestModelConfigVisionCapable:
+    def test_model_config_has_vision_capable_field_default_false(self):
+        from app.models.schemas import ModelConfig
+
+        m = ModelConfig(model_id="gpt-5.5")
+        assert m.vision_capable is False
+
+    def test_model_config_vision_capable_can_be_set_true(self):
+        from app.models.schemas import ModelConfig
+
+        m = ModelConfig(model_id="gpt-5.5", vision_capable=True)
+        assert m.vision_capable is True
+
+    @pytest.mark.asyncio
+    async def test_get_providers_returns_vision_capable_per_model(
+        self, settings_client: AsyncClient
+    ):
+        resp = await settings_client.get("/api/settings/llm/providers")
+        assert resp.status_code == 200
+        providers = resp.json()
+        assert len(providers) > 0
+        for p in providers:
+            assert p.get("models"), f"provider {p.get('id')} should seed with models"
+            for m in p["models"]:
+                assert "vision_capable" in m, (
+                    f"model {m.get('model_id')} missing vision_capable key"
+                )
+                assert m["vision_capable"] is False
+
+    @pytest.mark.asyncio
+    async def test_model_config_vision_capable_persists_through_round_trip(
+        self, settings_client: AsyncClient
+    ):
+        # Get initial providers (triggers init on first call)
+        resp = await settings_client.get("/api/settings/llm/providers")
+        assert resp.status_code == 200
+        providers = resp.json()
+        assert len(providers) > 0
+        assert len(providers[0]["models"]) > 0
+
+        # Mark first model as vision-capable
+        providers[0]["models"][0]["vision_capable"] = True
+
+        # PUT back
+        resp = await settings_client.put(
+            "/api/settings/llm/providers", json=providers
+        )
+        assert resp.status_code == 200
+
+        # GET again, verify the flag round-tripped
+        resp = await settings_client.get("/api/settings/llm/providers")
+        assert resp.status_code == 200
+        providers_after = resp.json()
+        first_model = providers_after[0]["models"][0]
+        assert first_model["vision_capable"] is True, (
+            "vision_capable=True did not round-trip through providers endpoint"
+        )
+
+    @pytest.mark.asyncio
+    async def test_init_providers_defaults_vision_capable_false(
+        self, settings_session: AsyncSession
+    ):
+        from app.routes.settings import init_llm_providers_if_missing
+        from sqlalchemy import select
+
+        await init_llm_providers_if_missing(settings_session)
+
+        # Read the raw JSON persisted by the init helper
+        result = await settings_session.execute(
+            select(Setting).where(Setting.key == "llm_providers")
+        )
+        row = result.scalar_one()
+        providers = json.loads(row.value)
+        assert len(providers) > 0
+        for p in providers:
+            for m in p.get("models", []):
+                assert m.get("vision_capable") is False, (
+                    f"model {m.get('model_id')} in provider {p.get('id')} "
+                    "should seed with vision_capable=False"
+                )
+
+    @pytest.mark.asyncio
+    async def test_vlm_model_setting_round_trip(self, settings_client: AsyncClient):
+        # PUT
+        resp = await settings_client.put(
+            "/api/settings/",
+            json={
+                "key": "vlm_model",
+                "value": "gemma4:12b",
+                "category": "vlm",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["key"] == "vlm_model"
+        assert body["value"] == "gemma4:12b"
+        assert body["category"] == "vlm"
+
+        # GET via grouped list
+        resp = await settings_client.get("/api/settings/")
+        assert resp.status_code == 200
+        grouped = resp.json()
+        assert "vlm" in grouped
+        vlm_entries = grouped["vlm"]
+        match = next((s for s in vlm_entries if s["key"] == "vlm_model"), None)
+        assert match is not None
+        assert match["value"] == "gemma4:12b"
+
+        # GET via single-key
+        resp = await settings_client.get("/api/settings/key/vlm_model")
+        assert resp.status_code == 200
+        assert resp.json()["value"] == "gemma4:12b"
+

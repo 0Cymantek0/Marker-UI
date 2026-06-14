@@ -1256,6 +1256,34 @@ export function SettingsPage() {
                             )}
                           </button>
 
+                          <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/80">Vision</span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={model.vision_capable ?? false}
+                              aria-label={`Vision capability for ${model.model_id}`}
+                              title="Mark this model as vision-capable (multimodal)"
+                              onClick={() => {
+                                updateDraft((draft) => {
+                                  const m = draft.models[mIdx]
+                                  if (m) m.vision_capable = !(m.vision_capable ?? false)
+                                })
+                              }}
+                              className={cn(
+                                'relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+                                model.vision_capable ? 'bg-primary' : 'bg-muted border-border/20'
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  'pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                                  model.vision_capable ? 'translate-x-3.5' : 'translate-x-0'
+                                )}
+                              />
+                            </button>
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => {
