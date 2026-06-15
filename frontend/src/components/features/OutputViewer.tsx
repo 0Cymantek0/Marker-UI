@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Download, Copy, Check, FileText, Code, Braces, Eye, FileSpreadsheet } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -104,9 +106,24 @@ export function OutputViewer({ content, onDownload }: OutputViewerProps) {
       <div className={cn('flex-1 p-4 overflow-auto font-mono text-xs leading-relaxed', getTabClass())}>
         {activeTab === 'markdown' && (
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed bg-transparent p-0 select-text">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Code blocks keep the monospace look the raw tabs use.
+                pre: ({ children }) => (
+                  <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed bg-transparent p-0 select-text">
+                    {children}
+                  </pre>
+                ),
+                code: ({ className, children, ...props }: any) => (
+                  <code className={cn('font-mono text-xs', className)} {...props}>
+                    {children}
+                  </code>
+                ),
+              }}
+            >
               {content}
-            </pre>
+            </ReactMarkdown>
           </div>
         )}
         {activeTab === 'html' && (
