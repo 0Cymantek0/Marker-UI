@@ -734,6 +734,33 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
 
     await db.commit()
 
+    # Keep image-understanding defaults seeded alongside LLM providers so every
+    # call site that guarantees LLM config also guarantees image config.
+    await init_image_settings_if_missing(db)
+
+
+async def init_image_settings_if_missing(db: AsyncSession) -> None:
+    """Ensure image-understanding default settings exist in the database.
+
+    Seeds two keys under the ``image`` category:
+        - ``vlm_model`` (default ""): overrides the auto-resolved vision model.
+          Empty string means "auto-resolve to the first vision-capable model".
+        - ``max_images_per_doc`` (default "50"): caps VLM work per document.
+
+    Values are stored as strings (the settings store is a generic key/value
+    table). Only inserts when the key is absent; never overwrites user edits.
+    """
+    defaults = {
+        "vlm_model": "",
+        "max_images_per_doc": "50",
+    }
+    for key, value in defaults.items():
+        stmt = select(Setting).where(Setting.key == key)
+        existing = (await db.execute(stmt)).scalar_one_or_none()
+        if existing is None:
+            db.add(Setting(key=key, value=value, category="image"))
+    await db.flush()
+
 
 async def fetch_models_from_api(
     provider_type: str,

@@ -510,6 +510,54 @@ class TestModelConfigVisionCapable:
                 )
 
     @pytest.mark.asyncio
+    async def test_init_providers_seeds_image_understanding_defaults(
+        self, settings_session: AsyncSession
+    ):
+        """init_llm_providers_if_missing also seeds image-understanding defaults."""
+        from app.routes.settings import init_llm_providers_if_missing
+        from sqlalchemy import select
+
+        await init_llm_providers_if_missing(settings_session)
+
+        async def _get(key: str) -> Setting | None:
+            result = await settings_session.execute(
+                select(Setting).where(Setting.key == key)
+            )
+            return result.scalar_one_or_none()
+
+        vlm = await _get("vlm_model")
+        assert vlm is not None, "vlm_model should be seeded"
+        assert vlm.category == "image"
+        assert vlm.value == ""  # empty = auto-resolve
+
+        cap = await _get("max_images_per_doc")
+        assert cap is not None, "max_images_per_doc should be seeded"
+        assert cap.category == "image"
+        assert cap.value == "50"
+
+    @pytest.mark.asyncio
+    async def test_init_image_settings_does_not_overwrite_user_edits(
+        self, settings_session: AsyncSession
+    ):
+        """Re-running the seed must not overwrite a user-set value."""
+        from app.routes.settings import init_image_settings_if_missing
+        from sqlalchemy import select
+
+        # Pre-populate as if the user already set it.
+        settings_session.add(
+            Setting(key="max_images_per_doc", value="200", category="image")
+        )
+        await settings_session.flush()
+
+        await init_image_settings_if_missing(settings_session)
+
+        result = await settings_session.execute(
+            select(Setting).where(Setting.key == "max_images_per_doc")
+        )
+        row = result.scalar_one()
+        assert row.value == "200"  # user edit preserved
+
+    @pytest.mark.asyncio
     async def test_vlm_model_setting_round_trip(self, settings_client: AsyncClient):
         # PUT
         resp = await settings_client.put(
