@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import '@testing-library/jest-dom'
@@ -15,7 +15,15 @@ vi.mock('@/components/features/FileUpload', () => ({
 }))
 
 vi.mock('@/components/features/ConversionOptions', () => ({
-  ConversionOptions: () => <div data-testid="conversion-options">ConversionOptions</div>
+  ConversionOptions: ({ config, onChange }: { config: any; onChange: (cfg: any) => void }) => (
+    <div data-testid="conversion-options">
+      <span data-testid="config-format">{config.output_format}</span>
+      <span data-testid="config-ocr">{config.force_ocr ? 'ocr-enabled' : 'ocr-disabled'}</span>
+      <button data-testid="trigger-config-change" onClick={() => onChange({ ...config, force_ocr: true })}>
+        Trigger Change
+      </button>
+    </div>
+  )
 }))
 
 vi.mock('@/components/features/TerminalLog', () => ({
@@ -82,13 +90,15 @@ describe('ConvertPage component', () => {
 
     // Queue list should show 1 job
     expect(screen.getByText('Conversion Queue (1)')).toBeInTheDocument()
-    expect(screen.getByText('test.pdf')).toBeInTheDocument()
+    // Filename appears in the queue card and (for completed jobs) the Output Preview header.
+    expect(screen.getAllByText('test.pdf').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Overall:')).toBeInTheDocument()
     expect(screen.getByText('1 of 1 completed')).toBeInTheDocument()
-    expect(screen.getByText('100%')).toBeInTheDocument()
+    // 100% appears in the queue progress; OutputViewer may add another.
+    expect(screen.getAllByText('100%').length).toBeGreaterThanOrEqual(1)
 
-    // Verify download button is present for completed job
-    expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument()
+    // Download button is present (queue card + possibly OutputViewer) for completed job
+    expect(screen.getAllByRole('button', { name: /download/i }).length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders failed job and displays failure status without download button', () => {
@@ -150,5 +160,59 @@ describe('ConvertPage component', () => {
 
     // Console is closed again
     expect(screen.queryByTestId('terminal-log')).not.toBeInTheDocument()
+  })
+
+  describe('configuration persistence', () => {
+    beforeEach(() => {
+      localStorage.clear()
+    })
+
+    it('loads config from localStorage if present', () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+      })
+
+      const customConfig = {
+        output_format: 'json',
+        converter: 'TableConverter',
+        use_llm: true,
+        force_ocr: true,
+      }
+      localStorage.setItem('marker-conversion-config', JSON.stringify(customConfig))
+
+      render(<ConvertPage />)
+
+      expect(screen.getByTestId('config-format')).toHaveTextContent('json')
+      expect(screen.getByTestId('config-ocr')).toHaveTextContent('ocr-enabled')
+    })
+
+    it('saves config to localStorage when changes are applied', () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+
+      // Verify initial load saves the default config
+      expect(localStorage.getItem('marker-conversion-config')).not.toBeNull()
+
+      // Trigger a change
+      fireEvent.click(screen.getByTestId('trigger-config-change'))
+
+      const saved = localStorage.getItem('marker-conversion-config')
+      expect(saved).not.toBeNull()
+      const parsed = JSON.parse(saved!)
+      expect(parsed.force_ocr).toBe(true)
+    })
   })
 })

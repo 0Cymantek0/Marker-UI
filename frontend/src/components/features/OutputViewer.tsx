@@ -1,15 +1,18 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Download, Copy, Check, FileText, Code, Braces, Eye, FileSpreadsheet } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { ImageUnderstandingBadge } from '@/components/features/output/ImageUnderstandingBadge'
+import type { ImageUnderstandingMeta } from '@/lib/api'
 
 type OutputTab = 'markdown' | 'html' | 'json' | 'raw'
 
 interface OutputViewerProps {
   content: string | null
   onDownload: () => void
+  imageUnderstanding?: ImageUnderstandingMeta[] | null
 }
 
 const TABS: { value: OutputTab; label: string; icon: any }[] = [
@@ -19,9 +22,19 @@ const TABS: { value: OutputTab; label: string; icon: any }[] = [
   { value: 'raw', label: 'Raw Text', icon: Eye },
 ]
 
-export function OutputViewer({ content, onDownload }: OutputViewerProps) {
+export function OutputViewer({ content, onDownload, imageUnderstanding }: OutputViewerProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>('markdown')
   const [copied, setCopied] = useState(false)
+
+  // Pair per-image metadata to the rendered ![](filename) tokens by filename.
+  const metaByFilename = useMemo(() => {
+    const m = new Map<string, { meta: ImageUnderstandingMeta; index: number }>()
+    ;(imageUnderstanding ?? []).forEach((meta, i) => {
+      m.set(meta.image_name, { meta, index: i + 1 })
+    })
+    return m
+  }, [imageUnderstanding])
+  const metaTotal = metaByFilename.size
 
   const copyToClipboard = useCallback(async () => {
     if (!content) return
@@ -120,6 +133,23 @@ export function OutputViewer({ content, onDownload }: OutputViewerProps) {
                     {children}
                   </code>
                 ),
+                // Overlay a badge on images that have understanding metadata.
+                img: ({ src, alt, ...props }: any) => {
+                  const filename = String(src ?? '').split('/').pop() ?? ''
+                  const entry = metaByFilename.get(filename)
+                  return (
+                    <span className="relative inline-block align-middle my-1">
+                      <img src={src} alt={alt} {...props} />
+                      {entry && (
+                        <ImageUnderstandingBadge
+                          meta={entry.meta}
+                          index={entry.index}
+                          total={metaTotal}
+                        />
+                      )}
+                    </span>
+                  )
+                },
               }}
             >
               {content}

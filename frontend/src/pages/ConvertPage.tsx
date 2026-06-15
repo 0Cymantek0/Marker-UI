@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Play, Loader2, Download, Trash2, FileText, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/features/FileUpload'
 import { ConversionOptions } from '@/components/features/ConversionOptions'
 import { TerminalLog } from '@/components/features/TerminalLog'
+import { OutputViewer } from '@/components/features/OutputViewer'
 import { useConversionQueue } from '@/hooks/useConversionQueue'
 import type { ConversionConfig } from '@/lib/api'
 import { Progress } from '@/components/ui/progress'
@@ -15,6 +16,7 @@ const DEFAULT_CONFIG: ConversionConfig = {
   output_format: 'markdown',
   converter: 'PdfConverter',
   use_llm: false,
+  image_handling_mode: 'extraction',
   force_ocr: false,
   paginate: false,
   disable_image_extraction: false,
@@ -28,14 +30,44 @@ export function ConvertPage() {
   const [files, setFiles] = useState<File[]>([])
   const [localPaths, setLocalPaths] = useState<string>('')
   const [outputDir, setOutputDir] = useState<string>('')
-  const [config, setConfig] = useState<ConversionConfig>(DEFAULT_CONFIG)
+  const [config, setConfig] = useState<ConversionConfig>(() => {
+    const saved = localStorage.getItem('marker-conversion-config')
+    if (saved) {
+      try {
+        return { ...DEFAULT_CONFIG, ...JSON.parse(saved) }
+      } catch (e) {
+        console.error('Failed to parse saved conversion config', e)
+      }
+    }
+    return DEFAULT_CONFIG
+  })
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [showConsole, setShowConsole] = useState(false)
+  const [previewText, setPreviewText] = useState<string | null>(null)
+
+  useEffect(() => {
+    localStorage.setItem('marker-conversion-config', JSON.stringify(config))
+  }, [config])
 
   const { jobs, start, cancel, download, clearLogs, removeJob } = useConversionQueue()
 
   // Auto-select the latest job if none is selected
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || jobs[jobs.length - 1]
+
+  // Read the selected completed job's result blob into text for inline preview.
+  useEffect(() => {
+    let cancelled = false
+    if (!selectedJob || selectedJob.phase !== 'completed' || !selectedJob.resultBlob) {
+      setPreviewText(null)
+      return
+    }
+    selectedJob.resultBlob.text().then((text) => {
+      if (!cancelled) setPreviewText(text)
+    }).catch(() => {
+      if (!cancelled) setPreviewText(null)
+    })
+    return () => { cancelled = true }
+  }, [selectedJob?.id, selectedJob?.phase, selectedJob?.resultBlob])
 
   const completedJobs = jobs.filter((j) => j.phase === 'completed')
   const overallProgress = jobs.length > 0
@@ -316,6 +348,28 @@ export function ConvertPage() {
             </div>
           )}
 
+          {/* Inline output preview for the selected completed job.
+              Shows parsed markdown with per-image understanding badges (commit 6). */}
+          {selectedJob && selectedJob.phase === 'completed' && (
+            <div className="glass-card border border-border/30 shadow-sm animate-fade-in">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20">
+                <h3 className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">
+                  Output Preview
+                  <span className="ml-2 text-muted-foreground/60 normal-case font-medium">
+                    {selectedJob.filename}
+                  </span>
+                </h3>
+              </div>
+              <div className="p-4">
+                <OutputViewer
+                  content={previewText}
+                  onDownload={() => download(selectedJob.id)}
+                  imageUnderstanding={selectedJob.imageUnderstanding}
+                />
+              </div>
+            </div>
+          )}
+
           {jobs.length === 0 && (
             <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border/50 rounded-2xl bg-card/10 text-muted-foreground min-h-[200px]">
               <FileText className="w-8 h-8 text-muted-foreground/45 mb-3 stroke-[1.5]" />
@@ -331,4 +385,3 @@ export function ConvertPage() {
   </div>
   )
 }
-

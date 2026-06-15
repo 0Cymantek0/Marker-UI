@@ -56,4 +56,54 @@ describe('OutputViewer component', () => {
     fireEvent.click(screen.getByRole('button', { name: /download/i }))
     expect(onDownload).toHaveBeenCalledTimes(1)
   })
+
+  it('renders an image-understanding badge when metadata matches the image filename', () => {
+    const md = '![chart](_page_0_Picture_1.jpeg)'
+    const meta = [
+      {
+        image_name: '_page_0_Picture_1.jpeg',
+        image_type: 'chart_bar',
+        confidence: 0.92,
+        model: 'gpt-4o',
+        omitted: false,
+      },
+    ]
+
+    render(<OutputViewer content={md} onDownload={vi.fn()} imageUnderstanding={meta} />)
+
+    const badge = screen.getByRole('button', { name: /chart_bar converted via vlm/i })
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveAttribute('aria-label', expect.stringContaining('Confidence 92%'))
+  })
+
+  it('renders no badge for images without matching metadata', () => {
+    const md = '![orphan](_page_2_Figure_0.jpeg)'
+
+    render(<OutputViewer content={md} onDownload={vi.fn()} imageUnderstanding={[]} />)
+
+    expect(screen.queryByRole('button', { name: /converted via vlm/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('img')).toHaveAttribute('src', '_page_2_Figure_0.jpeg')
+  })
+
+  it('clicking a badge opens the detail modal with type and confidence', () => {
+    const md = '![photo](img.jpeg)'
+    const meta = [
+      {
+        image_name: 'img.jpeg',
+        image_type: 'photo',
+        confidence: 0.8,
+        model: 'gpt-4o',
+        omitted: false,
+      },
+    ]
+
+    render(<OutputViewer content={md} onDownload={vi.fn()} imageUnderstanding={meta} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /photo converted via vlm/i }))
+
+    expect(screen.getByRole('heading', { name: /image understanding/i })).toBeInTheDocument()
+    expect(screen.getByText('img.jpeg')).toBeInTheDocument()
+    // Confidence shows in the modal (the tooltip also renders it, so use getAll).
+    expect(screen.getAllByText('80%').length).toBeGreaterThanOrEqual(1)
+  })
 })

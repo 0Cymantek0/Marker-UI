@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from io import BytesIO
 from typing import Any
 
@@ -13,6 +14,18 @@ from app.models.image_understanding import ImageHandlingMode, ImageType
 from app.services.vlm_service import VLMService
 
 logger = logging.getLogger(__name__)
+
+
+try:
+    from marker.renderers.markdown import Markdownify
+
+    def convert_marker_comment(self, el, text, parent_tags):
+        content = el.get_text() or ""
+        return f"\n<!-- {content} -->\n"
+
+    Markdownify.convert_marker_comment = convert_marker_comment
+except ImportError:
+    pass
 
 
 class ImageUnderstandingProcessor(BaseProcessor):
@@ -70,6 +83,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
                 n=self.context_window_size,
             )
 
+            t0 = time.perf_counter()
             try:
                 service = self._get_vlm_service()
                 classification = service.classify(
@@ -88,6 +102,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
             except Exception as exc:  # noqa: BLE001 - fail-soft processor
                 logger.warning("Image understanding skipped for picture: %r", exc)
                 continue
+            duration_ms = int((time.perf_counter() - t0) * 1000)
 
             if extraction.error:
                 logger.warning(
@@ -97,19 +112,25 @@ class ImageUnderstandingProcessor(BaseProcessor):
                 )
                 continue
 
+            model_id = self._resolved_model_id()
+            image_name = _picture_image_name(picture)
+
             _mutate_picture(
                 picture,
                 image_type=classification.image_type,
                 payload=extraction.payload,
                 mode=self.image_handling_mode,
                 confidence=classification.confidence,
+                model=model_id,
+                duration_ms=duration_ms,
+                image_name=image_name,
             )
             self._image_meta.append(
                 {
-                    "image_name": _picture_image_name(picture),
+                    "image_name": image_name,
                     "image_type": classification.image_type.value,
                     "confidence": float(classification.confidence),
-                    "model": self._resolved_model_id(),
+                    "model": model_id,
                     "omitted": classification.image_type == ImageType.decorative,
                 }
             )
@@ -182,20 +203,29 @@ def _mutate_picture(
     payload: dict[str, Any],
     mode: ImageHandlingMode,
     confidence: float,
+    model: str | None,
+    duration_ms: int,
+    image_name: str,
 ) -> None:
     rendered = render_extraction(image_type, payload)
     if not rendered:
         return
 
-    if image_type in _DESCRIPTION_TYPES and mode == ImageHandlingMode.both:
-        picture.description = rendered
-        if image_type == ImageType.decorative:
-            picture.ignore_for_output = True
-        return
+    model_str = model or "unknown"
+    meta_str = f"marker-ui image-understanding: type={image_type.value} model={model_str} confidence={confidence:.2f} cost_usd=0 duration_ms={duration_ms}"
 
-    picture.html = f"\n\n{rendered}\n"
-    if image_type == ImageType.decorative:
-        picture.ignore_for_output = True
+    html_parts = [f"<marker-comment>{meta_str}</marker-comment>"]
+
+    if mode == ImageHandlingMode.both and image_type != ImageType.decorative:
+        html_parts.append(f"<marker-comment>original_image: {image_name}</marker-comment>")
+
+    html_parts.append(f"\n\n{rendered}\n")
+
+    if mode == ImageHandlingMode.both and image_type != ImageType.decorative:
+        html_parts.append(f'<img src="{image_name}" />')
+
+    picture.html = "\n".join(html_parts)
+    picture.description = None
 
 
 def render_extraction(image_type: ImageType, payload: dict[str, Any]) -> str:
