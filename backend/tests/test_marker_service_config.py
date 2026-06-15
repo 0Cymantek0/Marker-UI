@@ -1,0 +1,114 @@
+"""Regression tests for image-understanding config plumbing.
+
+marker's ConfigParser.generate_config_dict() keeps only keys present in its
+crawler.attr_set. The image-understanding custom keys are not registered there,
+so they are silently dropped unless marker_service.convert_file re-injects them
+after the parser runs. These tests pin that behaviour.
+"""
+
+from marker.config.parser import ConfigParser
+
+from app.services.marker_service import (
+    IMAGE_UNDERSTANDING_CONFIG_KEYS,
+    build_marker_options,
+)
+
+
+def test_custom_keys_are_not_in_marker_crawler_attr_set():
+    """Pin the precondition: marker does not know about our custom keys.
+
+    If this fails, marker started registering these keys and the re-injection
+    in convert_file becomes redundant (harmless but worth noticing).
+    """
+    from marker.config.crawler import crawler
+
+    unknown = [k for k in IMAGE_UNDERSTANDING_CONFIG_KEYS if k in crawler.attr_set]
+    assert unknown == [], f"keys unexpectedly registered in marker: {unknown}"
+
+
+def test_config_parser_strips_custom_keys():
+    """ConfigParser alone drops every custom key (the original bug)."""
+    options = {
+        "image_handling_mode": "both",
+        "vlm_model": "gpt-4o",
+        "max_images_per_doc": 10,
+        "context_window_size": 3,
+        "include_original_ref": False,
+    }
+    config_dict = ConfigParser(options).generate_config_dict()
+    for k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
+        assert k not in config_dict, f"{k} unexpectedly survived ConfigParser"
+
+
+def test_build_marker_options_preserves_custom_keys():
+    """build_marker_options must keep the custom keys in the returned dict.
+
+    They flow into convert_file as the `options` arg, which is the re-injection
+    source. If this regresses, the keys never reach the re-injection loop.
+    """
+    opts = build_marker_options(
+        {
+            "providers": [
+                {
+                    "id": "openai",
+                    "type": "openai",
+                    "label": "OpenAI",
+                    "api_key": "openai-key",
+                    "models": [{"model_id": "gpt-4o"}],
+                }
+            ],
+            "active": {"provider_id": "openai", "model_id": "gpt-4o"},
+        },
+        {
+            "image_handling_mode": "both",
+            "vlm_model": "gpt-4o",
+            "max_images_per_doc": 10,
+        },
+    )
+    assert opts["image_handling_mode"] == "both"
+    assert opts["vlm_model"] == "gpt-4o"
+    assert opts["max_images_per_doc"] == 10
+
+
+def test_reinjection_restores_custom_keys_after_config_parser():
+    """Simulate the convert_file re-injection step end-to-end.
+
+    This is the exact logic added to marker_service.convert_file: parse, then
+    re-inject from the original options dict. The processor reads from the
+    resulting config_dict, so these keys must survive.
+    """
+    options = {
+        "image_handling_mode": "understanding",
+        "vlm_model": "gpt-4o",
+        "max_images_per_doc": 25,
+        "context_window_size": 4,
+        "include_original_ref": False,
+        "force_ocr": True,  # known marker key — should survive on its own
+    }
+    config_dict = ConfigParser(options).generate_config_dict()
+
+    # Mirror the convert_file re-injection loop verbatim.
+    for _k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
+        if _k in options:
+            config_dict[_k] = options[_k]
+
+    assert config_dict["image_handling_mode"] == "understanding"
+    assert config_dict["vlm_model"] == "gpt-4o"
+    assert config_dict["max_images_per_doc"] == 25
+    assert config_dict["context_window_size"] == 4
+    assert config_dict["include_original_ref"] is False
+    # marker-known keys still flow through untouched.
+    assert config_dict.get("force_ocr") is True
+
+
+def test_reinjection_skips_absent_keys():
+    """Absent custom keys must not be added as None values."""
+    options = {"image_handling_mode": "both"}
+    config_dict = ConfigParser(options).generate_config_dict()
+    for _k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
+        if _k in options:
+            config_dict[_k] = options[_k]
+
+    assert config_dict["image_handling_mode"] == "both"
+    assert "vlm_model" not in config_dict
+    assert "max_images_per_doc" not in config_dict

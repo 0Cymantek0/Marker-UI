@@ -38,11 +38,44 @@ def _import_marker() -> None:
 LLM_SERVICE_MAP: dict[str, str] = {
     "gemini": "marker.services.gemini.GoogleGeminiService",
     "openai": "marker.services.openai.OpenAIService",
+    "custom_openai": "marker.services.openai.OpenAIService",
     "claude": "marker.services.claude.ClaudeService",
+    "custom_anthropic": "marker.services.claude.ClaudeService",
     "ollama": "marker.services.ollama.OllamaService",
     "azure": "marker.services.azure_openai.AzureOpenAIService",
     "vertex": "marker.services.vertex.GoogleVertexService",
 }
+
+IMAGE_UNDERSTANDING_PROCESSOR = (
+    "app.processors.image_understanding.ImageUnderstandingProcessor"
+)
+
+# Custom config keys consumed by ImageUnderstandingProcessor.__init__.
+# marker's ConfigParser.generate_config_dict() silently drops any key not
+# present in its crawler.attr_set (verified: none of these are registered),
+# so they must be re-injected after the parser runs to reach the processor.
+IMAGE_UNDERSTANDING_CONFIG_KEYS: tuple[str, ...] = (
+    "image_handling_mode",
+    "vlm_model",
+    "max_images_per_doc",
+    "context_window_size",
+    "include_original_ref",
+)
+
+
+def with_image_understanding_processor(
+    options: dict[str, Any],
+    processors: str | None,
+) -> str | None:
+    """Append the image-understanding processor when a non-extraction mode is requested."""
+    mode = options.get("image_handling_mode")
+    if mode not in ("understanding", "both"):
+        return processors
+
+    existing = [p.strip() for p in (processors or "").split(",") if p.strip()]
+    if IMAGE_UNDERSTANDING_PROCESSOR not in existing:
+        existing.append(IMAGE_UNDERSTANDING_PROCESSOR)
+    return ",".join(existing)
 
 
 def build_marker_options(
@@ -101,42 +134,48 @@ def build_marker_options(
         secret_placeholder = f"secret:provider_{provider_id}_key_0_api_key"
 
         if p_type == "gemini":
-            options["llm_service"] = "gemini"
+            options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["gemini_api_key"] = secret_placeholder
             options["gemini_model_name"] = model_id
         elif p_type == "claude":
-            options["llm_service"] = "claude"
+            options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["claude_api_key"] = secret_placeholder
             options["claude_model_name"] = model_id
         elif p_type == "custom_anthropic":
             import os
             # Set environment variable for anthropic SDK
             os.environ["ANTHROPIC_BASE_URL"] = prov.get("base_url") or "https://api.anthropic.com/v1"
-            options["llm_service"] = "claude"
+            options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["claude_api_key"] = secret_placeholder
             options["claude_model_name"] = model_id
         elif p_type in ("openai", "custom_openai"):
-            options["llm_service"] = "openai"
+            options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["openai_api_key"] = secret_placeholder
             options["openai_base_url"] = prov.get("base_url") or "https://api.openai.com/v1"
             options["openai_model"] = model_id
         elif p_type == "ollama":
-            options["llm_service"] = "ollama"
+            options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["ollama_base_url"] = prov.get("base_url") or "http://localhost:11434"
             options["ollama_model"] = model_id
         elif p_type == "azure":
-            options["llm_service"] = "azure"
+            options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["azure_api_key"] = secret_placeholder
             options["azure_endpoint"] = prov.get("base_url") or ""
             options["azure_api_version"] = "2023-05-15"
             options["deployment_name"] = model_id
         elif p_type == "vertex":
-            options["llm_service"] = "vertex"
+            options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["vertex_project_id"] = secret_placeholder
             options["vertex_location"] = prov.get("base_url") or "us-central1"
             options["gemini_model_name"] = model_id
 
     options.update({k: v for k, v in conversion_config.items() if k not in ("llm_provider", "llm_model")})
+    processors = with_image_understanding_processor(
+        options,
+        options.get("processors"),
+    )
+    if processors is not None:
+        options["processors"] = processors
     return options
 
 
@@ -206,6 +245,13 @@ class MarkerService:
 
         config_parser = ConfigParser(options)
         config_dict = config_parser.generate_config_dict()
+
+        # Re-inject custom keys that ConfigParser strips (see
+        # IMAGE_UNDERSTANDING_CONFIG_KEYS). They flow unchanged through
+        # BaseConverter.config -> resolve_dependencies -> processor __init__.
+        for _k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
+            if _k in options:
+                config_dict[_k] = options[_k]
 
         converter = converter_cls(
             config=config_dict,
