@@ -112,3 +112,33 @@ def test_reinjection_skips_absent_keys():
     assert config_dict["image_handling_mode"] == "both"
     assert "vlm_model" not in config_dict
     assert "max_images_per_doc" not in config_dict
+
+
+def test_collect_image_understanding_meta_reads_processor_stash():
+    """marker_service reads the per-image sidecar from the processor instance."""
+    from app.services.marker_service import _collect_image_understanding_meta
+
+    class ImageUnderstandingProcessor:  # name match is intentional (lookup key)
+        image_meta = [{"image_name": "x.jpeg", "image_type": "chart_bar"}]
+
+    class _OtherProc:
+        pass
+
+    class _FakeConverter:
+        processor_list = [_OtherProc(), ImageUnderstandingProcessor()]
+
+    assert _collect_image_understanding_meta(_FakeConverter()) == [
+        {"image_name": "x.jpeg", "image_type": "chart_bar"}
+    ]
+
+
+def test_collect_image_understanding_meta_empty_when_no_processor():
+    """No ImageUnderstandingProcessor -> empty sidecar, no crash."""
+    from app.services.marker_service import _collect_image_understanding_meta
+
+    class _FakeConverter:
+        processor_list = []
+
+    assert _collect_image_understanding_meta(_FakeConverter()) == []
+    # Missing processor_list attr entirely.
+    assert _collect_image_understanding_meta(object()) == []
