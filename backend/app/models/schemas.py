@@ -135,6 +135,8 @@ class JobStatusResponse(BaseModel):
     progress: int = 0
     error_message: Optional[str] = None
     result_text: Optional[str] = None
+    # Conversion metadata (e.g. per-image understanding info for the badge UI).
+    image_understanding: Optional[list[dict]] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     filename: Optional[str] = None

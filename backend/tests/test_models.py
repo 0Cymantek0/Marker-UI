@@ -26,6 +26,7 @@ class TestConversionJob:
         "progress",
         "error_message",
         "result_text",
+        "result_metadata_json",
         "result_path",
         "config_json",
         "created_at",
@@ -36,11 +37,11 @@ class TestConversionJob:
     def test_table_name(self):
         assert ConversionJob.__tablename__ == "conversion_jobs"
 
-    def test_has_all_14_columns(self):
+    def test_has_all_15_columns(self):
         mapper = ConversionJob.__table__
         col_names = {c.name for c in mapper.columns}
         assert col_names == self.EXPECTED_COLUMNS
-        assert len(col_names) == 14
+        assert len(col_names) == 15
 
     def test_instantiation_with_defaults(self):
         job = ConversionJob(

@@ -385,6 +385,11 @@ class TaskManager:
 
         result_text = result.get("text", "")
         images = result.get("images", {})
+        metadata = result.get("metadata") or {}
+        # Only persist the image-understanding sidecar (a small list); drop any
+        # large/binary metadata the renderer may have returned.
+        result_metadata = {"image_understanding": metadata.get("image_understanding") or []}
+        result_metadata_json = json.dumps(result_metadata) if result_metadata["image_understanding"] else None
         output_format = config.get("output_format", "markdown")
         original_name = config.get("original_name", "output")
         local_filepath = config.get("local_filepath")
@@ -455,6 +460,7 @@ class TaskManager:
                 .values(
                     status="completed",
                     result_text=result_text,
+                    result_metadata_json=result_metadata_json,
                     result_path=str(final_path),
                     progress=100,
                     completed_at=datetime.now(timezone.utc),

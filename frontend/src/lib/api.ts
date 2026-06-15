@@ -8,6 +8,7 @@ export type ConverterType =
   | 'TableConverter'
   | 'OCRConverter'
   | 'ExtractionConverter'
+export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
 
 export interface ConversionConfig {
   output_format: OutputFormat
@@ -15,6 +16,7 @@ export interface ConversionConfig {
   use_llm?: boolean
   llm_provider?: string
   llm_model?: string
+  image_handling_mode?: ImageHandlingMode
   force_ocr?: boolean
   paginate?: boolean
   disable_image_extraction?: boolean
@@ -30,6 +32,14 @@ export interface ConversionResponse {
   filename: string
 }
 
+export interface ImageUnderstandingMeta {
+  image_name: string
+  image_type: string
+  confidence: number
+  model: string | null
+  omitted: boolean
+}
+
 export interface JobStatus {
   id: string
   job_id: string
@@ -42,6 +52,7 @@ export interface JobStatus {
   completed_at: string | null
   error_message: string | null
   result_text: string | null
+  image_understanding?: ImageUnderstandingMeta[] | null
 }
 
 export interface SSEEvent {
@@ -130,6 +141,7 @@ export interface BackendJobStatus {
   completed_at: string | null
   error_message: string | null
   result_text: string | null
+  image_understanding?: ImageUnderstandingMeta[] | null
   filename: string
   message?: string | null
   logs?: string | null
@@ -267,6 +279,7 @@ export async function uploadFile(
   if (config.use_llm !== undefined) params.append('use_llm', String(config.use_llm))
   if (config.llm_provider) params.append('llm_provider', config.llm_provider)
   if (config.llm_model) params.append('llm_model', config.llm_model)
+  if (config.image_handling_mode) params.append('image_handling_mode', config.image_handling_mode)
   if (config.force_ocr !== undefined) params.append('force_ocr', String(config.force_ocr))
   if (config.paginate !== undefined) params.append('paginate_output', String(config.paginate))
   if (config.disable_image_extraction !== undefined) params.append('disable_image_extraction', String(config.disable_image_extraction))
@@ -487,4 +500,3 @@ export async function selfHealModels(): Promise<{ success: boolean; healed_count
 export async function resetModels(deleteUserData: boolean): Promise<{ success: boolean; deleted_models: string[]; user_data_reset: boolean; message: string }> {
   return request<{ success: boolean; deleted_models: string[]; user_data_reset: boolean; message: string }>(`/models/reset?delete_user_data=${deleteUserData}`, { method: 'POST' })
 }
-

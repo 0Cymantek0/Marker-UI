@@ -322,6 +322,25 @@ async def test_upload_with_llm_model_override(client: AsyncClient, db_session):
     assert cfg["use_llm"] is True
 
 
+@pytest.mark.asyncio
+async def test_upload_with_image_handling_mode(client: AsyncClient, db_session):
+    """Verify upload endpoint saves image_handling_mode for processor wiring."""
+    resp = await _upload_file(
+        client,
+        extra_params={"image_handling_mode": "both"},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    from sqlalchemy import select
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    res = await db_session.execute(stmt)
+    job = res.scalar_one()
+
+    cfg = json.loads(job.config_json)
+    assert cfg["image_handling_mode"] == "both"
+
+
 def test_build_marker_options_model_override():
     """Verify that build_marker_options correctly overrides model names for all services."""
     from app.services.marker_service import build_marker_options
@@ -358,15 +377,52 @@ def test_build_marker_options_model_override():
 
     # Gemini Override
     opts = build_marker_options(llm_cfg, {"use_llm": True, "llm_provider": "gemini", "llm_model": "gemini-1.5-pro"})
+    assert opts["llm_service"] == "marker.services.gemini.GoogleGeminiService"
     assert opts["gemini_model_name"] == "gemini-1.5-pro"
 
     # Claude Override
     opts = build_marker_options(llm_cfg, {"use_llm": True, "llm_provider": "claude", "llm_model": "claude-3-5-haiku"})
+    assert opts["llm_service"] == "marker.services.claude.ClaudeService"
     assert opts["claude_model_name"] == "claude-3-5-haiku"
 
     # OpenAI Override
     opts = build_marker_options(llm_cfg, {"use_llm": True, "llm_provider": "openai", "llm_model": "gpt-4o"})
+    assert opts["llm_service"] == "marker.services.openai.OpenAIService"
     assert opts["openai_model"] == "gpt-4o"
+
+
+def test_build_marker_options_llm_service_import_path_is_marker_compatible():
+    """Regression: marker-pdf expects a dotted class path, not a short provider key."""
+    from marker.config.parser import ConfigParser
+
+    from app.services.marker_service import build_marker_options
+
+    llm_cfg = {
+        "providers": [
+            {
+                "id": "openai",
+                "type": "openai",
+                "label": "OpenAI",
+                "api_key": "openai-key",
+                "models": [{"model_id": "gpt-4o"}],
+            }
+        ],
+        "active": {
+            "provider_id": "openai",
+            "model_id": "gpt-4o",
+        },
+    }
+
+    opts = build_marker_options(
+        llm_cfg,
+        {
+            "use_llm": True,
+            "image_handling_mode": "both",
+        },
+    )
+
+    assert "." in opts["llm_service"]
+    assert ConfigParser(opts).get_llm_service() == "marker.services.openai.OpenAIService"
 
 
 @pytest.mark.asyncio
@@ -415,3 +471,89 @@ def test_build_marker_options_advanced_settings():
     assert opts["lang"] == "es"
 
 
+def test_parse_image_understanding_extracts_sidecar():
+    """The helper pulls the image_understanding list out of the metadata JSON column."""
+    from app.routes.convert import _parse_image_understanding
+    import json
+
+    payload = json.dumps({
+        "image_understanding": [
+            {"image_name": "_page_0_Picture_1.jpeg", "image_type": "chart_bar", "confidence": 0.9, "model": "gpt-4o", "omitted": False},
+        ]
+    })
+    result = _parse_image_understanding(payload)
+    assert result is not None
+    assert result[0]["image_type"] == "chart_bar"
+    assert result[0]["image_name"] == "_page_0_Picture_1.jpeg"
+
+
+def test_parse_image_understanding_returns_none_for_empty_or_invalid():
+    from app.routes.convert import _parse_image_understanding
+
+    assert _parse_image_understanding(None) is None
+    assert _parse_image_understanding("") is None
+    assert _parse_image_understanding("not json") is None
+    # Valid JSON but no image_understanding key.
+    assert _parse_image_understanding('{"other": 1}') is None
+    # Empty list.
+    assert _parse_image_understanding('{"image_understanding": []}') is None
+
+
+@pytest.mark.asyncio
+async def test_status_route_surfaces_image_understanding(client: AsyncClient, db_session):
+    """A completed job with result_metadata_json surfaces image_understanding in /status."""
+    import json
+    from app.models.job import ConversionJob
+    from datetime import datetime, timezone
+
+    job = ConversionJob(
+        id="job-meta-1",
+        filename="doc.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        result_metadata_json=json.dumps({
+            "image_understanding": [
+                {"image_name": "img.jpeg", "image_type": "photo", "confidence": 0.8, "model": "gpt-4o", "omitted": False}
+            ]
+        }),
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/status/job-meta-1")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["image_understanding"] is not None
+    assert body["image_understanding"][0]["image_type"] == "photo"
+
+
+@pytest.mark.asyncio
+async def test_status_route_omits_image_understanding_for_legacy_jobs(client: AsyncClient, db_session):
+    """A job with no metadata (pre-feature) returns no image_understanding field value."""
+    from app.models.job import ConversionJob
+    from datetime import datetime, timezone
+
+    job = ConversionJob(
+        id="job-legacy-1",
+        filename="doc.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        result_metadata_json=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/status/job-legacy-1")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("image_understanding") is None

@@ -35,6 +35,22 @@ router = APIRouter(prefix="/api/convert", tags=["convert"])
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _parse_image_understanding(metadata_json: str | None) -> list[dict] | None:
+    """Extract the per-image sidecar list from a job's metadata column.
+
+    Returns None when there is no metadata or no understanding entries, so the
+    JSON response omits the field entirely for legacy jobs (graceful degrade).
+    """
+    if not metadata_json:
+        return None
+    try:
+        parsed = json.loads(metadata_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    entries = parsed.get("image_understanding") if isinstance(parsed, dict) else None
+    return entries or None
+
+
 async def _load_llm_config(db: AsyncSession) -> dict[str, Any]:
     """Load stored LLM providers and active LLM configuration."""
     from app.models.settings import Setting
@@ -74,6 +90,10 @@ async def upload_file(
     use_llm: bool = Query(False, description="Enable LLM-assisted conversion"),
     llm_provider: Optional[str] = Query(None, description="LLM provider ID override"),
     llm_model: Optional[str] = Query(None, description="LLM model name override"),
+    image_handling_mode: str = Query(
+        "extraction",
+        description="Image handling: extraction, understanding, or both",
+    ),
     force_ocr: bool = Query(False, description="Force OCR on all pages"),
     paginate_output: bool = Query(False, description="Add page separators in output"),
     disable_image_extraction: bool = Query(False, description="Skip extracting images"),
@@ -169,6 +189,8 @@ async def upload_file(
         config["llm_provider"] = llm_provider
     if llm_model:
         config["llm_model"] = llm_model
+    if image_handling_mode in ("extraction", "understanding", "both"):
+        config["image_handling_mode"] = image_handling_mode
     if force_ocr:
         config["force_ocr"] = True
     if paginate_output:
@@ -279,6 +301,7 @@ async def get_status(
         progress=progress,
         error_message=job.error_message,
         result_text=job.result_text,
+        image_understanding=_parse_image_understanding(job.result_metadata_json),
         created_at=job.created_at,
         completed_at=job.completed_at,
         filename=job.original_name,

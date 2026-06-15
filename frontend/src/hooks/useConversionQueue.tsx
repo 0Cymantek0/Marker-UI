@@ -1,11 +1,14 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import {
   uploadFile,
   getJobEvents,
   getJobStatus,
+  getHistory,
   downloadResult,
   deleteJob,
   type ConversionConfig,
+  type JobStatus,
+  type ImageUnderstandingMeta,
 } from '@/lib/api'
 
 export type ConversionPhase =
@@ -32,6 +35,8 @@ export interface JobState {
   elapsed?: number
   eta?: number
   isBunch?: boolean
+  // Per-image understanding metadata for the badge UI.
+  imageUnderstanding?: ImageUnderstandingMeta[] | null
 }
 
 interface ConversionContextType {
@@ -47,7 +52,13 @@ const ConversionContext = createContext<ConversionContextType | null>(null)
 
 export function ConversionProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<JobState[]>([])
+  const jobsRef = useRef<JobState[]>([])
   const eventSourcesRef = useRef<Record<string, EventSource>>({})
+  const hydratedRef = useRef(false)
+
+  useEffect(() => {
+    jobsRef.current = jobs
+  }, [jobs])
 
   const updateJob = useCallback((id: string, updater: Partial<JobState> | ((prev: JobState) => JobState)) => {
     setJobs((prevJobs) =>
@@ -66,7 +77,16 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }))
 
     downloadResult(jobId)
-      .then((blob) => {
+      .then(async (blob) => {
+        // Fetch status to capture the per-image understanding sidecar (it is
+        // persisted server-side only at finalize, so SSE can't carry it).
+        let imageUnderstanding: ImageUnderstandingMeta[] | null = null
+        try {
+          const status = await getJobStatus(jobId)
+          imageUnderstanding = status.image_understanding ?? null
+        } catch {
+          // Non-fatal: badges just won't render for this job.
+        }
         updateJob(id, (prev) => ({
           ...prev,
           phase: 'completed',
@@ -74,6 +94,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           statusText: 'Conversion complete',
           error: null,
           resultBlob: blob,
+          imageUnderstanding,
           logs: [...prev.logs, '[SUCCESS] Result package successfully fetched and ready.'],
         }))
       })
@@ -113,6 +134,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         const status = await getJobStatus(jobId)
         if (status.status === 'completed') {
           clearInterval(pollInterval)
+          const imageUnderstanding = status.image_understanding ?? null
           downloadResult(jobId)
             .then((blob) => {
               updateJob(id, (prev) => ({
@@ -122,6 +144,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
                 statusText: 'Conversion complete',
                 error: null,
                 resultBlob: blob,
+                imageUnderstanding,
                 logs: [...prev.logs, '[SUCCESS] SSE disconnected, recovered via polling.'],
               }))
             })
@@ -169,6 +192,151 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }, 3000)
   }, [updateJob])
 
+  const attachJobEvents = useCallback((id: string, jobId: string) => {
+    if (eventSourcesRef.current[id]) {
+      return
+    }
+
+    const es = getJobEvents(jobId)
+    eventSourcesRef.current[id] = es
+
+    const closeES = () => {
+      es.close()
+      delete eventSourcesRef.current[id]
+    }
+
+    es.addEventListener('progress', (e) => {
+      const data = e.data ? JSON.parse(e.data) : {}
+      const messageStr = data.message || 'Executing conversion pipelines...'
+
+      if (data.status === 'completed') {
+        closeES()
+        handleJobCompleted(id, jobId)
+        return
+      }
+
+      if (data.status === 'failed') {
+        closeES()
+        handleJobFailed(id, data.error ?? 'Conversion failed')
+        return
+      }
+
+      if (data.status === 'cancelled') {
+        closeES()
+        updateJob(id, (prev) => ({
+          ...prev,
+          phase: 'failed',
+          statusText: 'Cancelled',
+          logs: [...prev.logs, '[SYSTEM] Job was cancelled.'],
+        }))
+        return
+      }
+
+      updateJob(id, (prev) => {
+        const nextLogs = [...prev.logs]
+        if (data.logs && data.logs.length > 0) {
+          data.logs.forEach((log: string) => {
+            if (!nextLogs.includes(log)) {
+              nextLogs.push(log)
+            }
+          })
+        } else if (messageStr && nextLogs[nextLogs.length - 1] !== `[INFO] ${messageStr}`) {
+          nextLogs.push(`[INFO] ${messageStr}`)
+        }
+        return {
+          ...prev,
+          progress: Math.max(prev.progress, data.progress ?? prev.progress),
+          statusText: messageStr,
+          logs: nextLogs,
+          elapsed: data.elapsed,
+          eta: data.eta,
+        }
+      })
+    })
+
+    es.addEventListener('status', (e) => {
+      const data = e.data ? JSON.parse(e.data) : {}
+      if (data.status === 'completed') {
+        closeES()
+        handleJobCompleted(id, jobId)
+      } else if (data.status === 'failed') {
+        closeES()
+        handleJobFailed(id, data.error ?? 'Conversion failed')
+      } else if (data.status === 'cancelled') {
+        closeES()
+        updateJob(id, (prev) => ({
+          ...prev,
+          phase: 'failed',
+          statusText: 'Cancelled',
+          logs: [...prev.logs, '[SYSTEM] Job was cancelled.'],
+        }))
+      }
+    })
+
+    es.onerror = () => {
+      closeES()
+      handleJobSSEDisconnected(id, jobId)
+    }
+  }, [handleJobCompleted, handleJobFailed, handleJobSSEDisconnected, updateJob])
+
+  useEffect(() => {
+    if (hydratedRef.current) return
+
+    let active = true
+    void getHistory(1, 50)
+      .then(({ jobs: historyJobs }) => {
+        if (!active) return
+        hydratedRef.current = true
+
+        const activeJobs = historyJobs.filter((job: JobStatus) =>
+          job.status === 'pending' || job.status === 'processing'
+        )
+        if (activeJobs.length === 0) return
+
+        const recoveredJobs: JobState[] = activeJobs.map((job) => ({
+          id: `history-${job.id}`,
+          filename: job.filename,
+          file: null,
+          localPath: '',
+          phase: 'processing',
+          progress: job.progress ?? 10,
+          statusText: job.status === 'pending' ? 'Queued on backend...' : 'Processing document...',
+          jobId: job.id,
+          error: null,
+          resultBlob: null,
+          logs: [
+            '[SYSTEM] Recovered active job from backend history.',
+            `[SYSTEM] Re-attaching SSE channel for job: ${job.id}`,
+          ],
+          outputFormat: job.output_format || 'markdown',
+        }))
+
+        const existingBackendIds = new Set(
+          jobsRef.current.map((job) => job.jobId).filter(Boolean)
+        )
+        const missing = recoveredJobs.filter((job) => !existingBackendIds.has(job.jobId))
+        if (missing.length === 0) return
+
+        setJobs((prev) => [...prev, ...missing])
+
+        for (const job of missing) {
+          if (job.jobId) {
+            attachJobEvents(job.id, job.jobId)
+          }
+        }
+      })
+      .catch(() => {
+        if (active) {
+          hydratedRef.current = true
+        }
+        // History recovery is best-effort; normal uploads still work.
+      })
+
+    return () => {
+      active = false
+    }
+  }, [attachJobEvents])
+
   const runJob = useCallback(async (job: JobState, config: ConversionConfig, outputDir?: string) => {
     updateJob(job.id, {
       phase: job.file ? 'uploading' : 'processing',
@@ -206,86 +374,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         ]
       }))
 
-      const es = getJobEvents(response.job_id)
-      eventSourcesRef.current[job.id] = es
-
-      const closeES = () => {
-        es.close()
-        delete eventSourcesRef.current[job.id]
-      }
-
-      es.addEventListener('progress', (e) => {
-        const data = e.data ? JSON.parse(e.data) : {}
-        const messageStr = data.message || 'Executing conversion pipelines...'
-
-        if (data.status === 'completed') {
-          closeES()
-          handleJobCompleted(job.id, response.job_id)
-          return
-        }
-
-        if (data.status === 'failed') {
-          closeES()
-          handleJobFailed(job.id, data.error ?? 'Conversion failed')
-          return
-        }
-
-        if (data.status === 'cancelled') {
-          closeES()
-          updateJob(job.id, (prev) => ({
-            ...prev,
-            phase: 'failed',
-            statusText: 'Cancelled',
-            logs: [...prev.logs, '[SYSTEM] Job was cancelled.'],
-          }))
-          return
-        }
-
-        updateJob(job.id, (prev) => {
-          const nextLogs = [...prev.logs]
-          if (data.logs && data.logs.length > 0) {
-            data.logs.forEach((log: string) => {
-              if (!nextLogs.includes(log)) {
-                nextLogs.push(log)
-              }
-            })
-          } else if (messageStr && nextLogs[nextLogs.length - 1] !== `[INFO] ${messageStr}`) {
-            nextLogs.push(`[INFO] ${messageStr}`)
-          }
-          return {
-            ...prev,
-            progress: Math.max(prev.progress, data.progress ?? prev.progress),
-            statusText: messageStr,
-            logs: nextLogs,
-            elapsed: data.elapsed,
-            eta: data.eta,
-          }
-        })
-      })
-
-      es.addEventListener('status', (e) => {
-        const data = e.data ? JSON.parse(e.data) : {}
-        if (data.status === 'completed') {
-          closeES()
-          handleJobCompleted(job.id, response.job_id)
-        } else if (data.status === 'failed') {
-          closeES()
-          handleJobFailed(job.id, data.error ?? 'Conversion failed')
-        } else if (data.status === 'cancelled') {
-          closeES()
-          updateJob(job.id, (prev) => ({
-            ...prev,
-            phase: 'failed',
-            statusText: 'Cancelled',
-            logs: [...prev.logs, '[SYSTEM] Job was cancelled.'],
-          }))
-        }
-      })
-
-      es.onerror = () => {
-        closeES()
-        handleJobSSEDisconnected(job.id, response.job_id)
-      }
+      attachJobEvents(job.id, response.job_id)
 
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Upload failed'
@@ -298,7 +387,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         logs: [...prev.logs, `[ERROR] Network error: ${errMsg}`],
       }))
     }
-  }, [updateJob, handleJobCompleted, handleJobFailed, handleJobSSEDisconnected])
+  }, [updateJob, attachJobEvents])
 
   const start = useCallback(async (files: File[], localPaths: string[], config: ConversionConfig, outputDir?: string) => {
     const newJobs: JobState[] = []

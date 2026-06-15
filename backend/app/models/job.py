@@ -34,6 +34,8 @@ class ConversionJob(Base):
     )
     config_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON-serialized conversion metadata (e.g. per-image understanding info).
+    result_metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
