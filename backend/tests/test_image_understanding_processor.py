@@ -121,6 +121,27 @@ def test_gather_local_context_uses_heading_chain_and_surrounding_text():
     assert "The chart shows Q2 growth." in surrounding
 
 
+def test_gather_local_context_handles_none_heading_level():
+    """Real marker SectionHeader blocks can carry heading_level=None.
+
+    Regression: ``getattr(prev, "heading_level", 0)`` returned None (the
+    attribute exists but is None), and ``None <= 1`` raised TypeError, aborting
+    the whole conversion. Guard must treat None as "no level".
+    """
+    from marker.schema import BlockTypes
+
+    h = FakeBlock(BlockTypes.SectionHeader, "Untitled section", heading_level=None)
+    before = FakeBlock(BlockTypes.Text, "Some text before.")
+    picture = FakePicture()
+    document = FakeDocument([h, before, picture])
+
+    # Must not raise.
+    heading_chain, surrounding = gather_local_context(document, picture, n=2)
+
+    assert heading_chain == "Untitled section"
+    assert "Some text before." in surrounding
+
+
 def test_extraction_mode_leaves_picture_untouched_and_skips_vlm():
     document, picture = _doc_with_picture()
     vlm = FakeVLM()

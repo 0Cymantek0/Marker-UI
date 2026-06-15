@@ -201,3 +201,41 @@ class TestKillPid:
 
     def test_kill_pid_is_static(self):
         assert isinstance(TaskManager.__dict__["_kill_pid"], staticmethod)
+
+
+# ---------------------------------------------------------------------------
+# report_stage_progress (tqdm tap sink)
+# ---------------------------------------------------------------------------
+
+
+class TestReportStageProgress:
+    def test_advances_progress_and_sets_label(self, task_manager: TaskManager):
+        task_manager._progress["job"] = 10
+        task_manager.report_stage_progress("job", 55, "Recognizing text (40/101)")
+
+        assert task_manager._progress["job"] == 55
+        assert task_manager._job_status_text["job"] == "Recognizing text (40/101)"
+        assert task_manager._job_has_real_progress["job"] is True
+
+    def test_never_regresses(self, task_manager: TaskManager):
+        task_manager._progress["job"] = 70
+        task_manager.report_stage_progress("job", 40, "earlier stage")
+        # Progress must not go backwards even if a stale/lower value arrives.
+        assert task_manager._progress["job"] == 70
+
+    def test_caps_at_96_leaving_room_for_finalization(self, task_manager: TaskManager):
+        task_manager._progress["job"] = 10
+        task_manager.report_stage_progress("job", 100, "done-ish")
+        assert task_manager._progress["job"] == 96
+
+    def test_real_progress_disables_log_string_override(self, task_manager: TaskManager):
+        # Once a real tqdm value lands, coarse log parsing must not touch progress.
+        task_manager._progress["job"] = 50
+        task_manager._job_logs["job"] = []
+        task_manager.report_stage_progress("job", 50, "Recognizing text (1/2)")
+
+        task_manager.add_job_log("job", "Detecting layout now", "INFO")
+        # Layout log would have forced progress to 30 in the fallback path; the
+        # real-progress guard must prevent that regression.
+        assert task_manager._progress["job"] == 50
+

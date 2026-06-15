@@ -61,6 +61,9 @@ class TaskManager:
         self._job_logs: dict[str, list[str]] = {}
         self._job_status_text: dict[str, str] = {}
         self._job_start_time: dict[str, float] = {}
+        # True once a real tqdm-derived progress value has arrived for the job;
+        # disables the synthetic crawl so the two don't fight.
+        self._job_has_real_progress: dict[str, bool] = {}
 
         # Register custom log handler for marker and app
         self._log_handler = JobLogHandler(self)
@@ -69,6 +72,23 @@ class TaskManager:
         )
         logging.getLogger("marker").addHandler(self._log_handler)
         logging.getLogger("app").addHandler(self._log_handler)
+
+        # Tap marker/surya tqdm bars for real per-stage progress.
+        from app.services import progress_tracker
+
+        progress_tracker.set_reporter(self.report_stage_progress)
+        progress_tracker.install()
+
+    def report_stage_progress(self, job_id: str, percent: int, label: str) -> None:
+        """Sink for the tqdm progress tap. Monotonic, never regresses."""
+        current = self._progress.get(job_id, 0)
+        # Cap at 96 so finalization (DB write + file save) owns the last few %.
+        percent = max(0, min(96, percent))
+        if percent > current:
+            self._progress[job_id] = percent
+        if label:
+            self._job_status_text[job_id] = label
+        self._job_has_real_progress[job_id] = True
 
     # ------------------------------------------------------------------
     # Submit
@@ -96,6 +116,7 @@ class TaskManager:
         self._job_logs[job_id] = []
         self._job_status_text[job_id] = "Starting conversion..."
         self._job_start_time[job_id] = time.time()
+        self._job_has_real_progress[job_id] = False
 
         def _on_done(fut: asyncio.Future[Any]) -> None:
             exc = fut.exception()
@@ -105,15 +126,18 @@ class TaskManager:
 
         future.add_done_callback(_on_done)
 
-        # Smooth progress increments
+        # Synthetic crawl only until real tqdm-derived progress kicks in. Once a
+        # real stage value arrives the crawl stops so it never fights the truth.
         async def _smooth_progress():
             while job_id in self._tasks:
                 fut = self._tasks[job_id]
                 if fut.done():
                     break
                 await asyncio.sleep(2)
+                if self._job_has_real_progress.get(job_id):
+                    continue
                 current = self._progress.get(job_id, 10)
-                if current < 85:
+                if current < 12:
                     self._progress[job_id] = current + 1
 
         loop.create_task(_smooth_progress())
@@ -128,8 +152,14 @@ class TaskManager:
         
         # Append message
         self._job_logs[job_id].append(message)
-        
-        # Parse log content to update status text and progress hints
+
+        # tqdm tap owns progress once it starts reporting; don't let coarse
+        # log-string guesses override the real per-stage values.
+        if self._job_has_real_progress.get(job_id):
+            return
+
+        # Parse log content for status text and progress hints. Only a pre-OCR
+        # fallback for the brief window before any tqdm bar appears.
         msg_lower = message.lower()
         if "layout" in msg_lower:
             self._job_status_text[job_id] = "Detecting document layout..."
@@ -137,20 +167,8 @@ class TaskManager:
                 self._progress[job_id] = 30
         elif "ocr" in msg_lower or "recognition" in msg_lower or "detector" in msg_lower:
             self._job_status_text[job_id] = "Performing OCR and text recognition..."
-            if self._progress.get(job_id, 0) < 50:
-                self._progress[job_id] = 50
-        elif "table" in msg_lower:
-            self._job_status_text[job_id] = "Extracting tables..."
-            if self._progress.get(job_id, 0) < 70:
-                self._progress[job_id] = 70
-        elif "math" in msg_lower:
-            self._job_status_text[job_id] = "Formatting mathematical equations..."
-            if self._progress.get(job_id, 0) < 80:
-                self._progress[job_id] = 80
-        elif "markdown" in msg_lower or "html" in msg_lower or "json" in msg_lower:
-            self._job_status_text[job_id] = "Generating structured output..."
-            if self._progress.get(job_id, 0) < 90:
-                self._progress[job_id] = 90
+            if self._progress.get(job_id, 0) < 33:
+                self._progress[job_id] = 33
 
     def get_status(self, job_id: str) -> dict[str, Any]:
         """Return current in-memory progress for *job_id*."""
@@ -209,6 +227,7 @@ class TaskManager:
             cancelled = future.cancel()
             self._progress.pop(job_id, None)
             self._tasks.pop(job_id, None)
+            self._job_has_real_progress.pop(job_id, None)
 
             pid = self._pids.pop(job_id, None)
             if pid is not None:

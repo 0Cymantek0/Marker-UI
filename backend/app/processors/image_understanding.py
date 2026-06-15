@@ -216,7 +216,7 @@ def gather_local_context(document: Any, picture_block: Any, n: int = 2) -> tuple
             text = _block_text(prev, document)
             if text:
                 headings.append(text)
-            if getattr(prev, "heading_level", 0) <= 1:
+            if (getattr(prev, "heading_level", None) or 0) <= 1:
                 break
         prev = document.get_prev_block(prev)
     headings.reverse()
