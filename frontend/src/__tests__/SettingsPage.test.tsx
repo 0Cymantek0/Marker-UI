@@ -17,6 +17,7 @@ vi.mock('@/lib/api', () => ({
   fetchAvailableModels: vi.fn(),
   selfHealModels: vi.fn(),
   resetModels: vi.fn(),
+  updateSetting: vi.fn(),
 }))
 
 vi.mock('sonner', () => ({
@@ -59,7 +60,9 @@ describe('SettingsPage component', () => {
   }
 
   const mockSettings = [
-    { key: 'gpu_acceleration_enabled', value: 'false', category: 'gpu' }
+    { key: 'gpu_acceleration_enabled', value: 'false', category: 'gpu' },
+    { key: 'vlm_model', value: '', category: 'image' },
+    { key: 'max_images_per_doc', value: '50', category: 'image' }
   ]
 
   const mockGPUStatus: api.GPUStatus = {
@@ -239,5 +242,33 @@ describe('SettingsPage component', () => {
     const geminiSaved = savedArg.find((p) => p.id === 'gemini')
     const target = geminiSaved?.models.find((m) => m.model_id === 'gemini-2.0-flash')
     expect(target?.vision_capable).toBe(true)
+  })
+
+  it('renders the Image Understanding Defaults section with seeded values', async () => {
+    render(<SettingsPage />)
+    await screen.findByText('Configured Service Providers')
+
+    expect(screen.getByText('Image Understanding Defaults')).toBeInTheDocument()
+    expect(screen.getByText('Default Vision Model')).toBeInTheDocument()
+    expect(screen.getByText('Per-document Image Cap')).toBeInTheDocument()
+    // Seeded max_images_per_doc=50 renders in the number input.
+    const capInput = screen.getByRole('spinbutton', { name: /per-document image cap/i }) as HTMLInputElement
+    expect(capInput.value).toBe('50')
+  })
+
+  it('changing the image cap saves via updateSetting', async () => {
+    vi.mocked(api.updateSetting).mockResolvedValue(undefined)
+    render(<SettingsPage />)
+    await screen.findByText('Configured Service Providers')
+
+    const capInput = screen.getByRole('spinbutton', { name: /per-document image cap/i }) as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(capInput, { target: { value: '100' } })
+    })
+    await act(async () => {
+      fireEvent.blur(capInput)
+    })
+
+    expect(api.updateSetting).toHaveBeenCalledWith('max_images_per_doc', '100', 'image')
   })
 })

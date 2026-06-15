@@ -32,7 +32,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/select'
-import { getSettings, getGPUStatus, installGPU, toggleGPU, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus } from '@/lib/api'
+import { getSettings, getGPUStatus, installGPU, toggleGPU, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, updateSetting, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -60,6 +60,13 @@ export function SettingsPage() {
   const [gpuEnabled, setGpuEnabled] = useState(false)
   const [gpuStatus, setGpuStatus] = useState<GPUStatus | null>(null)
   const [isPollingGpu, setIsPollingGpu] = useState(false)
+
+  // Image understanding defaults state
+  const [vlmModel, setVlmModel] = useState<string>('')
+  const [maxImagesPerDoc, setMaxImagesPerDoc] = useState<number>(50)
+  const [isSavingImageSetting, setIsSavingImageSetting] = useState(false)
+  // Last value persisted to the backend; used to skip no-op blur saves.
+  const committedImageCapRef = useRef<number>(50)
 
   // Drawer & Modal state
   const [activeDrawer, setActiveDrawer] = useState<{
@@ -178,6 +185,14 @@ export function SettingsPage() {
         const gpuSetting = settingsList.find((s) => s.key === 'gpu_acceleration_enabled')
         setGpuEnabled(gpuSetting?.value === 'true')
 
+        // Image understanding defaults
+        const vlmSetting = settingsList.find((s) => s.key === 'vlm_model')
+        setVlmModel(vlmSetting?.value ?? '')
+        const capSetting = settingsList.find((s) => s.key === 'max_images_per_doc')
+        const loadedCap = capSetting ? Number(capSetting.value) || 50 : 50
+        setMaxImagesPerDoc(loadedCap)
+        committedImageCapRef.current = loadedCap
+
         const status = await getGPUStatus()
         setGpuStatus(status)
         if (status.status === 'installing') {
@@ -240,6 +255,22 @@ export function SettingsPage() {
       console.error('Failed to toggle GPU:', err)
       toast.error('Failed to toggle GPU acceleration')
       setGpuEnabled(!checked)
+    }
+  }
+
+  const handleSaveImageSetting = async (key: 'vlm_model' | 'max_images_per_doc', value: string) => {
+    setIsSavingImageSetting(true)
+    try {
+      await updateSetting(key, value, 'image')
+      if (key === 'max_images_per_doc') {
+        committedImageCapRef.current = Number(value) || 50
+      }
+      toast.success('Image understanding default saved')
+    } catch (err) {
+      console.error('Failed to save image setting:', err)
+      toast.error('Failed to save image understanding default')
+    } finally {
+      setIsSavingImageSetting(false)
     }
   }
 
@@ -750,6 +781,84 @@ export function SettingsPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Image Understanding Defaults Section */}
+      <div className="space-y-4 pt-6 border-t border-border/20">
+        <div className="space-y-1">
+          <h3 className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            Image Understanding Defaults
+          </h3>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+            Global defaults for VLM-powered image understanding. Per-conversion overrides live in Advanced Settings on the Convert page.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Default Vision Model */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+              Default Vision Model
+            </label>
+            <Select
+              value={vlmModel}
+              onChange={(val) => {
+                setVlmModel(val)
+                handleSaveImageSetting('vlm_model', val)
+              }}
+              options={[
+                { value: '', label: 'Auto (first vision-capable model)' },
+                ...providers
+                  .flatMap((p) =>
+                    (p.models ?? [])
+                      .filter((m) => m.vision_capable)
+                      .map((m) => ({ value: m.model_id, label: `${p.label}: ${m.model_id}` }))
+                  ),
+              ]}
+              className="w-full"
+            />
+            <p className="text-[10px] text-muted-foreground/70 leading-normal">
+              {providers.some((p) => (p.models ?? []).some((m) => m.vision_capable))
+                ? 'Override auto-resolution. Mark models vision-capable in the provider editors above.'
+                : 'No vision-capable models configured. Mark a model vision-capable in a provider editor to enable understanding modes.'}
+            </p>
+          </div>
+
+          {/* Per-document image cap */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+              Per-document Image Cap
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={1000}
+              value={maxImagesPerDoc}
+              aria-label="Per-document image cap"
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : 50
+                setMaxImagesPerDoc(val)
+              }}
+              onBlur={(e) => {
+                const val = Math.max(1, Math.min(1000, Number(e.target.value) || 50))
+                setMaxImagesPerDoc(val)
+                if (val !== committedImageCapRef.current) {
+                  handleSaveImageSetting('max_images_per_doc', String(val))
+                }
+              }}
+              disabled={isSavingImageSetting}
+              className="bg-background/50 h-9 text-xs"
+            />
+            <p className="text-[10px] text-muted-foreground/70 leading-normal">
+              Caps VLM work per document (1–1000). Images beyond the cap keep their original reference.
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[10px] text-muted-foreground/60 leading-normal">
+          Cache management, privacy mode, and batch-API toggles are planned for a later phase (see roadmap).
+        </p>
       </div>
 
       {/* System Maintenance Section */}
