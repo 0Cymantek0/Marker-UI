@@ -100,7 +100,7 @@ describe('OutputViewer component', () => {
     render(<OutputViewer content={md} onDownload={vi.fn()} imageUnderstanding={meta} />)
 
     const badges = screen.getAllByRole('button', { name: /photo converted via vlm/i })
-    fireEvent.click(badges[0])
+    fireEvent.click(badges[0]!)
 
     expect(screen.getByRole('heading', { name: /image understanding/i })).toBeInTheDocument()
     expect(screen.getAllByText('img.jpeg').length).toBeGreaterThanOrEqual(1)
