@@ -59,7 +59,7 @@ export function PageHeader({ title, description, children, className }: PageHead
       </div>
 
       {/* Content Container */}
-      <div className="relative border-b border-border/20 px-4 md:px-6 pt-6 pb-5 bg-transparent">
+      <div className="relative px-4 md:px-6 pt-6 pb-5 bg-transparent">
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex-1 min-w-0">
             <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground transition-all duration-300">

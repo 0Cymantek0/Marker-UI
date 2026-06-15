@@ -11,6 +11,7 @@ const mockGetJobEvents = vi.fn()
 const mockDownloadResult = vi.fn()
 const mockDeleteJob = vi.fn()
 const mockGetJobStatus = vi.fn()
+const mockGetHistory = vi.fn()
 
 vi.mock('@/lib/api', () => ({
   uploadFile: (...args: any[]) => mockUploadFile(...args),
@@ -18,6 +19,7 @@ vi.mock('@/lib/api', () => ({
   downloadResult: (...args: any[]) => mockDownloadResult(...args),
   deleteJob: (...args: any[]) => mockDeleteJob(...args),
   getJobStatus: (...args: any[]) => mockGetJobStatus(...args),
+  getHistory: (...args: any[]) => mockGetHistory(...args),
   browseFiles: vi.fn(),
   browseFolder: vi.fn(),
 }))
@@ -46,6 +48,7 @@ describe('ConvertPage Integration with real hook', () => {
       filename: 'test.pdf'
     })
     mockGetJobEvents.mockReturnValue(createMockEventSource())
+    mockGetHistory.mockResolvedValue({ jobs: [], total: 0 })
   })
 
   it('submits conversion and renders queue item without crashing', async () => {
@@ -84,5 +87,42 @@ describe('ConvertPage Integration with real hook', () => {
     // Check overall progress and console logs rendering
     expect(screen.getByText('Conversion Queue (1)')).toBeInTheDocument()
     expect(screen.getByText('Processing document...')).toBeInTheDocument()
+  })
+
+  it('recovers active backend jobs from history when queue state is empty', async () => {
+    mockGetHistory.mockResolvedValue({
+      total: 1,
+      jobs: [
+        {
+          id: 'backend-job-1',
+          job_id: 'backend-job-1',
+          filename: 'openskills.pdf',
+          status: 'pending',
+          progress: 10,
+          output_format: 'markdown',
+          converter: 'PdfConverter',
+          created_at: '2026-06-14T03:29:54Z',
+          completed_at: null,
+          error_message: null,
+          result_text: null,
+        },
+      ],
+    })
+
+    render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('openskills.pdf')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Conversion Queue (1)')).toBeInTheDocument()
+    expect(screen.getByText('Queued on backend...')).toBeInTheDocument()
+    expect(mockGetJobEvents).toHaveBeenCalledWith('backend-job-1')
   })
 })

@@ -1,7 +1,19 @@
-"""Image-understanding processor for marker-pdf Picture blocks."""
+"""Image-understanding processor for marker-pdf Picture blocks.
+
+The VLM extraction result is written into ``Picture.html`` as **HTML**, not
+Markdown. marker renders every document by serialising the block tree to HTML
+and then running it through ``markdownify`` (for the Markdown renderer) or
+returning it verbatim (for the HTML / JSON renderers). markdownify *escapes*
+Markdown metacharacters in raw text nodes (``$$`` -> ``\\$\\$``, ``a_1`` ->
+``a\\_1``, ``**x**`` -> ``\\*\\*x\\*\\*``), so injecting raw Markdown here would
+corrupt LaTeX, Mermaid, and bold in the final output. Emitting HTML lets
+marker's own renderers convert it cleanly and uniformly — the same approach
+marker uses for every other block type.
+"""
 
 from __future__ import annotations
 
+import html as _html
 import logging
 import time
 from io import BytesIO
@@ -16,14 +28,46 @@ from app.services.vlm_service import VLMService
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# markdownify patches (applied once at import).
+#
+# marker constructs ``Markdownify`` without a ``code_language_callback`` and has
+# no converter for our ``<marker-comment>`` sidecar tag, so we add both here.
+# Patching the class (not an instance) is the only injection point, since the
+# Markdown renderer builds a fresh ``Markdownify`` per call.
+# ---------------------------------------------------------------------------
+
 try:
     from marker.renderers.markdown import Markdownify
 
-    def convert_marker_comment(self, el, text, parent_tags):
+    def _convert_marker_comment(self, el, text, parent_tags):
+        # Carry per-image metadata into the Markdown as an HTML comment so it
+        # survives for downstream LLMs / grep without rendering visibly.
         content = el.get_text() or ""
         return f"\n<!-- {content} -->\n"
 
-    Markdownify.convert_marker_comment = convert_marker_comment
+    Markdownify.convert_marker_comment = _convert_marker_comment
+
+    _orig_convert_pre = Markdownify.convert_pre
+
+    def _convert_pre(self, el, text, parent_tags):
+        # Preserve the ```<lang> info string from <code class="language-xxx">.
+        # Without this, our Mermaid fences collapse to a bare ``` fence and no
+        # renderer (or react-markdown) can identify them as Mermaid.
+        code_el = el.find("code") if hasattr(el, "find") else None
+        lang = ""
+        if code_el is not None and code_el.has_attr("class"):
+            for cls in code_el["class"]:
+                if cls.startswith("language-"):
+                    lang = cls[len("language-"):]
+                    break
+        if not lang:
+            return _orig_convert_pre(self, el, text, parent_tags)
+        if not text:
+            return ""
+        return f"\n\n```{lang}\n{text}\n```\n\n"
+
+    Markdownify.convert_pre = _convert_pre
 except ImportError:
     pass
 
@@ -115,23 +159,33 @@ class ImageUnderstandingProcessor(BaseProcessor):
             model_id = self._resolved_model_id()
             image_name = _picture_image_name(picture)
 
+            # Single source of truth for per-image metadata: both the markdown
+            # comment channel (for downstream LLMs / grep) and the sidecar
+            # channel (for the badge UI) derive from this one dict.
+            meta = {
+                "image_name": image_name,
+                "image_type": classification.image_type.value,
+                "confidence": float(classification.confidence),
+                "model": model_id,
+                "omitted": classification.image_type == ImageType.decorative,
+                "duration_ms": duration_ms,
+            }
             _mutate_picture(
                 picture,
                 image_type=classification.image_type,
                 payload=extraction.payload,
                 mode=self.image_handling_mode,
-                confidence=classification.confidence,
-                model=model_id,
-                duration_ms=duration_ms,
-                image_name=image_name,
+                meta=meta,
+                include_original_ref=self.include_original_ref,
             )
+            # Sidecar carries the badge-relevant subset (no duration_ms).
             self._image_meta.append(
                 {
-                    "image_name": image_name,
-                    "image_type": classification.image_type.value,
-                    "confidence": float(classification.confidence),
-                    "model": model_id,
-                    "omitted": classification.image_type == ImageType.decorative,
+                    "image_name": meta["image_name"],
+                    "image_type": meta["image_type"],
+                    "confidence": meta["confidence"],
+                    "model": meta["model"],
+                    "omitted": meta["omitted"],
                 }
             )
             processed += 1
@@ -202,49 +256,72 @@ def _mutate_picture(
     image_type: ImageType,
     payload: dict[str, Any],
     mode: ImageHandlingMode,
-    confidence: float,
-    model: str | None,
-    duration_ms: int,
-    image_name: str,
+    meta: dict[str, Any],
+    include_original_ref: bool = True,
 ) -> None:
+    """Replace a Picture block's output with the VLM textual representation.
+
+    Writes **HTML** into ``picture.html`` (see module docstring for why HTML and
+    not Markdown). Emits two channels from the single ``meta`` dict:
+      * a ``<marker-comment>`` tag that markdownify (patched at import) renders
+        as an HTML comment carrying per-image metadata for downstream LLMs/grep.
+      * the rendered representation (table / mermaid / latex / description) as
+        HTML the renderers convert uniformly.
+
+    ``both`` mode additionally keeps an ``<img>`` reference to the original
+    image so the file stays linked for audit / ZIP packaging — unless
+    ``include_original_ref`` is disabled.
+    """
     rendered = render_extraction(image_type, payload)
     if not rendered:
         return
 
-    model_str = model or "unknown"
-    meta_str = f"marker-ui image-understanding: type={image_type.value} model={model_str} confidence={confidence:.2f} cost_usd=0 duration_ms={duration_ms}"
+    image_name = meta["image_name"]
+    keep_original = (
+        mode == ImageHandlingMode.both
+        and include_original_ref
+        and image_type != ImageType.decorative
+    )
 
-    html_parts = [f"<marker-comment>{meta_str}</marker-comment>"]
-
-    if mode == ImageHandlingMode.both and image_type != ImageType.decorative:
-        html_parts.append(f"<marker-comment>original_image: {image_name}</marker-comment>")
-
-    html_parts.append(f"\n\n{rendered}\n")
-
-    if mode == ImageHandlingMode.both and image_type != ImageType.decorative:
-        html_parts.append(f'<img src="{image_name}" />')
+    meta_str = (
+        f"marker-ui image-understanding: "
+        f"type={meta['image_type']} model={meta['model'] or 'unknown'} "
+        f"confidence={float(meta['confidence']):.2f} "
+        f"cost_usd=0 duration_ms={meta['duration_ms']}"
+    )
+    html_parts = [f"<marker-comment>{_escape(meta_str)}</marker-comment>"]
+    if keep_original:
+        html_parts.append(
+            f"<marker-comment>original_image: {_escape(image_name)}</marker-comment>"
+        )
+    html_parts.append(rendered)
+    if keep_original:
+        html_parts.append(f'<img src="{_escape(image_name)}" />')
 
     picture.html = "\n".join(html_parts)
     picture.description = None
 
 
 def render_extraction(image_type: ImageType, payload: dict[str, Any]) -> str:
+    """Render an extraction payload as HTML for marker's renderers.
+
+    The Markdown renderer pipes this through markdownify (-> a Markdown table /
+    fenced Mermaid block / ``$$`` math / prose); the HTML and JSON renderers
+    keep it as-is. Returning Markdown here would be escaped by markdownify and
+    corrupt LaTeX / Mermaid / bold — see the module docstring.
+    """
     if image_type in _CHART_TYPES:
         return _render_chart(payload)
     if image_type == ImageType.table_image:
         return _render_table(payload)
     if image_type in _DIAGRAM_TYPES:
-        mermaid = str(payload.get("mermaid", "")).strip()
-        caption = str(payload.get("caption", "")).strip()
-        return f"{caption}\n\n```mermaid\n{mermaid}\n```".strip()
+        return _render_diagram(payload)
     if image_type == ImageType.equation:
-        latex = str(payload.get("latex", "")).strip()
-        caption = str(payload.get("caption", "")).strip()
-        return f"{caption}\n\n$$\n{latex}\n$$".strip()
+        return _render_equation(payload)
     if image_type == ImageType.screenshot_ui:
         return _render_screenshot(payload)
     if image_type == ImageType.decorative:
-        return "_Decorative element omitted._"
+        return "<p><em>Decorative element omitted.</em></p>"
     return _render_description(payload)
 
 
@@ -264,13 +341,18 @@ def _render_chart(payload: dict[str, Any]) -> str:
                 x_values.append(x)
             rows_by_x[x][col] = point.get("y", "")
 
-    lines = [_table_row(columns), _table_row(["---"] * len(columns))]
-    for x in x_values:
-        lines.append(_table_row([x, *[rows_by_x[x].get(col, "") for col in columns[1:]]]))
-    notes = str(payload.get("notes", "")).strip()
+    rows = [[x, *[rows_by_x[x].get(col, "") for col in columns[1:]]] for x in x_values]
+    table = _table_html(columns, rows)
+
     title = str(payload.get("title", "")).strip()
-    parts = [p for p in [f"**{title}**" if title else "", "\n".join(lines), notes] if p]
-    return "\n\n".join(parts)
+    notes = str(payload.get("notes", "")).strip()
+    parts = []
+    if title:
+        parts.append(f"<p><strong>{_escape(title)}</strong></p>")
+    parts.append(table)
+    if notes:
+        parts.append(f"<p>{_escape(notes)}</p>")
+    return "\n".join(parts)
 
 
 def _render_table(payload: dict[str, Any]) -> str:
@@ -281,36 +363,74 @@ def _render_table(payload: dict[str, Any]) -> str:
     if not headers:
         return _render_description(payload)
 
-    lines = [_table_row(headers), _table_row(["---"] * len(headers))]
-    for row in rows:
-        padded = list(row)[: len(headers)] + [""] * max(0, len(headers) - len(row))
-        lines.append(_table_row(padded))
+    norm_rows = [
+        list(row)[: len(headers)] + [""] * max(0, len(headers) - len(row))
+        for row in rows
+    ]
+    table = _table_html(headers, norm_rows)
     caption = str(payload.get("caption", "")).strip()
-    return "\n\n".join([p for p in [caption, "\n".join(lines)] if p])
+    parts = []
+    if caption:
+        parts.append(f"<p>{_escape(caption)}</p>")
+    parts.append(table)
+    return "\n".join(parts)
+
+
+def _render_diagram(payload: dict[str, Any]) -> str:
+    mermaid = str(payload.get("mermaid", "")).strip()
+    caption = str(payload.get("caption", "")).strip()
+    parts = []
+    if caption:
+        parts.append(f"<p>{_escape(caption)}</p>")
+    parts.append(
+        f'<pre><code class="language-mermaid">{_escape(mermaid)}</code></pre>'
+    )
+    return "\n".join(parts)
+
+
+def _render_equation(payload: dict[str, Any]) -> str:
+    latex = str(payload.get("latex", "")).strip()
+    caption = str(payload.get("caption", "")).strip()
+    parts = []
+    if caption:
+        parts.append(f"<p>{_escape(caption)}</p>")
+    parts.append(f'<math display="block">{_escape(latex)}</math>')
+    return "\n".join(parts)
 
 
 def _render_screenshot(payload: dict[str, Any]) -> str:
-    title = "# Screenshot"
     app = str(payload.get("application", "")).strip()
     area = str(payload.get("area", "")).strip()
     if app or area:
-        title = f"# Screenshot of {app or 'application'}: {area or 'screen'}"
-    lines = [title]
+        heading = f"Screenshot of {app or 'application'}: {area or 'screen'}"
+    else:
+        heading = "Screenshot"
+    parts = [f"<h1>{_escape(heading)}</h1>"]
     summary = str(payload.get("summary", "")).strip()
     if summary:
-        lines.extend(["", summary])
+        parts.append(f"<p>{_escape(summary)}</p>")
+
+    items = []
     for region in payload.get("regions") or []:
         name = str(region.get("name", "Region")).strip() or "Region"
         desc = str(region.get("description", "")).strip()
         ocr = str(region.get("ocr_text", "")).strip()
-        lines.append(f"- {name}: {desc}" + (f" Text: {ocr}" if ocr else ""))
-    return "\n".join(lines)
+        line = f"{name}: {desc}" + (f" Text: {ocr}" if ocr else "")
+        items.append(f"<li>{_escape(line)}</li>")
+    if items:
+        parts.append("<ul>" + "".join(items) + "</ul>")
+    return "\n".join(parts)
 
 
 def _render_description(payload: dict[str, Any]) -> str:
     alt = str(payload.get("alt_text") or payload.get("summary") or "").strip()
     details = [str(d).strip() for d in payload.get("details") or [] if str(d).strip()]
-    return "\n".join([alt, *[f"- {d}" for d in details]]).strip()
+    parts = []
+    if alt:
+        parts.append(f"<p>{_escape(alt)}</p>")
+    if details:
+        parts.append("<ul>" + "".join(f"<li>{_escape(d)}</li>" for d in details) + "</ul>")
+    return "\n".join(parts)
 
 
 def _block_text(block: Any, document: Any) -> str:
@@ -323,12 +443,20 @@ def _block_text(block: Any, document: Any) -> str:
     return str(getattr(block, "html", "") or getattr(block, "text", "") or "").strip()
 
 
-def _table_row(values: list[Any]) -> str:
-    return "| " + " | ".join(_escape_cell(v) for v in values) + " |"
+def _table_html(headers: list[Any], rows: list[list[Any]]) -> str:
+    """Render an HTML table; markdownify converts it to a Markdown table and
+    the HTML/JSON renderers keep it as-is. Cell content is HTML-escaped, so
+    Markdown metacharacters in the data survive the round-trip intact."""
+    head = "<tr>" + "".join(f"<th>{_escape(h)}</th>" for h in headers) + "</tr>"
+    body = "".join(
+        "<tr>" + "".join(f"<td>{_escape(c)}</td>" for c in row) + "</tr>"
+        for row in rows
+    )
+    return f"<table>{head}{body}</table>"
 
 
-def _escape_cell(value: Any) -> str:
-    return str(value).replace("|", "\\|")
+def _escape(value: Any) -> str:
+    return _html.escape(str(value), quote=True)
 
 
 def _picture_image_name(picture: Any) -> str:
@@ -367,11 +495,4 @@ _DIAGRAM_TYPES = {
     ImageType.diagram_state,
     ImageType.diagram_class,
     ImageType.diagram_architecture,
-}
-
-_DESCRIPTION_TYPES = {
-    ImageType.screenshot_ui,
-    ImageType.photo,
-    ImageType.figure_technical,
-    ImageType.other,
 }

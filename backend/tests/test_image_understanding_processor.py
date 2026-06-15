@@ -147,8 +147,12 @@ def test_processor_mutates_picture_in_place_for_chart_html():
 
     assert picture.html is not None
     assert "marker-ui image-understanding: type=chart_bar model=gpt-4o confidence=0.91" in picture.html
-    assert "| x | FY26 |" in picture.html
-    assert "| Q2 | 14 |" in picture.html
+    # Output is HTML (markdownify converts it to a Markdown table downstream).
+    assert "<table>" in picture.html
+    assert "<th>x</th>" in picture.html
+    assert "<th>FY26</th>" in picture.html
+    assert "<td>Q2</td>" in picture.html
+    assert "<td>14</td>" in picture.html
     assert "original_image" not in picture.html
     assert len(vlm.calls) == 2
 
@@ -179,10 +183,30 @@ def test_processor_both_mode_collects_sidecar_meta_for_description_type():
     assert picture.html is not None
     assert "marker-ui image-understanding: type=photo" in picture.html
     assert "original_image: _page_0_Picture_42.jpeg" in picture.html
-    assert "A detailed office photo.\n- Bright room" in picture.html
+    assert "<p>A detailed office photo.</p>" in picture.html
+    assert "<li>Bright room</li>" in picture.html
     assert '<img src="_page_0_Picture_42.jpeg" />' in picture.html
     assert proc.image_meta[0]["image_type"] == "photo"
     assert proc.image_meta[0]["omitted"] is False
+
+
+def test_processor_both_mode_respects_include_original_ref_false():
+    """When include_original_ref is off, both-mode drops the original <img>."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM(
+        image_type=ImageType.photo,
+        payload={"alt_text": "A photo.", "details": []},
+    )
+
+    proc = ImageUnderstandingProcessor(
+        {"image_handling_mode": "both", "include_original_ref": False},
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    assert picture.html is not None
+    assert "<img" not in picture.html
+    assert "original_image" not in picture.html
 
 
 def test_processor_decorative_omits_picture_output():
@@ -197,7 +221,7 @@ def test_processor_decorative_omits_picture_output():
 
     assert picture.ignore_for_output is False
     assert "marker-ui image-understanding: type=decorative" in picture.html
-    assert "_Decorative element omitted._" in picture.html
+    assert "Decorative element omitted." in picture.html
     assert "original_image" not in picture.html
     assert "<img" not in picture.html
     # Decorative images are flagged in the sidecar so the badge can show "omitted".
@@ -205,14 +229,80 @@ def test_processor_decorative_omits_picture_output():
     assert proc.image_meta[0]["omitted"] is True
 
 
-def test_render_extraction_diagram_outputs_mermaid_fence():
+def test_render_extraction_diagram_outputs_mermaid_code_block():
     rendered = render_extraction(
         ImageType.diagram_flow,
         {"caption": "Flow", "mermaid": "graph TD\n    A-->B\n    B-->C"},
     )
 
-    assert "```mermaid" in rendered
+    assert '<code class="language-mermaid">' in rendered
     assert "graph TD" in rendered
+
+
+# ---------------------------------------------------------------------------
+# Round-trip regression: render the processor HTML through marker's own
+# Markdownify and assert the *final Markdown* is correct. This is the test
+# that catches markdownify escaping LaTeX / Mermaid / bold — the bug that a
+# unit test on picture.html alone misses.
+# ---------------------------------------------------------------------------
+
+def _markdownify():
+    from marker.renderers.markdown import Markdownify
+
+    return Markdownify(
+        paginate_output=False,
+        page_separator="-" * 48,
+        inline_math_delimiters=("$", "$"),
+        block_math_delimiters=("$$", "$$"),
+        html_tables_in_markdown=False,
+        heading_style="ATX",
+        bullets="-",
+        escape_misc=False,
+        escape_underscores=True,
+        escape_asterisks=True,
+        escape_dollars=True,
+        sub_symbol="<sub>",
+        sup_symbol="<sup>",
+    )
+
+
+def test_roundtrip_chart_html_becomes_clean_markdown_table():
+    html = render_extraction(
+        ImageType.chart_bar,
+        {
+            "title": "Revenue_2024",
+            "series": [{"name": "series_1", "points": [{"x": "Q1", "y": 100}]}],
+            "notes": "",
+        },
+    )
+    md = _markdownify().convert(html)
+    # Underscores in headers survive (not escaped to series\_1 inside a table).
+    assert "series_1" in md
+    assert "| Q1" in md and "100" in md
+
+
+def test_roundtrip_diagram_html_keeps_mermaid_fence_and_underscores():
+    html = render_extraction(
+        ImageType.diagram_flow,
+        {"caption": "", "mermaid": "graph TD\n  start_node --> end_node"},
+    )
+    md = _markdownify().convert(html)
+    assert "```mermaid" in md
+    # Node ids keep their underscores — markdownify must not escape them.
+    assert "start_node --> end_node" in md
+    assert "\\_" not in md
+
+
+def test_roundtrip_equation_html_becomes_valid_block_math():
+    html = render_extraction(
+        ImageType.equation,
+        {"caption": "Pythagoras", "latex": "a_1 + b_2 = c^2"},
+    )
+    md = _markdownify().convert(html)
+    # $$ delimiters survive unescaped and the subscripts are intact.
+    assert "$$" in md
+    assert "\\$" not in md
+    assert "a_1 + b_2 = c^2" in md
 
 
 def test_with_image_understanding_processor_appends_for_understanding_modes():

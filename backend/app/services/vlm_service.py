@@ -580,20 +580,31 @@ class VLMService:
             import asyncio
 
             from app.database import async_session_factory
-            from app.routes.settings import get_active_llm, get_llm_providers
+            from app.models.settings import Setting
+            from app.routes.settings import init_llm_providers_if_missing
+            from sqlalchemy import select
 
             async def _load() -> LLMProvider | None:
                 async with async_session_factory() as session:
-                    active = await get_active_llm(session)
-                    providers = await get_llm_providers(session)
-                    for p in providers:
-                        if p.id == active.provider_id:
-                            # ``get_llm_providers`` returns masked keys. For
-                            # production callers the calling route should
-                            # instead pass a freshly-decrypted provider; this
-                            # path is a convenience fallback only.
-                            return p
-                    return None
+                    await init_llm_providers_if_missing(session)
+
+                    providers_row = (
+                        await session.execute(
+                            select(Setting).where(Setting.key == "llm_providers")
+                        )
+                    ).scalar_one_or_none()
+                    active_row = (
+                        await session.execute(
+                            select(Setting).where(Setting.key == "llm_global_active")
+                        )
+                    ).scalar_one_or_none()
+                    if not providers_row or not active_row:
+                        return None
+
+                    return _provider_from_stored_settings(
+                        providers_json=providers_row.value,
+                        active_json=active_row.value,
+                    )
 
             try:
                 loop = asyncio.get_event_loop()
@@ -730,6 +741,41 @@ def _demote_to_description(raw_response: str) -> dict[str, Any]:
         "alt_text": "Diagram could not be converted to Mermaid",
         "details": [f"Raw VLM response: {snippet}"],
     }
+
+
+def _provider_from_stored_settings(
+    *,
+    providers_json: str,
+    active_json: str,
+) -> LLMProvider | None:
+    """Build the active provider from raw DB JSON, preserving encrypted keys.
+
+    Do not call the public settings endpoint here: that path masks API keys for
+    UI safety, and masked keys make VLM calls fail then silently skip images.
+    """
+    try:
+        providers = json.loads(providers_json)
+        active = json.loads(active_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    provider_id = active.get("provider_id")
+    if not provider_id or provider_id == "none":
+        return None
+
+    for provider in providers:
+        if provider.get("id") != provider_id:
+            continue
+        return LLMProvider(
+            id=provider["id"],
+            type=provider["type"],
+            label=provider["label"],
+            api_key=provider.get("api_key"),
+            fallback_api_keys=provider.get("fallback_api_keys", []),
+            base_url=provider.get("base_url"),
+            models=provider.get("models", []),
+        )
+    return None
 
 
 def _read_setting_sync(key: str) -> str | None:

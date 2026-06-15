@@ -13,6 +13,7 @@ import {
   type ConversionConfig,
   type OutputFormat,
   type ConverterType,
+  type ImageHandlingMode,
   type ActiveLLM
 } from '@/lib/api'
 
@@ -36,11 +37,36 @@ const CONVERTERS: { value: ConverterType; label: string; desc: string }[] = [
   { value: 'ExtractionConverter', label: 'Fast Text', desc: 'Quick plain-text parser without heavy styles' },
 ]
 
+const IMAGE_HANDLING_OPTIONS: {
+  value: ImageHandlingMode
+  label: string
+  desc: string
+}[] = [
+  {
+    value: 'understanding',
+    label: 'Understanding only',
+    desc: 'Replace images with VLM text. Best for RAG pipelines.',
+  },
+  {
+    value: 'extraction',
+    label: 'Extraction only',
+    desc: 'Keep current image files and Markdown image links. No VLM cost.',
+  },
+  {
+    value: 'both',
+    label: 'Both',
+    desc: 'Add VLM text and keep the original image reference for audit.',
+  },
+]
+
 export function ConversionOptions({ config, onChange, disabled }: ConversionOptionsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [tempConfig, setTempConfig] = useState<ConversionConfig>(config)
   const [providers, setProviders] = useState<LLMProvider[]>([])
   const [activeLLM, setActiveLLM] = useState<ActiveLLM | null>(null)
+  const hasVisionModel = providers.some((provider) =>
+    provider.models?.some((model) => model.vision_capable)
+  )
 
   useEffect(() => {
     if (isModalOpen) {
@@ -174,6 +200,41 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="space-y-2.5">
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                    Image Understanding
+                  </label>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+                    Choose how extracted document images appear in Markdown.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2" role="radiogroup" aria-label="Image Understanding">
+                  {IMAGE_HANDLING_OPTIONS.map((option) => {
+                    const isSelected = (tempConfig.image_handling_mode ?? 'extraction') === option.value
+                    const needsVision = option.value !== 'extraction'
+                    const optionDisabled = disabled || (needsVision && !hasVisionModel)
+                    return (
+                      <RadioOption
+                        key={option.value}
+                        label={option.label}
+                        description={option.desc}
+                        selected={isSelected}
+                        disabled={optionDisabled}
+                        onClick={() => updateTemp('image_handling_mode', option.value)}
+                      />
+                    )
+                  })}
+                </div>
+
+                {!hasVisionModel && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-normal">
+                    Enable vision capability for at least one model in Settings to use understanding modes.
+                  </p>
+                )}
+              </div>
+
               <ToggleOption
                 label="Enable LLM Integration"
                 description="Use a Large Language Model (Gemini, Claude, GPT, etc.) to format tables, clean up layout artifacts, and fix extraction errors."
@@ -400,6 +461,52 @@ function ToggleOption({
           )}
         />
       </div>
+    </button>
+  )
+}
+
+function RadioOption({
+  label,
+  description,
+  selected,
+  disabled,
+  onClick,
+}: {
+  label: string
+  description: string
+  selected: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'flex items-start gap-3 w-full p-3 rounded-xl border text-left transition-all',
+        selected
+          ? 'border-primary/60 bg-primary/10 text-foreground'
+          : 'border-border/40 bg-card/35 text-muted-foreground hover:bg-muted/30 hover:text-foreground',
+        disabled && 'opacity-50 pointer-events-none'
+      )}
+    >
+      <span
+        className={cn(
+          'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border',
+          selected ? 'border-primary' : 'border-muted-foreground/40'
+        )}
+      >
+        {selected && <span className="h-2 w-2 rounded-full bg-primary" />}
+      </span>
+      <span className="min-w-0">
+        <span className="text-xs font-semibold text-foreground block">{label}</span>
+        <span className="block text-[11px] text-muted-foreground mt-0.5 leading-normal">
+          {description}
+        </span>
+      </span>
     </button>
   )
 }

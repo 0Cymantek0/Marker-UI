@@ -21,7 +21,11 @@ from app.models.image_understanding import (
     ImageType,
 )
 from app.models.schemas import LLMProvider, ModelConfig
-from app.services.vlm_service import VLMService, validate_mermaid
+from app.services.vlm_service import (
+    VLMService,
+    _provider_from_stored_settings,
+    validate_mermaid,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -400,3 +404,43 @@ class TestConstructorWiring:
 
         kwargs = http_client.chat.completions.create.call_args.kwargs
         assert kwargs.get("model") == "gpt-4o"
+
+
+class TestProviderResolution:
+    def test_provider_from_stored_settings_preserves_raw_api_key(self):
+        providers_json = json.dumps(
+            [
+                {
+                    "id": "openai",
+                    "type": "openai",
+                    "label": "OpenAI",
+                    "api_key": "encrypted-or-plaintext-key",
+                    "fallback_api_keys": [],
+                    "base_url": "https://api.openai.com/v1",
+                    "models": [
+                        {"model_id": "gpt-4o", "vision_capable": True},
+                    ],
+                }
+            ]
+        )
+        active_json = json.dumps(
+            {"provider_id": "openai", "model_id": "gpt-4o"}
+        )
+
+        provider = _provider_from_stored_settings(
+            providers_json=providers_json,
+            active_json=active_json,
+        )
+
+        assert provider is not None
+        assert provider.id == "openai"
+        assert provider.api_key == "encrypted-or-plaintext-key"
+        assert provider.models[0].vision_capable is True
+
+    def test_provider_from_stored_settings_none_active_returns_none(self):
+        provider = _provider_from_stored_settings(
+            providers_json=json.dumps([]),
+            active_json=json.dumps({"provider_id": "none", "model_id": ""}),
+        )
+
+        assert provider is None
