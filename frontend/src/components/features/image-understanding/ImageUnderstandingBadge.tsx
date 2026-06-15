@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 import { Badge, badgeVariants } from '@/components/ui/badge'
 import type { ImageUnderstandingMeta } from '@/lib/api'
 
-type BadgeVariant = NonNullable<Parameters<typeof badgeVariants>[0]['variant']>
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>
 
 // Maps an image_type to (badge label, badge variant) per UX doc §7.3.
 const TYPE_BADGE: Record<string, { label: string; variant: BadgeVariant }> = {
