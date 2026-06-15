@@ -277,21 +277,6 @@ class MarkerService:
             "metadata": metadata,
         }
 
-
-def _collect_image_understanding_meta(converter: Any) -> list[dict[str, Any]]:
-    """Read the per-image sidecar stash from an ImageUnderstandingProcessor.
-
-    The processor accumulates ``_image_meta`` during ``__call__`` (markdownify
-    strips HTML comments, so a comment channel cannot survive to output).
-    marker stores processor instances on ``converter.processor_list`` after
-    initialization; we locate ours by class name and read the stash.
-    """
-    processor_list = getattr(converter, "processor_list", None) or []
-    for processor in processor_list:
-        if type(processor).__name__ == "ImageUnderstandingProcessor":
-            return list(getattr(processor, "image_meta", []) or [])
-    return []
-
     def convert_bytes(
         self,
         data: bytes,
@@ -317,3 +302,18 @@ def _collect_image_understanding_meta(converter: Any) -> list[dict[str, Any]]:
             return {k: v for k, v in cp.dict_config.items()}
         except Exception:
             return {}
+
+
+def _collect_image_understanding_meta(converter: Any) -> list[dict[str, Any]]:
+    """Read the per-image sidecar stash from an ImageUnderstandingProcessor.
+
+    The processor accumulates ``_image_meta`` during ``__call__`` (markdownify
+    strips HTML comments, so a comment channel cannot survive to output).
+    marker stores processor instances on ``converter.processor_list`` after
+    initialization; we locate ours by class name and read the stash.
+    """
+    processor_list = getattr(converter, "processor_list", None) or []
+    for processor in processor_list:
+        if type(processor).__name__ == "ImageUnderstandingProcessor":
+            return list(getattr(processor, "image_meta", []) or [])
+    return []
