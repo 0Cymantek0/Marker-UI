@@ -73,6 +73,7 @@ htmlcov/
 *.onnx
 *.safetensors
 AGENTS.md
+CLAUDE.md
 dummy.pdf
 .playwright-mcp/
 
