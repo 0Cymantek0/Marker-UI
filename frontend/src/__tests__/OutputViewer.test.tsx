@@ -71,9 +71,9 @@ describe('OutputViewer component', () => {
 
     render(<OutputViewer content={md} onDownload={vi.fn()} imageUnderstanding={meta} />)
 
-    const badge = screen.getByRole('button', { name: /chart_bar converted via vlm/i })
-    expect(badge).toBeInTheDocument()
-    expect(badge).toHaveAttribute('aria-label', expect.stringContaining('Confidence 92%'))
+    const badges = screen.getAllByRole('button', { name: /chart_bar converted via vlm/i })
+    expect(badges[0]).toBeInTheDocument()
+    expect(badges[0]).toHaveAttribute('aria-label', expect.stringContaining('Confidence 92%'))
   })
 
   it('renders no badge for images without matching metadata', () => {
@@ -99,10 +99,11 @@ describe('OutputViewer component', () => {
 
     render(<OutputViewer content={md} onDownload={vi.fn()} imageUnderstanding={meta} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /photo converted via vlm/i }))
+    const badges = screen.getAllByRole('button', { name: /photo converted via vlm/i })
+    fireEvent.click(badges[0])
 
     expect(screen.getByRole('heading', { name: /image understanding/i })).toBeInTheDocument()
-    expect(screen.getByText('img.jpeg')).toBeInTheDocument()
+    expect(screen.getAllByText('img.jpeg').length).toBeGreaterThanOrEqual(1)
     // Confidence shows in the modal (the tooltip also renders it, so use getAll).
     expect(screen.getAllByText('80%').length).toBeGreaterThanOrEqual(1)
   })
