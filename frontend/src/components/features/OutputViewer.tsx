@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { ImageUnderstandingBadge } from '@/components/features/output/ImageUnderstandingBadge'
+import { ImageUnderstandingBadge } from '@/components/features/image-understanding/ImageUnderstandingBadge'
 import type { ImageUnderstandingMeta } from '@/lib/api'
 
 type OutputTab = 'markdown' | 'html' | 'json' | 'raw'
@@ -119,6 +119,26 @@ export function OutputViewer({ content, onDownload, imageUnderstanding }: Output
       <div className={cn('flex-1 p-4 overflow-auto font-mono text-xs leading-relaxed', getTabClass())}>
         {activeTab === 'markdown' && (
           <div className="prose prose-sm dark:prose-invert max-w-none">
+            {imageUnderstanding && imageUnderstanding.length > 0 && (
+              <div className="not-prose flex flex-wrap items-center gap-x-6 gap-y-3 p-4 mb-5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 shadow-sm">
+                <span className="text-[10px] font-extrabold tracking-widest text-slate-400 dark:text-slate-500 uppercase w-full mb-0.5">
+                  VLM Processed Images ({imageUnderstanding.length})
+                </span>
+                {imageUnderstanding.map((meta, i) => (
+                  <div key={meta.image_name} className="flex items-center gap-2 pr-4 border-r border-slate-200 dark:border-slate-800 last:border-0">
+                    <span className="text-[10px] font-mono text-muted-foreground max-w-[120px] truncate" title={meta.image_name}>
+                      {meta.image_name}
+                    </span>
+                    <ImageUnderstandingBadge
+                      meta={meta}
+                      index={i + 1}
+                      total={imageUnderstanding.length}
+                      inline
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
