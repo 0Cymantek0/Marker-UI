@@ -146,8 +146,10 @@ def test_processor_mutates_picture_in_place_for_chart_html():
     proc(document)
 
     assert picture.html is not None
+    assert "marker-ui image-understanding: type=chart_bar model=gpt-4o confidence=0.91" in picture.html
     assert "| x | FY26 |" in picture.html
     assert "| Q2 | 14 |" in picture.html
+    assert "original_image" not in picture.html
     assert len(vlm.calls) == 2
 
     # Sidecar metadata channel: pairs to the emitted image filename.
@@ -163,7 +165,7 @@ def test_processor_mutates_picture_in_place_for_chart_html():
 
 
 def test_processor_both_mode_collects_sidecar_meta_for_description_type():
-    """both-mode + photo sets description (image kept); sidecar still records type."""
+    """both-mode + photo sets html with comments and original img tag."""
     document, picture = _doc_with_picture()
     vlm = FakeVLM(
         image_type=ImageType.photo,
@@ -173,8 +175,12 @@ def test_processor_both_mode_collects_sidecar_meta_for_description_type():
     proc = ImageUnderstandingProcessor({"image_handling_mode": "both"}, vlm_service=vlm)
     proc(document)
 
-    assert picture.html is None
-    assert picture.description == "A detailed office photo.\n- Bright room"
+    assert picture.description is None
+    assert picture.html is not None
+    assert "marker-ui image-understanding: type=photo" in picture.html
+    assert "original_image: _page_0_Picture_42.jpeg" in picture.html
+    assert "A detailed office photo.\n- Bright room" in picture.html
+    assert '<img src="_page_0_Picture_42.jpeg" />' in picture.html
     assert proc.image_meta[0]["image_type"] == "photo"
     assert proc.image_meta[0]["omitted"] is False
 
@@ -189,8 +195,11 @@ def test_processor_decorative_omits_picture_output():
     )
     proc(document)
 
-    assert picture.ignore_for_output is True
+    assert picture.ignore_for_output is False
+    assert "marker-ui image-understanding: type=decorative" in picture.html
     assert "_Decorative element omitted._" in picture.html
+    assert "original_image" not in picture.html
+    assert "<img" not in picture.html
     # Decorative images are flagged in the sidecar so the badge can show "omitted".
     assert proc.image_meta[0]["image_type"] == "decorative"
     assert proc.image_meta[0]["omitted"] is True
