@@ -94,18 +94,20 @@ class TestLLMProviders:
             "api_key": "sk-together-12345",
             "fallback_api_keys": ["sk-together-fallback-1", "sk-together-fallback-2"],
             "base_url": "https://api.together.xyz/v1",
+            "concurrency": 3,
             "models": [
                 {"model_id": "deepseek-coder", "timeout": 30}
             ]
         }
         updated_list = providers + [new_provider]
-        
+
         resp = await test_client.put("/api/settings/llm/providers", json=updated_list)
         assert resp.status_code == 200
         body = resp.json()
-        
+
         custom_prov = next(p for p in body if p["id"] == "together-deepseek")
         assert custom_prov["label"] == "Together DeepSeek"
+        assert custom_prov["concurrency"] == 3
         assert is_masked(custom_prov["api_key"])
         assert len(custom_prov["fallback_api_keys"]) == 2
         assert is_masked(custom_prov["fallback_api_keys"][0])
@@ -119,6 +121,12 @@ class TestLLMProviders:
         assert db_custom["api_key"] != "sk-together-12345"
         assert decrypt_value(db_custom["api_key"]) == "sk-together-12345"
         assert decrypt_value(db_custom["fallback_api_keys"][0]) == "sk-together-fallback-1"
+        assert db_custom["concurrency"] == 3
+
+        # 4. Re-fetch through the API and confirm concurrency persists round-trip
+        resp = await test_client.get("/api/settings/llm/providers")
+        refetched = next(p for p in resp.json() if p["id"] == "together-deepseek")
+        assert refetched["concurrency"] == 3
 
     @pytest.mark.asyncio
     async def test_active_llm_endpoints(self, test_client: AsyncClient):
@@ -238,3 +246,68 @@ class TestLLMProviders:
         assert resp.status_code == 200
         providers_after_restart = resp.json()
         assert any(p["id"] == "custom-claude-endpoint" for p in providers_after_restart)
+
+    @pytest.mark.asyncio
+    async def test_masked_key_not_double_encrypted_on_resave(
+        self, test_client: AsyncClient, test_session: AsyncSession
+    ):
+        """Re-saving a provider whose key comes back MASKED must preserve the
+        stored ciphertext verbatim - never decrypt-then-re-encrypt.
+
+        Regression: the old save path round-tripped every existing key through
+        decrypt_value -> encrypt_value. When decrypt_value fail-softs (key
+        mismatch) it returns the ciphertext unchanged, so re-encrypting wrapped
+        it a second time. The double-wrapped token then decrypts (once) to
+        another Fernet token instead of the real secret -> provider HTTP 400.
+        """
+        from sqlalchemy import select, delete
+
+        await test_session.execute(delete(Setting).where(Setting.key == "llm_providers"))
+        await test_session.commit()
+
+        real_key = "AIzaSyARealLookingGeminiKey-1234567890x"
+        provider = {
+            "id": "mask-test",
+            "type": "gemini",
+            "label": "Mask Test",
+            "api_key": real_key,
+            "fallback_api_keys": [],
+            "base_url": "https://generativelanguage.googleapis.com",
+            "models": [{"model_id": "gemini-3-flash-preview"}],
+        }
+
+        # 1. First save: real plaintext -> encrypted once at rest.
+        resp = await test_client.put("/api/settings/llm/providers", json=[provider])
+        assert resp.status_code == 200
+
+        async def _stored_cipher() -> str:
+            row = (
+                await test_session.execute(
+                    select(Setting).where(Setting.key == "llm_providers")
+                )
+            ).scalar_one()
+            stored = next(p for p in json.loads(row.value) if p["id"] == "mask-test")
+            return stored["api_key"]
+
+        cipher_after_first = await _stored_cipher()
+        # Encrypted (not plaintext) and decrypts to the original.
+        assert cipher_after_first != real_key
+        assert decrypt_value(cipher_after_first) == real_key
+
+        # 2. UI re-fetches: key is returned MASKED.
+        resp = await test_client.get("/api/settings/llm/providers")
+        masked = next(p for p in resp.json() if p["id"] == "mask-test")["api_key"]
+        assert is_masked(masked)
+
+        # 3. Re-save with the masked value (e.g. user changed only the label).
+        resaved = dict(provider, api_key=masked, label="Renamed")
+        resp = await test_client.put("/api/settings/llm/providers", json=[resaved])
+        assert resp.status_code == 200
+
+        cipher_after_resave = await _stored_cipher()
+        # Ciphertext is byte-identical: not re-encrypted, not double-wrapped.
+        assert cipher_after_resave == cipher_after_first
+        # Still decrypts to the real key in ONE pass (no nested token).
+        decrypted = decrypt_value(cipher_after_resave)
+        assert decrypted == real_key
+        assert not decrypted.startswith("gAAAAA")

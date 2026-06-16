@@ -626,6 +626,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "label": "Gemini",
             "api_key": encrypt_value(get_old("gemini_api_key")) if get_old("gemini_api_key") else None,
             "fallback_api_keys": [],
+            "concurrency": 4,
             "models": [
                 {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
                 {"model_id": "gemini-2.0-pro-exp-02-05", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
@@ -637,6 +638,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "label": "Anthropic",
             "api_key": encrypt_value(get_old("claude_api_key")) if get_old("claude_api_key") else None,
             "fallback_api_keys": [],
+            "concurrency": 4,
             "models": [
                 {"model_id": get_old("claude_model_name") or "claude-3-7-sonnet-20250219", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
                 {"model_id": "claude-3-5-sonnet-20241022", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
@@ -649,6 +651,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "api_key": encrypt_value(get_old("openai_api_key")) if get_old("openai_api_key") else None,
             "base_url": get_old("openai_base_url") or "https://api.openai.com/v1",
             "fallback_api_keys": [],
+            "concurrency": 4,
             "models": [
                 {"model_id": get_old("openai_model") or "gpt-4o-mini", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
                 {"model_id": "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
@@ -660,6 +663,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "label": "Ollama",
             "base_url": get_old("ollama_base_url") or "http://localhost:11434",
             "fallback_api_keys": [],
+            "concurrency": 2,
             "models": [
                 {"model_id": get_old("ollama_model") or "llama3.2-vision", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
@@ -671,6 +675,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "api_key": encrypt_value(get_old("azure_api_key")) if get_old("azure_api_key") else None,
             "base_url": get_old("azure_endpoint") or "",
             "fallback_api_keys": [],
+            "concurrency": 4,
             "models": [
                 {"model_id": get_old("azure_deployment_name") or "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
@@ -682,6 +687,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "api_key": encrypt_value(get_old("vertex_project_id")) if get_old("vertex_project_id") else None,
             "base_url": get_old("vertex_location") or "us-central1",
             "fallback_api_keys": [],
+            "concurrency": 4,
             "models": [
                 {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
             ]
@@ -886,6 +892,7 @@ async def get_llm_providers(
             type=p["type"],
             label=p["label"],
             base_url=p.get("base_url"),
+            concurrency=p.get("concurrency"),
             api_key=mask_value(decrypt_value(p["api_key"])) if p.get("api_key") else None,
             fallback_api_keys=[mask_value(decrypt_value(fb)) for fb in p.get("fallback_api_keys", [])],
             models=[ModelConfig(**m) for m in p.get("models", [])]
@@ -910,19 +917,21 @@ async def save_llm_providers(
         except Exception:
             pass
 
+    # Keep the STORED CIPHERTEXT verbatim. A masked (unchanged) key must be
+    # preserved exactly as it sits in the DB - never decrypted-then-re-encrypted.
+    # Round-tripping is what corrupts data: if decrypt_value fails on a
+    # key/ENCRYPTION_KEY mismatch it fail-softs by returning the ciphertext
+    # unchanged, and re-encrypting that yields a double-wrapped token whose inner
+    # value is itself a Fernet token, not the real secret (HTTP 400 at call time).
     existing_map = {}
     for p in existing_providers:
         pid = p.get("id")
         if not pid:
             continue
-        api_key = p.get("api_key")
-        if api_key:
-            api_key = decrypt_value(api_key)
-        fallback_keys = []
-        for fb in p.get("fallback_api_keys", []):
-            if fb:
-                fallback_keys.append(decrypt_value(fb))
-        existing_map[pid] = {"api_key": api_key, "fallback_api_keys": fallback_keys}
+        existing_map[pid] = {
+            "api_key": p.get("api_key"),
+            "fallback_api_keys": list(p.get("fallback_api_keys", [])),
+        }
 
     updated_providers = []
     for p in body:
@@ -932,21 +941,23 @@ async def save_llm_providers(
         base_url = p.base_url
         models = [m.model_dump() for m in p.models]
 
-        api_key = p.api_key
-        if api_key and is_masked(api_key):
-            api_key = existing_map.get(pid, {}).get("api_key")
+        # Encrypt only freshly-entered plaintext. Masked => reuse stored cipher.
+        incoming_api_key = p.api_key
+        if incoming_api_key and is_masked(incoming_api_key):
+            encrypted_api_key = existing_map.get(pid, {}).get("api_key")
+        elif incoming_api_key:
+            encrypted_api_key = encrypt_value(incoming_api_key)
+        else:
+            encrypted_api_key = None
 
-        fallback_keys = []
+        encrypted_fallback_keys = []
         existing_fallbacks = existing_map.get(pid, {}).get("fallback_api_keys", [])
         for i, fb in enumerate(p.fallback_api_keys):
             if fb and is_masked(fb):
                 if i < len(existing_fallbacks):
-                    fallback_keys.append(existing_fallbacks[i])
+                    encrypted_fallback_keys.append(existing_fallbacks[i])
             elif fb:
-                fallback_keys.append(fb)
-
-        encrypted_api_key = encrypt_value(api_key) if api_key else None
-        encrypted_fallback_keys = [encrypt_value(fb) for fb in fallback_keys]
+                encrypted_fallback_keys.append(encrypt_value(fb))
 
         updated_providers.append({
             "id": pid,
@@ -955,6 +966,7 @@ async def save_llm_providers(
             "api_key": encrypted_api_key,
             "fallback_api_keys": encrypted_fallback_keys,
             "base_url": base_url,
+            "concurrency": p.concurrency,
             "models": models
         })
 
@@ -977,6 +989,7 @@ async def save_llm_providers(
             type=p["type"],
             label=p["label"],
             base_url=p["base_url"],
+            concurrency=p.get("concurrency"),
             api_key=mask_value(decrypt_value(p["api_key"])) if p["api_key"] else None,
             fallback_api_keys=[mask_value(decrypt_value(fb)) for fb in p["fallback_api_keys"]],
             models=[ModelConfig(**m) for m in p["models"]]

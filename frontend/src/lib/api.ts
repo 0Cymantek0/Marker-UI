@@ -102,6 +102,8 @@ export interface LLMProvider {
   api_key?: string
   fallback_api_keys: string[]
   base_url?: string
+  /** Max simultaneous in-flight API calls to this provider. undefined/0 = unlimited. */
+  concurrency?: number | null
   models: ModelConfig[]
 }
 

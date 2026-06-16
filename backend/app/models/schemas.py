@@ -221,6 +221,10 @@ class LLMProvider(BaseModel):
     api_key: Optional[str] = None
     fallback_api_keys: list[str] = Field(default_factory=list)
     base_url: Optional[str] = None
+    # Max simultaneous in-flight API calls to this provider. Gates the burst of
+    # parallel LLM requests marker fires (e.g. LLMTableProcessor) so overloaded
+    # endpoints stop returning 504 DEADLINE_EXCEEDED. None/<=0 means unlimited.
+    concurrency: Optional[int] = Field(default=None, ge=1)
     models: list[ModelConfig] = Field(default_factory=list)
 
 
