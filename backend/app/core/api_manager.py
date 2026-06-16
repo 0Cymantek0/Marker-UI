@@ -1,9 +1,12 @@
 """Live API interceptor and in-memory secure secrets cache for Marker UI."""
 
+import asyncio
 import logging
 import re
 import threading
+import time
 from typing import Any
+from urllib.parse import urlparse
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -17,6 +20,80 @@ _provider_keys: dict[str, list[str]] = {}  # provider_id -> [decrypted_keys...]
 _active_key_index: dict[str, int] = {}     # provider_id -> active index (default 0)
 _cache_lock = threading.Lock()
 
+# --- Per-provider concurrency control --------------------------------------
+# Marker fires a burst of parallel LLM calls (e.g. LLMTableProcessor runs 8
+# table requests at once). An overloaded endpoint answers with 504
+# DEADLINE_EXCEEDED. A per-provider semaphore caps how many calls are in flight
+# at any instant, across every job and worker thread, smoothing that burst.
+_provider_concurrency: dict[str, int] = {}          # provider_id -> max in-flight (>=1)
+_provider_hosts: dict[str, str] = {}                # lowercased host -> provider_id
+_sync_semaphores: dict[str, threading.Semaphore] = {}
+_async_semaphores: dict[tuple[str, int], asyncio.Semaphore] = {}
+_concurrency_lock = threading.Lock()
+
+
+def _identify_provider(request: httpx.Request) -> str | None:
+    """Best-effort map a request to a configured provider id.
+
+    Tries the resolved API key first (covers keyed providers), then falls back
+    to the request host (covers keyless providers like Ollama). Runs after
+    `_resolve_request`, so the real key is present in the request.
+    """
+    matched = _find_key_in_request(request)
+    if matched:
+        return matched[0]
+
+    host = (request.url.host or "").lower()
+    if host:
+        with _concurrency_lock:
+            return _provider_hosts.get(host)
+    return None
+
+
+def _acquire_sync_gate(provider_id: str | None) -> threading.Semaphore | None:
+    """Acquire (blocking) the sync concurrency gate for a provider, if capped.
+
+    Returns the semaphore so the caller can release it, or None when the
+    provider is unlimited / unknown.
+    """
+    if not provider_id:
+        return None
+    with _concurrency_lock:
+        limit = _provider_concurrency.get(provider_id)
+        if not limit or limit <= 0:
+            return None
+        sem = _sync_semaphores.get(provider_id)
+        if sem is None:
+            sem = threading.Semaphore(limit)
+            _sync_semaphores[provider_id] = sem
+    sem.acquire()
+    return sem
+
+
+def _acquire_async_gate(provider_id: str | None) -> asyncio.Semaphore | None:
+    """Acquire the async concurrency gate for a provider on the current loop.
+
+    asyncio.Semaphore is bound to one event loop, so cache per (provider, loop).
+    Returns the semaphore (already acquired) or None when unlimited / unknown.
+    """
+    if not provider_id:
+        return None
+    with _concurrency_lock:
+        limit = _provider_concurrency.get(provider_id)
+        if not limit or limit <= 0:
+            return None
+    try:
+        loop_id = id(asyncio.get_running_loop())
+    except RuntimeError:
+        return None
+    key = (provider_id, loop_id)
+    with _concurrency_lock:
+        sem = _async_semaphores.get(key)
+        if sem is None:
+            sem = asyncio.Semaphore(limit)
+            _async_semaphores[key] = sem
+    return sem
+
 # Original httpx.Client.send and httpx.AsyncClient.send methods
 _orig_client_send = httpx.Client.send
 _orig_async_client_send = httpx.AsyncClient.send
@@ -29,7 +106,6 @@ async def load_secrets_from_db() -> None:
     from app.models.settings import Setting
     from sqlalchemy import select
     from app.routes.settings import ALLOWED_LLM_HOSTS, init_llm_providers_if_missing
-    from urllib.parse import urlparse
     import json
 
     logger.info("Initializing in-memory secrets cache from DB...")
@@ -51,6 +127,12 @@ async def load_secrets_from_db() -> None:
             with _cache_lock:
                 _secrets_cache.clear()
                 _provider_keys.clear()
+
+                with _concurrency_lock:
+                    _provider_concurrency.clear()
+                    _provider_hosts.clear()
+                    _sync_semaphores.clear()
+                    _async_semaphores.clear()
 
                 for p in providers:
                     pid = p.get("id")
@@ -77,8 +159,18 @@ async def load_secrets_from_db() -> None:
                     _provider_keys[pid] = decrypted_keys
                     _active_key_index[pid] = 0
 
-                    # Add base URL hostnames dynamically to allowed list for SSRF protection
+                    # Per-provider concurrency cap (None/<=0 => unlimited).
+                    concurrency = p.get("concurrency")
                     base_url = p.get("base_url")
+                    with _concurrency_lock:
+                        if isinstance(concurrency, int) and concurrency > 0:
+                            _provider_concurrency[pid] = concurrency
+                        if base_url:
+                            host = urlparse(base_url).hostname
+                            if host:
+                                _provider_hosts[host.lower()] = pid
+
+                    # Add base URL hostnames dynamically to allowed list for SSRF protection
                     if base_url:
                         parsed_host = urlparse(base_url).hostname
                         if parsed_host:
@@ -262,38 +354,114 @@ async def _handle_rotation_async(
     return None if isinstance(error_or_res, Exception) else error_or_res
 
 
+def _is_llm_host(request: httpx.Request) -> bool:
+    """True if the request targets a known LLM provider host.
+
+    Gates model-call logging so routine traffic (model downloads from
+    huggingface, etc.) does not spam the console. Imported lazily to avoid a
+    circular import with the settings module.
+    """
+    try:
+        from app.routes.settings import ALLOWED_LLM_HOSTS
+
+        host = (request.url.host or "").lower()
+        return host in ALLOWED_LLM_HOSTS
+    except Exception:  # noqa: BLE001 - never let logging gate break a request
+        return False
+
+
+def _log_model_call_start(request: httpx.Request) -> bool:
+    """Log that a model call is starting. Returns True if it was an LLM host
+    (so the caller knows to log the matching completion line)."""
+    if not _is_llm_host(request):
+        return False
+    logger.info("model call > %s %s", request.method, request.url.host)
+    return True
+
+
+def _log_model_call_done(
+    request: httpx.Request, status_code: int, elapsed_ms: int
+) -> None:
+    """Log the outcome of a model call (host, status, duration). No secrets."""
+    marker = "OK" if 200 <= status_code < 300 else "FAIL"
+    log = logger.info if 200 <= status_code < 300 else logger.warning
+    log(
+        "model call %s %s -> HTTP %d (%dms)",
+        marker,
+        request.url.host,
+        status_code,
+        elapsed_ms,
+    )
+
+
 def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
     """Patched synchronous send method with auto key rotation retry."""
     _resolve_request(request)
+    is_llm = _log_model_call_start(request)
+    gate = _acquire_sync_gate(_identify_provider(request)) if is_llm else None
+    t0 = time.perf_counter()
     try:
         res = _orig_client_send(self, request, *args, **kwargs)
+        if is_llm:
+            _log_model_call_done(
+                request, res.status_code, int((time.perf_counter() - t0) * 1000)
+            )
         if res.status_code in (401, 403, 429, 503):
             rotated = _handle_rotation_sync(self, request, res, *args, **kwargs)
             if rotated:
                 return rotated
         return res
     except (httpx.ConnectError, httpx.TimeoutException) as e:
+        if is_llm:
+            logger.warning(
+                "model call FAIL %s -> %s (%dms)",
+                request.url.host,
+                type(e).__name__,
+                int((time.perf_counter() - t0) * 1000),
+            )
         rotated = _handle_rotation_sync(self, request, e, *args, **kwargs)
         if rotated:
             return rotated
         raise
+    finally:
+        if gate is not None:
+            gate.release()
 
 
 async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
     """Patched asynchronous send method with auto key rotation retry."""
     _resolve_request(request)
+    is_llm = _log_model_call_start(request)
+    gate = _acquire_async_gate(_identify_provider(request)) if is_llm else None
+    if gate is not None:
+        await gate.acquire()
+    t0 = time.perf_counter()
     try:
         res = await _orig_async_client_send(self, request, *args, **kwargs)
+        if is_llm:
+            _log_model_call_done(
+                request, res.status_code, int((time.perf_counter() - t0) * 1000)
+            )
         if res.status_code in (401, 403, 429, 503):
             rotated = await _handle_rotation_async(self, request, res, *args, **kwargs)
             if rotated:
                 return rotated
         return res
     except (httpx.ConnectError, httpx.TimeoutException) as e:
+        if is_llm:
+            logger.warning(
+                "model call FAIL %s -> %s (%dms)",
+                request.url.host,
+                type(e).__name__,
+                int((time.perf_counter() - t0) * 1000),
+            )
         rotated = await _handle_rotation_async(self, request, e, *args, **kwargs)
         if rotated:
             return rotated
         raise
+    finally:
+        if gate is not None:
+            gate.release()
 
 
 def setup_api_manager_monkeypatch() -> None:
