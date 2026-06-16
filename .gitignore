@@ -79,6 +79,7 @@ dummy.pdf
 
 # Planning docs (work-in-progress, not for commit)
 planning/
+sample/
 
 # Reference clones (read-only, developer use only)
 references/markitdown/
