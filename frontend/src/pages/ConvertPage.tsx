@@ -43,7 +43,6 @@ export function ConvertPage() {
   })
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [showConsole, setShowConsole] = useState(false)
-  const [previewText, setPreviewText] = useState<string | null>(null)
 
   useEffect(() => {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
@@ -54,20 +53,10 @@ export function ConvertPage() {
   // Auto-select the latest job if none is selected
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || jobs[jobs.length - 1]
 
-  // Read the selected completed job's result blob into text for inline preview.
-  useEffect(() => {
-    let cancelled = false
-    if (!selectedJob || selectedJob.phase !== 'completed' || !selectedJob.resultBlob) {
-      setPreviewText(null)
-      return
-    }
-    selectedJob.resultBlob.text().then((text) => {
-      if (!cancelled) setPreviewText(text)
-    }).catch(() => {
-      if (!cancelled) setPreviewText(null)
-    })
-    return () => { cancelled = true }
-  }, [selectedJob?.id, selectedJob?.phase, selectedJob?.resultBlob])
+  // Inline preview uses the clean document text captured from /status
+  // (result_text). The download blob must NOT be decoded here: when images are
+  // extracted the blob is a ZIP, and reading it as text renders binary garbage.
+  const previewText = selectedJob?.phase === 'completed' ? (selectedJob.resultText ?? null) : null
 
   const completedJobs = jobs.filter((j) => j.phase === 'completed')
   const overallProgress = jobs.length > 0

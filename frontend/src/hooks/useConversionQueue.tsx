@@ -29,6 +29,10 @@ export interface JobState {
   jobId: string | null
   error: string | null
   resultBlob: Blob | null
+  // Clean document text from the DB (/status result_text). Used for the inline
+  // preview. The download blob may be a ZIP (when images are extracted), so it
+  // must NOT be decoded as text for preview — see ConvertPage.
+  resultText: string | null
   logs: string[]
   outputFormat: string
   outputDir?: string
@@ -79,11 +83,14 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     downloadResult(jobId)
       .then(async (blob) => {
         // Fetch status to capture the per-image understanding sidecar (it is
-        // persisted server-side only at finalize, so SSE can't carry it).
+        // persisted server-side only at finalize, so SSE can't carry it) and
+        // the clean document text (the blob may be a ZIP, see resultText).
         let imageUnderstanding: ImageUnderstandingMeta[] | null = null
+        let resultText: string | null = null
         try {
           const status = await getJobStatus(jobId)
           imageUnderstanding = status.image_understanding ?? null
+          resultText = status.result_text ?? null
         } catch {
           // Non-fatal: badges just won't render for this job.
         }
@@ -94,6 +101,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           statusText: 'Conversion complete',
           error: null,
           resultBlob: blob,
+          resultText,
           imageUnderstanding,
           logs: [...prev.logs, '[SUCCESS] Result package successfully fetched and ready.'],
         }))
@@ -135,6 +143,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         if (status.status === 'completed') {
           clearInterval(pollInterval)
           const imageUnderstanding = status.image_understanding ?? null
+          const resultText = status.result_text ?? null
           downloadResult(jobId)
             .then((blob) => {
               updateJob(id, (prev) => ({
@@ -144,6 +153,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
                 statusText: 'Conversion complete',
                 error: null,
                 resultBlob: blob,
+                resultText,
                 imageUnderstanding,
                 logs: [...prev.logs, '[SUCCESS] SSE disconnected, recovered via polling.'],
               }))
@@ -156,6 +166,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
                 statusText: 'Conversion complete',
                 error: null,
                 resultBlob: null,
+                resultText,
+                imageUnderstanding,
                 logs: [...prev.logs, '[WARN] SSE disconnected. Polling recovered but download failed.'],
               }))
             })
@@ -304,6 +316,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           jobId: job.id,
           error: null,
           resultBlob: null,
+          resultText: null,
           logs: [
             '[SYSTEM] Recovered active job from backend history.',
             `[SYSTEM] Re-attaching SSE channel for job: ${job.id}`,
@@ -408,6 +421,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         jobId: null,
         error: null,
         resultBlob: null,
+        resultText: null,
         logs: [],
         outputFormat: config.output_format,
         outputDir,
@@ -430,6 +444,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         jobId: null,
         error: null,
         resultBlob: null,
+        resultText: null,
         logs: [],
         outputFormat: config.output_format,
         outputDir,

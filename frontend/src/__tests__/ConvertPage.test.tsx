@@ -101,6 +101,52 @@ describe('ConvertPage component', () => {
     expect(screen.getAllByRole('button', { name: /download/i }).length).toBeGreaterThanOrEqual(1)
   })
 
+  it('previews clean result_text, never the ZIP download blob (regression)', async () => {
+    // Regression for the "PK..." binary garbage bug: when images are extracted
+    // the download blob is a ZIP. The preview must use the clean result_text
+    // from /status (same source as the history page), NOT decode the blob.
+    const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00]) // "PK\x03\x04..."
+    const zipBlob = new Blob([zipBytes], { type: 'application/zip' })
+    const cleanMarkdown = '# OPENSKILL: Open-World Self-Evolution\n\nThis is the clean document text.'
+
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [
+        {
+          id: 'job-zip',
+          filename: 'openskill.pdf',
+          file: null,
+          localPath: '',
+          phase: 'completed',
+          progress: 100,
+          statusText: 'Conversion complete',
+          jobId: 'job-uuid-zip',
+          error: null,
+          resultBlob: zipBlob,
+          resultText: cleanMarkdown,
+          logs: [],
+          outputFormat: 'markdown',
+          imageUnderstanding: null,
+        }
+      ],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+
+    // The clean heading renders (ReactMarkdown turns it into an <h1>).
+    expect(
+      await screen.findByRole('heading', { name: /OPENSKILL: Open-World Self-Evolution/i })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/This is the clean document text\./)).toBeInTheDocument()
+
+    // The ZIP magic bytes must never appear in the preview.
+    expect(screen.queryByText(/PK/)).not.toBeInTheDocument()
+  })
+
   it('renders failed job and displays failure status without download button', () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [
