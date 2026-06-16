@@ -7,9 +7,12 @@ renderer selection, and LLM service instantiation.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any
+
+from app.services.model_tracker import tracker
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +66,63 @@ IMAGE_UNDERSTANDING_CONFIG_KEYS: tuple[str, ...] = (
 )
 
 
+def _default_pipeline_dotted_paths() -> list[str]:
+    """Resolve marker's full default PdfConverter processor pipeline to dotted
+    paths.
+
+    marker's ``PdfConverter.__init__`` REPLACES the entire default pipeline the
+    moment a non-None ``processor_list`` is passed (converters/pdf.py:122-125).
+    So to add our processor without silently dropping every built-in structural
+    and LLM processor (TableProcessor, LLMTableProcessor, LLMEquationProcessor,
+    LLMImageDescriptionProcessor, ...), we must materialise the default list
+    ourselves and append to it. Returns ``[]`` if marker can't be imported (e.g.
+    a partial test env), so the caller falls back to the bare single-element
+    list rather than crashing.
+    """
+    try:
+        from marker.converters.pdf import PdfConverter
+        from marker.util import classes_to_strings
+
+        return list(classes_to_strings(PdfConverter.default_processors))
+    except Exception as exc:  # noqa: BLE001 - degrade to bare list, never crash
+        logger.warning(
+            "Could not resolve marker default processor pipeline (%r); image "
+            "understanding will run WITHOUT the default LLM/structural processors.",
+            exc,
+        )
+        return []
+
+
 def with_image_understanding_processor(
     options: dict[str, Any],
     processors: str | None,
 ) -> str | None:
-    """Append the image-understanding processor when a non-extraction mode is requested."""
+    """Append the image-understanding processor when a non-extraction mode is requested.
+
+    Critically, when the caller has NOT supplied an explicit processor list, we
+    expand marker's full default pipeline to dotted paths first and append our
+    processor to it. Returning a bare single-element list here would make marker
+    replace the entire default pipeline (see ``_default_pipeline_dotted_paths``),
+    silently disabling every built-in LLM processor whenever image understanding
+    is on — the ISSUE-1 P0 regression. An explicit caller-supplied list is still
+    honoured verbatim (intentional overrides are not clobbered).
+    """
     mode = options.get("image_handling_mode")
     if mode not in ("understanding", "both"):
         return processors
 
-    existing = [p.strip() for p in (processors or "").split(",") if p.strip()]
-    if IMAGE_UNDERSTANDING_PROCESSOR not in existing:
-        existing.append(IMAGE_UNDERSTANDING_PROCESSOR)
-    return ",".join(existing)
+    explicit = [p.strip() for p in (processors or "").split(",") if p.strip()]
+    if explicit:
+        # Caller chose an explicit pipeline: respect it, just add ours.
+        if IMAGE_UNDERSTANDING_PROCESSOR not in explicit:
+            explicit.append(IMAGE_UNDERSTANDING_PROCESSOR)
+        return ",".join(explicit)
+
+    # No explicit list: preserve marker's full default pipeline, then append.
+    pipeline = _default_pipeline_dotted_paths()
+    if IMAGE_UNDERSTANDING_PROCESSOR not in pipeline:
+        pipeline.append(IMAGE_UNDERSTANDING_PROCESSOR)
+    return ",".join(pipeline)
 
 
 def build_marker_options(
@@ -179,8 +226,133 @@ def build_marker_options(
     return options
 
 
-import threading
-from app.services.model_tracker import tracker
+# ---------------------------------------------------------------------------
+# OOM safety net (ISSUE-5)
+#
+# We removed the VRAM-tier batch tuner, so surya now runs at its built-in CUDA
+# defaults (e.g. RECOGNITION_BATCH_SIZE=256). On a small card (6 GB) a dense
+# page can blow past VRAM and raise ``torch.cuda.OutOfMemoryError``, which would
+# otherwise crash the whole job. Instead we catch it, free the cache, halve the
+# batch sizes on the shared surya predictors, and retry. The lowered batch sizes
+# persist on the predictor singletons, so once a card has shown its ceiling the
+# rest of the run stays under it.
+# ---------------------------------------------------------------------------
+
+# Predictors on the marker model_dict whose batch_size we shrink on OOM. The
+# Layout/Recognition predictors wrap a FoundationPredictor that carries the
+# memory-dominant recognition batch, so we descend into it too.
+_OOM_RETRY_LIMIT = 3
+_MIN_BATCH_SIZE = 1
+
+
+def _is_cuda_oom(exc: BaseException) -> bool:
+    """True if ``exc`` is a CUDA out-of-memory error.
+
+    ``torch.cuda.OutOfMemoryError`` is the typed case, but some code paths raise
+    a plain ``RuntimeError('CUDA out of memory ...')``, so we match the message
+    too. Importing torch lazily keeps this usable in a torch-less test env.
+    """
+    try:
+        import torch
+
+        if isinstance(exc, torch.cuda.OutOfMemoryError):
+            return True
+    except Exception:  # noqa: BLE001 - torch missing / no cuda attr
+        pass
+    return isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower()
+
+
+def _iter_batch_size_holders(model_dict: dict[str, Any] | None) -> list[Any]:
+    """Collect every object on the model_dict that exposes a ``batch_size``.
+
+    Descends one level into a wrapped ``foundation_predictor`` (Layout /
+    Recognition predictors hold the memory-dominant recognition batch there).
+    """
+    holders: list[Any] = []
+    for predictor in (model_dict or {}).values():
+        if hasattr(predictor, "batch_size"):
+            holders.append(predictor)
+        inner = getattr(predictor, "foundation_predictor", None)
+        if inner is not None and hasattr(inner, "batch_size"):
+            holders.append(inner)
+    return holders
+
+
+def _halve_batch_sizes(model_dict: dict[str, Any] | None) -> bool:
+    """Halve the resolved batch size on every surya predictor (floor 1).
+
+    Returns True if at least one batch size actually dropped, False if every
+    holder is already at the floor (so the caller can stop retrying).
+    """
+    lowered = False
+    for holder in _iter_batch_size_holders(model_dict):
+        current = holder.batch_size
+        if current is None:
+            # None means "use the device default" — resolve it so we can shrink.
+            getter = getattr(holder, "get_batch_size", None)
+            if callable(getter):
+                try:
+                    current = getter()
+                except Exception:  # noqa: BLE001 - fall back to leaving as-is
+                    current = None
+        if not isinstance(current, int) or current <= _MIN_BATCH_SIZE:
+            continue
+        holder.batch_size = max(_MIN_BATCH_SIZE, current // 2)
+        lowered = True
+    return lowered
+
+
+def _empty_cuda_cache() -> None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:  # noqa: BLE001 - best effort; never block a retry
+        pass
+
+
+def run_with_oom_retry(
+    convert: Any,
+    model_dict: dict[str, Any] | None,
+    *,
+    limit: int = _OOM_RETRY_LIMIT,
+) -> Any:
+    """Call ``convert()``; on CUDA OOM, free cache + halve batches + retry.
+
+    ``convert`` is a zero-arg callable that runs the conversion. Re-raises the
+    OOM once batches can't shrink further or ``limit`` attempts are exhausted,
+    so a genuinely-too-big job still surfaces instead of looping forever. Any
+    non-OOM exception propagates immediately.
+    """
+    attempt = 0
+    while True:
+        try:
+            return convert()
+        except BaseException as exc:  # noqa: BLE001 - inspect, then re-raise
+            if not _is_cuda_oom(exc):
+                raise
+            attempt += 1
+            if attempt >= limit:
+                logger.error(
+                    "CUDA OOM after %d attempt(s); giving up. Last error: %r",
+                    attempt,
+                    exc,
+                )
+                raise
+            _empty_cuda_cache()
+            if not _halve_batch_sizes(model_dict):
+                logger.error(
+                    "CUDA OOM and batch sizes already at minimum; giving up."
+                )
+                raise
+            logger.warning(
+                "CUDA OOM (attempt %d/%d): freed cache, halved surya batch "
+                "sizes, retrying.",
+                attempt,
+                limit,
+            )
+
 
 class MarkerService:
     """Manages marker-pdf model loading and document conversion."""
@@ -216,6 +388,7 @@ class MarkerService:
                 download_all_models_parallel()
             tracker.set_loading(True)
             t0 = time.perf_counter()
+
             _import_marker()
 
             from marker.models import create_model_dict
@@ -261,7 +434,10 @@ class MarkerService:
             llm_service=config_parser.get_llm_service(),
         )
 
-        rendered = converter(str(filepath))
+        rendered = run_with_oom_retry(
+            lambda: converter(str(filepath)),
+            self._model_dict,
+        )
         text, ext, images = text_from_rendered(rendered)
 
         metadata = getattr(rendered, "metadata", None) or {}

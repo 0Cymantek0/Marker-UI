@@ -142,3 +142,127 @@ def test_collect_image_understanding_meta_empty_when_no_processor():
     assert _collect_image_understanding_meta(_FakeConverter()) == []
     # Missing processor_list attr entirely.
     assert _collect_image_understanding_meta(object()) == []
+
+
+# ---------------------------------------------------------------------------
+# OOM safety net (ISSUE-5): catch CUDA OOM -> empty_cache -> halve batch -> retry
+# ---------------------------------------------------------------------------
+
+
+class _FakePredictor:
+    """Minimal stand-in for a surya predictor with a batch_size knob."""
+
+    def __init__(self, batch_size):
+        self.batch_size = batch_size
+
+    def get_batch_size(self):
+        return self.batch_size if self.batch_size is not None else 256
+
+
+def test_run_with_oom_retry_halves_batch_then_succeeds():
+    """First call raises CUDA OOM, second succeeds. Batch sizes halved once."""
+    from app.services.marker_service import run_with_oom_retry
+
+    model_dict = {
+        "recognition_model": _FakePredictor(256),
+        "detection_model": _FakePredictor(32),
+    }
+    calls = {"n": 0}
+
+    def convert():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("CUDA out of memory. Tried to allocate ...")
+        return "rendered-ok"
+
+    result = run_with_oom_retry(convert, model_dict)
+
+    assert result == "rendered-ok"
+    assert calls["n"] == 2
+    assert model_dict["recognition_model"].batch_size == 128
+    assert model_dict["detection_model"].batch_size == 16
+
+
+def test_run_with_oom_retry_descends_into_foundation_predictor():
+    """Layout/Recognition wrap a foundation predictor; its batch must shrink too."""
+    from app.services.marker_service import run_with_oom_retry
+
+    foundation = _FakePredictor(256)
+
+    class _Wrapper:
+        batch_size = 8
+        foundation_predictor = foundation
+
+    model_dict = {"recognition_model": _Wrapper()}
+    calls = {"n": 0}
+
+    def convert():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("CUDA out of memory")
+        return "ok"
+
+    run_with_oom_retry(convert, model_dict)
+
+    assert foundation.batch_size == 128
+    assert model_dict["recognition_model"].batch_size == 4
+
+
+def test_run_with_oom_retry_non_oom_error_propagates_immediately():
+    """A non-OOM error must NOT be retried — it propagates on the first call."""
+    from app.services.marker_service import run_with_oom_retry
+
+    model_dict = {"recognition_model": _FakePredictor(256)}
+    calls = {"n": 0}
+
+    def convert():
+        calls["n"] += 1
+        raise ValueError("unrelated failure")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="unrelated failure"):
+        run_with_oom_retry(convert, model_dict)
+
+    assert calls["n"] == 1
+    # Batch sizes untouched on a non-OOM failure.
+    assert model_dict["recognition_model"].batch_size == 256
+
+
+def test_run_with_oom_retry_gives_up_at_minimum_batch():
+    """Persistent OOM with batches already at the floor re-raises, no infinite loop."""
+    from app.services.marker_service import run_with_oom_retry
+
+    model_dict = {"recognition_model": _FakePredictor(1)}
+    calls = {"n": 0}
+
+    def convert():
+        calls["n"] += 1
+        raise RuntimeError("CUDA out of memory")
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="out of memory"):
+        run_with_oom_retry(convert, model_dict)
+
+    # Floor batch can't shrink, so we bail after the first failed attempt.
+    assert calls["n"] == 1
+
+
+def test_run_with_oom_retry_exhausts_limit():
+    """Even with shrinkable batches, stop after `limit` attempts."""
+    from app.services.marker_service import run_with_oom_retry
+
+    model_dict = {"recognition_model": _FakePredictor(1024)}
+    calls = {"n": 0}
+
+    def convert():
+        calls["n"] += 1
+        raise RuntimeError("CUDA out of memory")
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="out of memory"):
+        run_with_oom_retry(convert, model_dict, limit=3)
+
+    assert calls["n"] == 3
