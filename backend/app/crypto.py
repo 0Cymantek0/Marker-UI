@@ -58,16 +58,51 @@ def encrypt_value(plaintext: str) -> str:
     return f.encrypt(plaintext.encode()).decode()
 
 
+def _looks_like_fernet_token(value: str) -> bool:
+    """Best-effort structural check: is ``value`` a Fernet token?
+
+    A Fernet token is url-safe base64 that decodes to
+    ``version(1) || timestamp(8) || iv(16) || ciphertext(>=0) || hmac(32)`` —
+    at least 57 bytes, with the version byte fixed at ``0x80``. This lets us
+    distinguish a genuine token that fails to decrypt (wrong/rotated key — a
+    real problem) from a plaintext value that was simply never encrypted
+    (benign). It never raises.
+    """
+    try:
+        raw = base64.urlsafe_b64decode(value.encode())
+    except Exception:  # noqa: BLE001 - not valid base64 => not a token
+        return False
+    return len(raw) >= 57 and raw[0] == 0x80
+
+
 def decrypt_value(ciphertext: str) -> str:
-    """Decrypt a Fernet-encrypted string."""
+    """Decrypt a Fernet-encrypted string.
+
+    Falls back to returning the value unchanged when it can't be decrypted, but
+    distinguishes the two reasons so the logs are honest:
+      * looks like a real Fernet token but won't decrypt -> wrong/rotated
+        ``ENCRYPTION_KEY`` (or corruption). Logged at ERROR; the returned
+        ciphertext is unusable as a secret, so this must be loud.
+      * not a Fernet token at all -> legacy plaintext from before encryption
+        was added. Benign; logged at DEBUG only.
+    """
     if not ciphertext:
         return ciphertext
     f = _get_fernet()
     try:
         return f.decrypt(ciphertext.encode()).decode()
     except Exception:
-        # If decryption fails, return as-is (might be plaintext from before encryption was added)
-        logger.warning("Failed to decrypt value - may be legacy plaintext")
+        if _looks_like_fernet_token(ciphertext):
+            logger.error(
+                "Failed to decrypt a value that IS a Fernet token - the "
+                "ENCRYPTION_KEY does not match the key it was encrypted with "
+                "(rotated/lost key, or corrupted data). Returning ciphertext "
+                "unchanged; any secret derived from it will be invalid."
+            )
+        else:
+            logger.debug(
+                "Value is not a Fernet token; treating as legacy plaintext."
+            )
         return ciphertext
 
 
