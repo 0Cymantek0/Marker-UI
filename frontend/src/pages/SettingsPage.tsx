@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Save,
-  TestTube,
   Loader2,
   Cpu,
   Sparkles,
@@ -35,6 +34,7 @@ import { Select } from '@/components/ui/select'
 import { getSettings, getGPUStatus, installGPU, toggleGPU, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, updateSetting, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { TestConnectionButton } from '@/components/features/settings/TestConnectionButton'
 
 // Helper to map provider types to icons
 function ProviderIcon({ type, className }: { type: string; className?: string }) {
@@ -385,8 +385,12 @@ export function SettingsPage() {
   }
 
   // Test Connection helper inside credentials drawer
-  const handleTestConnection = async () => {
-    if (!draftProvider) return
+  const handleTestApiKey = async (key: string): Promise<{ success: boolean; message: string }> => {
+    if (!draftProvider) return { success: false, message: 'No provider configured' }
+    if (!key) {
+      toast.error('API key is empty')
+      return { success: false, message: 'API key is empty' }
+    }
     setIsTesting(true)
     setTestResult(null)
     toast.info('Testing connection to provider...')
@@ -403,19 +407,18 @@ export function SettingsPage() {
         max_output_tokens: 4096,
       }
 
-      const apiKey = draftProvider.api_key
       const baseUrl = draftProvider.base_url
       const model = draftProvider.models[0]?.model_id || 'test'
 
       if (draftProvider.type === 'gemini' || draftProvider.type === 'vertex') {
-        backendConfig.gemini_api_key = apiKey
+        backendConfig.gemini_api_key = key
         backendConfig.gemini_model_name = model
         if (draftProvider.type === 'vertex') {
-          backendConfig.vertex_project_id = apiKey
+          backendConfig.vertex_project_id = key
           backendConfig.vertex_location = baseUrl
         }
       } else if (draftProvider.type === 'claude' || draftProvider.type === 'custom_anthropic') {
-        backendConfig.claude_api_key = apiKey
+        backendConfig.claude_api_key = key
         backendConfig.claude_model_name = model
         if (draftProvider.type === 'custom_anthropic') {
           backendConfig.openai_base_url = baseUrl
@@ -424,12 +427,12 @@ export function SettingsPage() {
         backendConfig.ollama_base_url = baseUrl
         backendConfig.ollama_model = model
       } else if (draftProvider.type === 'azure') {
-        backendConfig.azure_api_key = apiKey
+        backendConfig.azure_api_key = key
         backendConfig.azure_endpoint = baseUrl
         backendConfig.azure_deployment_name = model
       } else {
         // OpenAI / Custom OpenAI
-        backendConfig.openai_api_key = apiKey
+        backendConfig.openai_api_key = key
         backendConfig.openai_base_url = baseUrl
         backendConfig.openai_model = model
       }
@@ -442,15 +445,22 @@ export function SettingsPage() {
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        setTestResult({ success: true, message: data.message || 'Connected successfully!' })
+        const result = { success: true, message: data.message || 'Connected successfully!' }
+        setTestResult(result)
         toast.success('Connection test passed!')
+        return result
       } else {
-        setTestResult({ success: false, message: data.detail || data.message || 'Connection failed.' })
+        const result = { success: false, message: data.detail || data.message || 'Connection failed.' }
+        setTestResult(result)
         toast.error('Connection test failed.')
+        return result
       }
     } catch (err) {
-      setTestResult({ success: false, message: err instanceof Error ? err.message : 'Network error.' })
+      const msg = err instanceof Error ? err.message : 'Network error.'
+      const result = { success: false, message: msg }
+      setTestResult(result)
       toast.error('Connection test failed.')
+      return result
     } finally {
       setIsTesting(false)
     }
@@ -783,6 +793,30 @@ export function SettingsPage() {
         )}
       </div>
 
+      {/* Hardware Tuning Section — coming soon (ISSUE-8). Disabled placeholder:
+          the VRAM-tier auto-tuner was removed in favour of a future opt-in
+          benchmark with manual override + reset. Rendered greyed out so the
+          surface is discoverable without exposing a half-built control. */}
+      <div
+        className="space-y-4 pt-6 border-t border-border/20 opacity-50 pointer-events-none select-none"
+        aria-disabled="true"
+      >
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h3 className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-primary" />
+              Hardware Tuning
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+              Benchmark your GPU to find the fastest non-OOM batch sizes, with manual override and reset to defaults. Until then, conversions run at safe defaults with automatic out-of-memory recovery.
+            </p>
+          </div>
+          <Badge variant="secondary" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+            Coming Soon
+          </Badge>
+        </div>
+      </div>
+
       {/* Image Understanding Defaults Section */}
       <div className="space-y-4 pt-6 border-t border-border/20">
         <div className="space-y-1">
@@ -1066,30 +1100,35 @@ export function SettingsPage() {
                     className="bg-background/50 text-xs"
                   />
                 </div>
-              )}
-
-              {/* Primary API Key */}
+              )}              {/* Primary API Key */}
               {draftProvider.type !== 'ollama' && (
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                     <Key className="w-3.5 h-3.5 text-muted-foreground" />
                     {draftProvider.type === 'vertex' ? 'Google Cloud Project ID' : 'Primary API Key'}
                   </label>
-                  <Input
-                    type="password"
-                    value={draftProvider.api_key || ''}
-                    onChange={(e) => {
-                      updateDraft((draft) => {
-                        draft.api_key = e.target.value
-                      })
-                    }}
-                    placeholder={
-                      draftProvider.type === 'vertex'
-                        ? 'e.g., my-gcp-project-123'
-                        : 'Enter credentials token'
-                    }
-                    className="bg-background/50 text-xs"
-                  />
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="password"
+                      value={draftProvider.api_key || ''}
+                      onChange={(e) => {
+                        updateDraft((draft) => {
+                          draft.api_key = e.target.value
+                        })
+                      }}
+                      placeholder={
+                        draftProvider.type === 'vertex'
+                          ? 'e.g., my-gcp-project-123'
+                          : 'Enter credentials token'
+                      }
+                      className="bg-background/50 text-xs flex-1"
+                    />
+                    <TestConnectionButton
+                      apiKey={draftProvider.api_key || ''}
+                      onTest={handleTestApiKey}
+                      disabled={isTesting || draftProvider.type === 'vertex'}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1131,6 +1170,11 @@ export function SettingsPage() {
                           placeholder={`Fallback key ${idx + 1}`}
                           className="bg-background/50 text-xs flex-1"
                         />
+                        <TestConnectionButton
+                          apiKey={keyVal}
+                          onTest={handleTestApiKey}
+                          disabled={isTesting}
+                        />
                         <button
                           type="button"
                           onClick={() => {
@@ -1138,7 +1182,7 @@ export function SettingsPage() {
                               draft.fallback_api_keys = draft.fallback_api_keys.filter((_, i) => i !== idx)
                             })
                           }}
-                          className="p-2 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                          className="p-2 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors shrink-0"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1152,6 +1196,31 @@ export function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Concurrency cap */}
+              <div className="space-y-2 pt-2 border-t border-border/10">
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-muted-foreground" />
+                  Max Concurrent API Calls
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={draftProvider.concurrency ?? ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim()
+                    const n = parseInt(raw, 10)
+                    updateDraft((draft) => {
+                      draft.concurrency = raw === '' || isNaN(n) || n < 1 ? null : n
+                    })
+                  }}
+                  placeholder="Unlimited"
+                  className="bg-background/50 text-xs"
+                />
+                <p className="text-[10px] text-muted-foreground/60 leading-normal">
+                  Caps simultaneous in-flight requests to this provider across all jobs. Lower it if the provider returns 504 / DEADLINE_EXCEEDED under parallel load. Leave blank for unlimited.
+                </p>
+              </div>
 
               {/* Test connection result */}
               {testResult && (
@@ -1177,21 +1246,7 @@ export function SettingsPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-border/20 bg-muted/10">
-              <Button
-                variant="outline"
-                onClick={handleTestConnection}
-                disabled={isTesting || draftProvider.type === 'vertex'}
-                className="text-xs font-bold uppercase tracking-wider px-4 rounded-lg h-10 border-border/60 hover:bg-muted/50 gap-1.5"
-              >
-                {isTesting ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                ) : (
-                  <TestTube className="w-4 h-4 text-muted-foreground" />
-                )}
-                Test Connection
-              </Button>
-
+            <div className="flex items-center justify-end px-6 py-4 border-t border-border/20 bg-muted/10">
               <div className="flex gap-2">
                 <Button
                   variant="ghost"
