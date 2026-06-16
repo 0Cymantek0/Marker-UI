@@ -138,7 +138,7 @@ class TestClassify:
     def test_classify_second_attempt_fails_falls_back_to_other(
         self, service: VLMService, http_client: MagicMock
     ):
-        """Both attempts return malformed JSON → fallback to ImageType.other, confidence 0.0."""
+        """Both attempts return malformed JSON -> fallback to ImageType.other, confidence 0.0."""
         http_client.chat.completions.create.side_effect = [
             _mk_resp("totally not json"),
             _mk_resp("still not json"),
@@ -264,7 +264,7 @@ class TestExtract:
     def test_extract_malformed_json_retries_then_fails_gracefully(
         self, service: VLMService, http_client: MagicMock
     ):
-        """Both attempts malformed → error field set, payload empty dict."""
+        """Both attempts malformed -> error field set, payload empty dict."""
         http_client.chat.completions.create.side_effect = [
             _mk_resp("not json"),
             _mk_resp("also not json"),
@@ -312,7 +312,7 @@ class TestExtract:
     def test_extract_diagram_invalid_mermaid_retries_then_demotes_to_description(
         self, service: VLMService, http_client: MagicMock
     ):
-        """Invalid Mermaid on both attempts → demote payload to DescriptionPayload shape."""
+        """Invalid Mermaid on both attempts -> demote payload to DescriptionPayload shape."""
         invalid_mermaid = "this is not mermaid syntax at all"
         http_client.chat.completions.create.side_effect = [
             _mk_resp(json.dumps({"mermaid": invalid_mermaid, "caption": "diag"})),
@@ -339,7 +339,7 @@ class TestExtract:
     def test_extract_provider_exception_never_raises(
         self, service: VLMService, http_client: MagicMock
     ):
-        """Client raising → ExtractionResult with error string, never propagates."""
+        """Client raising -> ExtractionResult with error string, never propagates."""
         http_client.chat.completions.create.side_effect = TimeoutError("VLM timed out")
 
         result = service.extract(
@@ -355,6 +355,90 @@ class TestExtract:
         assert result.confidence == 0.0
         assert result.error is not None
         assert "timeout" in result.error.lower() or "timed out" in result.error.lower()
+
+    def test_extract_503_surfaces_error_string(
+        self, service: VLMService, http_client: MagicMock
+    ):
+        """ISSUE-4: a provider 503 (ServiceUnavailable) must land on
+        ExtractionResult.error, not be swallowed into a blank success."""
+
+        class ServiceUnavailable(Exception):
+            pass
+
+        http_client.chat.completions.create.side_effect = ServiceUnavailable(
+            "503 Service Unavailable: model overloaded"
+        )
+
+        result = service.extract(
+            image_bytes=b"fake",
+            mime_type="image/png",
+            image_type=ImageType.chart_bar,
+            heading_chain="",
+            surrounding_paragraphs="",
+        )
+
+        assert result.error is not None
+        assert "503" in result.error
+
+
+# ---------------------------------------------------------------------------
+# Per-call logging — readable "VLM model used" lines for server + UI console
+# ---------------------------------------------------------------------------
+
+
+class TestCallLogging:
+    def test_classify_logs_model_and_result(self, service, http_client, caplog):
+        import logging
+
+        http_client.chat.completions.create.return_value = _mk_resp(
+            json.dumps({"image_type": "chart_bar", "confidence": 0.9, "rationale": "x"})
+        )
+        with caplog.at_level(logging.INFO, logger="app.services.vlm_service"):
+            service.classify(b"fake", "image/png", "", "")
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert any("VLM > classify" in m and "gpt-4o" in m for m in messages)
+        assert any("VLM OK classify -> chart_bar" in m for m in messages)
+
+    def test_extract_logs_model_and_type(self, service, http_client, caplog):
+        import logging
+
+        http_client.chat.completions.create.return_value = _mk_resp(
+            json.dumps({"title": "t", "series": []})
+        )
+        with caplog.at_level(logging.INFO, logger="app.services.vlm_service"):
+            service.extract(b"fake", "image/png", ImageType.chart_bar, "", "")
+
+        messages = [r.getMessage() for r in caplog.records]
+        assert any("VLM > extract chart_bar" in m and "gpt-4o" in m for m in messages)
+        assert any("VLM OK extract chart_bar ok" in m for m in messages)
+
+    def test_extract_decorative_logs_skip_without_call(
+        self, service, http_client, caplog
+    ):
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="app.services.vlm_service"):
+            service.extract(b"fake", "image/png", ImageType.decorative, "", "")
+
+        assert any(
+            "VLM SKIP extract skipped" in r.getMessage() for r in caplog.records
+        )
+        http_client.chat.completions.create.assert_not_called()
+
+    def test_extract_failure_logs_warning(self, service, http_client, caplog):
+        import logging
+
+        http_client.chat.completions.create.side_effect = RuntimeError(
+            "503 Service Unavailable"
+        )
+        with caplog.at_level(logging.INFO, logger="app.services.vlm_service"):
+            service.extract(b"fake", "image/png", ImageType.chart_bar, "", "")
+
+        warnings = [
+            r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING
+        ]
+        assert any("VLM FAIL extract" in m and "chart_bar" in m for m in warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -390,9 +474,15 @@ class TestValidateMermaid:
 
 class TestConstructorWiring:
     def test_model_id_falls_back_to_first_vision_capable_model(
-        self, http_client: MagicMock
+        self, http_client: MagicMock, monkeypatch
     ):
         """If model_id is None, default to the provider's first vision_capable model."""
+        import app.services.vlm_service as vlm
+
+        # Isolate from any live DB: no vlm_model override, no active model.
+        monkeypatch.setattr(vlm, "_read_setting_sync", lambda key: None)
+        monkeypatch.setattr(vlm, "_read_active_model_id_sync", lambda: None)
+
         prov = _mk_provider()
         svc = VLMService(provider=prov, model_id=None, http_client=http_client)
 
@@ -404,6 +494,61 @@ class TestConstructorWiring:
 
         kwargs = http_client.chat.completions.create.call_args.kwargs
         assert kwargs.get("model") == "gpt-4o"
+
+    def test_model_id_falls_back_to_active_model_when_none_vision_capable(
+        self, monkeypatch
+    ):
+        """ISSUE-3: when no model is vision_capable and no vlm_model override is
+        set, resolve to the active model id (llm_global_active) rather than
+        silently using models[0]."""
+        import app.services.vlm_service as vlm
+
+        prov = LLMProvider(
+            id="gemini-test",
+            type="gemini",
+            label="Gemini",
+            api_key="secret:k",
+            base_url=None,
+            models=[
+                ModelConfig(model_id="gemini-2.0-flash", vision_capable=False),
+                ModelConfig(model_id="gemini-3-flash-preview", vision_capable=False),
+            ],
+        )
+        monkeypatch.setattr(vlm, "_read_setting_sync", lambda key: None)
+        monkeypatch.setattr(
+            vlm, "_read_active_model_id_sync", lambda: "gemini-3-flash-preview"
+        )
+
+        assert VLMService._resolve_model_id(prov) == "gemini-3-flash-preview"
+
+    def test_model_id_vlm_setting_wins_over_active(self, monkeypatch):
+        """An explicit vlm_model override beats both vision_capable and active."""
+        import app.services.vlm_service as vlm
+
+        prov = _mk_provider()
+        monkeypatch.setattr(
+            vlm, "_read_setting_sync", lambda key: "override-model"
+        )
+
+        assert VLMService._resolve_model_id(prov) == "override-model"
+
+    def test_model_id_active_ignored_when_not_on_provider(self, monkeypatch):
+        """Active model belonging to a different provider must not be used;
+        fall through to models[0]."""
+        import app.services.vlm_service as vlm
+
+        prov = LLMProvider(
+            id="gemini-test",
+            type="gemini",
+            label="Gemini",
+            api_key="secret:k",
+            base_url=None,
+            models=[ModelConfig(model_id="gemini-2.0-flash", vision_capable=False)],
+        )
+        monkeypatch.setattr(vlm, "_read_setting_sync", lambda key: None)
+        monkeypatch.setattr(vlm, "_read_active_model_id_sync", lambda: "gpt-4o")
+
+        assert VLMService._resolve_model_id(prov) == "gemini-2.0-flash"
 
 
 class TestProviderResolution:

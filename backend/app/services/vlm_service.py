@@ -35,6 +35,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 from typing import Any
 
 from app.crypto import decrypt_value
@@ -266,8 +267,8 @@ class VLMService:
 
     Public methods (both synchronous, both never raise):
 
-        * :meth:`classify` — one VLM call → ``ClassificationResult``.
-        * :meth:`extract` — one VLM call (or zero for decorative) →
+        * :meth:`classify` — one VLM call -> ``ClassificationResult``.
+        * :meth:`extract` — one VLM call (or zero for decorative) ->
           ``ExtractionResult``. Diagram types validate the Mermaid field
           and demote to a description on repeated failure.
     """
@@ -332,13 +333,17 @@ class VLMService:
         )
         data_url = _encode_data_url(image_bytes, mime_type)
 
+        logger.info("VLM > classify image (model=%s)", self._model_id)
+        t0 = time.perf_counter()
         try:
-            return self._classify_with_retry(
+            result = self._classify_with_retry(
                 system_prompt, user_prompt, data_url
             )
         except Exception as exc:  # noqa: BLE001 — provider errors caught here
             logger.warning(
-                "classify(): provider call failed; returning fallback. error=%r",
+                "VLM FAIL classify (model=%s, %dms): %r",
+                self._model_id,
+                int((time.perf_counter() - t0) * 1000),
                 exc,
             )
             return ClassificationResult(
@@ -346,6 +351,14 @@ class VLMService:
                 confidence=0.0,
                 rationale=f"Classification failed; defaulting to other ({exc})",
             )
+        logger.info(
+            "VLM OK classify -> %s (confidence=%.2f, model=%s, %dms)",
+            result.image_type.value,
+            result.confidence,
+            self._model_id,
+            int((time.perf_counter() - t0) * 1000),
+        )
+        return result
 
     def extract(
         self,
@@ -365,6 +378,7 @@ class VLMService:
         """
         # Short-circuit: decorative images carry no information.
         if image_type == ImageType.decorative:
+            logger.info("VLM SKIP extract skipped (decorative image, no call)")
             return ExtractionResult(
                 image_type=ImageType.decorative,
                 payload={},
@@ -379,14 +393,20 @@ class VLMService:
         )
         data_url = _encode_data_url(image_bytes, mime_type)
 
+        logger.info(
+            "VLM > extract %s (model=%s)", image_type.value, self._model_id
+        )
+        t0 = time.perf_counter()
         try:
-            return self._extract_with_retry(
+            result = self._extract_with_retry(
                 image_type, system_prompt, user_prompt, data_url
             )
         except Exception as exc:  # noqa: BLE001 — provider errors caught here
             logger.warning(
-                "extract(): provider call failed for %s; returning error result. error=%r",
-                image_type,
+                "VLM FAIL extract %s (model=%s, %dms): %r",
+                image_type.value,
+                self._model_id,
+                int((time.perf_counter() - t0) * 1000),
                 exc,
             )
             return ExtractionResult(
@@ -396,6 +416,23 @@ class VLMService:
                 confidence=0.0,
                 error=str(exc),
             )
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        if result.error:
+            logger.warning(
+                "VLM FAIL extract %s returned error (model=%s, %dms): %s",
+                image_type.value,
+                self._model_id,
+                elapsed_ms,
+                result.error,
+            )
+        else:
+            logger.info(
+                "VLM OK extract %s ok (model=%s, %dms)",
+                image_type.value,
+                self._model_id,
+                elapsed_ms,
+            )
+        return result
 
     # -----------------------------------------------------------------
     # Internals — classify
@@ -629,8 +666,17 @@ class VLMService:
 
     @staticmethod
     def _resolve_model_id(provider: LLMProvider) -> str:
-        """Pick the model to use. Order: ``vlm_model`` setting → first
-        ``vision_capable`` model on the provider → first model on the provider.
+        """Pick the model to use. Order: ``vlm_model`` setting -> first
+        ``vision_capable`` model on the provider -> the active model id
+        (``llm_global_active``) if it belongs to this provider -> first model on
+        the provider.
+
+        The active-model step matters because all seeded models currently carry
+        ``vision_capable: False`` (ISSUE-3), so step 2 never matches; without
+        this step the VLM silently used ``models[0]`` instead of the model the
+        user actually selected. Modern Gemini / GPT-4o / Claude are all
+        vision-capable, so the active model is a far better default than the
+        first list entry.
         """
         # 1. vlm_model setting (best-effort, sync DB read skipped in tests).
         try:
@@ -645,7 +691,15 @@ class VLMService:
             if m.vision_capable:
                 return m.model_id
 
-        # 3. First model on the provider (last resort).
+        # 3. Active model id, if it belongs to this provider.
+        try:
+            active_model = _read_active_model_id_sync()
+            if active_model and any(m.model_id == active_model for m in provider.models):
+                return active_model
+        except Exception:  # noqa: BLE001 — setting may be absent
+            pass
+
+        # 4. First model on the provider (last resort).
         if provider.models:
             return provider.models[0].model_id
 
@@ -776,6 +830,22 @@ def _provider_from_stored_settings(
             models=provider.get("models", []),
         )
     return None
+
+
+def _read_active_model_id_sync() -> str | None:
+    """Read the active model id from the ``llm_global_active`` setting.
+
+    Used by ``_resolve_model_id`` as a fallback when no ``vlm_model`` override
+    is set and no model is flagged ``vision_capable`` (ISSUE-3). Returns
+    ``None`` if the setting is absent, malformed, or the lookup fails.
+    """
+    raw = _read_setting_sync("llm_global_active")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw).get("model_id") or None
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return None
 
 
 def _read_setting_sync(key: str) -> str | None:
