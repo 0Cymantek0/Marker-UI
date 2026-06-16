@@ -326,9 +326,102 @@ def test_roundtrip_equation_html_becomes_valid_block_math():
     assert "a_1 + b_2 = c^2" in md
 
 
+def test_processor_logs_start_and_done_tally(caplog):
+    """ISSUE-2: processor must log entry count and exit tally so an operator
+    can tell 'no pictures' from 'all failed' from 'never ran'."""
+    import logging
+
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+
+    with caplog.at_level(logging.INFO, logger="app.processors.image_understanding"):
+        ImageUnderstandingProcessor(
+            {"image_handling_mode": "understanding", "vlm_model": "gpt-4o"},
+            vlm_service=vlm,
+        )(document)
+
+    messages = [r.getMessage() for r in caplog.records]
+    start = next(m for m in messages if "ImageUnderstanding start" in m)
+    done = next(m for m in messages if "ImageUnderstanding done" in m)
+    assert "pictures=1" in start
+    assert "model=gpt-4o" in start
+    assert "processed=1" in done
+    assert "failed=0" in done
+    assert "total=1" in done
+
+
+def test_processor_logs_failed_tally_when_vlm_raises(caplog):
+    """A VLM that raises must be counted as failed, not silently dropped."""
+    import logging
+
+    document, picture = _doc_with_picture()
+
+    class BoomVLM:
+        def classify(self, *a, **k):
+            raise RuntimeError("vlm down")
+
+        def extract(self, *a, **k):  # pragma: no cover - never reached
+            raise AssertionError("extract should not run")
+
+    with caplog.at_level(logging.INFO, logger="app.processors.image_understanding"):
+        ImageUnderstandingProcessor(
+            {"image_handling_mode": "understanding"},
+            vlm_service=BoomVLM(),
+        )(document)
+
+    done = next(
+        r.getMessage() for r in caplog.records if "ImageUnderstanding done" in r.getMessage()
+    )
+    assert "processed=0" in done
+    assert "failed=1" in done
+
+
+def test_processor_counts_extraction_error_as_failed(caplog):
+    """ISSUE-4: a 503 surfaces as ExtractionResult.error (not a raise). The
+    processor must count that error branch as failed and leave the picture
+    un-mutated, so the tally reflects the real outcome."""
+    import logging
+
+    from app.models.image_understanding import ClassificationResult, ExtractionResult
+
+    document, picture = _doc_with_picture()
+
+    class ErrorVLM:
+        def classify(self, *a, **k):
+            return ClassificationResult(
+                image_type=ImageType.chart_bar, confidence=0.9, rationale="x"
+            )
+
+        def extract(self, *a, **k):
+            return ExtractionResult(
+                image_type=ImageType.chart_bar,
+                payload={},
+                raw_response="",
+                confidence=0.0,
+                error="503 Service Unavailable: model overloaded",
+            )
+
+    with caplog.at_level(logging.INFO, logger="app.processors.image_understanding"):
+        proc = ImageUnderstandingProcessor(
+            {"image_handling_mode": "understanding"},
+            vlm_service=ErrorVLM(),
+        )
+        proc(document)
+
+    done = next(
+        r.getMessage() for r in caplog.records if "ImageUnderstanding done" in r.getMessage()
+    )
+    assert "processed=0" in done
+    assert "failed=1" in done
+    # Picture left untouched; no sidecar meta for a failed extraction.
+    assert picture.html is None
+    assert proc.image_meta == []
+
+
 def test_with_image_understanding_processor_appends_for_understanding_modes():
     assert with_image_understanding_processor({}, None) is None
 
+    # Explicit caller-supplied list is honoured verbatim, just with ours added.
     processors = with_image_understanding_processor(
         {"image_handling_mode": "both"},
         "marker.processors.order.OrderProcessor",
@@ -339,9 +432,36 @@ def test_with_image_understanding_processor_appends_for_understanding_modes():
     assert IMAGE_UNDERSTANDING_PROCESSOR in processors
 
 
+def test_with_image_understanding_processor_preserves_default_pipeline():
+    """ISSUE-1 regression: with NO explicit processor list, marker would replace
+    its entire default pipeline (dropping every built-in LLM processor) the
+    moment we pass a non-None list. We must expand the default pipeline and
+    append ours so use_llm refinement still runs alongside image understanding."""
+    processors = with_image_understanding_processor(
+        {"image_handling_mode": "understanding"},
+        None,
+    )
+
+    assert processors is not None
+    parts = processors.split(",")
+    # Our processor is present...
+    assert IMAGE_UNDERSTANDING_PROCESSOR in parts
+    # ...and so are marker's default LLM + structural processors.
+    assert any("LLMTableProcessor" in p for p in parts)
+    assert any("LLMEquationProcessor" in p for p in parts)
+    assert any("LLMImageDescriptionProcessor" in p for p in parts)
+    assert any("TableProcessor" in p for p in parts)
+    # Ours runs last so Picture blocks are final before it mutates them.
+    assert parts[-1] == IMAGE_UNDERSTANDING_PROCESSOR
+
+
 def test_build_marker_options_wires_processor_when_mode_is_both():
     llm_cfg = {"providers": [], "active": {"provider_id": "none", "model_id": ""}}
 
     opts = build_marker_options(llm_cfg, {"image_handling_mode": "both"})
 
-    assert opts["processors"] == IMAGE_UNDERSTANDING_PROCESSOR
+    parts = opts["processors"].split(",")
+    assert IMAGE_UNDERSTANDING_PROCESSOR in parts
+    # Default pipeline preserved (ISSUE-1): built-in LLM processors still wired.
+    assert any("LLMTableProcessor" in p for p in parts)
+    assert parts[-1] == IMAGE_UNDERSTANDING_PROCESSOR

@@ -112,13 +112,25 @@ class ImageUnderstandingProcessor(BaseProcessor):
             return
 
         pictures = list(document.contained_blocks([BlockTypes.Picture]))
+        logger.info(
+            "ImageUnderstanding start: mode=%s model=%s pictures=%d max=%d",
+            self.image_handling_mode.value,
+            self._resolved_model_id() or "unknown",
+            len(pictures),
+            self.max_images_per_doc,
+        )
         processed = 0
+        skipped_no_image = 0
+        skipped_limit = 0
+        failed = 0
         for picture in pictures:
             if processed >= self.max_images_per_doc:
-                break
+                skipped_limit += 1
+                continue
 
             image_bytes = _picture_to_png_bytes(picture, document)
             if image_bytes is None:
+                skipped_no_image += 1
                 continue
 
             heading_chain, surrounding = gather_local_context(
@@ -145,6 +157,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
                 )
             except Exception as exc:  # noqa: BLE001 - fail-soft processor
                 logger.warning("Image understanding skipped for picture: %r", exc)
+                failed += 1
                 continue
             duration_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -154,6 +167,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
                     classification.image_type,
                     extraction.error,
                 )
+                failed += 1
                 continue
 
             model_id = self._resolved_model_id()
@@ -189,6 +203,16 @@ class ImageUnderstandingProcessor(BaseProcessor):
                 }
             )
             processed += 1
+
+        logger.info(
+            "ImageUnderstanding done: processed=%d failed=%d "
+            "skipped_no_image=%d skipped_over_limit=%d total=%d",
+            processed,
+            failed,
+            skipped_no_image,
+            skipped_limit,
+            len(pictures),
+        )
 
     def _get_vlm_service(self) -> VLMService:
         if self._vlm_service is None:
