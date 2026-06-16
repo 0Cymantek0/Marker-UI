@@ -26,6 +26,7 @@ from app.models.schemas import (
     LLMProvider,
     ActiveLLM,
     FetchModelsRequest,
+    LiveOverrideRequest,
 )
 from app.utils.secrets import (
     decrypt_value,
@@ -1046,6 +1047,61 @@ async def save_active_llm(
     await db.flush()
     await db.commit()
     return body
+
+
+@router.post("/llm/live-override")
+async def live_override(
+    body: LiveOverrideRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Hot-swap a running job's model and/or concurrency for one provider.
+
+    Applies at the httpx layer so in-flight calls from an already-running
+    converter pick up the change without restarting (no lost OCR work). Only
+    same-provider model swaps are valid; the running client cannot turn into a
+    different provider.
+    """
+    from app.core.api_manager import set_model_override, set_provider_concurrency
+
+    applied: dict[str, Any] = {"provider_id": body.provider_id}
+
+    # 1. Live model swap (same provider only).
+    if body.new_model and body.old_model and body.new_model != body.old_model:
+        set_model_override(body.provider_id, body.old_model, body.new_model)
+        applied["model_swap"] = {"from": body.old_model, "to": body.new_model}
+
+        # Persist as the provider's active model so subsequent jobs use it too.
+        if body.persist:
+            active = await get_active_llm(db)
+            if active.provider_id == body.provider_id:
+                await save_active_llm(
+                    ActiveLLM(provider_id=body.provider_id, model_id=body.new_model), db
+                )
+            # Also reflect it in the provider's stored model list ordering is
+            # untouched; active selection is what build_marker_options reads.
+
+    # 2. Live concurrency change.
+    if body.concurrency is not None:
+        set_provider_concurrency(body.provider_id, body.concurrency)
+        applied["concurrency"] = body.concurrency
+
+        # Persist into the provider record so it survives restarts.
+        stmt = select(Setting).where(Setting.key == "llm_providers")
+        row = (await db.execute(stmt)).scalar_one_or_none()
+        if row:
+            try:
+                providers = json.loads(row.value)
+                for p in providers:
+                    if p.get("id") == body.provider_id:
+                        p["concurrency"] = body.concurrency
+                        break
+                row.value = json.dumps(providers)
+                await db.flush()
+                await db.commit()
+            except Exception:
+                pass
+
+    return {"status": "applied", **applied}
 
 
 @router.post("/llm/providers/fetch-models")

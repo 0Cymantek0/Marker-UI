@@ -41,6 +41,15 @@ export interface JobState {
   isBunch?: boolean
   // Per-image understanding metadata for the badge UI.
   imageUnderstanding?: ImageUnderstandingMeta[] | null
+  // LLM provider/model this job runs under — lets the model-swap dialog
+  // pre-fill and scope a same-provider hot-swap. Empty when not using an LLM.
+  llmProvider?: string
+  llmModel?: string
+  // True once the backend has signalled that key rotation is exhausted and a
+  // model swap is worth suggesting. Drives the auto-surfaced swap dialog.
+  rateLimited?: boolean
+  // User dismissed the auto dialog for this job; don't auto-resurface it.
+  swapPromptDismissed?: boolean
 }
 
 interface ConversionContextType {
@@ -50,6 +59,9 @@ interface ConversionContextType {
   download: (id: string) => Promise<void>
   clearLogs: (id: string) => void
   removeJob: (id: string) => void
+  // Model-swap prompt controls.
+  dismissSwapPrompt: (id: string) => void
+  clearRateLimited: (id: string) => void
 }
 
 const ConversionContext = createContext<ConversionContextType | null>(null)
@@ -255,6 +267,10 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         } else if (messageStr && nextLogs[nextLogs.length - 1] !== `[INFO] ${messageStr}`) {
           nextLogs.push(`[INFO] ${messageStr}`)
         }
+        // Backend emits this once key rotation is exhausted / stuck on rate
+        // limits — the only point at which suggesting a model swap is useful.
+        const rateLimited =
+          prev.rateLimited || nextLogs.some((l) => l.includes('model swap suggested'))
         return {
           ...prev,
           progress: Math.max(prev.progress, data.progress ?? prev.progress),
@@ -262,6 +278,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           logs: nextLogs,
           elapsed: data.elapsed,
           eta: data.eta,
+          rateLimited,
         }
       })
     })
@@ -426,6 +443,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         outputFormat: config.output_format,
         outputDir,
         isBunch,
+        llmProvider: config.use_llm ? config.llm_provider : undefined,
+        llmModel: config.use_llm ? config.llm_model : undefined,
       })
     }
 
@@ -449,6 +468,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         outputFormat: config.output_format,
         outputDir,
         isBunch,
+        llmProvider: config.use_llm ? config.llm_provider : undefined,
+        llmModel: config.use_llm ? config.llm_model : undefined,
       })
     }
 
@@ -518,11 +539,43 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
   }, [updateJob])
 
   const removeJob = useCallback((id: string) => {
-    setJobs((prev) => prev.filter((j) => j.id !== id))
+    // Close the SSE socket first so its onerror doesn't kick off a polling loop
+    // for a job we're about to drop.
+    if (eventSourcesRef.current[id]) {
+      eventSourcesRef.current[id].close()
+      delete eventSourcesRef.current[id]
+    }
+
+    setJobs((prev) => {
+      const job = prev.find((j) => j.id === id)
+      // Cancel + delete the job on the backend before removing it from the list.
+      // Without this a running conversion keeps executing in the background with
+      // no UI left to cancel it. deleteJob() flips the DB to "cancelled" so the
+      // result is discarded at finalize.
+      if (job?.jobId) {
+        deleteJob(job.jobId).catch(() => {})
+      }
+      return prev.filter((j) => j.id !== id)
+    })
   }, [])
 
+  const dismissSwapPrompt = useCallback((id: string) => {
+    updateJob(id, { swapPromptDismissed: true })
+  }, [updateJob])
+
+  const clearRateLimited = useCallback((id: string) => {
+    // After a swap is applied, clear the flag and drop the stale signal log so
+    // the dialog doesn't immediately re-detect from history.
+    updateJob(id, (prev) => ({
+      ...prev,
+      rateLimited: false,
+      swapPromptDismissed: false,
+      logs: prev.logs.filter((l) => !l.includes('model swap suggested')),
+    }))
+  }, [updateJob])
+
   return (
-    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob }}>
+    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob, dismissSwapPrompt, clearRateLimited }}>
       {children}
     </ConversionContext.Provider>
   )

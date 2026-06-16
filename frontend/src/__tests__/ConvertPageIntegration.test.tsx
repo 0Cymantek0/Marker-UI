@@ -125,4 +125,50 @@ describe('ConvertPage Integration with real hook', () => {
     expect(screen.getByText('Queued on backend...')).toBeInTheDocument()
     expect(mockGetJobEvents).toHaveBeenCalledWith('backend-job-1')
   })
+
+  it('cancels the backend job when the trash/remove button is clicked', async () => {
+    // Regression: deleting a queue item used to only drop it from the UI list,
+    // leaving the conversion running in the background with no way to stop it.
+    // removeJob must now also hit deleteJob (backend cancel + delete).
+    mockGetHistory.mockResolvedValue({
+      total: 1,
+      jobs: [
+        {
+          id: 'backend-job-9',
+          job_id: 'backend-job-9',
+          filename: 'running.pdf',
+          status: 'processing',
+          progress: 42,
+          output_format: 'markdown',
+          converter: 'PdfConverter',
+          created_at: '2026-06-14T03:29:54Z',
+          completed_at: null,
+          error_message: null,
+          result_text: null,
+        },
+      ],
+    })
+    mockDeleteJob.mockResolvedValue(undefined)
+
+    render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('running.pdf')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /remove from list/i }))
+
+    // Backend must be told to cancel + delete the still-running job.
+    await waitFor(() => {
+      expect(mockDeleteJob).toHaveBeenCalledWith('backend-job-9')
+    })
+    // And the card disappears from the queue.
+    expect(screen.queryByText('running.pdf')).not.toBeInTheDocument()
+  })
 })

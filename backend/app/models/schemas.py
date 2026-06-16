@@ -233,6 +233,20 @@ class ActiveLLM(BaseModel):
     model_id: str
 
 
+class LiveOverrideRequest(BaseModel):
+    """Hot-swap a running job's model and/or concurrency for one provider.
+
+    Model swap only works within the SAME provider (identical host/auth/wire
+    format); the running converter cannot become a different provider's client.
+    """
+    provider_id: str
+    old_model: Optional[str] = None
+    new_model: Optional[str] = None
+    concurrency: Optional[int] = Field(default=None, ge=1)
+    # Persist the new model as the provider's active selection for future jobs.
+    persist: bool = True
+
+
 class FetchModelsRequest(BaseModel):
     provider_id: Optional[str] = None
     type: str

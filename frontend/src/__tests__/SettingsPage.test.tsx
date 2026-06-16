@@ -256,6 +256,44 @@ describe('SettingsPage component', () => {
     expect(capInput.value).toBe('50')
   })
 
+  it('lists every configured model in the vision dropdown even when none are vision-capable (ISSUE-3)', async () => {
+    // Regression: the dropdown used to filter to vision_capable models only, so
+    // with the default seed (all vision_capable=false) the user saw nothing but
+    // "Auto" and could never pick a model. It must now show all configured models.
+    render(<SettingsPage />)
+    await screen.findByText('Configured Service Providers')
+
+    // The Default Vision Model select is the trigger button under that label.
+    const label = screen.getByText('Default Vision Model')
+    const wrapper = label.parentElement as HTMLElement
+    const trigger = wrapper.querySelector('button') as HTMLButtonElement
+    await act(async () => {
+      fireEvent.click(trigger)
+    })
+
+    // Both providers' models appear despite vision_capable being unset.
+    expect(screen.getByText(/Gemini: gemini-2\.0-flash/)).toBeInTheDocument()
+    expect(screen.getByText(/Claude: claude-3-7-sonnet/)).toBeInTheDocument()
+  })
+
+  it('saves the selected vision model via updateSetting (ISSUE-3)', async () => {
+    vi.mocked(api.updateSetting).mockResolvedValue(undefined)
+    render(<SettingsPage />)
+    await screen.findByText('Configured Service Providers')
+
+    const label = screen.getByText('Default Vision Model')
+    const wrapper = label.parentElement as HTMLElement
+    const trigger = wrapper.querySelector('button') as HTMLButtonElement
+    await act(async () => {
+      fireEvent.click(trigger)
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Claude: claude-3-7-sonnet/))
+    })
+
+    expect(api.updateSetting).toHaveBeenCalledWith('vlm_model', 'claude-3-7-sonnet', 'image')
+  })
+
   it('changing the image cap saves via updateSetting', async () => {
     vi.mocked(api.updateSetting).mockResolvedValue(undefined)
     render(<SettingsPage />)

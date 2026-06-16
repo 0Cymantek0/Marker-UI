@@ -370,6 +370,16 @@ class TaskManager:
         finally:
             active_conversion_threads.pop(thread_ident, None)
             self._pids.pop(job_id, None)
+            # Drop any live model hot-swap for this job's provider so it never
+            # bleeds into an unrelated later job.
+            provider_id = config.get("llm_provider")
+            if provider_id:
+                try:
+                    from app.core.api_manager import clear_model_override, reset_stuck_counter
+                    clear_model_override(provider_id)
+                    reset_stuck_counter(provider_id)
+                except Exception:  # noqa: BLE001 - cleanup is best effort
+                    pass
 
     # ------------------------------------------------------------------
     # DB helpers (async - called via asyncio.run from thread)

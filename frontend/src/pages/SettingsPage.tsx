@@ -520,7 +520,7 @@ export function SettingsPage() {
 
       <div className="max-w-[1400px] mx-auto space-y-8 pb-12 px-4 md:px-6 w-full relative">
         {/* Global LLM active banner */}
-      <div className="glass-card border border-border/30 rounded-2xl p-5 shadow-sm space-y-4 bg-card/15">
+      <div className="glass-card border border-border/30 rounded-2xl p-5 shadow-sm space-y-4 bg-card/15 relative z-10">
         <div className="flex items-center gap-2 border-b border-border/20 pb-3">
           <Activity className="w-4.5 h-4.5 text-primary" />
           <h3 className="font-extrabold text-sm text-foreground uppercase tracking-wider">Global LLM Configuration</h3>
@@ -845,17 +845,18 @@ export function SettingsPage() {
                 { value: '', label: 'Auto (first vision-capable model)' },
                 ...providers
                   .flatMap((p) =>
-                    (p.models ?? [])
-                      .filter((m) => m.vision_capable)
-                      .map((m) => ({ value: m.model_id, label: `${p.label}: ${m.model_id}` }))
+                    (p.models ?? []).map((m) => ({
+                      value: m.model_id,
+                      label: `${p.label}: ${m.model_id}${m.vision_capable ? '' : ' (mark vision-capable)'}`,
+                    }))
                   ),
               ]}
-              className="w-full"
+              className="w-full md:w-full"
             />
             <p className="text-[10px] text-muted-foreground/70 leading-normal">
               {providers.some((p) => (p.models ?? []).some((m) => m.vision_capable))
-                ? 'Override auto-resolution. Mark models vision-capable in the provider editors above.'
-                : 'No vision-capable models configured. Mark a model vision-capable in a provider editor to enable understanding modes.'}
+                ? 'Override auto-resolution. Only models marked vision-capable in the provider editors above are used for understanding.'
+                : 'No vision-capable models yet. Pick one here, then mark it vision-capable in its provider editor above to enable understanding modes.'}
             </p>
           </div>
 

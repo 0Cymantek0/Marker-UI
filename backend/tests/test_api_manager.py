@@ -365,3 +365,246 @@ def test_concurrency_gate_released_on_error(clean_concurrency_state):
     assert sem.acquire(blocking=False) is True
     sem.release()
 
+
+# ---------------------------------------------------------------------------
+# Live model hot-swap
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def clean_override_state():
+    """Reset model-override + provider maps before and after a test."""
+    with am._override_lock:
+        am._model_overrides.clear()
+    with am._concurrency_lock:
+        am._provider_hosts.clear()
+        am._provider_concurrency.clear()
+        am._sync_semaphores.clear()
+    with am._cache_lock:
+        am._provider_keys.clear()
+    yield
+    with am._override_lock:
+        am._model_overrides.clear()
+    with am._concurrency_lock:
+        am._provider_hosts.clear()
+        am._provider_concurrency.clear()
+        am._sync_semaphores.clear()
+    with am._cache_lock:
+        am._provider_keys.clear()
+
+
+def test_model_override_rewrites_gemini_url(clean_override_state):
+    """A live override swaps the model name in the Gemini URL path mid-flight."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+    am.set_model_override(provider_id, "gemini-3-flash-preview", "gemini-2.0-flash")
+
+    seen_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_urls.append(str(request.url))
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        client.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash-preview:generateContent",
+            json={"contents": []},
+        )
+
+    assert seen_urls, "request never reached the transport"
+    assert "gemini-2.0-flash:generateContent" in seen_urls[0]
+    assert "gemini-3-flash-preview" not in seen_urls[0]
+
+
+def test_model_override_rewrites_openai_body(clean_override_state):
+    """For body-carried models (OpenAI/Claude), the override rewrites the JSON."""
+    provider_id = "openai"
+    with am._concurrency_lock:
+        am._provider_hosts["api.openai.com"] = provider_id
+    am.set_model_override(provider_id, "gpt-4o-mini", "gpt-4o")
+
+    seen_bodies: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_bodies.append(request.content)
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        client.post(
+            "https://api.openai.com/v1/chat/completions",
+            json={"model": "gpt-4o-mini", "messages": []},
+        )
+
+    assert seen_bodies, "request never reached the transport"
+    assert b'"gpt-4o"' in seen_bodies[0]
+    assert b"gpt-4o-mini" not in seen_bodies[0]
+
+
+def test_model_override_only_affects_its_provider(clean_override_state):
+    """An override for one provider must not rewrite another provider's call."""
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = "gemini"
+        am._provider_hosts["api.openai.com"] = "openai"
+    am.set_model_override("gemini", "gemini-3-flash-preview", "gemini-2.0-flash")
+
+    seen: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.content)
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    # OpenAI call references the gemini model name in its body; must be untouched.
+    with httpx.Client(transport=transport) as client:
+        client.post(
+            "https://api.openai.com/v1/chat/completions",
+            json={"model": "gemini-3-flash-preview", "messages": []},
+        )
+
+    assert seen and b"gemini-3-flash-preview" in seen[0]
+
+
+def test_clear_model_override_stops_rewrite(clean_override_state):
+    """After clearing, requests pass through with the original model intact."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+    am.set_model_override(provider_id, "gemini-3-flash-preview", "gemini-2.0-flash")
+    am.clear_model_override(provider_id)
+
+    seen_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_urls.append(str(request.url))
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        client.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash-preview:generateContent",
+            json={"contents": []},
+        )
+
+    assert seen_urls and "gemini-3-flash-preview:generateContent" in seen_urls[0]
+
+
+def test_set_provider_concurrency_live_rebuilds_semaphore(clean_override_state):
+    """Changing concurrency live drops the old semaphore so the new cap applies."""
+    provider_id = "gemini"
+    am.set_provider_concurrency(provider_id, 4)
+    with am._concurrency_lock:
+        assert am._provider_concurrency[provider_id] == 4
+    # Seed a stale semaphore, then lower the cap; it must be discarded.
+    with am._concurrency_lock:
+        am._sync_semaphores[provider_id] = threading.Semaphore(4)
+    am.set_provider_concurrency(provider_id, 2)
+    with am._concurrency_lock:
+        assert am._provider_concurrency[provider_id] == 2
+        assert provider_id not in am._sync_semaphores  # rebuilt lazily at new cap
+    # Setting to None removes the cap entirely.
+    am.set_provider_concurrency(provider_id, None)
+    with am._concurrency_lock:
+        assert provider_id not in am._provider_concurrency
+
+
+# ---------------------------------------------------------------------------
+# "Suggest a model swap" signal (only when key rotation can't recover)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def clean_stuck_state():
+    with am._stuck_lock:
+        am._stuck_counter.clear()
+    with am._concurrency_lock:
+        am._provider_hosts.clear()
+    with am._cache_lock:
+        am._provider_keys.clear()
+    yield
+    with am._stuck_lock:
+        am._stuck_counter.clear()
+    with am._concurrency_lock:
+        am._provider_hosts.clear()
+    with am._cache_lock:
+        am._provider_keys.clear()
+
+
+def test_swap_suggested_after_threshold_consecutive_rate_limits(clean_stuck_state, caplog):
+    """With a single key (no rotation possible), N consecutive 429s emit exactly
+    one 'model swap suggested' line - not one per failure."""
+    import logging
+
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": "rate limited"})
+
+    transport = httpx.MockTransport(handler)
+    with caplog.at_level(logging.WARNING, logger="app.core.api_manager"):
+        for _ in range(am._STUCK_THRESHOLD + 2):
+            with httpx.Client(transport=transport) as client:
+                client.post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/"
+                    "gemini-3-flash-preview:generateContent",
+                    json={"contents": []},
+                )
+
+    suggestions = [m.getMessage() for m in caplog.records if "model swap suggested" in m.getMessage()]
+    assert len(suggestions) == 1, f"expected exactly one suggestion, got {len(suggestions)}"
+    assert provider_id in suggestions[0]
+
+
+def test_no_swap_suggestion_below_threshold(clean_stuck_state, caplog):
+    """A couple of rate limits (below threshold) must NOT nudge the user."""
+    import logging
+
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": "rate limited"})
+
+    transport = httpx.MockTransport(handler)
+    with caplog.at_level(logging.WARNING, logger="app.core.api_manager"):
+        for _ in range(am._STUCK_THRESHOLD - 1):
+            with httpx.Client(transport=transport) as client:
+                client.get("https://generativelanguage.googleapis.com/v1beta/models")
+
+    assert not any("model swap suggested" in m.getMessage() for m in caplog.records)
+
+
+def test_success_resets_rate_limit_streak(clean_stuck_state, caplog):
+    """A successful call resets the streak, so intermittent 429s never accumulate
+    to a suggestion."""
+    import logging
+
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    state = {"calls": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        # Fail, fail, succeed, repeat - never N-in-a-row.
+        if state["calls"] % 3 == 0:
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(429, json={"error": "rate limited"})
+
+    transport = httpx.MockTransport(handler)
+    with caplog.at_level(logging.WARNING, logger="app.core.api_manager"):
+        for _ in range(12):
+            with httpx.Client(transport=transport) as client:
+                client.get("https://generativelanguage.googleapis.com/v1beta/models")
+
+    assert not any("model swap suggested" in m.getMessage() for m in caplog.records)
+
+

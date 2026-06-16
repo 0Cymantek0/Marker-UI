@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import '@testing-library/jest-dom'
 
@@ -37,6 +37,31 @@ vi.mock('@/components/features/TerminalLog', () => ({
   )
 }))
 
+// The model-swap dialog pulls provider models + applies the override via the
+// API client; stub those so the dialog renders without network.
+const mockApplyLiveOverride = vi.fn().mockResolvedValue({ status: 'applied' })
+const mockGetLLMProviders = vi.fn().mockResolvedValue([
+  {
+    id: 'gemini',
+    type: 'gemini',
+    label: 'Gemini',
+    fallback_api_keys: [],
+    concurrency: 4,
+    models: [
+      { model_id: 'gemini-3-flash-preview' },
+      { model_id: 'gemini-2.0-flash' },
+    ],
+  },
+])
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return {
+    ...actual,
+    getLLMProviders: () => mockGetLLMProviders(),
+    applyLiveOverride: (body: unknown) => mockApplyLiveOverride(body),
+  }
+})
+
 describe('ConvertPage component', () => {
   it('renders initial state with empty queue and console closed by default', () => {
     mockUseConversionQueue.mockReturnValue({
@@ -46,6 +71,8 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
     })
 
     render(<ConvertPage />)
@@ -84,6 +111,8 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
     })
 
     render(<ConvertPage />)
@@ -133,6 +162,8 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
     })
 
     render(<ConvertPage />)
@@ -169,6 +200,8 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
     })
 
     render(<ConvertPage />)
@@ -186,6 +219,8 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
     })
 
     render(<ConvertPage />)
@@ -221,6 +256,8 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
       })
 
       const customConfig = {
@@ -245,6 +282,8 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
       })
 
       render(<ConvertPage />)
@@ -259,6 +298,97 @@ describe('ConvertPage component', () => {
       expect(saved).not.toBeNull()
       const parsed = JSON.parse(saved!)
       expect(parsed.force_ocr).toBe(true)
+    })
+  })
+
+  describe('model-swap on rate limit', () => {
+    const runningLLMJob = (overrides: Record<string, unknown> = {}) => ({
+      id: 'job-run',
+      filename: 'openskill.pdf',
+      file: null,
+      localPath: '',
+      phase: 'processing',
+      progress: 92,
+      statusText: 'Extracting tables...',
+      jobId: 'job-uuid-run',
+      error: null,
+      resultBlob: null,
+      resultText: null,
+      logs: [],
+      outputFormat: 'markdown',
+      llmProvider: 'gemini',
+      llmModel: 'gemini-3-flash-preview',
+      ...overrides,
+    })
+
+    it('shows a Switch Model button on a running LLM job', () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob()],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      expect(screen.getByRole('button', { name: /Switch Model/i })).toBeInTheDocument()
+    })
+
+    it('opens the swap dialog manually with the current model shown', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob()],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByRole('button', { name: /Switch Model/i }))
+
+      const dialog = await screen.findByRole('dialog')
+      expect(dialog).toBeInTheDocument()
+      expect(within(dialog).getByRole('heading', { name: /Switch Model/i })).toBeInTheDocument()
+      expect(within(dialog).getByText(/Current: gemini-3-flash-preview/i)).toBeInTheDocument()
+    })
+
+    it('auto-surfaces the dialog with the rate-limit header when stuck', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob({ rateLimited: true })],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      expect(await screen.findByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText(/Hitting Rate Limits/i)).toBeInTheDocument()
+    })
+
+    it('does not auto-surface once the prompt was dismissed', () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob({ rateLimited: true, swapPromptDismissed: true })],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
 })

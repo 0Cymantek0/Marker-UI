@@ -31,6 +31,123 @@ _sync_semaphores: dict[str, threading.Semaphore] = {}
 _async_semaphores: dict[tuple[str, int], asyncio.Semaphore] = {}
 _concurrency_lock = threading.Lock()
 
+# --- Live model hot-swap ----------------------------------------------------
+# When a running job hits repeated rate limits on a preview/overloaded model,
+# the user can swap to a sibling model of the SAME provider without losing
+# work. The converter already running has its model name baked in, so we
+# rewrite the outgoing request at the httpx layer: provider_id -> (old, new).
+# Only same-provider swaps work here (identical host/auth/wire format); a
+# different provider would need a different client entirely.
+_model_overrides: dict[str, tuple[str, str]] = {}
+_override_lock = threading.Lock()
+
+# --- "Suggest a model swap" signal ------------------------------------------
+# Key rotation already recovers from a single key's rate limit by trying the
+# next key. We only want to nudge the user to swap models when recovery is
+# genuinely stuck: every key is rate-limited, or there is one key, or the model
+# itself is overloaded (repeated 504). So we count ONLY final, post-rotation
+# rate-limit/timeout outcomes per provider and reset on any success. When the
+# streak crosses the threshold we emit ONE log line the UI listens for.
+_STUCK_THRESHOLD = 3
+_stuck_counter: dict[str, int] = {}
+_stuck_lock = threading.Lock()
+# Status codes that mean "rate limited / overloaded" rather than a config error.
+_RATE_LIMIT_STATUSES = (429, 503, 504)
+
+
+def reset_stuck_counter(provider_id: str) -> None:
+    """Forget the rate-limit streak for a provider (e.g. after a model swap)."""
+    with _stuck_lock:
+        _stuck_counter.pop(provider_id, None)
+
+
+def _note_call_outcome(provider_id: str | None, *, ok: bool, rate_limited: bool) -> None:
+    """Track consecutive unrecovered rate-limit/timeout outcomes per provider.
+
+    Emits a single 'model swap suggested' log line (which the frontend watches)
+    when the streak first crosses the threshold. A success resets the streak.
+    """
+    if not provider_id:
+        return
+    with _stuck_lock:
+        if ok:
+            _stuck_counter.pop(provider_id, None)
+            return
+        if not rate_limited:
+            return  # auth/other errors are not a "swap model" situation
+        streak = _stuck_counter.get(provider_id, 0) + 1
+        _stuck_counter[provider_id] = streak
+        crossed = streak == _STUCK_THRESHOLD
+    if crossed:
+        # ASCII-only: Windows consoles default to cp1252 (see memory).
+        logger.warning(
+            "model swap suggested for provider %s: %d consecutive rate-limit/timeout responses",
+            provider_id,
+            _STUCK_THRESHOLD,
+        )
+
+
+
+def set_model_override(provider_id: str, old_model: str, new_model: str) -> None:
+    """Install a live old->new model rewrite for a provider's in-flight calls."""
+    with _override_lock:
+        if not new_model or old_model == new_model:
+            _model_overrides.pop(provider_id, None)
+        else:
+            _model_overrides[provider_id] = (old_model, new_model)
+    # New model => fresh start; forget the previous model's rate-limit streak.
+    reset_stuck_counter(provider_id)
+
+
+def clear_model_override(provider_id: str) -> None:
+    """Remove any live model rewrite for a provider."""
+    with _override_lock:
+        _model_overrides.pop(provider_id, None)
+
+
+def set_provider_concurrency(provider_id: str, limit: int | None) -> None:
+    """Update a provider's concurrency cap live and reset its semaphores so the
+    new limit applies to subsequent calls. None/<=0 means unlimited."""
+    with _concurrency_lock:
+        if limit and limit > 0:
+            _provider_concurrency[provider_id] = limit
+        else:
+            _provider_concurrency.pop(provider_id, None)
+        # Drop cached semaphores; they are lazily rebuilt at the new limit.
+        _sync_semaphores.pop(provider_id, None)
+        for key in [k for k in _async_semaphores if k[0] == provider_id]:
+            _async_semaphores.pop(key, None)
+
+
+def _apply_model_override(request: httpx.Request, provider_id: str | None) -> None:
+    """Rewrite the model name in a request when a live override is set.
+
+    Gemini carries the model in the URL path
+    (``/v1beta/models/<model>:generateContent``); OpenAI/Claude/Ollama carry it
+    in the JSON body as ``"model": "<model>"``. A literal old->new replace
+    covers both without parsing provider-specific schemas.
+    """
+    if not provider_id:
+        return
+    with _override_lock:
+        mapping = _model_overrides.get(provider_id)
+    if not mapping:
+        return
+    old_model, new_model = mapping
+
+    url_str = str(request.url)
+    if old_model in url_str:
+        request.url = httpx.URL(url_str.replace(old_model, new_model))
+
+    if hasattr(request, "_content") and request._content and old_model.encode("utf-8") in request._content:
+        try:
+            content_str = request._content.decode("utf-8", errors="ignore")
+            request._content = content_str.replace(old_model, new_model).encode("utf-8")
+            request.headers["content-length"] = str(len(request._content))
+        except Exception as e:  # noqa: BLE001 - never break a request over a rewrite
+            logger.error("Failed to apply model override in request body: %s", e)
+
+
 
 def _identify_provider(request: httpx.Request) -> str | None:
     """Best-effort map a request to a configured provider id.
@@ -398,7 +515,10 @@ def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, 
     """Patched synchronous send method with auto key rotation retry."""
     _resolve_request(request)
     is_llm = _log_model_call_start(request)
-    gate = _acquire_sync_gate(_identify_provider(request)) if is_llm else None
+    provider_id = _identify_provider(request) if is_llm else None
+    if is_llm:
+        _apply_model_override(request, provider_id)
+    gate = _acquire_sync_gate(provider_id) if is_llm else None
     t0 = time.perf_counter()
     try:
         res = _orig_client_send(self, request, *args, **kwargs)
@@ -409,7 +529,19 @@ def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, 
         if res.status_code in (401, 403, 429, 503):
             rotated = _handle_rotation_sync(self, request, res, *args, **kwargs)
             if rotated:
+                if is_llm:
+                    _note_call_outcome(
+                        provider_id,
+                        ok=200 <= rotated.status_code < 300,
+                        rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
+                    )
                 return rotated
+        if is_llm:
+            _note_call_outcome(
+                provider_id,
+                ok=200 <= res.status_code < 300,
+                rate_limited=res.status_code in _RATE_LIMIT_STATUSES,
+            )
         return res
     except (httpx.ConnectError, httpx.TimeoutException) as e:
         if is_llm:
@@ -421,7 +553,16 @@ def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, 
             )
         rotated = _handle_rotation_sync(self, request, e, *args, **kwargs)
         if rotated:
+            if is_llm:
+                _note_call_outcome(
+                    provider_id,
+                    ok=200 <= rotated.status_code < 300,
+                    rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
+                )
             return rotated
+        if is_llm:
+            # A timeout that rotation could not recover counts as overloaded.
+            _note_call_outcome(provider_id, ok=False, rate_limited=True)
         raise
     finally:
         if gate is not None:
@@ -432,7 +573,10 @@ async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Requ
     """Patched asynchronous send method with auto key rotation retry."""
     _resolve_request(request)
     is_llm = _log_model_call_start(request)
-    gate = _acquire_async_gate(_identify_provider(request)) if is_llm else None
+    provider_id = _identify_provider(request) if is_llm else None
+    if is_llm:
+        _apply_model_override(request, provider_id)
+    gate = _acquire_async_gate(provider_id) if is_llm else None
     if gate is not None:
         await gate.acquire()
     t0 = time.perf_counter()
@@ -445,7 +589,19 @@ async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Requ
         if res.status_code in (401, 403, 429, 503):
             rotated = await _handle_rotation_async(self, request, res, *args, **kwargs)
             if rotated:
+                if is_llm:
+                    _note_call_outcome(
+                        provider_id,
+                        ok=200 <= rotated.status_code < 300,
+                        rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
+                    )
                 return rotated
+        if is_llm:
+            _note_call_outcome(
+                provider_id,
+                ok=200 <= res.status_code < 300,
+                rate_limited=res.status_code in _RATE_LIMIT_STATUSES,
+            )
         return res
     except (httpx.ConnectError, httpx.TimeoutException) as e:
         if is_llm:
@@ -457,7 +613,15 @@ async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Requ
             )
         rotated = await _handle_rotation_async(self, request, e, *args, **kwargs)
         if rotated:
+            if is_llm:
+                _note_call_outcome(
+                    provider_id,
+                    ok=200 <= rotated.status_code < 300,
+                    rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
+                )
             return rotated
+        if is_llm:
+            _note_call_outcome(provider_id, ok=False, rate_limited=True)
         raise
     finally:
         if gate is not None:

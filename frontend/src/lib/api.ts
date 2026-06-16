@@ -409,6 +409,23 @@ export async function fetchAvailableModels(
   })
 }
 
+export interface LiveOverrideRequest {
+  provider_id: string
+  old_model?: string
+  new_model?: string
+  concurrency?: number | null
+  persist?: boolean
+}
+
+/** Hot-swap a running job's model and/or concurrency for one provider.
+ *  Same-provider model swaps apply to in-flight calls without losing work. */
+export async function applyLiveOverride(body: LiveOverrideRequest): Promise<{ status: string }> {
+  return request<{ status: string }>('/settings/llm/live-override', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export async function deleteJob(jobId: string): Promise<void> {
   return request<void>(`/convert/${jobId}`, { method: 'DELETE' })
 }

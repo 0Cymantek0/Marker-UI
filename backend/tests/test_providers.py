@@ -311,3 +311,82 @@ class TestLLMProviders:
         decrypted = decrypt_value(cipher_after_resave)
         assert decrypted == real_key
         assert not decrypted.startswith("gAAAAA")
+
+    @pytest.mark.asyncio
+    async def test_live_override_swaps_model_and_concurrency(
+        self, test_client: AsyncClient, test_session: AsyncSession
+    ):
+        """POST /llm/live-override installs a live model rewrite + concurrency
+        cap, persists the new active model, and writes concurrency back to the
+        provider record."""
+        import app.core.api_manager as am
+        from sqlalchemy import select, delete
+
+        await test_session.execute(delete(Setting).where(Setting.key == "llm_providers"))
+        await test_session.execute(delete(Setting).where(Setting.key == "llm_global_active"))
+        await test_session.commit()
+
+        provider = {
+            "id": "gemini",
+            "type": "gemini",
+            "label": "Gemini",
+            "api_key": "AIzaTestKey-0987654321",
+            "fallback_api_keys": [],
+            "base_url": "https://generativelanguage.googleapis.com",
+            "concurrency": 4,
+            "models": [
+                {"model_id": "gemini-3-flash-preview"},
+                {"model_id": "gemini-2.0-flash"},
+            ],
+        }
+        await test_client.put("/api/settings/llm/providers", json=[provider])
+        await test_client.put(
+            "/api/settings/llm/active",
+            json={"provider_id": "gemini", "model_id": "gemini-3-flash-preview"},
+        )
+
+        try:
+            resp = await test_client.post(
+                "/api/settings/llm/live-override",
+                json={
+                    "provider_id": "gemini",
+                    "old_model": "gemini-3-flash-preview",
+                    "new_model": "gemini-2.0-flash",
+                    "concurrency": 2,
+                    "persist": True,
+                },
+            )
+            assert resp.status_code == 200
+            payload = resp.json()
+            assert payload["status"] == "applied"
+            assert payload["model_swap"] == {
+                "from": "gemini-3-flash-preview",
+                "to": "gemini-2.0-flash",
+            }
+            assert payload["concurrency"] == 2
+
+            # Live override registered in the api_manager.
+            with am._override_lock:
+                assert am._model_overrides["gemini"] == (
+                    "gemini-3-flash-preview",
+                    "gemini-2.0-flash",
+                )
+            with am._concurrency_lock:
+                assert am._provider_concurrency["gemini"] == 2
+
+            # Active model persisted for future jobs.
+            active = await test_client.get("/api/settings/llm/active")
+            assert active.json()["model_id"] == "gemini-2.0-flash"
+
+            # Concurrency persisted into the provider record.
+            row = (
+                await test_session.execute(
+                    select(Setting).where(Setting.key == "llm_providers")
+                )
+            ).scalar_one()
+            stored = next(p for p in json.loads(row.value) if p["id"] == "gemini")
+            assert stored["concurrency"] == 2
+        finally:
+            am.clear_model_override("gemini")
+            am.set_provider_concurrency("gemini", None)
+

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Play, Loader2, Download, Trash2, FileText, Terminal } from 'lucide-react'
+import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { FileUpload } from '@/components/features/FileUpload'
 import { ConversionOptions } from '@/components/features/ConversionOptions'
 import { TerminalLog } from '@/components/features/TerminalLog'
 import { OutputViewer } from '@/components/features/OutputViewer'
+import { ModelSwapDialog } from '@/components/features/conversion/ModelSwapDialog'
 import { useConversionQueue } from '@/hooks/useConversionQueue'
 import type { ConversionConfig } from '@/lib/api'
 import { Progress } from '@/components/ui/progress'
@@ -43,12 +44,45 @@ export function ConvertPage() {
   })
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [showConsole, setShowConsole] = useState(false)
+  // Model-swap dialog: which job it targets, and whether it auto-surfaced.
+  const [swapJobId, setSwapJobId] = useState<string | null>(null)
+  const [swapAuto, setSwapAuto] = useState(false)
 
   useEffect(() => {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
   }, [config])
 
-  const { jobs, start, cancel, download, clearLogs, removeJob } = useConversionQueue()
+  const { jobs, start, cancel, download, clearLogs, removeJob, dismissSwapPrompt, clearRateLimited } = useConversionQueue()
+
+  // Auto-surface the swap dialog when a running job reports it's stuck on rate
+  // limits (key rotation exhausted) and the user hasn't dismissed it yet.
+  useEffect(() => {
+    if (swapJobId) return // a dialog is already open
+    const stuck = jobs.find(
+      (j) =>
+        j.rateLimited &&
+        !j.swapPromptDismissed &&
+        (j.phase === 'processing' || j.phase === 'uploading') &&
+        j.llmProvider
+    )
+    if (stuck) {
+      setSwapJobId(stuck.id)
+      setSwapAuto(true)
+    }
+  }, [jobs, swapJobId])
+
+  const swapJob = jobs.find((j) => j.id === swapJobId) || null
+
+  const closeSwap = useCallback(() => {
+    if (swapJob && swapAuto) dismissSwapPrompt(swapJob.id)
+    setSwapJobId(null)
+    setSwapAuto(false)
+  }, [swapJob, swapAuto, dismissSwapPrompt])
+
+  const openSwapManual = useCallback((id: string) => {
+    setSwapJobId(id)
+    setSwapAuto(false)
+  }, [])
 
   // Auto-select the latest job if none is selected
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || jobs[jobs.length - 1]
@@ -320,6 +354,24 @@ export function ConvertPage() {
                           </Button>
                         )}
 
+                        {isJobRunning && job.llmProvider && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openSwapManual(job.id)}
+                            title="Switch model for this running job"
+                            className={cn(
+                              'h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg',
+                              job.rateLimited
+                                ? 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+                                : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+                            )}
+                          >
+                            <Repeat className="w-3.5 h-3.5" />
+                            Switch Model
+                          </Button>
+                        )}
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -371,6 +423,18 @@ export function ConvertPage() {
         </div>
       </div>
     </div>
+
+    {swapJob && (
+      <ModelSwapDialog
+        open={!!swapJob}
+        auto={swapAuto}
+        filename={swapJob.filename}
+        providerId={swapJob.llmProvider}
+        currentModel={swapJob.llmModel}
+        onClose={closeSwap}
+        onApplied={() => clearRateLimited(swapJob.id)}
+      />
+    )}
   </div>
   )
 }
