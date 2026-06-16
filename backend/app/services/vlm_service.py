@@ -315,6 +315,17 @@ class VLMService:
     # Public API
     # -----------------------------------------------------------------
 
+    @property
+    def model_id(self) -> str:
+        """Resolved model id used for VLM calls.
+
+        Exposed publicly so callers (e.g. ImageUnderstandingProcessor's badge
+        metadata) can report the model that actually ran. Without this,
+        ``getattr(service, "model_id", None)`` falls through to ``None`` and the
+        per-image metadata records ``model=unknown``.
+        """
+        return self._model_id
+
     def classify(
         self,
         image_bytes: bytes,

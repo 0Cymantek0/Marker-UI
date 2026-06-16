@@ -52,6 +52,28 @@ class FakePicture(FakeBlock):
         return Image.new("RGB", (12, 12), color="white")
 
 
+class FakeFigure(FakeBlock):
+    """A marker Figure block (charts/diagrams land here, not in Picture).
+
+    Carries a pre-set ``description`` to mimic marker's native
+    LLMImageDescriptionProcessor having already run; the test asserts our
+    processor overwrites it with structured ``html``.
+    """
+
+    def __init__(self):
+        from marker.schema import BlockTypes
+
+        super().__init__(BlockTypes.Figure)
+        self.html = None
+        self.description = "Native marker prose description."
+        self.ignore_for_output = False
+        self.block_id = 7
+        self.id = FakeBlockId("_page_1_Figure_7")
+
+    def get_image(self, document):
+        return Image.new("RGB", (24, 24), color="white")
+
+
 class FakeDocument:
     def __init__(self, blocks):
         self.blocks = blocks
@@ -187,6 +209,39 @@ def test_processor_mutates_picture_in_place_for_chart_html():
             "omitted": False,
         }
     ]
+
+
+def test_processor_processes_figure_blocks_not_just_pictures():
+    """Regression: charts/diagrams are marker Figure blocks, not Picture blocks.
+
+    The processor used to iterate only BlockTypes.Picture, so every Figure
+    (the actual charts and diagrams in a paper) bypassed the VLM and fell back
+    to marker's native ``Image <id> description:`` prose. The processor must
+    now also pick up Figure blocks and overwrite the native description with
+    structured html.
+    """
+    from marker.schema import BlockTypes
+
+    h1 = FakeBlock(BlockTypes.SectionHeader, "Results", heading_level=1)
+    figure = FakeFigure()
+    document = FakeDocument([h1, figure])
+    vlm = FakeVLM()  # default chart_bar payload
+
+    proc = ImageUnderstandingProcessor(
+        {"image_handling_mode": "understanding", "vlm_model": "gpt-4o"},
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    # VLM actually ran on the Figure (classify + extract).
+    assert len(vlm.calls) == 2
+    # Structured html replaces marker's native prose description.
+    assert figure.html is not None
+    assert "<table>" in figure.html
+    assert "marker-ui image-understanding: type=chart_bar model=gpt-4o" in figure.html
+    # Badge metadata pairs to the Figure's emitted filename.
+    assert proc.image_meta[0]["image_name"] == "_page_1_Figure_7.jpeg"
+    assert proc.image_meta[0]["image_type"] == "chart_bar"
 
 
 def test_processor_both_mode_collects_sidecar_meta_for_description_type():
@@ -436,7 +491,12 @@ def test_with_image_understanding_processor_preserves_default_pipeline():
     """ISSUE-1 regression: with NO explicit processor list, marker would replace
     its entire default pipeline (dropping every built-in LLM processor) the
     moment we pass a non-None list. We must expand the default pipeline and
-    append ours so use_llm refinement still runs alongside image understanding."""
+    append ours so use_llm refinement still runs alongside image understanding.
+
+    Bug 3: the native LLMImageDescriptionProcessor is the one exception — it
+    handles the same Picture + Figure blocks ours does and runs earlier, so we
+    drop it to avoid a discarded paid LLM call per image.
+    """
     processors = with_image_understanding_processor(
         {"image_handling_mode": "understanding"},
         None,
@@ -446,12 +506,13 @@ def test_with_image_understanding_processor_preserves_default_pipeline():
     parts = processors.split(",")
     # Our processor is present...
     assert IMAGE_UNDERSTANDING_PROCESSOR in parts
-    # ...and so are marker's default LLM + structural processors.
+    # ...and so are marker's other default LLM + structural processors.
     assert any("LLMTableProcessor" in p for p in parts)
     assert any("LLMEquationProcessor" in p for p in parts)
-    assert any("LLMImageDescriptionProcessor" in p for p in parts)
     assert any("TableProcessor" in p for p in parts)
-    # Ours runs last so Picture blocks are final before it mutates them.
+    # ...but the redundant native image-description processor is dropped.
+    assert not any("LLMImageDescriptionProcessor" in p for p in parts)
+    # Ours runs last so Picture/Figure blocks are final before it mutates them.
     assert parts[-1] == IMAGE_UNDERSTANDING_PROCESSOR
 
 

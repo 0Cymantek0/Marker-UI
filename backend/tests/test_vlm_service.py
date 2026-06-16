@@ -550,6 +550,16 @@ class TestConstructorWiring:
 
         assert VLMService._resolve_model_id(prov) == "gemini-2.0-flash"
 
+    def test_model_id_property_exposes_resolved_model(
+        self, http_client: MagicMock
+    ):
+        """The public ``model_id`` property reports the resolved model so the
+        badge metadata records the real model instead of ``unknown``."""
+        prov = _mk_provider()
+        svc = VLMService(provider=prov, model_id="gpt-4o", http_client=http_client)
+        assert svc.model_id == "gpt-4o"
+
+
 
 class TestProviderResolution:
     def test_provider_from_stored_settings_preserves_raw_api_key(self):

@@ -79,7 +79,12 @@ class ImageUnderstandingProcessor(BaseProcessor):
     unchanged unless a caller explicitly chooses ``understanding`` or ``both``.
     """
 
-    block_types = (BlockTypes.Picture, BlockTypes.PictureGroup)
+    block_types = (
+        BlockTypes.Picture,
+        BlockTypes.PictureGroup,
+        BlockTypes.Figure,
+        BlockTypes.FigureGroup,
+    )
 
     def __init__(
         self,
@@ -111,7 +116,9 @@ class ImageUnderstandingProcessor(BaseProcessor):
         if self.image_handling_mode == ImageHandlingMode.extraction:
             return
 
-        pictures = list(document.contained_blocks([BlockTypes.Picture]))
+        pictures = list(
+            document.contained_blocks([BlockTypes.Picture, BlockTypes.Figure])
+        )
         logger.info(
             "ImageUnderstanding start: mode=%s model=%s pictures=%d max=%d",
             self.image_handling_mode.value,

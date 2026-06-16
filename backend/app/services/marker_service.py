@@ -53,6 +53,15 @@ IMAGE_UNDERSTANDING_PROCESSOR = (
     "app.processors.image_understanding.ImageUnderstandingProcessor"
 )
 
+# marker's native image-description processor. It handles the SAME block types
+# our processor does (Picture + Figure) and runs EARLIER in the pipeline, so in
+# understanding/both modes it makes a paid LLM call on every image that our
+# processor then overwrites — pure waste, and double-billing. We drop it from
+# the default pipeline whenever our processor is active.
+NATIVE_IMAGE_DESCRIPTION_PROCESSOR = (
+    "marker.processors.llm.llm_image_description.LLMImageDescriptionProcessor"
+)
+
 # Custom config keys consumed by ImageUnderstandingProcessor.__init__.
 # marker's ConfigParser.generate_config_dict() silently drops any key not
 # present in its crawler.attr_set (verified: none of these are registered),
@@ -118,8 +127,14 @@ def with_image_understanding_processor(
             explicit.append(IMAGE_UNDERSTANDING_PROCESSOR)
         return ",".join(explicit)
 
-    # No explicit list: preserve marker's full default pipeline, then append.
-    pipeline = _default_pipeline_dotted_paths()
+    # No explicit list: preserve marker's full default pipeline, drop the
+    # redundant native image-description processor (ours supersedes it for
+    # Picture + Figure blocks), then append ours.
+    pipeline = [
+        p
+        for p in _default_pipeline_dotted_paths()
+        if p != NATIVE_IMAGE_DESCRIPTION_PROCESSOR
+    ]
     if IMAGE_UNDERSTANDING_PROCESSOR not in pipeline:
         pipeline.append(IMAGE_UNDERSTANDING_PROCESSOR)
     return ",".join(pipeline)
