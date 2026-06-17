@@ -183,7 +183,11 @@ def test_processor_mutates_picture_in_place_for_chart_html():
     vlm = FakeVLM()
 
     proc = ImageUnderstandingProcessor(
-        {"image_handling_mode": "understanding", "vlm_model": "gpt-4o"},
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
         vlm_service=vlm,
     )
     proc(document)
@@ -196,7 +200,10 @@ def test_processor_mutates_picture_in_place_for_chart_html():
     assert "<th>FY26</th>" in picture.html
     assert "<td>Q2</td>" in picture.html
     assert "<td>14</td>" in picture.html
-    assert "original_image" not in picture.html
+    # Augment gate (§6): chart is NOT safe to replace, so even in understanding
+    # mode the original image is kept alongside the extracted table.
+    assert "original_image" in picture.html
+    assert '<img src="_page_0_Picture_42.jpeg" />' in picture.html
     assert len(vlm.calls) == 2
 
     # Sidecar metadata channel: pairs to the emitted image filename.
@@ -207,8 +214,35 @@ def test_processor_mutates_picture_in_place_for_chart_html():
             "confidence": 0.91,
             "model": "gpt-4o",
             "omitted": False,
+            "cost_usd": 0.0,
         }
     ]
+
+
+def test_equation_replaces_image_in_understanding_mode():
+    """Augment gate (§6/decision #4): equation->LaTeX IS safe to replace, so the
+    original image is dropped in understanding mode (unlike charts/diagrams)."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM(
+        image_type=ImageType.equation,
+        payload={"latex": "a^2 + b^2 = c^2", "caption": "Pythagoras"},
+    )
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    assert picture.html is not None
+    assert "a^2 + b^2 = c^2" in picture.html
+    # Safe-to-replace type: no kept original.
+    assert "original_image" not in picture.html
+    assert "<img" not in picture.html
 
 
 def test_processor_processes_figure_blocks_not_just_pictures():
@@ -228,7 +262,11 @@ def test_processor_processes_figure_blocks_not_just_pictures():
     vlm = FakeVLM()  # default chart_bar payload
 
     proc = ImageUnderstandingProcessor(
-        {"image_handling_mode": "understanding", "vlm_model": "gpt-4o"},
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
         vlm_service=vlm,
     )
     proc(document)
@@ -252,7 +290,10 @@ def test_processor_both_mode_collects_sidecar_meta_for_description_type():
         payload={"alt_text": "A detailed office photo.", "details": ["Bright room"]},
     )
 
-    proc = ImageUnderstandingProcessor({"image_handling_mode": "both"}, vlm_service=vlm)
+    proc = ImageUnderstandingProcessor(
+        {"image_handling_mode": "both", "allow_cloud_vlm": True},
+        vlm_service=vlm,
+    )
     proc(document)
 
     assert picture.description is None
@@ -275,7 +316,11 @@ def test_processor_both_mode_respects_include_original_ref_false():
     )
 
     proc = ImageUnderstandingProcessor(
-        {"image_handling_mode": "both", "include_original_ref": False},
+        {
+            "image_handling_mode": "both",
+            "include_original_ref": False,
+            "allow_cloud_vlm": True,
+        },
         vlm_service=vlm,
     )
     proc(document)
@@ -290,7 +335,7 @@ def test_processor_decorative_omits_picture_output():
     vlm = FakeVLM(image_type=ImageType.decorative, payload={})
 
     proc = ImageUnderstandingProcessor(
-        {"image_handling_mode": "understanding"},
+        {"image_handling_mode": "understanding", "allow_cloud_vlm": True},
         vlm_service=vlm,
     )
     proc(document)
@@ -391,7 +436,11 @@ def test_processor_logs_start_and_done_tally(caplog):
 
     with caplog.at_level(logging.INFO, logger="app.processors.image_understanding"):
         ImageUnderstandingProcessor(
-            {"image_handling_mode": "understanding", "vlm_model": "gpt-4o"},
+            {
+                "image_handling_mode": "understanding",
+                "vlm_model": "gpt-4o",
+                "allow_cloud_vlm": True,
+            },
             vlm_service=vlm,
         )(document)
 
@@ -420,7 +469,7 @@ def test_processor_logs_failed_tally_when_vlm_raises(caplog):
 
     with caplog.at_level(logging.INFO, logger="app.processors.image_understanding"):
         ImageUnderstandingProcessor(
-            {"image_handling_mode": "understanding"},
+            {"image_handling_mode": "understanding", "allow_cloud_vlm": True},
             vlm_service=BoomVLM(),
         )(document)
 
@@ -458,7 +507,7 @@ def test_processor_counts_extraction_error_as_failed(caplog):
 
     with caplog.at_level(logging.INFO, logger="app.processors.image_understanding"):
         proc = ImageUnderstandingProcessor(
-            {"image_handling_mode": "understanding"},
+            {"image_handling_mode": "understanding", "allow_cloud_vlm": True},
             vlm_service=ErrorVLM(),
         )
         proc(document)
@@ -526,3 +575,495 @@ def test_build_marker_options_wires_processor_when_mode_is_both():
     # Default pipeline preserved (ISSUE-1): built-in LLM processors still wired.
     assert any("LLMTableProcessor" in p for p in parts)
     assert parts[-1] == IMAGE_UNDERSTANDING_PROCESSOR
+
+
+class _RoutingDetectionModel:
+    """Fake surya DetectionPredictor returning a fixed text-coverage profile."""
+
+    def __init__(self, coverage_boxes, image_side=100):
+        self._boxes = coverage_boxes
+        self._side = image_side
+
+    def __call__(self, images):
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class _Box:
+            polygon: list
+
+        @dataclass
+        class _Result:
+            bboxes: list
+            image_bbox: list = field(
+                default_factory=lambda: [0, 0, self._side, self._side]
+            )
+
+        return [_Result(bboxes=[_Box(polygon=b) for b in self._boxes])]
+
+
+def test_processor_skips_decorative_route_without_vlm_call():
+    """Tier-0: a decorative image (no detected text) is omitted locally with no
+    VLM call — the §2 skip path that saves the most expensive resource."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+        detection_model=_RoutingDetectionModel(coverage_boxes=[]),  # no text
+    )
+    proc(document)
+
+    # No VLM call happened — the router short-circuited locally.
+    assert vlm.calls == []
+    # Picture omitted as decorative.
+    assert picture.html is not None
+    assert "Decorative element omitted" in picture.html
+    assert proc.image_meta == [
+        {
+            "image_name": "_page_0_Picture_42.jpeg",
+            "image_type": "decorative",
+            "confidence": 1.0,
+            "model": "gpt-4o",
+            "omitted": True,
+            "cost_usd": 0.0,
+        }
+    ]
+
+
+def test_local_only_decorative_route_does_not_construct_vlm_service():
+    """Local-only privacy mode can omit decorative images without configured VLM."""
+    document, picture = _doc_with_picture()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "allow_cloud_vlm": False,
+        },
+        detection_model=_RoutingDetectionModel(coverage_boxes=[]),
+    )
+    proc(document)
+
+    assert "Decorative element omitted" in (picture.html or "")
+    assert proc.image_meta[0]["model"] == "local-only"
+
+
+def test_processor_routes_sparse_text_graphic_to_vlm():
+    """A chart (sparse axis labels) still escalates to the VLM under the router."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+
+    # Two tiny label boxes -> low density -> vlm route.
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+        detection_model=_RoutingDetectionModel(
+            coverage_boxes=[
+                [[2, 2], [12, 2], [12, 8], [2, 8]],
+                [[80, 90], [92, 90], [92, 96], [80, 96]],
+            ]
+        ),
+    )
+    proc(document)
+
+    # VLM ran (classify + extract) and produced the chart table.
+    assert len(vlm.calls) == 2
+    assert "<table>" in (picture.html or "")
+
+
+def test_router_disabled_preserves_legacy_path():
+    """router_enabled=False -> every image hits the VLM (legacy behaviour),
+    even with a detection model that would otherwise route to decorative."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "router_enabled": False,
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+        detection_model=_RoutingDetectionModel(coverage_boxes=[]),  # would skip
+    )
+    proc(document)
+
+    # Router off: the decorative-looking image still went to the VLM.
+    assert len(vlm.calls) == 2
+    assert "<table>" in (picture.html or "")
+
+
+class _OcrTextLine:
+    def __init__(self, text):
+        self.text = text
+
+
+class _OcrResultObj:
+    def __init__(self, lines):
+        self.text_lines = [_OcrTextLine(t) for t in lines]
+        self.image_bbox = [0, 0, 100, 100]
+
+
+class _FakeRecognitionModel:
+    def __init__(self, lines):
+        self._lines = lines
+
+    def __call__(self, **kwargs):
+        return [_OcrResultObj(self._lines)]
+
+
+def _dense_text_boxes():
+    """Five wide boxes covering ~60% of a 100x100 image -> OCR route."""
+    return [
+        [[0, 0], [100, 0], [100, 12], [0, 12]],
+        [[0, 14], [100, 14], [100, 26], [0, 26]],
+        [[0, 28], [100, 28], [100, 40], [0, 40]],
+        [[0, 42], [100, 42], [100, 54], [0, 54]],
+        [[0, 56], [100, 56], [100, 68], [0, 68]],
+    ]
+
+
+def test_processor_text_image_routes_to_local_ocr_no_vlm():
+    """Tier-2: a text-dense image is transcribed locally with NO VLM call —
+    the line-227 fix (describe -> transcribe)."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+        detection_model=_RoutingDetectionModel(coverage_boxes=_dense_text_boxes()),
+        recognition_model=_FakeRecognitionModel(
+            ["Section 4.1 Results", "The model achieved 94% accuracy."]
+        ),
+    )
+    proc(document)
+
+    # No cloud call — transcription was local and deterministic.
+    assert vlm.calls == []
+    assert "The model achieved 94% accuracy." in (picture.html or "")
+    assert "Section 4.1 Results" in (picture.html or "")
+    assert proc.image_meta[0]["model"] == "local-ocr"
+    assert proc.image_meta[0]["omitted"] is False
+
+
+def test_processor_ocr_empty_escalates_to_vlm():
+    """When local OCR recovers no text, the image escalates to the VLM rather
+    than emitting nothing (plan §5 escalation gate)."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+        detection_model=_RoutingDetectionModel(coverage_boxes=_dense_text_boxes()),
+        recognition_model=_FakeRecognitionModel([]),  # OCR recovers nothing
+    )
+    proc(document)
+
+    # Fell through to the VLM.
+    assert len(vlm.calls) == 2
+    assert "<table>" in (picture.html or "")
+
+
+class _CountingVLM(FakeVLM):
+    """FakeVLM that records how many extract calls ran (for dedup assertions)."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.extract_count = 0
+
+    def extract(self, *a, **k):
+        self.extract_count += 1
+        return super().extract(*a, **k)
+
+
+def _doc_with_two_identical_pictures():
+    from marker.schema import BlockTypes
+
+    h1 = FakeBlock(BlockTypes.SectionHeader, "Report", heading_level=1)
+    p1 = FakePicture()
+    p2 = FakePicture()
+    # Distinct dataclass field values so FakeBlock.__eq__ (and thus
+    # list.index in FakeDocument) treats them as different blocks — without
+    # this, identical dataclasses collide and FakeDocument navigation loops.
+    # The image itself (get_image) is identical, which is what dedup keys on.
+    p1.text = "first"
+    p2.text = "second"
+    # Give the second a distinct emitted name so we can prove the fan-out
+    # regenerates the per-block image link rather than copying the first's.
+    p2.id = FakeBlockId("_page_5_Picture_99")
+    return FakeDocument([h1, p1, p2]), p1, p2
+
+
+def test_dedup_collapses_identical_images_to_one_vlm_call():
+    """Plan §8a: two identical images -> one extraction, fanned to both blocks
+    with each block's own image name regenerated."""
+    document, p1, p2 = _doc_with_two_identical_pictures()
+    vlm = _CountingVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "both",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    # Only ONE extract call despite two identical pictures.
+    assert vlm.extract_count == 1
+    # Both blocks got the table...
+    assert "<table>" in (p1.html or "")
+    assert "<table>" in (p2.html or "")
+    # ...but each kept its OWN image link (fan-out regenerated the name).
+    assert "_page_0_Picture_42.jpeg" in p1.html
+    assert "_page_5_Picture_99.jpeg" in p2.html
+
+
+def test_dedup_disabled_processes_each_image():
+    document, p1, p2 = _doc_with_two_identical_pictures()
+    vlm = _CountingVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "both",
+            "vlm_model": "gpt-4o",
+            "dedup_enabled": False,
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    # Dedup off: both images extracted independently.
+    assert vlm.extract_count == 2
+
+
+class _BatchVLM:
+    """Fake VLM exposing the batch surface; records batch sizes seen."""
+
+    model_id = "gpt-4o"
+
+    def __init__(self):
+        self.batch_calls = []
+
+    def classify_and_extract_batch(self, items, max_retries=2):
+        from app.models.image_understanding import ExtractionResult, ImageType
+
+        self.batch_calls.append(len(items))
+        return [
+            ExtractionResult(
+                image_type=ImageType.chart_bar,
+                payload={"title": "T", "series": [{"name": "s", "points": [{"x": "Q1", "y": 1}]}]},
+                raw_response="{}",
+                confidence=0.9,
+            )
+            for _ in items
+        ]
+
+
+class _OcrSufficientBatchVLM:
+    """Batch VLM says local OCR is better for this ambiguous image."""
+
+    model_id = "gpt-4o"
+
+    def __init__(self):
+        self.batch_calls = []
+
+    def classify_and_extract_batch(self, items, max_retries=2):
+        from app.models.image_understanding import ExtractionResult, ImageType
+
+        self.batch_calls.append(len(items))
+        return [
+            ExtractionResult(
+                image_type=ImageType.other,
+                payload={},
+                raw_response="{}",
+                confidence=0.8,
+                route="ocr_sufficient",
+            )
+            for _ in items
+        ]
+
+
+def _doc_with_two_distinct_pictures():
+    from marker.schema import BlockTypes
+    from PIL import Image
+
+    h1 = FakeBlock(BlockTypes.SectionHeader, "Report", heading_level=1)
+    p1 = FakePicture()
+    p1.text = "first"
+    p2 = FakePicture()
+    p2.text = "second"
+    p2.id = FakeBlockId("_page_5_Picture_99")
+    # Distinct image content so dedup does NOT collapse them.
+    p2.get_image = lambda document: Image.new("RGB", (40, 40), color="black")
+    return FakeDocument([h1, p1, p2]), p1, p2
+
+
+def test_processor_batches_vlm_images_in_one_call():
+    """Plan §3: two distinct VLM-routed images go out in a SINGLE batch call."""
+    document, p1, p2 = _doc_with_two_distinct_pictures()
+    vlm = _BatchVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "dedup_enabled": False,
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    # One batch call carrying both images (no router model -> both vlm-routed).
+    assert vlm.batch_calls == [2]
+    assert "<table>" in (p1.html or "")
+    assert "<table>" in (p2.html or "")
+
+
+def test_processor_spills_vlm_ocr_sufficient_route_to_local_ocr():
+    document, picture = _doc_with_picture()
+    vlm = _OcrSufficientBatchVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "dedup_enabled": False,
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+        recognition_model=_FakeRecognitionModel(["Ambiguous crop text."]),
+    )
+    proc(document)
+
+    assert vlm.batch_calls == [1]
+    assert "Ambiguous crop text." in (picture.html or "")
+    assert proc.image_meta[0]["model"] == "local-ocr"
+
+
+def test_processor_batch_disabled_uses_serial():
+    """batch_enabled=False -> legacy per-image two-call path."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "batch_enabled": False,
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    assert len(vlm.calls) == 2  # classify + extract
+    assert "<table>" in (picture.html or "")
+
+
+class _CostBatchVLM:
+    """Batch VLM that reports a per-image cost on each ExtractionResult."""
+
+    model_id = "gpt-4o"
+
+    def classify_and_extract_batch(self, items, max_retries=2):
+        from app.models.image_understanding import ExtractionResult, ImageType
+
+        return [
+            ExtractionResult(
+                image_type=ImageType.photo,
+                payload={"alt_text": "x", "details": []},
+                raw_response="{}",
+                confidence=0.9,
+                cost_usd=0.0123,
+            )
+            for _ in items
+        ]
+
+
+def test_processor_attributes_cost_to_badge_meta():
+    """Plan §6: per-image cost flows into the badge sidecar + the HTML comment,
+    closing the cost_usd=0 gap."""
+    document, picture = _doc_with_picture()
+    vlm = _CostBatchVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "dedup_enabled": False,
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+    )
+    proc(document)
+
+    assert proc.image_meta[0]["cost_usd"] == 0.0123
+    assert "cost_usd=0.012300" in (picture.html or "")
+
+
+def test_privacy_gate_blocks_cloud_when_disabled():
+    """Plan §11a: allow_cloud_vlm=False -> no cloud call; local OCR runs instead."""
+    document, picture = _doc_with_picture()
+    vlm = _BatchVLM()  # records batch calls
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": False,
+        },
+        vlm_service=vlm,
+        # No detection model -> router would pick vlm; the privacy gate must
+        # still prevent the cloud send and fall back to local OCR.
+        recognition_model=_FakeRecognitionModel(["Local text only."]),
+    )
+    proc(document)
+
+    # No cloud batch call happened.
+    assert vlm.batch_calls == []
+    # Local OCR produced the text instead.
+    assert "Local text only." in (picture.html or "")
+    assert proc.image_meta[0]["model"] == "local-ocr"
+
+
+def test_privacy_gate_skips_when_no_local_ocr():
+    """Cloud disabled AND no local OCR available -> image skipped, not sent."""
+    document, picture = _doc_with_picture()
+    vlm = _BatchVLM()
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": False,
+        },
+        vlm_service=vlm,
+        # No recognition model -> no local OCR fallback.
+    )
+    proc(document)
+
+    assert vlm.batch_calls == []
+    assert picture.html is None  # untouched, never sent to cloud

@@ -72,6 +72,19 @@ IMAGE_UNDERSTANDING_CONFIG_KEYS: tuple[str, ...] = (
     "max_images_per_doc",
     "context_window_size",
     "include_original_ref",
+    "router_enabled",
+    "decorative_max_text_density",
+    "ocr_min_text_density",
+    "ocr_min_lines",
+    "allow_cloud_vlm",
+    "dedup_enabled",
+    "dedup_max_distance",
+    "downscale_vlm_crops",
+    "vlm_crop_max_px",
+    "batch_enabled",
+    "vlm_batch_size",
+    "max_batch_retries",
+    "ocr_engine",
 )
 
 

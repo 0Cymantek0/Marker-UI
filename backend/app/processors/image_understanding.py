@@ -15,17 +15,24 @@ from __future__ import annotations
 
 import html as _html
 import logging
-import time
 from io import BytesIO
 from typing import Any
 
 from marker.processors import BaseProcessor
 from marker.schema import BlockTypes
 
-from app.models.image_understanding import ImageHandlingMode, ImageType
+from app.models.image_understanding import (
+    ImageHandlingMode,
+    ImageType,
+    RouteDecision,
+    RouteKind,
+)
 from app.services.vlm_service import VLMService
 
 logger = logging.getLogger(__name__)
+
+# Sentinel for "local OCR service not yet built" (distinct from "built, None").
+_UNSET: Any = object()
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +97,9 @@ class ImageUnderstandingProcessor(BaseProcessor):
         self,
         config: Any | None = None,
         vlm_service: Any | None = None,
+        detection_model: Any | None = None,
+        recognition_model: Any | None = None,
+        ocr_error_model: Any | None = None,
     ) -> None:
         super().__init__(config)
         cfg = config if isinstance(config, dict) else {}
@@ -100,12 +110,52 @@ class ImageUnderstandingProcessor(BaseProcessor):
         self.max_images_per_doc = int(cfg.get("max_images_per_doc", 50))
         self.context_window_size = int(cfg.get("context_window_size", 2))
         self.include_original_ref = bool(cfg.get("include_original_ref", True))
+        self.router_enabled = bool(cfg.get("router_enabled", True))
+        self.allow_cloud_vlm = bool(cfg.get("allow_cloud_vlm", False))
+        self.dedup_enabled = bool(cfg.get("dedup_enabled", True))
+        self.dedup_max_distance = int(cfg.get("dedup_max_distance", 0))
+        self.downscale_vlm_crops = bool(cfg.get("downscale_vlm_crops", True))
+        self.vlm_crop_max_px = int(cfg.get("vlm_crop_max_px", 768))
+        self.batch_enabled = bool(cfg.get("batch_enabled", True))
+        self.vlm_batch_size = int(cfg.get("vlm_batch_size", 8))
+        self.max_batch_retries = int(cfg.get("max_batch_retries", 2))
+        self.ocr_engine = str(cfg.get("ocr_engine", "surya"))
         self._vlm_service = vlm_service
+        # Surya models injected by marker's resolve_dependencies (param name ==
+        # artifact_dict key). Used by the Tier-0 router (detection) and Tier-2
+        # local OCR (recognition + detection). Absent in torch-less test envs;
+        # the router then degrades to the VLM route.
+        self._detection_model = detection_model
+        self._recognition_model = recognition_model
+        self._ocr_error_model = ocr_error_model
+        self._router = self._build_router(cfg)
+        # Tier-2 local OCR service, built lazily on first ocr-routed image.
+        self._local_ocr: Any = _UNSET
+        # Dedup cache: aHash -> the rendered html the original block received,
+        # so a repeated image is fanned back without a second model call.
+        self._dedup_cache: list[tuple[str, str]] = []
         # Sidecar metadata collected during __call__ for the badge UI.
         # marker's MarkdownRenderer strips HTML comments, so a <!-- ... -->
         # channel does not survive to output. Instead we collect per-image
         # metadata here and marker_service reads it after the converter runs.
         self._image_meta: list[dict[str, Any]] = []
+
+    def _build_router(self, cfg: dict[str, Any]) -> Any | None:
+        """Construct the Tier-0 router, or None when disabled.
+
+        Returns None when ``router_enabled`` is False so ``__call__`` takes the
+        legacy per-image classify+extract path (the §7 escape hatch). When
+        enabled but no detection model is injected, the router still builds and
+        degrades every image to the VLM route.
+        """
+        if not self.router_enabled:
+            return None
+        from app.processors.image_router import ImageRouter
+
+        return ImageRouter(
+            detection_model=self._detection_model,
+            config={**cfg, "allow_cloud_vlm": self.allow_cloud_vlm},
+        )
 
     @property
     def image_meta(self) -> list[dict[str, Any]]:
@@ -130,14 +180,29 @@ class ImageUnderstandingProcessor(BaseProcessor):
         skipped_no_image = 0
         skipped_limit = 0
         failed = 0
+        deduped = 0
+        routed = {"skip_decorative": 0, "ocr": 0, "vlm": 0}
+        # VLM-routed images are collected here and drained in batches after the
+        # route loop, so one structured call handles many images (plan §3).
+        vlm_queue: list[dict[str, Any]] = []
         for picture in pictures:
             if processed >= self.max_images_per_doc:
                 skipped_limit += 1
                 continue
 
-            image_bytes = _picture_to_png_bytes(picture, document)
-            if image_bytes is None:
+            image = _picture_to_image(picture, document)
+            if image is None:
                 skipped_no_image += 1
+                continue
+
+            # Dedup: an identical image already extracted this run is fanned
+            # back without a second model call (plan §8a).
+            image_hash = self._image_hash(image)
+            cached = self._lookup_dedup(image_hash)
+            if cached is not None:
+                self._replay_outcome(picture, cached)
+                deduped += 1
+                processed += 1
                 continue
 
             heading_chain, surrounding = gather_local_context(
@@ -146,80 +211,455 @@ class ImageUnderstandingProcessor(BaseProcessor):
                 n=self.context_window_size,
             )
 
-            t0 = time.perf_counter()
-            try:
-                service = self._get_vlm_service()
-                classification = service.classify(
-                    image_bytes,
-                    "image/png",
-                    heading_chain,
-                    surrounding,
-                )
-                extraction = service.extract(
-                    image_bytes,
-                    "image/png",
-                    classification.image_type,
-                    heading_chain,
-                    surrounding,
-                )
-            except Exception as exc:  # noqa: BLE001 - fail-soft processor
-                logger.warning("Image understanding skipped for picture: %r", exc)
-                failed += 1
-                continue
-            duration_ms = int((time.perf_counter() - t0) * 1000)
+            decision = self._route(image)
+            routed[decision.route.value] = routed.get(decision.route.value, 0) + 1
 
-            if extraction.error:
-                logger.warning(
-                    "Image understanding extraction failed for %s: %s",
-                    classification.image_type,
-                    extraction.error,
-                )
-                failed += 1
+            if decision.route == RouteKind.skip_decorative:
+                self._apply_decorative(picture, decision)
+                self._store_dedup(image_hash, {"kind": "decorative"})
+                processed += 1
                 continue
 
-            model_id = self._resolved_model_id()
-            image_name = _picture_image_name(picture)
+            if decision.route == RouteKind.ocr:
+                ocr_outcome = self._apply_local_ocr(picture, image, decision)
+                if ocr_outcome is not None:
+                    self._store_dedup(image_hash, ocr_outcome)
+                    processed += 1
+                    continue
+                # OCR produced nothing usable: escalate to the VLM rather than
+                # emit token soup (plan §5 self-correction / escalation gate).
+                logger.debug("OCR empty; escalating image to VLM")
+                routed["ocr"] -= 1
+                routed["vlm"] = routed.get("vlm", 0) + 1
 
-            # Single source of truth for per-image metadata: both the markdown
-            # comment channel (for downstream LLMs / grep) and the sidecar
-            # channel (for the badge UI) derive from this one dict.
-            meta = {
-                "image_name": image_name,
-                "image_type": classification.image_type.value,
-                "confidence": float(classification.confidence),
-                "model": model_id,
-                "omitted": classification.image_type == ImageType.decorative,
-                "duration_ms": duration_ms,
-            }
-            _mutate_picture(
-                picture,
-                image_type=classification.image_type,
-                payload=extraction.payload,
-                mode=self.image_handling_mode,
-                meta=meta,
-                include_original_ref=self.include_original_ref,
-            )
-            # Sidecar carries the badge-relevant subset (no duration_ms).
-            self._image_meta.append(
+            # Privacy gate (plan §11a): with cloud disabled, no image leaves the
+            # box. The router already degrades visual->ocr when it has a
+            # detection model; this guard covers the router-off / no-model paths
+            # so a vlm route never silently turns into a cloud send. Try local
+            # OCR as a last resort, else skip the image untouched.
+            if not self.allow_cloud_vlm:
+                routed["vlm"] = max(0, routed.get("vlm", 0) - 1)
+                ocr_outcome = self._apply_local_ocr(picture, image, decision)
+                if ocr_outcome is not None:
+                    routed["ocr"] = routed.get("ocr", 0) + 1
+                    self._store_dedup(image_hash, ocr_outcome)
+                    processed += 1
+                else:
+                    logger.debug(
+                        "Cloud VLM disabled and local OCR empty; skipping image"
+                    )
+                    skipped_no_image += 1
+                continue
+
+            # Defer the cloud send: queue this image for batched extraction.
+            # Downscale the crop here (the cheapest large cost lever, §8) — OCR
+            # and dedup already ran on the full-res image.
+            vlm_queue.append(
                 {
-                    "image_name": meta["image_name"],
-                    "image_type": meta["image_type"],
-                    "confidence": meta["confidence"],
-                    "model": meta["model"],
-                    "omitted": meta["omitted"],
+                    "picture": picture,
+                    "image": image,
+                    "image_bytes": _image_to_png_bytes(self._vlm_crop(image)),
+                    "heading_chain": heading_chain,
+                    "surrounding": surrounding,
+                    "image_hash": image_hash,
                 }
             )
-            processed += 1
+
+        # Drain the VLM queue in batches (or one-by-one when batching is off).
+        vlm_ok, vlm_failed = self._drain_vlm_queue(vlm_queue)
+        processed += vlm_ok
+        failed += vlm_failed
 
         logger.info(
             "ImageUnderstanding done: processed=%d failed=%d "
-            "skipped_no_image=%d skipped_over_limit=%d total=%d",
+            "skipped_no_image=%d skipped_over_limit=%d deduped=%d total=%d "
+            "routed_decorative=%d routed_ocr=%d routed_vlm=%d",
             processed,
             failed,
             skipped_no_image,
             skipped_limit,
+            deduped,
             len(pictures),
+            routed["skip_decorative"],
+            routed["ocr"],
+            routed["vlm"],
         )
+
+    def _drain_vlm_queue(self, queue: list[dict[str, Any]]) -> tuple[int, int]:
+        """Process all VLM-routed images; returns (processed_ok, failed).
+
+        Identical queued images (same aHash) are collapsed to one representative
+        sent to the model, then the result is fanned back to every duplicate
+        (plan §8a dedup applied across the whole batch). When ``batch_enabled``
+        is off, each unique image takes the legacy two-call path.
+        """
+        if not queue:
+            return 0, 0
+
+        # Group by hash so duplicates share one extraction. Items with no hash
+        # (dedup disabled / hashing failed) each form their own group.
+        groups: list[list[dict[str, Any]]] = []
+        by_hash: dict[str, list[dict[str, Any]]] = {}
+        for item in queue:
+            h = item.get("image_hash")
+            if h is None:
+                groups.append([item])
+            elif h in by_hash:
+                by_hash[h].append(item)
+            else:
+                bucket = [item]
+                by_hash[h] = bucket
+                groups.append(bucket)
+
+        representatives = [g[0] for g in groups]
+        model_id = self._resolved_model_id()
+
+        if self.batch_enabled:
+            extractions = self._run_batch(representatives)
+        else:
+            extractions = self._run_serial(representatives)
+
+        ok = 0
+        failed = 0
+        for group, extraction in zip(groups, extractions):
+            if extraction is not None and getattr(extraction, "route", None) == "decorative":
+                for item in group:
+                    self._apply_decorative(
+                        item["picture"],
+                        RouteDecision(
+                            route=RouteKind.skip_decorative,
+                            reason="vlm decorative",
+                        ),
+                    )
+                    ok += 1
+                self._store_dedup(group[0].get("image_hash"), {"kind": "decorative"})
+                continue
+
+            if extraction is not None and getattr(extraction, "route", None) == "ocr_sufficient":
+                for item in group:
+                    outcome = self._apply_local_ocr(
+                        item["picture"],
+                        item["image"],
+                        RouteDecision(route=RouteKind.ocr, reason="vlm ocr_sufficient"),
+                    )
+                    if outcome is None:
+                        failed += 1
+                    else:
+                        self._store_dedup(item.get("image_hash"), outcome)
+                        ok += 1
+                continue
+
+            if extraction is None or extraction.error:
+                if extraction is not None and extraction.error:
+                    logger.warning(
+                        "Batch extraction failed: %s", extraction.error
+                    )
+                failed += len(group)
+                continue
+
+            outcome = {
+                "kind": "vlm",
+                "image_type": extraction.image_type,
+                "payload": extraction.payload,
+                "confidence": float(extraction.confidence),
+                "model": model_id,
+                "cost_usd": float(getattr(extraction, "cost_usd", 0.0) or 0.0),
+            }
+            # Fan the single extraction back to every duplicate in the group.
+            # Only the representative carries the cost — the duplicates were
+            # served from cache and cost nothing (avoids double-counting spend).
+            for n_in_group, item in enumerate(group):
+                replay = outcome if n_in_group == 0 else {**outcome, "cost_usd": 0.0}
+                self._replay_outcome(item["picture"], replay)
+                ok += 1
+            self._store_dedup(group[0].get("image_hash"), outcome)
+        return ok, failed
+
+    def _run_batch(self, items: list[dict[str, Any]]) -> list[Any | None]:
+        """Run batched classify+extract over representative items.
+
+        Splits into ``vlm_batch_size`` chunks. Any provider/transport failure on
+        a chunk yields ``None`` for each item in it (counted as failed), never
+        raising — one bad batch never aborts the document.
+
+        Capability-detect: a service that does not implement
+        ``classify_and_extract_batch`` (e.g. a minimal client, or a provider
+        without structured-output support) transparently degrades to the serial
+        two-call path (plan §3.3 — capability-detect, don't assume).
+        """
+        from app.prompts.image_batch import BatchItem
+
+        service = self._get_vlm_service()
+        if not hasattr(service, "classify_and_extract_batch"):
+            logger.debug("VLM service has no batch method; using serial path")
+            return self._run_serial(items)
+
+        results: list[Any | None] = []
+        size = max(1, self.vlm_batch_size)
+        for start in range(0, len(items), size):
+            chunk = items[start : start + size]
+            batch_items = [
+                BatchItem(
+                    image_bytes=it["image_bytes"],
+                    mime_type="image/png",
+                    heading_chain=it["heading_chain"],
+                    surrounding=it["surrounding"],
+                )
+                for it in chunk
+            ]
+            try:
+                chunk_results = service.classify_and_extract_batch(
+                    batch_items, max_retries=self.max_batch_retries
+                )
+            except Exception as exc:  # noqa: BLE001 - fail-soft
+                logger.warning("Batch call raised (%r); marking chunk failed", exc)
+                chunk_results = []
+            # Align to chunk length: pad short responses with None.
+            for i in range(len(chunk)):
+                results.append(
+                    chunk_results[i] if i < len(chunk_results) else None
+                )
+        return results
+
+    def _run_serial(self, items: list[dict[str, Any]]) -> list[Any | None]:
+        """Legacy two-call path per representative image (batching disabled)."""
+        service = self._get_vlm_service()
+        results: list[Any | None] = []
+        for it in items:
+            try:
+                classification = service.classify(
+                    it["image_bytes"], "image/png",
+                    it["heading_chain"], it["surrounding"],
+                )
+                extraction = service.extract(
+                    it["image_bytes"], "image/png", classification.image_type,
+                    it["heading_chain"], it["surrounding"],
+                )
+                # Carry the classifier confidence onto the extraction so the
+                # badge shows the routing confidence, matching the old path.
+                if not extraction.error:
+                    extraction.confidence = float(classification.confidence)
+                    extraction.image_type = classification.image_type
+                results.append(extraction)
+            except Exception as exc:  # noqa: BLE001 - fail-soft
+                logger.warning("Serial VLM call raised (%r)", exc)
+                results.append(None)
+        return results
+
+    def _route(self, image: Any) -> RouteDecision:
+        """Tier-0 route for one image; defaults to VLM when the router is off.
+
+        With ``router_enabled=False`` (or no router built) every image takes the
+        ``vlm`` route, reproducing the legacy classify+extract behaviour exactly.
+        """
+        if self._router is None:
+            return RouteDecision(route=RouteKind.vlm, reason="router disabled")
+        decision = self._router.route(image)
+        logger.debug("ImageRouter -> %s (%s)", decision.route.value, decision.reason)
+        return decision
+
+    def _apply_decorative(self, picture: Any, decision: RouteDecision) -> None:
+        """Omit a decorative image locally — no VLM call (plan §2 skip path)."""
+        model_id = self._resolved_model_id()
+        meta = {
+            "image_name": _picture_image_name(picture),
+            "image_type": ImageType.decorative.value,
+            "confidence": 1.0,
+            "model": model_id,
+            "omitted": True,
+            "duration_ms": 0,
+        }
+        _mutate_picture(
+            picture,
+            image_type=ImageType.decorative,
+            payload={},
+            mode=self.image_handling_mode,
+            meta=meta,
+            include_original_ref=self.include_original_ref,
+        )
+        self._record_meta(meta)
+
+    def _record_meta(self, meta: dict[str, Any]) -> None:
+        """Append the badge-relevant subset of ``meta`` to the sidecar stash."""
+        self._image_meta.append(
+            {
+                "image_name": meta["image_name"],
+                "image_type": meta["image_type"],
+                "confidence": meta["confidence"],
+                "model": meta["model"],
+                "omitted": meta["omitted"],
+                "cost_usd": float(meta.get("cost_usd", 0.0) or 0.0),
+            }
+        )
+
+    # -----------------------------------------------------------------
+    # Dedup (plan §8a)
+    # -----------------------------------------------------------------
+
+    def _vlm_crop(self, image: Any) -> Any:
+        """Return the image to send to the cloud VLM, downscaled if enabled.
+
+        Downscaling only affects the cloud send (plan §8); the OCR path and
+        dedup hash already ran on the full-resolution crop.
+        """
+        if not self.downscale_vlm_crops:
+            return image
+        from app.utils.image_downscale import downscale_to_max
+
+        return downscale_to_max(image, self.vlm_crop_max_px)
+
+    def _image_hash(self, image: Any) -> str | None:
+        """aHash for dedup, or None when dedup is off / hashing failed."""
+        if not self.dedup_enabled:
+            return None
+        from app.utils.image_hash import average_hash
+
+        return average_hash(image)
+
+    def _lookup_dedup(self, image_hash: str | None) -> dict[str, Any] | None:
+        """Return a cached outcome for an image within the dedup distance."""
+        if image_hash is None or not self._dedup_cache:
+            return None
+        from app.utils.image_hash import hamming_distance
+
+        for cached_hash, outcome in self._dedup_cache:
+            if hamming_distance(image_hash, cached_hash) <= self.dedup_max_distance:
+                return outcome
+        return None
+
+    def _store_dedup(self, image_hash: str | None, outcome: dict[str, Any]) -> None:
+        """Remember an outcome so a later identical image can be fanned back."""
+        if image_hash is None:
+            return
+        self._dedup_cache.append((image_hash, outcome))
+
+    def _replay_outcome(self, picture: Any, outcome: dict[str, Any]) -> None:
+        """Re-apply a cached extraction outcome onto a duplicate block.
+
+        The cached *outcome* (not the raw HTML) is replayed so the new block's
+        own image name regenerates correctly in the kept-original link.
+        """
+        kind = outcome.get("kind")
+        if kind == "decorative":
+            self._apply_decorative(
+                picture, RouteDecision(route=RouteKind.skip_decorative, reason="dedup")
+            )
+            return
+
+        if kind == "ocr":
+            meta = {
+                "image_name": _picture_image_name(picture),
+                "image_type": ImageType.other.value,
+                "confidence": 1.0,
+                "model": "local-ocr",
+                "omitted": False,
+                "duration_ms": 0,
+            }
+            _apply_ocr_html(
+                picture,
+                ocr_html=outcome.get("ocr_html", ""),
+                mode=self.image_handling_mode,
+                meta=meta,
+                include_original_ref=self.include_original_ref,
+            )
+            self._record_meta(meta)
+            return
+
+        # VLM outcome.
+        image_type = outcome.get("image_type", ImageType.other)
+        meta = {
+            "image_name": _picture_image_name(picture),
+            "image_type": image_type.value,
+            "confidence": float(outcome.get("confidence", 0.0)),
+            "model": outcome.get("model"),
+            "omitted": image_type == ImageType.decorative,
+            "duration_ms": 0,
+            "cost_usd": float(outcome.get("cost_usd", 0.0) or 0.0),
+        }
+        _mutate_picture(
+            picture,
+            image_type=image_type,
+            payload=outcome.get("payload", {}),
+            mode=self.image_handling_mode,
+            meta=meta,
+            include_original_ref=self.include_original_ref,
+        )
+        self._record_meta(meta)
+
+    def _apply_local_ocr(
+        self, picture: Any, image: Any, decision: RouteDecision
+    ) -> dict[str, Any] | None:
+        """Transcribe a text-as-image locally and write it to the block.
+
+        Returns a dedup outcome dict when usable text was recovered and applied;
+        None when OCR produced nothing (the caller then escalates to the VLM).
+        No cloud token is spent here — the deterministic line-227 fix (§5b).
+        """
+        ocr = self._get_local_ocr()
+        if ocr is None or not ocr.available:
+            return None
+        result = ocr.recognize(image)
+        if result.error or not result.html:
+            logger.debug(
+                "Local OCR no output (%s); lines=%d",
+                result.error or "empty",
+                result.line_count,
+            )
+            return None
+
+        meta = {
+            "image_name": _picture_image_name(picture),
+            # text-as-image transcription is its own outcome; record it as a
+            # table_image-free "other" text result. The badge shows model=local.
+            "image_type": ImageType.other.value,
+            "confidence": 1.0,
+            "model": "local-ocr",
+            "omitted": False,
+            "duration_ms": result.duration_ms,
+        }
+        _apply_ocr_html(
+            picture,
+            ocr_html=result.html,
+            mode=self.image_handling_mode,
+            meta=meta,
+            include_original_ref=self.include_original_ref,
+        )
+        self._record_meta(meta)
+        logger.info(
+            "Local OCR transcribed %d lines (%dms) for %s",
+            result.line_count,
+            result.duration_ms,
+            meta["image_name"],
+        )
+        return {"kind": "ocr", "ocr_html": result.html}
+
+    def _get_local_ocr(self) -> Any | None:
+        """Lazily build the Tier-2 OCR engine behind the pluggable seam (§5).
+
+        Routes through ``build_ocr_engine`` so a future engine swap is a config
+        change, not a processor edit. Returns None when no recognition model is
+        injected (torch-less env) or the configured engine cannot be built.
+        """
+        if self._local_ocr is _UNSET:
+            if self._recognition_model is None:
+                self._local_ocr = None
+            else:
+                from app.services.ocr_engine import build_ocr_engine
+
+                try:
+                    self._local_ocr = build_ocr_engine(
+                        self.ocr_engine,
+                        recognition_model=self._recognition_model,
+                        detection_model=self._detection_model,
+                    )
+                except (NotImplementedError, ValueError) as exc:
+                    logger.warning(
+                        "OCR engine %r unavailable (%s); local OCR disabled",
+                        self.ocr_engine,
+                        exc,
+                    )
+                    self._local_ocr = None
+        return self._local_ocr
 
     def _get_vlm_service(self) -> VLMService:
         if self._vlm_service is None:
@@ -228,6 +668,8 @@ class ImageUnderstandingProcessor(BaseProcessor):
 
     def _resolved_model_id(self) -> str | None:
         """Best-effort model id used for extraction, for the badge modal."""
+        if self._vlm_service is None and not self.allow_cloud_vlm:
+            return self.vlm_model or "local-only"
         try:
             service = self._get_vlm_service()
             return getattr(service, "model_id", None) or self.vlm_model
@@ -272,13 +714,23 @@ def gather_local_context(document: Any, picture_block: Any, n: int = 2) -> tuple
     return "\n".join(headings), "\n".join([*before, *after])
 
 
-def _picture_to_png_bytes(picture: Any, document: Any) -> bytes | None:
-    image = picture.get_image(document)
-    if image is None:
-        return None
+def _picture_to_image(picture: Any, document: Any) -> Any | None:
+    """Return the cropped PIL image for a Picture/Figure block, or None."""
+    return picture.get_image(document)
+
+
+def _image_to_png_bytes(image: Any) -> bytes:
+    """Serialise a PIL image to PNG bytes."""
     buf = BytesIO()
     image.save(buf, format="PNG")
     return buf.getvalue()
+
+
+def _picture_to_png_bytes(picture: Any, document: Any) -> bytes | None:
+    image = _picture_to_image(picture, document)
+    if image is None:
+        return None
+    return _image_to_png_bytes(image)
 
 
 def _mutate_picture(
@@ -299,9 +751,13 @@ def _mutate_picture(
       * the rendered representation (table / mermaid / latex / description) as
         HTML the renderers convert uniformly.
 
-    ``both`` mode additionally keeps an ``<img>`` reference to the original
-    image so the file stays linked for audit / ZIP packaging — unless
-    ``include_original_ref`` is disabled.
+    ``both`` mode keeps an ``<img>`` reference to the original image so the file
+    stays linked for audit / ZIP packaging. In ``understanding`` mode the
+    original is kept too for any type that is NOT safe to replace outright (the
+    §6 augment gate): 2026 chart->data / diagram->mermaid extraction is not
+    reliable enough to delete the source, so only ``equation`` (->LaTeX, robust)
+    and ``decorative`` (->omitted) replace destructively. ``include_original_ref``
+    can disable the kept link entirely.
     """
     rendered = render_extraction(image_type, payload)
     if not rendered:
@@ -309,16 +765,17 @@ def _mutate_picture(
 
     image_name = meta["image_name"]
     keep_original = (
-        mode == ImageHandlingMode.both
-        and include_original_ref
+        include_original_ref
         and image_type != ImageType.decorative
+        and (mode == ImageHandlingMode.both or not _safe_to_replace(image_type))
     )
 
     meta_str = (
         f"marker-ui image-understanding: "
         f"type={meta['image_type']} model={meta['model'] or 'unknown'} "
         f"confidence={float(meta['confidence']):.2f} "
-        f"cost_usd=0 duration_ms={meta['duration_ms']}"
+        f"cost_usd={float(meta.get('cost_usd', 0.0) or 0.0):.6f} "
+        f"duration_ms={meta['duration_ms']}"
     )
     html_parts = [f"<marker-comment>{_escape(meta_str)}</marker-comment>"]
     if keep_original:
@@ -326,6 +783,43 @@ def _mutate_picture(
             f"<marker-comment>original_image: {_escape(image_name)}</marker-comment>"
         )
     html_parts.append(rendered)
+    if keep_original:
+        html_parts.append(f'<img src="{_escape(image_name)}" />')
+
+    picture.html = "\n".join(html_parts)
+    picture.description = None
+
+
+def _apply_ocr_html(
+    picture: Any,
+    *,
+    ocr_html: str,
+    mode: ImageHandlingMode,
+    meta: dict[str, Any],
+    include_original_ref: bool = True,
+) -> None:
+    """Write locally-transcribed OCR text into a Picture block as HTML.
+
+    Mirrors :func:`_mutate_picture` but takes pre-rendered HTML (the OCR
+    transcription) rather than a typed payload. Text-as-image is always safe to
+    *augment* but never destructive about the source: in ``both`` mode the
+    original image link is preserved when ``include_original_ref`` is set.
+    """
+    image_name = meta["image_name"]
+    keep_original = mode == ImageHandlingMode.both and include_original_ref
+
+    meta_str = (
+        f"marker-ui image-understanding: "
+        f"type={meta['image_type']} model={meta['model'] or 'local-ocr'} "
+        f"confidence={float(meta['confidence']):.2f} "
+        f"cost_usd=0 duration_ms={meta['duration_ms']} route=ocr"
+    )
+    html_parts = [f"<marker-comment>{_escape(meta_str)}</marker-comment>"]
+    if keep_original:
+        html_parts.append(
+            f"<marker-comment>original_image: {_escape(image_name)}</marker-comment>"
+        )
+    html_parts.append(ocr_html)
     if keep_original:
         html_parts.append(f'<img src="{_escape(image_name)}" />')
 
@@ -527,3 +1021,20 @@ _DIAGRAM_TYPES = {
     ImageType.diagram_class,
     ImageType.diagram_architecture,
 }
+
+# Types whose extraction is reliable enough to REPLACE the source image even in
+# ``understanding`` mode (plan §6 / decision #4). Everything else (charts,
+# diagrams, photos, screenshots, technical figures) is *augmented*: the original
+# image is kept alongside the extraction because 2026 chart->data /
+# diagram->mermaid is not reliable enough to delete the source. ``decorative``
+# is handled separately (it is omitted, never augmented).
+_REPLACE_SAFE_TYPES = {
+    ImageType.equation,
+    ImageType.decorative,
+}
+
+
+def _safe_to_replace(image_type: ImageType) -> bool:
+    """True when ``image_type`` may replace the source image destructively."""
+    return image_type in _REPLACE_SAFE_TYPES
+

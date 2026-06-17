@@ -104,113 +104,113 @@ class TestExtractorPromptsPerType:
         assert isinstance(user, str)
         assert "series" in system
         assert "points" in system
-        assert self.HEADING in system
-        assert self.PARA in system
+        assert self.HEADING in user
+        assert self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_chart_line(self) -> None:
-        system, _ = self._build(ImageType.chart_line)
+        system, user = self._build(ImageType.chart_line)
         assert "series" in system and "points" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_chart_pie(self) -> None:
-        system, _ = self._build(ImageType.chart_pie)
+        system, user = self._build(ImageType.chart_pie)
         assert "series" in system and "points" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_chart_scatter(self) -> None:
-        system, _ = self._build(ImageType.chart_scatter)
+        system, user = self._build(ImageType.chart_scatter)
         assert "series" in system and "points" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_chart_other(self) -> None:
-        system, _ = self._build(ImageType.chart_other)
+        system, user = self._build(ImageType.chart_other)
         assert "series" in system and "points" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     # --- Table (TablePayload: caption, headers, rows) ---
 
     def test_extract_prompt_for_table_image(self) -> None:
-        system, _ = self._build(ImageType.table_image)
+        system, user = self._build(ImageType.table_image)
         assert "caption" in system and "headers" in system and "rows" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     # --- Diagrams (DiagramPayload: mermaid, caption) ---
 
     def test_extract_prompt_for_diagram_flow(self) -> None:
-        system, _ = self._build(ImageType.diagram_flow)
+        system, user = self._build(ImageType.diagram_flow)
         assert "mermaid" in system and "caption" in system
         assert "graph TD" in system or "graph LR" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_diagram_sequence(self) -> None:
-        system, _ = self._build(ImageType.diagram_sequence)
+        system, user = self._build(ImageType.diagram_sequence)
         assert "mermaid" in system and "caption" in system
         assert "sequenceDiagram" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_diagram_state(self) -> None:
-        system, _ = self._build(ImageType.diagram_state)
+        system, user = self._build(ImageType.diagram_state)
         assert "mermaid" in system and "caption" in system
         assert "stateDiagram-v2" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_diagram_class(self) -> None:
-        system, _ = self._build(ImageType.diagram_class)
+        system, user = self._build(ImageType.diagram_class)
         assert "mermaid" in system and "caption" in system
         assert "classDiagram" in system or "erDiagram" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_diagram_architecture(self) -> None:
-        system, _ = self._build(ImageType.diagram_architecture)
+        system, user = self._build(ImageType.diagram_architecture)
         assert "mermaid" in system and "caption" in system
         assert "subgraph" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     # --- Equation (EquationPayload: latex, caption) ---
 
     def test_extract_prompt_for_equation(self) -> None:
-        system, _ = self._build(ImageType.equation)
+        system, user = self._build(ImageType.equation)
         assert "latex" in system and "caption" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     # --- Screenshot (ScreenshotPayload: application, area, regions, summary) ---
 
     def test_extract_prompt_for_screenshot_ui(self) -> None:
-        system, _ = self._build(ImageType.screenshot_ui)
+        system, user = self._build(ImageType.screenshot_ui)
         assert "application" in system and "regions" in system and "summary" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     # --- Description (DescriptionPayload: alt_text, details) ---
 
     def test_extract_prompt_for_figure_technical(self) -> None:
-        system, _ = self._build(ImageType.figure_technical)
+        system, user = self._build(ImageType.figure_technical)
         assert "alt_text" in system and "details" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_photo(self) -> None:
-        system, _ = self._build(ImageType.photo)
+        system, user = self._build(ImageType.photo)
         assert "alt_text" in system and "details" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     def test_extract_prompt_for_other(self) -> None:
-        system, _ = self._build(ImageType.other)
+        system, user = self._build(ImageType.other)
         assert "alt_text" in system and "details" in system
-        assert self.HEADING in system and self.PARA in system
+        assert self.HEADING in user and self.PARA in user
         assert system.rstrip().endswith("Return JSON only, no prose, no code fences.")
 
     # --- Decorative (special-case: static "{}", no second VLM call) ---
@@ -301,3 +301,50 @@ class TestModuleExports:
             ImageType.diagram_architecture,
         }
         assert set(DIAGRAM_TYPES.keys()) == diagram_members
+
+
+# ---------------------------------------------------------------------------
+# Prompt-caching: stable system prefix (plan §8)
+# ---------------------------------------------------------------------------
+
+
+class TestCacheableSystemPrefix:
+    """The system prompt must be byte-identical across images of the same type
+    so provider prompt-caching hits; per-image context lives in the user prompt.
+    """
+
+    def test_extract_system_prompt_is_context_invariant(self) -> None:
+        sys_a, user_a = build_extract_prompt(
+            ImageType.chart_bar,
+            heading_chain="H1: Revenue",
+            surrounding_paragraphs="First doc context.",
+        )
+        sys_b, user_b = build_extract_prompt(
+            ImageType.chart_bar,
+            heading_chain="H1: Costs > H2: Detail",
+            surrounding_paragraphs="A totally different paragraph.",
+        )
+        # System prefix identical -> cacheable.
+        assert sys_a == sys_b
+        # The variable context moved to the user prompt.
+        assert "Revenue" in user_a and "Revenue" not in sys_a
+        assert "different paragraph" in user_b and "different paragraph" not in sys_b
+
+    def test_classify_system_prompt_is_context_invariant(self) -> None:
+        sys_a, user_a = build_classify_prompt(
+            heading_chain="H1: A", surrounding_paragraphs="alpha"
+        )
+        sys_b, user_b = build_classify_prompt(
+            heading_chain="H1: B", surrounding_paragraphs="beta"
+        )
+        assert sys_a == sys_b
+        assert "alpha" in user_a and "beta" in user_b
+
+    def test_extract_user_prompt_carries_context(self) -> None:
+        _, user = build_extract_prompt(
+            ImageType.table_image,
+            heading_chain="H1: Results",
+            surrounding_paragraphs="Table caption text.",
+        )
+        assert "H1: Results" in user
+        assert "Table caption text." in user

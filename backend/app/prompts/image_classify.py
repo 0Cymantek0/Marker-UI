@@ -70,6 +70,11 @@ def build_classify_prompt(
         Tuple of (system_prompt, user_prompt). The system prompt carries the
         taxonomy + JSON discipline; the user prompt carries the local context
         and the implicit image attachment.
+
+    Prompt-caching note (plan §8): the per-image document context lives in the
+    **user** prompt only. The system prompt (taxonomy + schema, several KB) is
+    byte-identical across every image in the document, so provider
+    prompt-caching actually hits the same cached prefix on each request.
     """
     type_defs_block = "\n".join(f"- {line}" for line in TYPE_DEFINITIONS.values())
     system = _CLASSIFY_SYSTEM_TEMPLATE.format(

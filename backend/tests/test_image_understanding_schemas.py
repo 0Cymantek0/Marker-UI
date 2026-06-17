@@ -313,6 +313,7 @@ class TestImageUnderstandingConfig:
         assert c.skip_decorative is True
         assert c.include_original_ref is True
         assert c.confidence_threshold == 0.7
+        assert c.allow_cloud_vlm is False
 
     def test_no_cost_cap(self) -> None:
         """Decision #5: NO max_job_budget_usd field."""

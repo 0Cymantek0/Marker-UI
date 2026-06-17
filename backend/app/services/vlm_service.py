@@ -303,6 +303,8 @@ class VLMService:
         if http_client is None:
             http_client = self._build_default_client(provider)
         self._client: Any = http_client
+        # Accumulator for the most recent extract() call pair (plan §6 cost).
+        self._last_call_cost: float = 0.0
 
         logger.debug(
             "VLMService initialised: provider=%s type=%s model=%s",
@@ -345,6 +347,9 @@ class VLMService:
         data_url = _encode_data_url(image_bytes, mime_type)
 
         logger.info("VLM > classify image (model=%s)", self._model_id)
+        # Reset the cost accumulator at the start of a classify+extract pair so
+        # the extract result attributes the whole pair's spend (plan §6).
+        self._last_call_cost = 0.0
         t0 = time.perf_counter()
         try:
             result = self._classify_with_retry(
@@ -443,7 +448,199 @@ class VLMService:
                 self._model_id,
                 elapsed_ms,
             )
+        # Attribute the accumulated call cost (classify + extract) to this
+        # result so the serial path closes the cost_usd=0 gap too (plan §6).
+        result.cost_usd = round(self._last_call_cost, 6)
         return result
+
+    # -----------------------------------------------------------------
+    # Public API — batched classify + extract (plan §3 / §13.3)
+    # -----------------------------------------------------------------
+
+    def classify_and_extract_batch(
+        self,
+        items: list[Any],
+        max_retries: int = 1,
+    ) -> list[ExtractionResult]:
+        """Classify + extract a batch of images in a single structured call.
+
+        One cloud round-trip routes and extracts up to ``len(items)`` images,
+        reconciled back to each by echoed index. Indices missing or malformed in
+        the response are retried in a smaller follow-up call (up to
+        ``max_retries`` extra calls), so a partially-bad response never discards
+        the good results (plan §3.2 per-image partial-failure recovery).
+
+        Never raises. Returns a list aligned 1:1 with ``items``; an image that
+        could not be recovered after retries carries ``error`` set.
+        """
+        from app.prompts.image_batch import (
+            build_batch_response_format,
+            build_batch_system_prompt,
+            build_batch_user_content,
+            parse_batch_response,
+        )
+
+        n = len(items)
+        results: list[ExtractionResult | None] = [None] * n
+        if n == 0:
+            return []
+
+        system_prompt = build_batch_system_prompt()
+        response_format = build_batch_response_format(self._provider.type)
+
+        pending = list(range(n))
+        attempts = 0
+        # Accumulate per-index cost across attempts so a retried image carries
+        # its full attributed spend (plan §6 per-image attribution).
+        cost_by_index: dict[int, float] = {i: 0.0 for i in range(n)}
+        while pending and attempts <= max_retries:
+            attempts += 1
+            sub_items = [items[i] for i in pending]
+            content = build_batch_user_content(sub_items, _encode_data_url)
+            t0 = time.perf_counter()
+            try:
+                raw, call_cost = self._call_vlm_batch(
+                    system_prompt, content, response_format
+                )
+            except Exception as exc:  # noqa: BLE001 — provider error caught
+                logger.warning(
+                    "VLM FAIL batch n=%d (model=%s, %dms): %r",
+                    len(sub_items),
+                    self._model_id,
+                    int((time.perf_counter() - t0) * 1000),
+                    exc,
+                )
+                break  # network/provider down: fill remaining as errors below
+
+            # Split this call's cost evenly across the images it carried.
+            per_image_cost = call_cost / len(sub_items) if sub_items else 0.0
+            for global_idx in pending:
+                cost_by_index[global_idx] += per_image_cost
+
+            parsed = parse_batch_response(raw, len(sub_items))
+            logger.info(
+                "VLM OK batch n=%d recovered=%d cost=$%.4f (model=%s, %dms, attempt=%d)",
+                len(sub_items),
+                len(parsed),
+                call_cost,
+                self._model_id,
+                int((time.perf_counter() - t0) * 1000),
+                attempts,
+            )
+            still_pending: list[int] = []
+            for local_idx, global_idx in enumerate(pending):
+                entry = parsed.get(local_idx)
+                result = self._batch_entry_to_result(entry)
+                if result is None:
+                    still_pending.append(global_idx)
+                else:
+                    result.cost_usd = round(cost_by_index[global_idx], 6)
+                    results[global_idx] = result
+            pending = still_pending
+
+        # Any index never recovered -> explicit error result (still carries the
+        # cost we spent attempting it).
+        for global_idx in pending:
+            results[global_idx] = ExtractionResult(
+                image_type=ImageType.other,
+                payload={},
+                raw_response="",
+                confidence=0.0,
+                error="batch: no usable result after retries",
+                cost_usd=round(cost_by_index[global_idx], 6),
+            )
+        return [r for r in results if r is not None]
+
+    def _batch_entry_to_result(
+        self, entry: dict[str, Any] | None
+    ) -> ExtractionResult | None:
+        """Turn one parsed batch entry into an ExtractionResult.
+
+        Returns None when the entry is missing or fails validation (the caller
+        then retries that index). Diagram payloads are Mermaid-validated and
+        demoted to a description on failure, matching the single-image path.
+        """
+        if entry is None:
+            return None
+        try:
+            image_type = ImageType(entry.get("image_type"))
+        except (ValueError, TypeError):
+            return None
+
+        route = str(entry.get("route") or "vlm_required")
+        payload = entry.get("payload") or {}
+        confidence = float(entry.get("confidence", 0.0) or 0.0)
+
+        if route == "decorative":
+            return ExtractionResult(
+                image_type=ImageType.decorative,
+                payload={},
+                raw_response=json.dumps(entry),
+                confidence=confidence or 1.0,
+                error=None,
+                route=route,
+            )
+
+        if route == "ocr_sufficient":
+            return ExtractionResult(
+                image_type=ImageType.other,
+                payload={},
+                raw_response=json.dumps(entry),
+                confidence=confidence or 0.9,
+                error=None,
+                route=route,
+            )
+
+        if image_type in _DIAGRAM_TYPES:
+            mermaid = str(payload.get("mermaid", "") or "")
+            if not validate_mermaid(mermaid):
+                # Demote rather than discard — preserve what the model produced.
+                return ExtractionResult(
+                    image_type=image_type,
+                    payload=_demote_to_description(json.dumps(payload)),
+                    raw_response=json.dumps(payload),
+                    confidence=min(confidence, 0.5),
+                    error=None,
+                    route=route,
+                )
+
+        return ExtractionResult(
+            image_type=image_type,
+            payload=payload,
+            raw_response=json.dumps(payload),
+            confidence=confidence or 0.9,
+            error=None,
+            route=route,
+        )
+
+    def _call_vlm_batch(
+        self,
+        system_prompt: str,
+        user_content: list[dict[str, Any]],
+        response_format: dict[str, Any],
+    ) -> tuple[str, float]:
+        """One batched chat-completion call. Returns (raw_content, cost_usd).
+
+        Raises on transport/provider error (caller catches). The cost is
+        estimated from the response's token usage via the §6 price table; it is
+        ``0.0`` when the provider does not report usage.
+        """
+        from app.utils.image_cost import estimate_cost, extract_usage
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
+        resp = self._client.chat.completions.create(
+            model=self._model_id,
+            messages=messages,
+            response_format=response_format,
+        )
+        prompt_tokens, completion_tokens = extract_usage(resp)
+        cost = estimate_cost(
+            self._provider.type, self._model_id, prompt_tokens, completion_tokens
+        )
+        return _extract_content(resp), cost
 
     # -----------------------------------------------------------------
     # Internals — classify
@@ -607,6 +804,14 @@ class VLMService:
             model=self._model_id,
             messages=messages,
             response_format={"type": "json_object"},
+        )
+        # Accumulate the call cost so the serial extract path can attribute it
+        # (plan §6). Reset by ``extract`` before each call pair.
+        from app.utils.image_cost import estimate_cost, extract_usage
+
+        prompt_tokens, completion_tokens = extract_usage(resp)
+        self._last_call_cost += estimate_cost(
+            self._provider.type, self._model_id, prompt_tokens, completion_tokens
         )
         # OpenAI-shaped response: resp.choices[0].message.content
         # ``resp`` may be a dict (httpx-backed adapter) or an object (openai SDK / mock).

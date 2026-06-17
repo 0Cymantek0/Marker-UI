@@ -108,6 +108,44 @@ class DescriptionPayload(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Router decision (Tier-0 local pre-pass — plan §1/§2)
+# ---------------------------------------------------------------------------
+
+class RouteKind(str, Enum):
+    """Where the graded router sends an image.
+
+    * ``skip_decorative`` — no text, tiny / low-content: omit, zero cost.
+    * ``ocr`` — text-as-image: deterministic local Surya OCR, zero cloud cost,
+      no hallucination (the openskill.md line-227 class of bug).
+    * ``vlm`` — genuine visual understanding (chart/diagram/photo): escalate to
+      the (batched) cloud VLM.
+    """
+
+    skip_decorative = "skip_decorative"
+    ocr = "ocr"
+    vlm = "vlm"
+
+
+class RouteDecision(BaseModel):
+    """Result of the Tier-0 local pre-pass for one image.
+
+    Carries the chosen route plus the cheap local signals that justified it, so
+    the ``reason`` can be logged and the thresholds tuned against real output
+    (plan §7: tune via logged ``reason`` metadata, not a fixed split up front).
+    """
+
+    route: RouteKind
+    reason: str = ""
+    text_density: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of image area covered by detected text boxes.",
+    )
+    line_count: int = Field(default=0, ge=0, description="Detected text line count.")
+
+
+# ---------------------------------------------------------------------------
 # Classification result
 # ---------------------------------------------------------------------------
 
@@ -127,6 +165,15 @@ class ExtractionResult(BaseModel):
     raw_response: str = Field(default="", description="Raw VLM response for debugging")
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     error: Optional[str] = None
+    route: Optional[str] = Field(
+        default=None,
+        description="Batch route verdict: vlm_required, ocr_sufficient, or decorative.",
+    )
+    cost_usd: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Estimated USD cost attributed to this extraction (plan §6).",
+    )
     context_window: Optional[dict] = Field(
         default=None,
         description="Debug info about the VLM context window used (injected at prompt layer)",
@@ -164,4 +211,103 @@ class ImageUnderstandingConfig(BaseModel):
         ge=0.0,
         le=1.0,
         description="Minimum confidence for the ~approximate cell marker",
+    )
+
+    # --- Tier-0 router (plan §1/§2/§7) -----------------------------------
+    router_enabled: bool = Field(
+        default=True,
+        description=(
+            "Master switch for the graded Tier-0 router. When False the "
+            "processor uses the legacy per-image classify+extract path "
+            "(escape hatch — plan §7/§10)."
+        ),
+    )
+    decorative_max_text_density: float = Field(
+        default=0.02,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Images with text-box area fraction at or below this AND no "
+            "meaningful detected lines route to skip_decorative."
+        ),
+    )
+    ocr_min_text_density: float = Field(
+        default=0.45,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Images with text-box area fraction at or above this route to "
+            "deterministic local OCR (text-as-image) instead of the cloud VLM."
+        ),
+    )
+    ocr_min_lines: int = Field(
+        default=3,
+        ge=1,
+        description="Minimum detected text lines to consider the OCR route.",
+    )
+    allow_cloud_vlm: bool = Field(
+        default=False,
+        description=(
+            "Allow escalation to the cloud VLM (plan §11a). False by default "
+            "so a fresh install stays local-only until the user explicitly "
+            "opts in to sending image crops to a configured provider."
+        ),
+    )
+    dedup_enabled: bool = Field(
+        default=True,
+        description=(
+            "Collapse repeated identical images (logos, recurring figures) to "
+            "a single extraction, fanned back to every duplicate (plan §8a)."
+        ),
+    )
+    dedup_max_distance: int = Field(
+        default=0,
+        ge=0,
+        le=64,
+        description=(
+            "Max aHash Hamming distance treated as a duplicate. 0 = exact "
+            "fingerprint match (safest; never collapses distinct figures)."
+        ),
+    )
+    downscale_vlm_crops: bool = Field(
+        default=True,
+        description=(
+            "Downscale image crops before the VLM send to land in the cheap "
+            "vision-token tile band (plan §8, the biggest non-obvious cost "
+            "lever). Off preserves full-resolution sends."
+        ),
+    )
+    vlm_crop_max_px: int = Field(
+        default=768,
+        ge=64,
+        le=4096,
+        description="Longest-side pixel cap applied to a crop before VLM send.",
+    )
+    batch_enabled: bool = Field(
+        default=True,
+        description=(
+            "Route+extract images in batched structured-output calls instead "
+            "of two serial calls per image (plan §3). Off = legacy per-image "
+            "classify+extract."
+        ),
+    )
+    vlm_batch_size: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description="Images per batched VLM call (clamped per provider, plan §3.1).",
+    )
+    max_batch_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Max extra batch calls to recover missing/garbled indices.",
+    )
+    ocr_engine: str = Field(
+        default="surya",
+        description=(
+            "Local OCR engine behind the pluggable OCREngine seam (plan §5). "
+            "Only 'surya' ships today; glm_ocr / paddleocr_vl / mistral_ocr are "
+            "gated behind the §9.4 benchmark."
+        ),
     )

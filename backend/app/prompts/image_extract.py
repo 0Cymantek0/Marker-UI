@@ -31,10 +31,6 @@ Rules:
 - alt_text: 3-6 sentences covering subject, composition, mood, colors, and context.
 - details: list of short factual observations (entities, text visible in the image, axis labels, etc.).
 
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
-
 {discipline_line}\
 """
 
@@ -47,10 +43,6 @@ stacked bars become multiple series.
 
 Output strict JSON in this exact shape:
 {{"title": str, "x_label": str, "y_label": str, "series": [{{"name": str, "points": [{{"x": any, "y": any}}]}}], "notes": str}}
-
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
 
 {discipline_line}\
 """
@@ -65,10 +57,6 @@ Sample interpolated curves at meaningful intervals when points are not labeled.
 Output strict JSON in this exact shape:
 {{"title": str, "x_label": str, "y_label": str, "series": [{{"name": str, "points": [{{"x": any, "y": any}}]}}], "notes": str}}
 
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
-
 {discipline_line}\
 """
 
@@ -80,10 +68,6 @@ Each slice is one data point: x = slice label, y = value (percentage is optional
 
 Output strict JSON in this exact shape:
 {{"title": str, "x_label": str, "y_label": str, "series": [{{"name": str, "points": [{{"x": any, "y": any}}]}}], "notes": str}}
-
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
 
 {discipline_line}\
 """
@@ -97,10 +81,6 @@ Each marker is one data point. Multiple marker groups become multiple series.
 Output strict JSON in this exact shape:
 {{"title": str, "x_label": str, "y_label": str, "series": [{{"name": str, "points": [{{"x": any, "y": any}}]}}], "notes": str}}
 
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
-
 {discipline_line}\
 """
 
@@ -112,10 +92,6 @@ Approximate the geometry as best you can; encode series and points in the same s
 
 Output strict JSON in this exact shape:
 {{"title": str, "x_label": str, "y_label": str, "series": [{{"name": str, "points": [{{"x": any, "y": any}}]}}], "notes": str}}
-
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
 
 {discipline_line}\
 """
@@ -129,10 +105,6 @@ Preserve the exact structure of the original table. Repeat merged-cell values in
 Output strict JSON in this exact shape:
 {{"caption": str, "headers": [str], "rows": [[str]]}}
 
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
-
 {discipline_line}\
 """
 
@@ -144,10 +116,6 @@ CONSTRAINT: Use valid Mermaid `graph TD` (top-down) or `graph LR` (left-right) s
 
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
-
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
 
 {discipline_line}\
 """
@@ -161,10 +129,6 @@ CONSTRAINT: Use valid Mermaid `sequenceDiagram` syntax with `participant`, `Acto
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
 
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
-
 {discipline_line}\
 """
 
@@ -176,10 +140,6 @@ CONSTRAINT: Use valid Mermaid `stateDiagram-v2` syntax with `[*]` for start/end,
 
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
-
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
 
 {discipline_line}\
 """
@@ -193,10 +153,6 @@ CONSTRAINT: Use valid Mermaid `classDiagram` syntax (preferred) or `erDiagram` f
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
 
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
-
 {discipline_line}\
 """
 
@@ -208,10 +164,6 @@ CONSTRAINT: Use valid Mermaid `graph TD` (or `graph LR`) with one `subgraph "Sub
 
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
-
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
 
 {discipline_line}\
 """
@@ -227,10 +179,6 @@ Rules:
 - latex: LaTeX source usable inside $$...$$ or \\[...\\]. Use standard amsmath commands. No markdown fences.
 - caption: short human-readable description of what the equation states.
 
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
-
 {discipline_line}\
 """
 
@@ -242,10 +190,6 @@ Identify the application and the visible UI region, then enumerate the meaningfu
 
 Output strict JSON in this exact shape:
 {{"application": str, "area": str, "regions": [{{"name": str, "description": str, "ocr_text": str}}], "summary": str}}
-
-Document context:
-- Heading chain: {heading_chain}
-- Surrounding paragraphs: {surrounding_paragraphs}
 
 {discipline_line}\
 """
@@ -307,6 +251,12 @@ def build_extract_prompt(
         prompt is empty, signalling the pipeline to skip the second VLM call.
         Unknown / future ImageType values fall back to the DescriptionPayload
         template.
+
+    Prompt-caching note (plan §8): the per-image document context lives in the
+    **user** prompt, never the system prompt. The system prompt is therefore
+    byte-stable per ``image_type`` across the whole document, so provider
+    prompt-caching (OpenAI automatic at 1024+ tokens, up to ~90% off input
+    cost) actually hits — the cached prefix is the same bytes every request.
     """
     if image_type == ImageType.decorative:
         return "{}", ""
@@ -315,13 +265,29 @@ def build_extract_prompt(
     if template is None:
         template = FALLBACK_TEMPLATE
 
-    system = template.format(
-        heading_chain=heading_chain,
-        surrounding_paragraphs=surrounding_paragraphs,
-        discipline_line=EXTRACT_DISCIPLINE_LINE,
-    )
-    user = (
+    system = template.format(discipline_line=EXTRACT_DISCIPLINE_LINE)
+    user = _context_user_prompt(
         "Extract structured data from the attached image using the JSON schema "
-        "described in the system instructions."
+        "described in the system instructions.",
+        heading_chain,
+        surrounding_paragraphs,
     )
     return system, user
+
+
+def _context_user_prompt(
+    instruction: str,
+    heading_chain: str,
+    surrounding_paragraphs: str,
+) -> str:
+    """Compose a user prompt carrying the per-image (variable) document context.
+
+    Kept out of the system prompt so the cacheable system prefix stays
+    byte-stable across images (plan §8 prompt-caching).
+    """
+    return (
+        f"{instruction}\n\n"
+        f"Document context:\n"
+        f"- Heading chain: {heading_chain}\n"
+        f"- Surrounding paragraphs: {surrounding_paragraphs}"
+    )
