@@ -1,0 +1,192 @@
+"""Tests for the OCR/VLM benchmark harness (plan §9.4).
+
+Covers the scoring metrics (CER/WER, TEDS-lite, facts) and the regression-gate
+logic that decides whether an engine swap is justified. The harness must refuse
+to swap on faith: a candidate engine only wins when it both clears the
+golden-match gate and beats the baseline.
+"""
+
+from __future__ import annotations
+
+from app.benchmark.metrics import (
+    character_error_rate,
+    facts_recall,
+    score_outputs,
+    table_similarity,
+    word_error_rate,
+)
+from app.benchmark.runner import (
+    GOLDEN_MATCH_THRESHOLD,
+    BenchmarkReport,
+    BenchmarkSample,
+    compare_configs,
+    run_benchmark,
+)
+
+
+# ---------------------------------------------------------------------------
+# CER / WER
+# ---------------------------------------------------------------------------
+
+
+def test_cer_zero_on_exact_match():
+    assert character_error_rate("hello world", "hello world") == 0.0
+
+
+def test_cer_one_on_total_mismatch_against_empty_ref():
+    # Empty reference + non-empty hypothesis: all hypothesis chars are errors.
+    assert character_error_rate("", "abc") == 1.0
+
+
+def test_cer_counts_single_substitution():
+    # "cat" -> "cot": 1 substitution over 3 reference chars.
+    assert abs(character_error_rate("cat", "cot") - (1 / 3)) < 1e-9
+
+
+def test_wer_counts_word_edits():
+    # one substitution over three reference words
+    assert abs(word_error_rate("the quick fox", "the slow fox") - (1 / 3)) < 1e-9
+
+
+def test_cer_perfect_when_both_empty():
+    assert character_error_rate("", "") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Facts recall (chart/structured)
+# ---------------------------------------------------------------------------
+
+
+def test_facts_recall_finds_numbers_regardless_of_formatting():
+    # The machine-checkable facts (the numbers) survive cosmetic markdown diffs.
+    ref = "Revenue was 100 in Q1 and 140 in Q2."
+    hyp = "| Q1 | 100 |\n| Q2 | 140 |"
+    assert facts_recall(ref, hyp) == 1.0
+
+
+def test_facts_recall_partial_when_a_number_missing():
+    ref = "values 10 20 30"
+    hyp = "values 10 20"
+    assert abs(facts_recall(ref, hyp) - (2 / 3)) < 1e-9
+
+
+def test_facts_recall_one_when_no_facts_in_reference():
+    # No numeric facts to check -> vacuously perfect (text metric carries it).
+    assert facts_recall("just prose", "different prose") == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Table similarity (TEDS-lite)
+# ---------------------------------------------------------------------------
+
+
+def test_table_similarity_identical_tables():
+    t = [["a", "b"], ["1", "2"]]
+    assert table_similarity(t, t) == 1.0
+
+
+def test_table_similarity_partial_on_one_wrong_cell():
+    ref = [["a", "b"], ["1", "2"]]
+    hyp = [["a", "b"], ["1", "9"]]
+    # 3 of 4 cells match.
+    assert abs(table_similarity(ref, hyp) - 0.75) < 1e-9
+
+
+def test_table_similarity_handles_shape_mismatch():
+    ref = [["a", "b"], ["1", "2"]]
+    hyp = [["a", "b"]]
+    # Missing cells count against the score but it never raises.
+    score = table_similarity(ref, hyp)
+    assert 0.0 <= score < 1.0
+
+
+# ---------------------------------------------------------------------------
+# Combined score
+# ---------------------------------------------------------------------------
+
+
+def test_score_outputs_perfect_text():
+    score = score_outputs(
+        sample_id="s1",
+        reference_text="hello world",
+        hypothesis_text="hello world",
+    )
+    assert score.combined == 1.0
+    assert score.cer == 0.0
+
+
+def test_score_outputs_blends_table_when_present():
+    score = score_outputs(
+        sample_id="s2",
+        reference_text="totals",
+        hypothesis_text="totals",
+        reference_table=[["a", "b"], ["1", "2"]],
+        hypothesis_table=[["a", "b"], ["1", "9"]],
+    )
+    # Table is imperfect (0.75), so combined sits below 1.0 even though text matches.
+    assert score.combined < 1.0
+    assert score.table_score == 0.75
+
+
+# ---------------------------------------------------------------------------
+# Regression gate
+# ---------------------------------------------------------------------------
+
+
+def _report(name: str, pairs: list[tuple[str, str, str]]) -> BenchmarkReport:
+    samples = [
+        BenchmarkSample(sample_id=sid, reference_text=ref, hypothesis_text=hyp)
+        for sid, ref, hyp in pairs
+    ]
+    return run_benchmark(name, samples)
+
+
+def test_report_passing_when_above_threshold():
+    report = _report(
+        "surya",
+        [("a", "hello world", "hello world"), ("b", "foo bar", "foo bar")],
+    )
+    assert report.mean_combined == 1.0
+    assert report.passing
+    assert report.regressions() == []
+
+
+def test_report_flags_regressions_below_threshold():
+    report = _report(
+        "surya",
+        [("a", "hello world", "completely different text here")],
+    )
+    assert not report.passing
+    assert "a" in report.regressions()
+
+
+def test_compare_configs_refuses_swap_when_candidate_fails_gate():
+    baseline = _report("surya", [("a", "hello world", "hello world")])
+    # Candidate is garbage -> below gate -> never swap even if it differs.
+    candidate = _report("glm_ocr", [("a", "hello world", "zzz")])
+    verdict = compare_configs(baseline, candidate)
+    assert verdict["should_swap"] is False
+    assert verdict["candidate_passes_gate"] is False
+
+
+def test_compare_configs_refuses_swap_when_not_better():
+    baseline = _report("surya", [("a", "hello world", "hello world")])
+    candidate = _report("glm_ocr", [("a", "hello world", "hello world")])
+    verdict = compare_configs(baseline, candidate)
+    # Equal score -> delta 0 -> no swap (no swap on faith / no-op churn).
+    assert verdict["delta"] == 0.0
+    assert verdict["should_swap"] is False
+
+
+def test_compare_configs_swaps_when_better_and_passing():
+    baseline = _report("surya", [("a", "hello world there", "hello world")])
+    candidate = _report("glm_ocr", [("a", "hello world there", "hello world there")])
+    verdict = compare_configs(baseline, candidate)
+    assert verdict["candidate_passes_gate"] is True
+    assert verdict["delta"] > 0
+    assert verdict["should_swap"] is True
+
+
+def test_threshold_is_eighty_percent():
+    # Pin the golden-match threshold the gate inherits from markitdown #4.
+    assert GOLDEN_MATCH_THRESHOLD == 0.80
