@@ -18,6 +18,7 @@ const DEFAULT_CONFIG: ConversionConfig = {
   converter: 'PdfConverter',
   use_llm: false,
   image_handling_mode: 'extraction',
+  allow_cloud_vlm: false,
   force_ocr: false,
   paginate: false,
   disable_image_extraction: false,

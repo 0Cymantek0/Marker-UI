@@ -76,7 +76,7 @@ AGENTS.md
 CLAUDE.md
 dummy.pdf
 .playwright-mcp/
-
+.claude/
 # Planning docs (work-in-progress, not for commit)
 planning/
 sample/

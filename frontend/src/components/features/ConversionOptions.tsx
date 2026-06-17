@@ -67,6 +67,7 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
   const hasVisionModel = providers.some((provider) =>
     provider.models?.some((model) => model.vision_capable)
   )
+  const tempUsesImageUnderstanding = (tempConfig.image_handling_mode ?? 'extraction') !== 'extraction'
 
   useEffect(() => {
     if (isModalOpen) {
@@ -232,6 +233,16 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
                   <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-normal">
                     Enable vision capability for at least one model in Settings to use understanding modes.
                   </p>
+                )}
+
+                {tempUsesImageUnderstanding && (
+                  <ToggleOption
+                    label="Allow Cloud Image Analysis"
+                    description="Send image crops that need chart, diagram, or photo understanding to the configured vision model."
+                    checked={tempConfig.allow_cloud_vlm ?? false}
+                    onChange={(v) => updateTemp('allow_cloud_vlm', v)}
+                    disabled={disabled || !hasVisionModel}
+                  />
                 )}
               </div>
 

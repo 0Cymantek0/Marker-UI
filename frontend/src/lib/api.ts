@@ -17,6 +17,7 @@ export interface ConversionConfig {
   llm_provider?: string
   llm_model?: string
   image_handling_mode?: ImageHandlingMode
+  allow_cloud_vlm?: boolean
   force_ocr?: boolean
   paginate?: boolean
   disable_image_extraction?: boolean
@@ -38,6 +39,7 @@ export interface ImageUnderstandingMeta {
   confidence: number
   model: string | null
   omitted: boolean
+  cost_usd?: number
 }
 
 export interface JobStatus {
@@ -282,6 +284,7 @@ export async function uploadFile(
   if (config.llm_provider) params.append('llm_provider', config.llm_provider)
   if (config.llm_model) params.append('llm_model', config.llm_model)
   if (config.image_handling_mode) params.append('image_handling_mode', config.image_handling_mode)
+  if (config.allow_cloud_vlm !== undefined) params.append('allow_cloud_vlm', String(config.allow_cloud_vlm))
   if (config.force_ocr !== undefined) params.append('force_ocr', String(config.force_ocr))
   if (config.paginate !== undefined) params.append('paginate_output', String(config.paginate))
   if (config.disable_image_extraction !== undefined) params.append('disable_image_extraction', String(config.disable_image_extraction))

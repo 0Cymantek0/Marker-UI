@@ -94,6 +94,10 @@ async def upload_file(
         "extraction",
         description="Image handling: extraction, understanding, or both",
     ),
+    allow_cloud_vlm: bool = Query(
+        False,
+        description="Allow image-understanding crops to be sent to the configured cloud VLM provider",
+    ),
     force_ocr: bool = Query(False, description="Force OCR on all pages"),
     paginate_output: bool = Query(False, description="Add page separators in output"),
     disable_image_extraction: bool = Query(False, description="Skip extracting images"),
@@ -191,6 +195,7 @@ async def upload_file(
         config["llm_model"] = llm_model
     if image_handling_mode in ("extraction", "understanding", "both"):
         config["image_handling_mode"] = image_handling_mode
+    config["allow_cloud_vlm"] = allow_cloud_vlm
     if force_ocr:
         config["force_ocr"] = True
     if paginate_output:

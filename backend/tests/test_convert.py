@@ -339,6 +339,27 @@ async def test_upload_with_image_handling_mode(client: AsyncClient, db_session):
 
     cfg = json.loads(job.config_json)
     assert cfg["image_handling_mode"] == "both"
+    assert cfg["allow_cloud_vlm"] is False
+
+
+@pytest.mark.asyncio
+async def test_upload_with_cloud_vlm_opt_in(client: AsyncClient, db_session):
+    """Cloud image understanding is explicit opt-in, never implied by mode."""
+    resp = await _upload_file(
+        client,
+        extra_params={"image_handling_mode": "both", "allow_cloud_vlm": "true"},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    from sqlalchemy import select
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    res = await db_session.execute(stmt)
+    job = res.scalar_one()
+
+    cfg = json.loads(job.config_json)
+    assert cfg["image_handling_mode"] == "both"
+    assert cfg["allow_cloud_vlm"] is True
 
 
 def test_build_marker_options_model_override():

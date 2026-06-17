@@ -23,6 +23,7 @@ const baseConfig: ConversionConfig = {
   converter: 'PdfConverter',
   use_llm: false,
   image_handling_mode: 'extraction',
+  allow_cloud_vlm: false,
 }
 
 const active: ActiveLLM = {
@@ -33,6 +34,39 @@ const active: ActiveLLM = {
 describe('ConversionOptions image understanding controls', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+  })
+
+  it('requires explicit cloud image analysis opt-in', async () => {
+    const providers: LLMProvider[] = [
+      {
+        id: 'openai',
+        type: 'openai',
+        label: 'OpenAI',
+        fallback_api_keys: [],
+        models: [{ model_id: 'gpt-4o', vision_capable: true }],
+      },
+    ]
+    mockGetLLMProviders.mockResolvedValue(providers)
+    mockGetActiveLLM.mockResolvedValue(active)
+    const onChange = vi.fn()
+
+    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /both/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('radio', { name: /both/i }))
+    fireEvent.click(screen.getByRole('button', { name: /allow cloud image analysis/i }))
+    fireEvent.click(screen.getByRole('button', { name: /apply settings/i }))
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image_handling_mode: 'both',
+        allow_cloud_vlm: true,
+      })
+    )
   })
 
   it('saves the 3-way image handling radio selection', async () => {
