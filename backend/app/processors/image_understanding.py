@@ -34,6 +34,19 @@ logger = logging.getLogger(__name__)
 # Sentinel for "local OCR service not yet built" (distinct from "built, None").
 _UNSET: Any = object()
 
+# Sentinel comment our processor writes into ``picture.html`` for every block it
+# handles. ImageUnderstandingRenderer keys off it to take ownership of <img>
+# emission for that block (marker force-appends one <img> per image block; we
+# suppress that duplicate). The token also encodes the keep/drop intent:
+#   keep=1 -> renderer keeps marker's single <img> (augment: chart/diagram/...)
+#   keep=0 -> renderer drops it (replace/decorative: image truly omitted)
+# markdownify strips HTML comments, so this never reaches the final markdown.
+IU_HANDLED_PREFIX = "marker-ui-iu-handled"
+
+
+def _handled_marker(keep: bool) -> str:
+    return f"<marker-comment>{IU_HANDLED_PREFIX} keep={1 if keep else 0}</marker-comment>"
+
 
 # ---------------------------------------------------------------------------
 # markdownify patches (applied once at import).
@@ -216,7 +229,9 @@ class ImageUnderstandingProcessor(BaseProcessor):
 
             if decision.route == RouteKind.skip_decorative:
                 self._apply_decorative(picture, decision)
-                self._store_dedup(image_hash, {"kind": "decorative"})
+                self._store_dedup(
+                    image_hash, {"kind": "decorative", "vlm_decided": False}
+                )
                 processed += 1
                 continue
 
@@ -330,9 +345,13 @@ class ImageUnderstandingProcessor(BaseProcessor):
                             route=RouteKind.skip_decorative,
                             reason="vlm decorative",
                         ),
+                        vlm_decided=True,
                     )
                     ok += 1
-                self._store_dedup(group[0].get("image_hash"), {"kind": "decorative"})
+                self._store_dedup(
+                    group[0].get("image_hash"),
+                    {"kind": "decorative", "vlm_decided": True},
+                )
                 continue
 
             if extraction is not None and getattr(extraction, "route", None) == "ocr_sufficient":
@@ -458,9 +477,24 @@ class ImageUnderstandingProcessor(BaseProcessor):
         logger.debug("ImageRouter -> %s (%s)", decision.route.value, decision.reason)
         return decision
 
-    def _apply_decorative(self, picture: Any, decision: RouteDecision) -> None:
-        """Omit a decorative image locally — no VLM call (plan §2 skip path)."""
-        model_id = self._resolved_model_id()
+    def _apply_decorative(
+        self, picture: Any, decision: RouteDecision, *, vlm_decided: bool = False
+    ) -> None:
+        """Omit a decorative image (plan §2 skip path).
+
+        Bug #4 part 1 (honest origin): a router skip_decorative is a LOCAL
+        decision — no VLM call ran — so recording ``model=<gemini...>`` is
+        misleading metadata. We record ``router-local`` for the local router and
+        the real VLM model id only when the VLM itself returned route=decorative
+        (``vlm_decided=True``).
+
+        Bug #4 part 2 (no clutter): a truly-omitted image leaves NO visible
+        "Decorative element omitted." stub and NO ``<img>``. We write only the
+        keep=0 handled-marker sentinel + the metadata comment, so the renderer
+        drops marker's forced image and nothing renders into the markdown. The
+        image file is still registered (keep=0 path) so ZIP/audit retains bytes.
+        """
+        model_id = self._resolved_model_id() if vlm_decided else "router-local"
         meta = {
             "image_name": _picture_image_name(picture),
             "image_type": ImageType.decorative.value,
@@ -469,14 +503,19 @@ class ImageUnderstandingProcessor(BaseProcessor):
             "omitted": True,
             "duration_ms": 0,
         }
-        _mutate_picture(
-            picture,
-            image_type=ImageType.decorative,
-            payload={},
-            mode=self.image_handling_mode,
-            meta=meta,
-            include_original_ref=self.include_original_ref,
+        meta_str = (
+            f"marker-ui image-understanding: "
+            f"type={meta['image_type']} model={meta['model']} "
+            f"confidence={float(meta['confidence']):.2f} "
+            f"cost_usd=0.000000 duration_ms={meta['duration_ms']}"
         )
+        picture.html = "\n".join(
+            [
+                _handled_marker(False),
+                f"<marker-comment>{_escape(meta_str)}</marker-comment>",
+            ]
+        )
+        picture.description = None
         self._record_meta(meta)
 
     def _record_meta(self, meta: dict[str, Any]) -> None:
@@ -542,7 +581,9 @@ class ImageUnderstandingProcessor(BaseProcessor):
         kind = outcome.get("kind")
         if kind == "decorative":
             self._apply_decorative(
-                picture, RouteDecision(route=RouteKind.skip_decorative, reason="dedup")
+                picture,
+                RouteDecision(route=RouteKind.skip_decorative, reason="dedup"),
+                vlm_decided=bool(outcome.get("vlm_decided", False)),
             )
             return
 
@@ -558,15 +599,23 @@ class ImageUnderstandingProcessor(BaseProcessor):
             _apply_ocr_html(
                 picture,
                 ocr_html=outcome.get("ocr_html", ""),
-                mode=self.image_handling_mode,
                 meta=meta,
-                include_original_ref=self.include_original_ref,
             )
             self._record_meta(meta)
             return
 
         # VLM outcome.
         image_type = outcome.get("image_type", ImageType.other)
+        if image_type == ImageType.decorative:
+            # A VLM that classified the image as decorative omits it the same way
+            # the router does — no stub, no <img> (bug #4). The VLM made this
+            # call, so the honest origin is the real model id.
+            self._apply_decorative(
+                picture,
+                RouteDecision(route=RouteKind.skip_decorative, reason="vlm decorative"),
+                vlm_decided=True,
+            )
+            return
         meta = {
             "image_name": _picture_image_name(picture),
             "image_type": image_type.value,
@@ -620,9 +669,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
         _apply_ocr_html(
             picture,
             ocr_html=result.html,
-            mode=self.image_handling_mode,
             meta=meta,
-            include_original_ref=self.include_original_ref,
         )
         self._record_meta(meta)
         logger.info(
@@ -677,13 +724,36 @@ class ImageUnderstandingProcessor(BaseProcessor):
             return self.vlm_model
 
 
+def _safe_prev_block(document: Any, block: Any) -> Any | None:
+    """document.get_prev_block that degrades to None on a detached block.
+
+    marker's page.get_prev_block does ``structure.index(block.id)``, which raises
+    ValueError when the block exists in the tree but was dropped from its page's
+    structure list (e.g. a Figure filtered post-layout). Local context is
+    best-effort metadata, so a detached block yields no context instead of
+    crashing the whole conversion.
+    """
+    try:
+        return document.get_prev_block(block)
+    except ValueError:
+        return None
+
+
+def _safe_next_block(document: Any, block: Any) -> Any | None:
+    """document.get_next_block that degrades to None on a detached block (see above)."""
+    try:
+        return document.get_next_block(block)
+    except ValueError:
+        return None
+
+
 def gather_local_context(document: Any, picture_block: Any, n: int = 2) -> tuple[str, str]:
     """Return heading chain and +/-N text-block context around a Picture."""
     headings: list[str] = []
     before: list[str] = []
     after: list[str] = []
 
-    prev = document.get_prev_block(picture_block)
+    prev = _safe_prev_block(document, picture_block)
     while prev is not None:
         if getattr(prev, "block_type", None) == BlockTypes.SectionHeader:
             text = _block_text(prev, document)
@@ -691,25 +761,25 @@ def gather_local_context(document: Any, picture_block: Any, n: int = 2) -> tuple
                 headings.append(text)
             if (getattr(prev, "heading_level", None) or 0) <= 1:
                 break
-        prev = document.get_prev_block(prev)
+        prev = _safe_prev_block(document, prev)
     headings.reverse()
 
-    prev = document.get_prev_block(picture_block)
+    prev = _safe_prev_block(document, picture_block)
     while prev is not None and len(before) < n:
         if getattr(prev, "block_type", None) == BlockTypes.Text:
             text = _block_text(prev, document)
             if text:
                 before.append(text)
-        prev = document.get_prev_block(prev)
+        prev = _safe_prev_block(document, prev)
     before.reverse()
 
-    nxt = document.get_next_block(picture_block)
+    nxt = _safe_next_block(document, picture_block)
     while nxt is not None and len(after) < n:
         if getattr(nxt, "block_type", None) == BlockTypes.Text:
             text = _block_text(nxt, document)
             if text:
                 after.append(text)
-        nxt = document.get_next_block(nxt)
+        nxt = _safe_next_block(document, nxt)
 
     return "\n".join(headings), "\n".join([*before, *after])
 
@@ -777,15 +847,23 @@ def _mutate_picture(
         f"cost_usd={float(meta.get('cost_usd', 0.0) or 0.0):.6f} "
         f"duration_ms={meta['duration_ms']}"
     )
-    html_parts = [f"<marker-comment>{_escape(meta_str)}</marker-comment>"]
+    html_parts = [
+        _handled_marker(keep_original),
+        f"<marker-comment>{_escape(meta_str)}</marker-comment>",
+    ]
     if keep_original:
         html_parts.append(
             f"<marker-comment>original_image: {_escape(image_name)}</marker-comment>"
         )
     html_parts.append(rendered)
-    if keep_original:
-        html_parts.append(f'<img src="{_escape(image_name)}" />')
 
+    # NOTE: we do NOT append our own <img> here. marker's renderer
+    # unconditionally appends exactly one <img> per image block
+    # (renderers/html.py: `<p>{content}<img src='name'></p>`). Emitting one here
+    # too produced the double-embed (![](x)![](x)). The _handled_marker token
+    # tells ImageUnderstandingRenderer to own <img> emission for this block:
+    # keep marker's single <img> when keep_original, drop it otherwise (so a
+    # replace/decorative image is truly omitted). markdownify strips the comment.
     picture.html = "\n".join(html_parts)
     picture.description = None
 
@@ -794,35 +872,35 @@ def _apply_ocr_html(
     picture: Any,
     *,
     ocr_html: str,
-    mode: ImageHandlingMode,
     meta: dict[str, Any],
-    include_original_ref: bool = True,
 ) -> None:
     """Write locally-transcribed OCR text into a Picture block as HTML.
 
     Mirrors :func:`_mutate_picture` but takes pre-rendered HTML (the OCR
-    transcription) rather than a typed payload. Text-as-image is always safe to
-    *augment* but never destructive about the source: in ``both`` mode the
-    original image link is preserved when ``include_original_ref`` is set.
-    """
-    image_name = meta["image_name"]
-    keep_original = mode == ImageHandlingMode.both and include_original_ref
+    transcription) rather than a typed payload.
 
+    Bug #3: an ``ocr`` route means layout sent a *text-as-image* here — a body
+    paragraph (or caption) that surya misdetected as a Picture/Figure. The
+    transcription reproduces that text verbatim, so keeping the original ``<img>``
+    of the very same text emits the content twice (the transcribed paragraph,
+    then an image of it). The transcription fully supersedes the crop, so we emit
+    the keep=0 sentinel and never re-embed the source. The image file is still
+    registered by the renderer (keep=0 path) so ZIP / audit retains the bytes;
+    only the redundant visible embed is removed.
+    """
     meta_str = (
         f"marker-ui image-understanding: "
         f"type={meta['image_type']} model={meta['model'] or 'local-ocr'} "
         f"confidence={float(meta['confidence']):.2f} "
         f"cost_usd=0 duration_ms={meta['duration_ms']} route=ocr"
     )
-    html_parts = [f"<marker-comment>{_escape(meta_str)}</marker-comment>"]
-    if keep_original:
-        html_parts.append(
-            f"<marker-comment>original_image: {_escape(image_name)}</marker-comment>"
-        )
-    html_parts.append(ocr_html)
-    if keep_original:
-        html_parts.append(f'<img src="{_escape(image_name)}" />')
+    html_parts = [
+        _handled_marker(False),
+        f"<marker-comment>{_escape(meta_str)}</marker-comment>",
+        ocr_html,
+    ]
 
+    # See _mutate_picture: the renderer owns <img> emission via the handled-marker.
     picture.html = "\n".join(html_parts)
     picture.description = None
 
@@ -845,8 +923,6 @@ def render_extraction(image_type: ImageType, payload: dict[str, Any]) -> str:
         return _render_equation(payload)
     if image_type == ImageType.screenshot_ui:
         return _render_screenshot(payload)
-    if image_type == ImageType.decorative:
-        return "<p><em>Decorative element omitted.</em></p>"
     return _render_description(payload)
 
 
@@ -904,6 +980,20 @@ def _render_table(payload: dict[str, Any]) -> str:
 def _render_diagram(payload: dict[str, Any]) -> str:
     mermaid = str(payload.get("mermaid", "")).strip()
     caption = str(payload.get("caption", "")).strip()
+    # A diagram payload can arrive WITHOUT usable mermaid: the VLM may have
+    # demoted a fabrication-prone figure to a {alt_text, details} description
+    # (vlm_service._demote_to_description), or returned a description shape
+    # directly. Emitting an empty ```mermaid fence in that case silently drops
+    # the extracted content (and renders as a blank code block). Fall back to
+    # the description renderer so the salvaged text survives for ANY diagram
+    # type on any document.
+    if not mermaid:
+        desc = _render_description(payload)
+        if desc:
+            return desc
+        if caption:
+            return f"<p>{_escape(caption)}</p>"
+        return ""
     parts = []
     if caption:
         parts.append(f"<p>{_escape(caption)}</p>")

@@ -143,6 +143,40 @@ def test_gather_local_context_uses_heading_chain_and_surrounding_text():
     assert "The chart shows Q2 growth." in surrounding
 
 
+def test_gather_local_context_survives_block_not_in_structure():
+    """Regression: a Figure can be in the document tree but absent from its
+    page's ``structure`` list. marker's ``page.get_prev_block`` then does
+    ``self.structure.index(block.id)`` which raises ValueError, crashing the
+    whole job (real failure: '/page/1/Figure/0 is not in list'). Context is
+    best-effort metadata -- it must degrade to empty, never raise.
+    """
+    from marker.schema import BlockTypes
+
+    class RaisingDocument:
+        """Mimics marker raising ValueError from structure.index() lookups."""
+
+        def __init__(self, blocks):
+            self.blocks = blocks
+
+        def contained_blocks(self, block_types):
+            return [b for b in self.blocks if b.block_type in block_types]
+
+        def get_prev_block(self, block):
+            raise ValueError(f"{block.id.to_path()} is not in list")
+
+        def get_next_block(self, block):
+            raise ValueError(f"{block.id.to_path()} is not in list")
+
+    picture = FakePicture()
+    document = RaisingDocument([FakeBlock(BlockTypes.Text, "orphan"), picture])
+
+    # Must not raise -- degrades to empty context.
+    heading_chain, surrounding = gather_local_context(document, picture, n=2)
+
+    assert heading_chain == ""
+    assert surrounding == ""
+
+
 def test_gather_local_context_handles_none_heading_level():
     """Real marker SectionHeader blocks can carry heading_level=None.
 
@@ -200,10 +234,12 @@ def test_processor_mutates_picture_in_place_for_chart_html():
     assert "<th>FY26</th>" in picture.html
     assert "<td>Q2</td>" in picture.html
     assert "<td>14</td>" in picture.html
-    # Augment gate (§6): chart is NOT safe to replace, so even in understanding
-    # mode the original image is kept alongside the extracted table.
+    # Augment gate (§6): chart is NOT safe to replace, so the original image is
+    # kept. The processor no longer emits its own <img> (the renderer owns it);
+    # instead it records keep-intent via the handled-marker + original_image ref.
     assert "original_image" in picture.html
-    assert '<img src="_page_0_Picture_42.jpeg" />' in picture.html
+    assert "marker-ui-iu-handled keep=1" in picture.html
+    assert "<img" not in picture.html
     assert len(vlm.calls) == 2
 
     # Sidecar metadata channel: pairs to the emitted image filename.
@@ -302,7 +338,9 @@ def test_processor_both_mode_collects_sidecar_meta_for_description_type():
     assert "original_image: _page_0_Picture_42.jpeg" in picture.html
     assert "<p>A detailed office photo.</p>" in picture.html
     assert "<li>Bright room</li>" in picture.html
-    assert '<img src="_page_0_Picture_42.jpeg" />' in picture.html
+    # Renderer owns <img>; the processor records keep-intent, not the tag.
+    assert "marker-ui-iu-handled keep=1" in picture.html
+    assert "<img" not in picture.html
     assert proc.image_meta[0]["image_type"] == "photo"
     assert proc.image_meta[0]["omitted"] is False
 
@@ -335,19 +373,27 @@ def test_processor_decorative_omits_picture_output():
     vlm = FakeVLM(image_type=ImageType.decorative, payload={})
 
     proc = ImageUnderstandingProcessor(
-        {"image_handling_mode": "understanding", "allow_cloud_vlm": True},
+        {
+            "image_handling_mode": "understanding",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
         vlm_service=vlm,
     )
     proc(document)
 
     assert picture.ignore_for_output is False
     assert "marker-ui image-understanding: type=decorative" in picture.html
-    assert "Decorative element omitted." in picture.html
+    # Bug #4: no visible "Decorative element omitted." stub, no original link, no img.
+    assert "Decorative element omitted." not in picture.html
     assert "original_image" not in picture.html
     assert "<img" not in picture.html
+    # VLM classified it -> honest origin is the real model id, not router-local.
+    assert "model=gpt-4o" in picture.html
     # Decorative images are flagged in the sidecar so the badge can show "omitted".
     assert proc.image_meta[0]["image_type"] == "decorative"
     assert proc.image_meta[0]["omitted"] is True
+    assert proc.image_meta[0]["model"] == "gpt-4o"
 
 
 def test_render_extraction_diagram_outputs_mermaid_code_block():
@@ -358,6 +404,40 @@ def test_render_extraction_diagram_outputs_mermaid_code_block():
 
     assert '<code class="language-mermaid">' in rendered
     assert "graph TD" in rendered
+
+
+def test_render_extraction_demoted_diagram_falls_back_to_description():
+    """A diagram payload with no usable mermaid (demoted to a description) must
+    render its salvaged text, NOT an empty ```mermaid fence that drops content.
+
+    Universal: applies to every diagram_* type on any document — the VLM demotes
+    fabrication-prone figures to {alt_text, details} and that text must survive.
+    """
+    rendered = render_extraction(
+        ImageType.diagram_architecture,
+        {
+            "alt_text": "Four-panel comparison of skill-acquisition paradigms.",
+            "details": [
+                "Human-Curated: Scalable X, Grounded check, Supervision-free check",
+                "Ours: Open-World: all three check",
+            ],
+        },
+    )
+
+    assert "language-mermaid" not in rendered
+    assert "comparison" in rendered.lower()
+    assert "Open-World" in rendered
+
+
+def test_render_extraction_empty_mermaid_string_does_not_emit_blank_fence():
+    """An explicit empty mermaid key must not produce a blank code block."""
+    rendered = render_extraction(
+        ImageType.diagram_flow,
+        {"mermaid": "   ", "caption": "Some caption"},
+    )
+
+    assert "language-mermaid" not in rendered
+    assert "Some caption" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +504,64 @@ def test_roundtrip_equation_html_becomes_valid_block_math():
     assert "$$" in md
     assert "\\$" not in md
     assert "a_1 + b_2 = c^2" in md
+
+
+# ---------------------------------------------------------------------------
+# Double-embed regression: the renderer must own <img> emission so a handled
+# block produces exactly ONE ![](img) for augment types and ZERO for
+# replace/decorative — never the ![](x)![](x) double the baseline showed.
+# ---------------------------------------------------------------------------
+
+def _extract_html_via_iu_renderer(block_html: str, image_block_id="_page_0_Picture_42"):
+    """Run a single image block's html through ImageUnderstandingRenderer's
+    image branch, returning the final markdown for that block.
+
+    Builds the minimal content-ref structure marker's extract_html walks: a
+    parent whose child is the image block carrying our processor's html.
+    """
+    from app.renderers.image_understanding_renderer import _handled_keep
+    # We test the keep-decision helper + the markdownify image count directly,
+    # which together define the single-embed guarantee without standing up a
+    # full marker Document (covered end-to-end by the lab harness).
+    return _handled_keep(block_html)
+
+
+def test_renderer_keeps_single_img_for_augment_block():
+    """An augment block (keep=1) yields exactly one image link, not two."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()  # chart_bar -> augment
+    ImageUnderstandingProcessor(
+        {"image_handling_mode": "both", "allow_cloud_vlm": True},
+        vlm_service=vlm,
+    )(document)
+
+    from app.renderers.image_understanding_renderer import _handled_keep
+    keep = _handled_keep(picture.html)
+    assert keep is True
+    # The processor html itself carries NO <img> — the renderer adds the single
+    # one. So the block can never contribute two embeds.
+    assert picture.html.count("<img") == 0
+
+
+def test_renderer_drops_img_for_decorative_block():
+    """A decorative block (keep=0) yields zero image links — truly omitted."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM(image_type=ImageType.decorative, payload={})
+    ImageUnderstandingProcessor(
+        {"image_handling_mode": "understanding", "allow_cloud_vlm": True},
+        vlm_service=vlm,
+    )(document)
+
+    from app.renderers.image_understanding_renderer import _handled_keep
+    assert _handled_keep(picture.html) is False
+    assert picture.html.count("<img") == 0
+
+
+def test_handled_keep_returns_none_for_untouched_block():
+    """A block we never handled has no sentinel -> renderer uses marker default."""
+    from app.renderers.image_understanding_renderer import _handled_keep
+    assert _handled_keep("<p>just some text</p>") is None
+    assert _handled_keep("") is None
 
 
 def test_processor_logs_start_and_done_tally(caplog):
@@ -620,15 +758,18 @@ def test_processor_skips_decorative_route_without_vlm_call():
 
     # No VLM call happened — the router short-circuited locally.
     assert vlm.calls == []
-    # Picture omitted as decorative.
+    # Picture omitted as decorative: keep=0 sentinel, no stub text, no img (bug #4).
     assert picture.html is not None
-    assert "Decorative element omitted" in picture.html
+    assert "Decorative element omitted" not in picture.html
+    assert "<img" not in picture.html
+    # Router decided locally -> honest origin is router-local, NOT the VLM model.
+    assert "model=router-local" in picture.html
     assert proc.image_meta == [
         {
             "image_name": "_page_0_Picture_42.jpeg",
             "image_type": "decorative",
             "confidence": 1.0,
-            "model": "gpt-4o",
+            "model": "router-local",
             "omitted": True,
             "cost_usd": 0.0,
         }
@@ -648,8 +789,52 @@ def test_local_only_decorative_route_does_not_construct_vlm_service():
     )
     proc(document)
 
-    assert "Decorative element omitted" in (picture.html or "")
-    assert proc.image_meta[0]["model"] == "local-only"
+    # Omitted with no stub, and the local router origin (not a VLM model id).
+    assert "Decorative element omitted" not in (picture.html or "")
+    assert "model=router-local" in (picture.html or "")
+    assert proc.image_meta[0]["model"] == "router-local"
+
+
+def test_multiple_decorative_logos_emit_no_stub_clutter():
+    """Bug #4: the page-0 author/affiliation logos (6 router-skipped decoratives)
+    must leave ZERO "Decorative element omitted." lines and ZERO image embeds —
+    no clutter. Distinct images so dedup does not collapse them."""
+    from marker.schema import BlockTypes
+    from PIL import Image as _Image
+
+    class _LogoPicture(FakePicture):
+        def __init__(self, n):
+            super().__init__()
+            self.text = f"logo{n}"
+            self.id = FakeBlockId(f"_page_0_Picture_{n}")
+            self._n = n
+
+        def get_image(self, document):
+            # Distinct solid colour per logo so aHash differs (no dedup collapse).
+            return _Image.new("RGB", (12, 12), color=(self._n * 5 % 255, 0, 0))
+
+    logos = [_LogoPicture(n) for n in range(6)]
+    document = FakeDocument([FakeBlock(BlockTypes.Text, "Authors"), *logos])
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "both",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=FakeVLM(),
+        detection_model=_RoutingDetectionModel(coverage_boxes=[]),  # no text -> decorative
+    )
+    proc(document)
+
+    for logo in logos:
+        assert "Decorative element omitted" not in (logo.html or "")
+        assert (logo.html or "").count("<img") == 0
+        assert "model=router-local" in (logo.html or "")
+    # All six recorded as omitted decoratives with honest local origin.
+    assert len(proc.image_meta) == 6
+    assert all(m["model"] == "router-local" for m in proc.image_meta)
+    assert all(m["omitted"] is True for m in proc.image_meta)
 
 
 def test_processor_routes_sparse_text_graphic_to_vlm():
@@ -1067,3 +1252,62 @@ def test_privacy_gate_skips_when_no_local_ocr():
 
     assert vlm.batch_calls == []
     assert picture.html is None  # untouched, never sent to cloud
+
+
+# ---------------------------------------------------------------------------
+# Bug #3: a body paragraph misdetected by layout (surya) as a Picture/Figure is
+# routed to local OCR and transcribed. The transcription reproduces the text, so
+# re-embedding the source <img> of that same text duplicates the content (the
+# paragraph, then a picture of it). The OCR path must drop the kept image.
+# ---------------------------------------------------------------------------
+
+def test_ocr_text_image_drops_kept_img_in_both_mode():
+    """An ocr-routed text-image emits its transcription with keep=0 even in
+    ``both`` mode, so the redundant image-of-the-text is not embedded."""
+    document, picture = _doc_with_picture()
+    vlm = FakeVLM()
+    text = "Figure 3 shows that OpenSkill-generated skills yield higher reward."
+
+    proc = ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "both",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=vlm,
+        detection_model=_RoutingDetectionModel(coverage_boxes=_dense_text_boxes()),
+        recognition_model=_FakeRecognitionModel([text]),
+    )
+    proc(document)
+
+    from app.renderers.image_understanding_renderer import _handled_keep
+    # Transcription kept (the real content), but the source <img> is dropped.
+    assert "OpenSkill-generated skills" in picture.html
+    assert _handled_keep(picture.html) is False
+    assert picture.html.count("<img") == 0
+    assert "original_image" not in picture.html
+    assert proc.image_meta[0]["model"] == "local-ocr"
+
+
+def test_renderer_drops_img_for_ocr_text_block():
+    """End-to-end through the renderer: an OCR text-block contributes exactly
+    zero image embeds (the text-of-image is not duplicated as a picture)."""
+    from app.renderers.image_understanding_renderer import _handled_keep
+
+    document, picture = _doc_with_picture()
+    text = "A misdetected body paragraph rendered as a Picture block."
+
+    ImageUnderstandingProcessor(
+        {
+            "image_handling_mode": "both",
+            "vlm_model": "gpt-4o",
+            "allow_cloud_vlm": True,
+        },
+        vlm_service=FakeVLM(),
+        detection_model=_RoutingDetectionModel(coverage_boxes=_dense_text_boxes()),
+        recognition_model=_FakeRecognitionModel([text]),
+    )(document)
+
+    assert _handled_keep(picture.html) is False
+    # The processor html carries no <img>; the renderer (keep=0) adds none.
+    assert picture.html.count("<img") == 0

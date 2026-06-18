@@ -53,6 +53,29 @@ IMAGE_UNDERSTANDING_PROCESSOR = (
     "app.processors.image_understanding.ImageUnderstandingProcessor"
 )
 
+# Custom Markdown renderer that owns <img> emission for image-understanding
+# blocks (kills the double-embed; honours decorative/equation omission). Only
+# swapped in for the markdown renderer in understanding/both mode — every other
+# output format and extraction mode keeps marker's stock renderer untouched.
+IMAGE_UNDERSTANDING_RENDERER = (
+    "app.renderers.image_understanding_renderer.ImageUnderstandingRenderer"
+)
+_MARKER_MARKDOWN_RENDERER = "marker.renderers.markdown.MarkdownRenderer"
+
+
+def _select_renderer(options: dict[str, Any], default_renderer: str) -> str:
+    """Swap in our renderer only when it actually applies.
+
+    Conditions: image understanding is active (understanding/both) AND marker
+    resolved the stock Markdown renderer. Any explicit non-markdown output
+    (json/html/chunks) or extraction mode falls through to ``default_renderer``
+    unchanged, so we never alter behaviour we don't own.
+    """
+    mode = options.get("image_handling_mode")
+    if mode in ("understanding", "both") and default_renderer == _MARKER_MARKDOWN_RENDERER:
+        return IMAGE_UNDERSTANDING_RENDERER
+    return default_renderer
+
 # marker's native image-description processor. It handles the SAME block types
 # our processor does (Picture + Figure) and runs EARLIER in the pipeline, so in
 # understanding/both modes it makes a paid LLM call on every image that our
@@ -458,7 +481,7 @@ class MarkerService:
             config=config_dict,
             artifact_dict=self._model_dict,
             processor_list=config_parser.get_processors(),
-            renderer=config_parser.get_renderer(),
+            renderer=_select_renderer(options, config_parser.get_renderer()),
             llm_service=config_parser.get_llm_service(),
         )
 
