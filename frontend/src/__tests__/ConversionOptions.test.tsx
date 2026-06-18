@@ -98,6 +98,52 @@ describe('ConversionOptions image understanding controls', () => {
     )
   })
 
+  it('exposes pipeline knobs and applies router + tuning overrides', async () => {
+    const providers: LLMProvider[] = [
+      {
+        id: 'openai',
+        type: 'openai',
+        label: 'OpenAI',
+        fallback_api_keys: [],
+        models: [{ model_id: 'gpt-4o', vision_capable: true }],
+      },
+    ]
+    mockGetLLMProviders.mockResolvedValue(providers)
+    mockGetActiveLLM.mockResolvedValue(active)
+    const onChange = vi.fn()
+
+    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+
+    // Knobs only show once an understanding mode is active.
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /both/i })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('radio', { name: /both/i }))
+
+    // Everyday router toggle is present and flips.
+    const router = await screen.findByRole('button', { name: /smart image router/i })
+    expect(router).toBeInTheDocument()
+    fireEvent.click(router)
+
+    // Tuning section is collapsed until disclosed.
+    expect(screen.queryByLabelText(/vlm batch size/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /experimental \/ tuning/i }))
+
+    const batchSize = await screen.findByLabelText(/vlm batch size/i)
+    fireEvent.change(batchSize, { target: { value: '16' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /apply settings/i }))
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image_handling_mode: 'both',
+        router_enabled: false,
+        vlm_batch_size: 16,
+      })
+    )
+  })
+
   it('disables understanding modes when no vision-capable model is configured', async () => {
     const providers: LLMProvider[] = [
       {

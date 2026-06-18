@@ -32,7 +32,7 @@ export function Select({ value, onChange, options, className, disabled }: Select
   }, [])
 
   return (
-    <div ref={containerRef} className={cn('relative w-full md:w-44', className)}>
+    <div ref={containerRef} className={cn('relative w-full md:w-44', isOpen && 'z-30', className)}>
       <button
         type="button"
         disabled={disabled}

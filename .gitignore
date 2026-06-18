@@ -81,5 +81,9 @@ dummy.pdf
 planning/
 sample/
 
+# Lab benchmarking harness (contains test API key vault — NEVER commit)
+lab/
+
 # Reference clones (read-only, developer use only)
 references/markitdown/
+backend/tests/fixtures/

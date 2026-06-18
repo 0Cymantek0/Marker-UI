@@ -9,6 +9,7 @@ export type ConverterType =
   | 'OCRConverter'
   | 'ExtractionConverter'
 export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
+export type OcrEngine = 'surya' | 'glm_ocr' | 'paddleocr_vl' | 'mistral_ocr'
 
 export interface ConversionConfig {
   output_format: OutputFormat
@@ -25,6 +26,19 @@ export interface ConversionConfig {
   language?: string
   disable_multiprocessing?: boolean
   debug?: boolean
+  // --- Image-understanding pipeline knobs (mirror ImageUnderstandingConfig) ---
+  router_enabled?: boolean
+  dedup_enabled?: boolean
+  downscale_vlm_crops?: boolean
+  batch_enabled?: boolean
+  ocr_engine?: OcrEngine
+  decorative_max_text_density?: number
+  ocr_min_text_density?: number
+  ocr_min_lines?: number
+  dedup_max_distance?: number
+  vlm_crop_max_px?: number
+  vlm_batch_size?: number
+  max_batch_retries?: number
 }
 
 export interface ConversionResponse {
@@ -292,6 +306,19 @@ export async function uploadFile(
   if (config.language) params.append('lang', config.language)
   if (config.disable_multiprocessing !== undefined) params.append('disable_multiprocessing', String(config.disable_multiprocessing))
   if (config.debug !== undefined) params.append('debug', String(config.debug))
+  // --- Image-understanding pipeline knobs (1:1 query-param names) ---
+  if (config.router_enabled !== undefined) params.append('router_enabled', String(config.router_enabled))
+  if (config.dedup_enabled !== undefined) params.append('dedup_enabled', String(config.dedup_enabled))
+  if (config.downscale_vlm_crops !== undefined) params.append('downscale_vlm_crops', String(config.downscale_vlm_crops))
+  if (config.batch_enabled !== undefined) params.append('batch_enabled', String(config.batch_enabled))
+  if (config.ocr_engine) params.append('ocr_engine', config.ocr_engine)
+  if (config.decorative_max_text_density !== undefined) params.append('decorative_max_text_density', String(config.decorative_max_text_density))
+  if (config.ocr_min_text_density !== undefined) params.append('ocr_min_text_density', String(config.ocr_min_text_density))
+  if (config.ocr_min_lines !== undefined) params.append('ocr_min_lines', String(config.ocr_min_lines))
+  if (config.dedup_max_distance !== undefined) params.append('dedup_max_distance', String(config.dedup_max_distance))
+  if (config.vlm_crop_max_px !== undefined) params.append('vlm_crop_max_px', String(config.vlm_crop_max_px))
+  if (config.vlm_batch_size !== undefined) params.append('vlm_batch_size', String(config.vlm_batch_size))
+  if (config.max_batch_retries !== undefined) params.append('max_batch_retries', String(config.max_batch_retries))
   if (localFilepath) params.append('local_filepath', localFilepath)
   if (outputDir) params.append('output_dir', outputDir)
 

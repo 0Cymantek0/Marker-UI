@@ -362,6 +362,85 @@ async def test_upload_with_cloud_vlm_opt_in(client: AsyncClient, db_session):
     assert cfg["allow_cloud_vlm"] is True
 
 
+@pytest.mark.asyncio
+async def test_upload_image_pipeline_knobs_reach_config(client: AsyncClient, db_session):
+    """Every new image-understanding @Query lands in the stored config dict."""
+    resp = await _upload_file(
+        client,
+        extra_params={
+            "image_handling_mode": "understanding",
+            "router_enabled": "false",
+            "dedup_enabled": "false",
+            "downscale_vlm_crops": "false",
+            "batch_enabled": "false",
+            "ocr_engine": "surya",
+            "decorative_max_text_density": "0.05",
+            "ocr_min_text_density": "0.6",
+            "ocr_min_lines": "5",
+            "dedup_max_distance": "4",
+            "vlm_crop_max_px": "1024",
+            "vlm_batch_size": "16",
+            "max_batch_retries": "3",
+        },
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    from sqlalchemy import select
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    res = await db_session.execute(stmt)
+    job = res.scalar_one()
+
+    cfg = json.loads(job.config_json)
+    assert cfg["router_enabled"] is False
+    assert cfg["dedup_enabled"] is False
+    assert cfg["downscale_vlm_crops"] is False
+    assert cfg["batch_enabled"] is False
+    assert cfg["ocr_engine"] == "surya"
+    assert cfg["decorative_max_text_density"] == 0.05
+    assert cfg["ocr_min_text_density"] == 0.6
+    assert cfg["ocr_min_lines"] == 5
+    assert cfg["dedup_max_distance"] == 4
+    assert cfg["vlm_crop_max_px"] == 1024
+    assert cfg["vlm_batch_size"] == 16
+    assert cfg["max_batch_retries"] == 3
+
+
+@pytest.mark.asyncio
+async def test_upload_omits_unset_pipeline_knobs(client: AsyncClient, db_session):
+    """Knobs the UI does not send stay out of config, so processor defaults win."""
+    resp = await _upload_file(
+        client,
+        extra_params={"image_handling_mode": "understanding"},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    from sqlalchemy import select
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    res = await db_session.execute(stmt)
+    job = res.scalar_one()
+
+    cfg = json.loads(job.config_json)
+    for key in (
+        "router_enabled", "dedup_enabled", "downscale_vlm_crops", "batch_enabled",
+        "ocr_engine", "decorative_max_text_density", "ocr_min_text_density",
+        "ocr_min_lines", "dedup_max_distance", "vlm_crop_max_px",
+        "vlm_batch_size", "max_batch_retries",
+    ):
+        assert key not in cfg
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_out_of_range_knob(client: AsyncClient, db_session):
+    """FastAPI Query bounds reject an out-of-range tuning value (422)."""
+    resp = await _upload_file(
+        client,
+        extra_params={"vlm_batch_size": "999"},  # le=64
+    )
+    assert resp.status_code == 422
+
+
 def test_build_marker_options_model_override():
     """Verify that build_marker_options correctly overrides model names for all services."""
     from app.services.marker_service import build_marker_options
@@ -578,3 +657,82 @@ async def test_status_route_omits_image_understanding_for_legacy_jobs(client: As
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("image_understanding") is None
+
+
+# ---------------------------------------------------------------------------
+# Timestamps must round-trip with UTC offset so the frontend can parse them
+# as UTC, not as local time. Regression for the "all times wrong" bug.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_status_route_serializes_timestamps_with_utc_offset(
+    client: AsyncClient, db_session
+):
+    """created_at / completed_at JSON must end with Z or +00:00, never naive."""
+    from datetime import datetime, timezone
+
+    naive_utc = datetime(2026, 6, 11, 9, 0, 0)  # what SQLite hands back
+    job = ConversionJob(
+        id="job-tz-status",
+        filename="doc.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        progress=100,
+        created_at=naive_utc,
+        completed_at=naive_utc,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get("/api/convert/status/job-tz-status")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    for key in ("created_at", "completed_at"):
+        val = body[key]
+        assert val is not None, f"{key} was None"
+        # Must carry an explicit UTC offset so JS new Date() parses it as UTC.
+        assert val.endswith("Z") or "+00:00" in val, (
+            f"{key}='{val}' missing UTC offset — frontend will misparse as local"
+        )
+
+
+@pytest.mark.asyncio
+async def test_history_route_serializes_timestamps_with_utc_offset(
+    client: AsyncClient, db_session
+):
+    """History endpoint must also emit tz-aware timestamps."""
+    from datetime import datetime
+
+    naive_utc = datetime(2026, 6, 11, 9, 0, 0)
+    job = ConversionJob(
+        id="job-tz-history",
+        filename="doc.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        progress=100,
+        created_at=naive_utc,
+        completed_at=naive_utc,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get("/api/convert/history")
+    assert resp.status_code == 200
+    jobs = resp.json()["jobs"]
+    ours = next((j for j in jobs if j["job_id"] == "job-tz-history"), None)
+    assert ours is not None
+
+    for key in ("created_at", "completed_at"):
+        val = ours[key]
+        assert val is not None
+        assert val.endswith("Z") or "+00:00" in val, (
+            f"{key}='{val}' missing UTC offset"
+        )

@@ -107,6 +107,21 @@ async def upload_file(
     strip_existing_ocr: bool = Query(False, description="Strip existing OCR text"),
     redo_inline_math: bool = Query(False, description="Re-render inline math"),
     debug: bool = Query(False, description="Enable debug output"),
+    # --- Image-understanding pipeline knobs (mirror ImageUnderstandingConfig).
+    #     Optional[...] = None so only knobs the UI actually sends override the
+    #     backend schema defaults; others fall through to the processor defaults.
+    router_enabled: Optional[bool] = Query(None, description="Master switch for the Tier-0 router (off = legacy path)"),
+    dedup_enabled: Optional[bool] = Query(None, description="Collapse repeated identical images to one extraction"),
+    downscale_vlm_crops: Optional[bool] = Query(None, description="Downscale crops before VLM send (cost lever)"),
+    batch_enabled: Optional[bool] = Query(None, description="Batch route+extract calls instead of serial per-image"),
+    ocr_engine: Optional[str] = Query(None, description="Local OCR engine (only 'surya' ships; others fall back)"),
+    decorative_max_text_density: Optional[float] = Query(None, ge=0.0, le=1.0, description="Text-density at/below which an image is decorative"),
+    ocr_min_text_density: Optional[float] = Query(None, ge=0.0, le=1.0, description="Text-density at/above which an image routes to local OCR"),
+    ocr_min_lines: Optional[int] = Query(None, ge=1, description="Min detected text lines to consider the OCR route"),
+    dedup_max_distance: Optional[int] = Query(None, ge=0, le=64, description="Max aHash Hamming distance treated as duplicate (0 = exact)"),
+    vlm_crop_max_px: Optional[int] = Query(None, ge=64, le=4096, description="Longest-side pixel cap applied to a crop before VLM send"),
+    vlm_batch_size: Optional[int] = Query(None, ge=1, le=64, description="Images per batched VLM call"),
+    max_batch_retries: Optional[int] = Query(None, ge=0, le=5, description="Max extra batch calls to recover missing/garbled indices"),
     db: AsyncSession = Depends(get_db),
 ) -> ConversionResponse:
     """Accept a document upload or local file path, create a job, and start conversion."""
@@ -214,6 +229,33 @@ async def upload_file(
         config["redo_inline_math"] = True
     if debug:
         config["debug"] = True
+    # --- Image-understanding pipeline knobs. None = not sent by the UI, so the
+    #     processor keeps its schema default. Anything non-None is an explicit
+    #     user override and flows through IMAGE_UNDERSTANDING_CONFIG_KEYS.
+    if router_enabled is not None:
+        config["router_enabled"] = router_enabled
+    if dedup_enabled is not None:
+        config["dedup_enabled"] = dedup_enabled
+    if downscale_vlm_crops is not None:
+        config["downscale_vlm_crops"] = downscale_vlm_crops
+    if batch_enabled is not None:
+        config["batch_enabled"] = batch_enabled
+    if ocr_engine in ("surya", "glm_ocr", "paddleocr_vl", "mistral_ocr"):
+        config["ocr_engine"] = ocr_engine
+    if decorative_max_text_density is not None:
+        config["decorative_max_text_density"] = decorative_max_text_density
+    if ocr_min_text_density is not None:
+        config["ocr_min_text_density"] = ocr_min_text_density
+    if ocr_min_lines is not None:
+        config["ocr_min_lines"] = ocr_min_lines
+    if dedup_max_distance is not None:
+        config["dedup_max_distance"] = dedup_max_distance
+    if vlm_crop_max_px is not None:
+        config["vlm_crop_max_px"] = vlm_crop_max_px
+    if vlm_batch_size is not None:
+        config["vlm_batch_size"] = vlm_batch_size
+    if max_batch_retries is not None:
+        config["max_batch_retries"] = max_batch_retries
     if local_filepath:
         config["local_filepath"] = local_filepath
     if output_dir:

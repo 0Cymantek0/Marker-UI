@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { FileText, Code, Braces, Layers, HelpCircle, Settings2, X } from 'lucide-react'
+import { FileText, Code, Braces, Layers, HelpCircle, Settings2, X, ChevronDown, FlaskConical } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,7 @@ import {
   type OutputFormat,
   type ConverterType,
   type ImageHandlingMode,
+  type OcrEngine,
   type ActiveLLM
 } from '@/lib/api'
 
@@ -59,8 +60,35 @@ const IMAGE_HANDLING_OPTIONS: {
   },
 ]
 
+// Only 'surya' ships today. The other engines are wired behind a benchmark gate;
+// the backend degrades them to the VLM, so we render them but label them honestly.
+const OCR_ENGINE_OPTIONS: { value: OcrEngine; label: string }[] = [
+  { value: 'surya', label: 'Surya (local, default)' },
+  { value: 'glm_ocr', label: 'GLM-OCR (experimental — falls back to cloud)' },
+  { value: 'paddleocr_vl', label: 'PaddleOCR-VL (experimental — falls back to cloud)' },
+  { value: 'mistral_ocr', label: 'Mistral OCR (experimental — falls back to cloud)' },
+]
+
+// Schema defaults (ImageUnderstandingConfig) used as control fallbacks so a knob
+// shows its real default until the user changes it.
+const IU_DEFAULTS = {
+  router_enabled: true,
+  dedup_enabled: true,
+  downscale_vlm_crops: true,
+  batch_enabled: true,
+  ocr_engine: 'surya' as OcrEngine,
+  decorative_max_text_density: 0.02,
+  ocr_min_text_density: 0.45,
+  ocr_min_lines: 3,
+  dedup_max_distance: 0,
+  vlm_crop_max_px: 768,
+  vlm_batch_size: 8,
+  max_batch_retries: 2,
+} as const
+
 export function ConversionOptions({ config, onChange, disabled }: ConversionOptionsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [showTuning, setShowTuning] = useState(false)
   const [tempConfig, setTempConfig] = useState<ConversionConfig>(config)
   const [providers, setProviders] = useState<LLMProvider[]>([])
   const [activeLLM, setActiveLLM] = useState<ActiveLLM | null>(null)
@@ -88,6 +116,7 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
 
   const openModal = () => {
     setTempConfig({ ...config })
+    setShowTuning(false)
     setIsModalOpen(true)
   }
 
@@ -243,6 +272,140 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
                     onChange={(v) => updateTemp('allow_cloud_vlm', v)}
                     disabled={disabled || !hasVisionModel}
                   />
+                )}
+
+                {tempUsesImageUnderstanding && (
+                  <div className="space-y-1 pt-1 animate-fade-in relative z-30">
+                    <ToggleOption
+                      label="Smart Image Router"
+                      description="Grade each image locally first: skip decorative, OCR text-as-image, send only genuine visuals to the VLM. Off uses the legacy classify-every-image path."
+                      checked={tempConfig.router_enabled ?? IU_DEFAULTS.router_enabled}
+                      onChange={(v) => updateTemp('router_enabled', v)}
+                      disabled={disabled}
+                    />
+                    <ToggleOption
+                      label="Deduplicate Repeated Images"
+                      description="Collapse identical images (logos, recurring figures) to a single analysis, reused for every copy."
+                      checked={tempConfig.dedup_enabled ?? IU_DEFAULTS.dedup_enabled}
+                      onChange={(v) => updateTemp('dedup_enabled', v)}
+                      disabled={disabled}
+                    />
+                    <ToggleOption
+                      label="Downscale Crops Before Send"
+                      description="Shrink image crops into the cheaper vision-token band before the VLM call. The biggest cost lever."
+                      checked={tempConfig.downscale_vlm_crops ?? IU_DEFAULTS.downscale_vlm_crops}
+                      onChange={(v) => updateTemp('downscale_vlm_crops', v)}
+                      disabled={disabled}
+                    />
+                    <ToggleOption
+                      label="Batch VLM Calls"
+                      description="Route and extract many images in one structured call instead of two serial calls per image."
+                      checked={tempConfig.batch_enabled ?? IU_DEFAULTS.batch_enabled}
+                      onChange={(v) => updateTemp('batch_enabled', v)}
+                      disabled={disabled}
+                    />
+
+                    <div className="space-y-1.5 px-2.5 pt-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                          Local OCR Engine
+                        </label>
+                        <HelpIcon text="Engine used for text-as-image OCR. Only Surya ships today; the others fall back to the cloud VLM until benchmarked." />
+                      </div>
+                      <Select
+                        value={tempConfig.ocr_engine ?? IU_DEFAULTS.ocr_engine}
+                        onChange={(val) => updateTemp('ocr_engine', val as OcrEngine)}
+                        disabled={disabled}
+                        options={OCR_ENGINE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                        className="w-full md:w-full"
+                      />
+                      {(tempConfig.ocr_engine ?? IU_DEFAULTS.ocr_engine) !== 'surya' && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-normal">
+                          Not yet available — this engine falls back to the cloud VLM until it ships. Surya stays the active local engine.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Experimental / tuning disclosure */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowTuning((s) => !s)}
+                        aria-expanded={showTuning}
+                        className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80 hover:text-foreground hover:bg-muted/30 transition-colors"
+                      >
+                        <FlaskConical className="w-3.5 h-3.5 text-primary" />
+                        <span>Experimental / Tuning</span>
+                        <ChevronDown className={cn('w-3.5 h-3.5 ml-auto transition-transform', showTuning && 'rotate-180')} />
+                      </button>
+
+                      {showTuning && (
+                        <div className="mt-1 pl-3 border-l border-primary/20 space-y-3 animate-fade-in">
+                          <p className="text-[11px] text-muted-foreground leading-normal pt-1">
+                            Power-user thresholds. Leave at defaults unless you are tuning routing against your own documents.
+                          </p>
+                          <SliderField
+                            label="Decorative Max Text Density"
+                            help="At or below this text-area fraction (and no real lines), an image is treated as decorative and skipped."
+                            value={tempConfig.decorative_max_text_density ?? IU_DEFAULTS.decorative_max_text_density}
+                            min={0} max={1} step={0.01}
+                            onChange={(v) => updateTemp('decorative_max_text_density', v)}
+                            disabled={disabled}
+                          />
+                          <SliderField
+                            label="OCR Min Text Density"
+                            help="At or above this text-area fraction, an image routes to local OCR instead of the cloud VLM."
+                            value={tempConfig.ocr_min_text_density ?? IU_DEFAULTS.ocr_min_text_density}
+                            min={0} max={1} step={0.01}
+                            onChange={(v) => updateTemp('ocr_min_text_density', v)}
+                            disabled={disabled}
+                          />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <NumberField
+                              label="OCR Min Lines"
+                              help="Minimum detected text lines before the OCR route is considered."
+                              value={tempConfig.ocr_min_lines ?? IU_DEFAULTS.ocr_min_lines}
+                              min={1} step={1}
+                              onChange={(v) => updateTemp('ocr_min_lines', v)}
+                              disabled={disabled}
+                            />
+                            <NumberField
+                              label="Dedup Max Distance"
+                              help="Max aHash Hamming distance treated as a duplicate. 0 = exact match (safest)."
+                              value={tempConfig.dedup_max_distance ?? IU_DEFAULTS.dedup_max_distance}
+                              min={0} max={64} step={1}
+                              onChange={(v) => updateTemp('dedup_max_distance', v)}
+                              disabled={disabled}
+                            />
+                            <NumberField
+                              label="VLM Crop Max Px"
+                              help="Longest-side pixel cap applied to a crop before the VLM send."
+                              value={tempConfig.vlm_crop_max_px ?? IU_DEFAULTS.vlm_crop_max_px}
+                              min={64} max={4096} step={64}
+                              onChange={(v) => updateTemp('vlm_crop_max_px', v)}
+                              disabled={disabled}
+                            />
+                            <NumberField
+                              label="VLM Batch Size"
+                              help="Images per batched VLM call (clamped per provider)."
+                              value={tempConfig.vlm_batch_size ?? IU_DEFAULTS.vlm_batch_size}
+                              min={1} max={64} step={1}
+                              onChange={(v) => updateTemp('vlm_batch_size', v)}
+                              disabled={disabled}
+                            />
+                            <NumberField
+                              label="Max Batch Retries"
+                              help="Max extra batch calls to recover missing or garbled images."
+                              value={tempConfig.max_batch_retries ?? IU_DEFAULTS.max_batch_retries}
+                              min={0} max={5} step={1}
+                              onChange={(v) => updateTemp('max_batch_retries', v)}
+                              disabled={disabled}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -519,5 +682,102 @@ function RadioOption({
         </span>
       </span>
     </button>
+  )
+}
+
+// ─── Slider Field (0–1 thresholds) ───────────────────────────────────
+
+function SliderField({
+  label,
+  help,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  disabled,
+}: {
+  label: string
+  help: string
+  value: number
+  min: number
+  max: number
+  step: number
+  onChange: (value: number) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className={cn('space-y-1.5', disabled && 'opacity-50 pointer-events-none')}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+            {label}
+          </label>
+          <HelpIcon text={help} />
+        </div>
+        <span className="text-[11px] font-bold tabular-nums text-foreground">{value.toFixed(2)}</span>
+      </div>
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-6 appearance-none bg-transparent accent-primary cursor-pointer [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-muted [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-muted"
+      />
+    </div>
+  )
+}
+
+// ─── Number Field (integer knobs) ────────────────────────────────────
+
+function NumberField({
+  label,
+  help,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  disabled,
+}: {
+  label: string
+  help: string
+  value: number
+  min: number
+  max?: number
+  step: number
+  onChange: (value: number) => void
+  disabled?: boolean
+}) {
+  const clamp = (n: number) => {
+    if (Number.isNaN(n)) return min
+    if (n < min) return min
+    if (max !== undefined && n > max) return max
+    return n
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+          {label}
+        </label>
+        <HelpIcon text={help} />
+      </div>
+      <Input
+        type="number"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(clamp(Number(e.target.value)))}
+        className="bg-background/50 h-9 text-xs"
+      />
+    </div>
   )
 }
