@@ -348,3 +348,102 @@ class TestCacheableSystemPrefix:
         )
         assert "H1: Results" in user
         assert "Table caption text." in user
+
+
+# ---------------------------------------------------------------------------
+# Universal anti-fabrication guardrail (PDF-agnostic regression lock).
+#
+# The openskill baseline showed the VLM inventing mermaid edges for a non-graph
+# comparison figure. The fix is a soft guardrail that must bind EVERY diagram
+# type on EVERY document, plus its mirror in the batched path. These tests lock
+# the contract so the rule can never silently regress — they assert the
+# constraint exists for all diagram_* types, not that any specific figure
+# converts a specific way (which would overfit to one PDF).
+# ---------------------------------------------------------------------------
+
+
+# Phrases that, together, encode "reproduce only what is drawn; don't invent
+# structure; comparison panels are not a flow". Matched case-insensitively.
+_FIDELITY_MARKERS = ("only", "drawn", "never invent")
+_PANEL_ESCAPE_MARKERS = ("comparison", "panel")
+
+
+class TestDiagramFidelityGuardrail:
+    """Every diagram_* extractor prompt must carry the no-fabrication rule."""
+
+    @pytest.mark.parametrize("image_type", list(DIAGRAM_TYPES.keys()))
+    def test_each_diagram_prompt_binds_to_only_what_is_drawn(
+        self, image_type: ImageType
+    ) -> None:
+        system, _ = build_extract_prompt(
+            image_type, heading_chain="", surrounding_paragraphs=""
+        )
+        low = system.lower()
+        for marker in _FIDELITY_MARKERS:
+            assert marker in low, (
+                f"{image_type} extract prompt missing fidelity marker {marker!r}"
+            )
+
+    @pytest.mark.parametrize("image_type", list(DIAGRAM_TYPES.keys()))
+    def test_each_diagram_prompt_has_comparison_panel_escape(
+        self, image_type: ImageType
+    ) -> None:
+        system, _ = build_extract_prompt(
+            image_type, heading_chain="", surrounding_paragraphs=""
+        )
+        low = system.lower()
+        assert any(m in low for m in _PANEL_ESCAPE_MARKERS), (
+            f"{image_type} prompt lacks the comparison-panel escape hatch"
+        )
+
+    def test_non_diagram_prompt_does_not_carry_diagram_fidelity(self) -> None:
+        # The chart path has its own discipline; the diagram fidelity block is
+        # diagram-only so the cacheable prefixes stay distinct.
+        system, _ = build_extract_prompt(
+            ImageType.chart_bar, heading_chain="", surrounding_paragraphs=""
+        )
+        assert "never invent an edge" not in system.lower()
+
+
+class TestBatchFidelityGuardrail:
+    """The batched classify+extract prompt mirrors the same guardrail."""
+
+    def test_batch_system_prompt_binds_diagram_fidelity(self) -> None:
+        from app.prompts.image_batch import build_batch_system_prompt
+
+        low = build_batch_system_prompt().lower()
+        for marker in _FIDELITY_MARKERS:
+            assert marker in low, f"batch prompt missing fidelity marker {marker!r}"
+
+    def test_batch_system_prompt_has_comparison_panel_escape(self) -> None:
+        from app.prompts.image_batch import build_batch_system_prompt
+
+        low = build_batch_system_prompt().lower()
+        assert any(m in low for m in _PANEL_ESCAPE_MARKERS), (
+            "batch prompt lacks the comparison-panel escape hatch"
+        )
+
+
+class TestAugmentGateIsConservative:
+    """Hard safety backbone: a fallible extraction must never DESTROY the source.
+
+    Only provably-lossless conversions (equation->LaTeX) and omissions
+    (decorative) may replace the original image. Every visual type — charts,
+    ALL diagrams, tables, technical figures, photos, screenshots — must keep the
+    source image alongside the extraction, so a wrong mermaid/table misleads at
+    worst but never loses the real figure. This holds for any PDF.
+    """
+
+    def test_only_equation_and_decorative_replace_destructively(self) -> None:
+        from app.processors.image_understanding import _safe_to_replace
+
+        replaceable = {t for t in ImageType if _safe_to_replace(t)}
+        assert replaceable == {ImageType.equation, ImageType.decorative}
+
+    @pytest.mark.parametrize("image_type", list(DIAGRAM_TYPES.keys()))
+    def test_no_diagram_type_is_destructively_replaceable(
+        self, image_type: ImageType
+    ) -> None:
+        from app.processors.image_understanding import _safe_to_replace
+
+        assert not _safe_to_replace(image_type)

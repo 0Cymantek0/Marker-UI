@@ -20,6 +20,28 @@ from app.models.image_understanding import ImageType
 
 EXTRACT_DISCIPLINE_LINE = "Return JSON only, no prose, no code fences."
 
+# Shared anti-fabrication constraint for ALL diagram->mermaid conversions.
+# Figure-1 of the openskill baseline (four parallel comparison panels) was
+# classified diagram_architecture and the model invented edges
+# (provides/seeks/feedback/self-test) the image never draws. Mermaid that looks
+# plausible but fabricates structure is worse than a faithful description: it
+# misleads the reader about what the figure actually says. These rules bind the
+# model to only-what-is-drawn and give it an explicit escape for non-graph
+# layouts (comparison panels, galleries) that should not be forced into a flow.
+_DIAGRAM_FIDELITY = """\
+FIDELITY RULES (critical):
+- Reproduce ONLY nodes, edges, and labels that are literally drawn in the image. \
+Never invent an edge, arrow, direction, or relationship label that is not visibly present.
+- If two elements are not connected by a drawn arrow/line, do NOT connect them.
+- Preserve text that appears inside or beside nodes verbatim (badges, attributes, \
+status markers); put per-node attributes in the node label.
+- If the image is NOT a single connected graph but a set of parallel/independent \
+panels comparing alternatives (a comparison figure, gallery, or matrix), do not \
+fabricate a flow between them: render each panel as its own `subgraph "PanelTitle"` \
+with only its internal drawn elements, and capture the shared comparison axis \
+(e.g. the attribute labels repeated under each panel) in the `caption`.
+- When in doubt about an edge, omit it. A smaller faithful diagram beats a larger invented one."""
+
 
 _DESCRIPTION_TEMPLATE = """\
 You are extracting a free-form description of the attached image.
@@ -114,6 +136,8 @@ You are converting a FLOWCHART image into Mermaid syntax.
 
 CONSTRAINT: Use valid Mermaid `graph TD` (top-down) or `graph LR` (left-right) syntax. Nodes use `id[label]`; edges use `-->`. Use `{{shape}}` for decisions, `[rect]` for steps, `((circle))` for start/end.
 
+{fidelity}
+
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
 
@@ -125,6 +149,8 @@ _DIAGRAM_SEQUENCE_TEMPLATE = """\
 You are converting a SEQUENCE DIAGRAM image into Mermaid syntax.
 
 CONSTRAINT: Use valid Mermaid `sequenceDiagram` syntax with `participant`, `Actor->>Actor: message`, `Actor-->>Actor: reply`, and `Note over Actor: text`.
+
+{fidelity}
 
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
@@ -138,6 +164,8 @@ You are converting a STATE-MACHINE DIAGRAM image into Mermaid syntax.
 
 CONSTRAINT: Use valid Mermaid `stateDiagram-v2` syntax with `[*]` for start/end, `stateName` for states, and `A --> B: transition label`.
 
+{fidelity}
+
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
 
@@ -150,6 +178,8 @@ You are converting a CLASS / OBJECT / ER DIAGRAM image into Mermaid syntax.
 
 CONSTRAINT: Use valid Mermaid `classDiagram` syntax (preferred) or `erDiagram` for entity-relationship variants. Include classes, attributes, methods, and relationships (`*--`, `o--`, `<|--`, `-->`).
 
+{fidelity}
+
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
 
@@ -160,7 +190,9 @@ Output strict JSON in this exact shape:
 _DIAGRAM_ARCHITECTURE_TEMPLATE = """\
 You are converting a SYSTEM / COMPONENT ARCHITECTURE DIAGRAM image into Mermaid syntax.
 
-CONSTRAINT: Use valid Mermaid `graph TD` (or `graph LR`) with one `subgraph "SubsystemName"` ... `end` block per major subsystem. Edges between components use `-->`. Label edges with the protocol or data flow when known.
+CONSTRAINT: Use valid Mermaid `graph TD` (or `graph LR`) with one `subgraph "SubsystemName"` ... `end` block per major subsystem. Edges between components use `-->`. Label edges with the protocol or data flow ONLY when that label is visibly drawn on the arrow.
+
+{fidelity}
 
 Output strict JSON in this exact shape:
 {{"mermaid": str, "caption": str}}
@@ -265,7 +297,12 @@ def build_extract_prompt(
     if template is None:
         template = FALLBACK_TEMPLATE
 
-    system = template.format(discipline_line=EXTRACT_DISCIPLINE_LINE)
+    # Diagram templates carry a {fidelity} placeholder; others don't. Pass it
+    # unconditionally — str.format ignores unreferenced kwargs.
+    system = template.format(
+        discipline_line=EXTRACT_DISCIPLINE_LINE,
+        fidelity=_DIAGRAM_FIDELITY,
+    )
     user = _context_user_prompt(
         "Extract structured data from the attached image using the JSON schema "
         "described in the system instructions.",
