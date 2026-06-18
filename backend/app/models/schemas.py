@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +146,22 @@ class JobStatusResponse(BaseModel):
     logs: Optional[list[str]] = None
     elapsed: Optional[int] = None
     eta: Optional[int] = None
+
+    @field_serializer("created_at", "completed_at")
+    def _serialize_timestamps(self, value: Optional[datetime]) -> Optional[str]:
+        """Always emit a UTC offset so clients parse timestamps as UTC.
+
+        SQLite stores naive datetimes, so a value read back from the DB has no
+        tzinfo. Without this serializer Pydantic calls ``isoformat()`` and the
+        JSON ends up as ``2026-06-11T09:00:00`` (no offset), which JavaScript's
+        ``new Date()`` then misparses as *local* time — every displayed time in
+        the app was off by the user's UTC offset. Assume naive == UTC.
+        """
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
 
 
 class HistoryResponse(BaseModel):

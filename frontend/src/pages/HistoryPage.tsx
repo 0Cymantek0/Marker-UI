@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { getHistory, deleteJob, downloadResult, getJobStatus, type JobStatus } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { formatDate } from '@/lib/datetime'
 import { PageHeader } from '@/components/layout/PageHeader'
 
 const STATUS_VARIANT = {
@@ -32,17 +33,6 @@ const STATUS_VARIANT = {
   completed: 'success' as const,
   failed: 'destructive' as const,
   cancelled: 'outline' as const,
-}
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
 }
 
 export function HistoryPage() {
