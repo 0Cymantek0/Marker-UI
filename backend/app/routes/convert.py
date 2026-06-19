@@ -111,6 +111,7 @@ async def upload_file(
     #     Optional[...] = None so only knobs the UI actually sends override the
     #     backend schema defaults; others fall through to the processor defaults.
     router_enabled: Optional[bool] = Query(None, description="Master switch for the Tier-0 router (off = legacy path)"),
+    smart_router_level: Optional[str] = Query(None, description="Tier-0 routing brain: disabled | smart | beeg_brain"),
     dedup_enabled: Optional[bool] = Query(None, description="Collapse repeated identical images to one extraction"),
     downscale_vlm_crops: Optional[bool] = Query(None, description="Downscale crops before VLM send (cost lever)"),
     batch_enabled: Optional[bool] = Query(None, description="Batch route+extract calls instead of serial per-image"),
@@ -234,6 +235,8 @@ async def upload_file(
     #     user override and flows through IMAGE_UNDERSTANDING_CONFIG_KEYS.
     if router_enabled is not None:
         config["router_enabled"] = router_enabled
+    if smart_router_level in ("disabled", "smart", "beeg_brain"):
+        config["smart_router_level"] = smart_router_level
     if dedup_enabled is not None:
         config["dedup_enabled"] = dedup_enabled
     if downscale_vlm_crops is not None:

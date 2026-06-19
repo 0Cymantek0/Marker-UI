@@ -370,6 +370,7 @@ async def test_upload_image_pipeline_knobs_reach_config(client: AsyncClient, db_
         extra_params={
             "image_handling_mode": "understanding",
             "router_enabled": "false",
+            "smart_router_level": "beeg_brain",
             "dedup_enabled": "false",
             "downscale_vlm_crops": "false",
             "batch_enabled": "false",
@@ -393,6 +394,7 @@ async def test_upload_image_pipeline_knobs_reach_config(client: AsyncClient, db_
 
     cfg = json.loads(job.config_json)
     assert cfg["router_enabled"] is False
+    assert cfg["smart_router_level"] == "beeg_brain"
     assert cfg["dedup_enabled"] is False
     assert cfg["downscale_vlm_crops"] is False
     assert cfg["batch_enabled"] is False
@@ -426,7 +428,7 @@ async def test_upload_omits_unset_pipeline_knobs(client: AsyncClient, db_session
         "router_enabled", "dedup_enabled", "downscale_vlm_crops", "batch_enabled",
         "ocr_engine", "decorative_max_text_density", "ocr_min_text_density",
         "ocr_min_lines", "dedup_max_distance", "vlm_crop_max_px",
-        "vlm_batch_size", "max_batch_retries",
+        "vlm_batch_size", "max_batch_retries", "smart_router_level",
     ):
         assert key not in cfg
 
