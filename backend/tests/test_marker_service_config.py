@@ -64,6 +64,7 @@ def test_build_marker_options_preserves_custom_keys():
             "vlm_model": "gpt-4o",
             "max_images_per_doc": 10,
             "router_enabled": False,
+            "smart_router_level": "beeg_brain",
             "ocr_engine": "surya",
             "vlm_batch_size": 16,
             "ocr_min_text_density": 0.6,
@@ -73,6 +74,7 @@ def test_build_marker_options_preserves_custom_keys():
     assert opts["vlm_model"] == "gpt-4o"
     assert opts["max_images_per_doc"] == 10
     assert opts["router_enabled"] is False
+    assert opts["smart_router_level"] == "beeg_brain"
     assert opts["ocr_engine"] == "surya"
     assert opts["vlm_batch_size"] == 16
     assert opts["ocr_min_text_density"] == 0.6

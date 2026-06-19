@@ -113,6 +113,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
         detection_model: Any | None = None,
         recognition_model: Any | None = None,
         ocr_error_model: Any | None = None,
+        layout_model: Any | None = None,
     ) -> None:
         super().__init__(config)
         cfg = config if isinstance(config, dict) else {}
@@ -141,6 +142,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
         self._detection_model = detection_model
         self._recognition_model = recognition_model
         self._ocr_error_model = ocr_error_model
+        self._layout_model = layout_model
         self._router = self._build_router(cfg)
         # Tier-2 local OCR service, built lazily on first ocr-routed image.
         self._local_ocr: Any = _UNSET
@@ -167,7 +169,12 @@ class ImageUnderstandingProcessor(BaseProcessor):
 
         return ImageRouter(
             detection_model=self._detection_model,
-            config={**cfg, "allow_cloud_vlm": self.allow_cloud_vlm},
+            layout_model=self._layout_model,
+            config={
+                **cfg,
+                "allow_cloud_vlm": self.allow_cloud_vlm,
+                "smart_router_level": cfg.get("smart_router_level", "smart"),
+            },
         )
 
     @property

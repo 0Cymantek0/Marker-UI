@@ -137,3 +137,161 @@ def test_thresholds_are_configurable():
     )
     decision = router.route(_img())
     assert decision.route == RouteKind.ocr
+
+
+# ---------------------------------------------------------------------------
+# Layout brain (smart / beeg_brain) — route on the per-crop Surya layout label.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FakeLayoutBox:
+    label: str
+    polygon: list[list[float]]
+
+
+@dataclass
+class FakeLayoutResult:
+    bboxes: list[FakeLayoutBox] = field(default_factory=list)
+    image_bbox: list[float] = field(default_factory=lambda: [0.0, 0.0, 100.0, 100.0])
+
+
+class FakeLayoutModel:
+    """Callable mimicking surya LayoutPredictor([img]) -> [LayoutResult]."""
+
+    def __init__(self, result: FakeLayoutResult | None = None, boom: bool = False):
+        self._result = result or FakeLayoutResult()
+        self._boom = boom
+
+    def __call__(self, images):
+        if self._boom:
+            raise RuntimeError("layout exploded")
+        return [self._result]
+
+
+def _layout(label, x0=0, y0=0, x1=100, y1=100):
+    return FakeLayoutResult(
+        bboxes=[FakeLayoutBox(label=label, polygon=[[x0, y0], [x1, y0], [x1, y1], [x0, y1]])]
+    )
+
+
+def _smart_router(layout_model, detection_result=None, level="smart", cfg=None):
+    return ImageRouter(
+        detection_model=FakeDetectionModel(detection_result or FakeDetectionResult()),
+        layout_model=layout_model,
+        config={"allow_cloud_vlm": True, "smart_router_level": level, **(cfg or {})},
+    )
+
+
+def test_smart_table_label_routes_vlm():
+    router = _smart_router(FakeLayoutModel(_layout("Table")))
+    decision = router.route(_img())
+    assert decision.route == RouteKind.vlm
+    assert decision.layout_label == "Table"
+
+
+def test_smart_equation_label_routes_vlm():
+    router = _smart_router(FakeLayoutModel(_layout("Equation")))
+    decision = router.route(_img())
+    assert decision.route == RouteKind.vlm
+    assert decision.layout_label == "Equation"
+
+
+def test_smart_text_label_routes_ocr():
+    router = _smart_router(FakeLayoutModel(_layout("Text")))
+    decision = router.route(_img())
+    assert decision.route == RouteKind.ocr
+    assert decision.layout_label == "Text"
+
+
+def test_smart_picture_label_with_no_text_is_decorative():
+    # Picture label + empty detection (density 0, lines 0) -> decorative drop.
+    router = _smart_router(FakeLayoutModel(_layout("Picture")))
+    decision = router.route(_img())
+    assert decision.route == RouteKind.skip_decorative
+    assert decision.layout_label == "Picture"
+
+
+def test_smart_picture_label_with_text_routes_vlm():
+    # Picture label but sparse text present -> genuine graphic -> VLM.
+    boxes = [_box(2, 2, 30, 10)]
+    det = FakeDetectionResult(bboxes=boxes, image_bbox=[0, 0, 100, 100])
+    router = _smart_router(FakeLayoutModel(_layout("Picture")), detection_result=det)
+    decision = router.route(_img())
+    assert decision.route == RouteKind.vlm
+    assert decision.layout_label == "Picture"
+
+
+def test_smart_picks_largest_layout_box():
+    # A tiny caption inside a big picture must not flip the route to OCR.
+    result = FakeLayoutResult(
+        bboxes=[
+            FakeLayoutBox(label="Caption", polygon=[[0, 0], [10, 0], [10, 8], [0, 8]]),
+            FakeLayoutBox(label="Picture", polygon=[[0, 0], [100, 0], [100, 100], [0, 100]]),
+        ]
+    )
+    boxes = [_box(2, 2, 30, 10)]
+    det = FakeDetectionResult(bboxes=boxes, image_bbox=[0, 0, 100, 100])
+    router = _smart_router(FakeLayoutModel(result), detection_result=det)
+    decision = router.route(_img())
+    assert decision.layout_label == "Picture"
+    assert decision.route == RouteKind.vlm
+
+
+def test_disabled_level_ignores_layout_model():
+    # level=disabled must use the density brain even with a layout model present.
+    # Text label, but empty detection -> density brain yields decorative.
+    router = _smart_router(FakeLayoutModel(_layout("Text")), level="disabled")
+    decision = router.route(_img())
+    assert decision.route == RouteKind.skip_decorative
+    assert decision.layout_label == ""
+
+
+def test_beeg_brain_text_label_sparse_density_escalates_to_vlm():
+    # Text label but density below the OCR threshold = disagreement -> VLM.
+    boxes = [_box(2, 2, 20, 8)]  # sparse
+    det = FakeDetectionResult(bboxes=boxes, image_bbox=[0, 0, 100, 100])
+    router = _smart_router(
+        FakeLayoutModel(_layout("Text")), detection_result=det, level="beeg_brain"
+    )
+    decision = router.route(_img())
+    assert decision.route == RouteKind.vlm
+    assert "disagree" in decision.reason
+
+
+def test_beeg_brain_text_label_dense_density_routes_ocr():
+    # Text label AND dense text -> signals agree -> OCR.
+    boxes = [_box(0, 0, 100, 50), _box(0, 52, 100, 90)]  # ~88% coverage
+    det = FakeDetectionResult(bboxes=boxes, image_bbox=[0, 0, 100, 100])
+    router = _smart_router(
+        FakeLayoutModel(_layout("Text")), detection_result=det, level="beeg_brain"
+    )
+    decision = router.route(_img())
+    assert decision.route == RouteKind.ocr
+
+
+def test_smart_layout_failure_degrades_to_density_brain():
+    # Layout call raises -> empty label -> density brain (empty detection ->
+    # decorative). Must not raise.
+    router = _smart_router(FakeLayoutModel(boom=True))
+    decision = router.route(_img())
+    assert decision.route == RouteKind.skip_decorative
+    assert decision.layout_label == ""
+
+
+def test_no_layout_model_uses_density_brain():
+    # smart level but no layout model injected -> density brain fallback.
+    router = ImageRouter(
+        detection_model=FakeDetectionModel(),
+        layout_model=None,
+        config={"allow_cloud_vlm": True, "smart_router_level": "smart"},
+    )
+    decision = router.route(_img())
+    assert decision.route == RouteKind.skip_decorative
+
+
+def test_unknown_level_string_defaults_to_smart():
+    router = _smart_router(FakeLayoutModel(_layout("Table")), level="bogus")
+    assert router.level.value == "smart"
+    assert router.route(_img()).route == RouteKind.vlm
+

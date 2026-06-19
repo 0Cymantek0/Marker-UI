@@ -52,6 +52,31 @@ class ImageHandlingMode(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# SmartRouterLevel — the Tier-0 routing "brain" (3 levels)
+# ---------------------------------------------------------------------------
+
+class SmartRouterLevel(str, Enum):
+    """How much local intelligence the Tier-0 router applies per crop.
+
+    * ``disabled`` — density-only heuristic (text-box area + line count). No
+      extra layout pass: cheapest and fastest, but mis-routes text-heavy charts
+      to OCR and may drop textless graphics.
+    * ``smart`` — re-run Surya ``layout_model`` on each crop and route on its
+      label (Table/Equation/Text/Code/Form/Picture/...). Big accuracy gain at
+      one extra *local* forward pass per crop (no API cost).
+    * ``beeg_brain`` — layout + density fusion with conservative escalation:
+      when the label and density disagree, escalate to the VLM instead of
+      guessing, and require both signals to agree before dropping a decorative.
+      Highest accuracy and near-zero catastrophic drops, at the most local GPU
+      and more VLM escalations.
+    """
+
+    disabled = "disabled"
+    smart = "smart"
+    beeg_brain = "beeg_brain"
+
+
+# ---------------------------------------------------------------------------
 # Per-type payload sub-models  (plan sec 6.4)
 # ---------------------------------------------------------------------------
 
@@ -136,6 +161,13 @@ class RouteDecision(BaseModel):
 
     route: RouteKind
     reason: str = ""
+    layout_label: str = Field(
+        default="",
+        description=(
+            "Surya layout label of the crop that drove the route (smart/"
+            "beeg_brain levels). Empty when density-only routing was used."
+        ),
+    )
     text_density: float = Field(
         default=0.0,
         ge=0.0,
@@ -220,6 +252,16 @@ class ImageUnderstandingConfig(BaseModel):
             "Master switch for the graded Tier-0 router. When False the "
             "processor uses the legacy per-image classify+extract path "
             "(escape hatch — plan §7/§10)."
+        ),
+    )
+    smart_router_level: SmartRouterLevel = Field(
+        default=SmartRouterLevel.smart,
+        description=(
+            "Tier-0 routing brain: 'disabled' = density-only heuristic; "
+            "'smart' = route on a per-crop Surya layout label (default); "
+            "'beeg_brain' = layout+density fusion with conservative VLM "
+            "escalation on disagreement. Higher levels cost more local GPU but "
+            "route more accurately."
         ),
     )
     decorative_max_text_density: float = Field(

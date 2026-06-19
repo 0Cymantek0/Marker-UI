@@ -96,6 +96,7 @@ IMAGE_UNDERSTANDING_CONFIG_KEYS: tuple[str, ...] = (
     "context_window_size",
     "include_original_ref",
     "router_enabled",
+    "smart_router_level",
     "decorative_max_text_density",
     "ocr_min_text_density",
     "ocr_min_lines",
