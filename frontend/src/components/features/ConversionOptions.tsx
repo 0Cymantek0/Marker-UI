@@ -15,6 +15,7 @@ import {
   type ConverterType,
   type ImageHandlingMode,
   type OcrEngine,
+  type SmartRouterLevel,
   type ActiveLLM
 } from '@/lib/api'
 
@@ -69,10 +70,35 @@ const OCR_ENGINE_OPTIONS: { value: OcrEngine; label: string }[] = [
   { value: 'mistral_ocr', label: 'Mistral OCR (experimental — falls back to cloud)' },
 ]
 
+// Smart Image Router intelligence levels. Each option carries a pros/cons line
+// shown live under the dropdown so the user sees the speed/accuracy trade.
+const SMART_ROUTER_OPTIONS: {
+  value: SmartRouterLevel
+  label: string
+  desc: string
+}[] = [
+  {
+    value: 'disabled',
+    label: 'Disabled (density only)',
+    desc: 'Cheapest and fastest: routes on text density alone. May mis-route text-heavy charts to OCR and drop textless graphics.',
+  },
+  {
+    value: 'smart',
+    label: 'Smart (layout-aware)',
+    desc: 'Classifies each crop with the local Surya layout model. Big accuracy gain for one extra local pass per image — no API cost.',
+  },
+  {
+    value: 'beeg_brain',
+    label: 'Beeg Brain (layout + density fusion)',
+    desc: 'Highest accuracy: fuses layout and density and escalates disagreements to the VLM. Most local GPU and more cloud escalations.',
+  },
+]
+
 // Schema defaults (ImageUnderstandingConfig) used as control fallbacks so a knob
 // shows its real default until the user changes it.
 const IU_DEFAULTS = {
   router_enabled: true,
+  smart_router_level: 'smart' as SmartRouterLevel,
   dedup_enabled: true,
   downscale_vlm_crops: true,
   batch_enabled: true,
@@ -283,6 +309,28 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
                       onChange={(v) => updateTemp('router_enabled', v)}
                       disabled={disabled}
                     />
+                    {(tempConfig.router_enabled ?? IU_DEFAULTS.router_enabled) && (
+                      <div className="space-y-1.5 px-2.5 pt-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                            Router Intelligence
+                          </label>
+                          <HelpIcon text="How hard the local router thinks before routing each image. Higher levels cost more local GPU but route more accurately." />
+                        </div>
+                        <Select
+                          value={tempConfig.smart_router_level ?? IU_DEFAULTS.smart_router_level}
+                          onChange={(val) => updateTemp('smart_router_level', val as SmartRouterLevel)}
+                          disabled={disabled}
+                          options={SMART_ROUTER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                          className="w-full md:w-full"
+                        />
+                        <p className="text-[11px] text-muted-foreground leading-normal" data-testid="smart-router-desc">
+                          {(SMART_ROUTER_OPTIONS.find(
+                            (o) => o.value === (tempConfig.smart_router_level ?? IU_DEFAULTS.smart_router_level),
+                          ) ?? SMART_ROUTER_OPTIONS[1]).desc}
+                        </p>
+                      </div>
+                    )}
                     <ToggleOption
                       label="Deduplicate Repeated Images"
                       description="Collapse identical images (logos, recurring figures) to a single analysis, reused for every copy."

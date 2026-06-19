@@ -10,6 +10,7 @@ export type ConverterType =
   | 'ExtractionConverter'
 export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
 export type OcrEngine = 'surya' | 'glm_ocr' | 'paddleocr_vl' | 'mistral_ocr'
+export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
 
 export interface ConversionConfig {
   output_format: OutputFormat
@@ -28,6 +29,7 @@ export interface ConversionConfig {
   debug?: boolean
   // --- Image-understanding pipeline knobs (mirror ImageUnderstandingConfig) ---
   router_enabled?: boolean
+  smart_router_level?: SmartRouterLevel
   dedup_enabled?: boolean
   downscale_vlm_crops?: boolean
   batch_enabled?: boolean
@@ -308,6 +310,7 @@ export async function uploadFile(
   if (config.debug !== undefined) params.append('debug', String(config.debug))
   // --- Image-understanding pipeline knobs (1:1 query-param names) ---
   if (config.router_enabled !== undefined) params.append('router_enabled', String(config.router_enabled))
+  if (config.smart_router_level) params.append('smart_router_level', config.smart_router_level)
   if (config.dedup_enabled !== undefined) params.append('dedup_enabled', String(config.dedup_enabled))
   if (config.downscale_vlm_crops !== undefined) params.append('downscale_vlm_crops', String(config.downscale_vlm_crops))
   if (config.batch_enabled !== undefined) params.append('batch_enabled', String(config.batch_enabled))

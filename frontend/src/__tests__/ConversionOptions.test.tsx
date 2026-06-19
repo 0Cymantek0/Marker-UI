@@ -144,6 +144,48 @@ describe('ConversionOptions image understanding controls', () => {
     )
   })
 
+  it('exposes the smart router level dropdown and applies it', async () => {
+    const providers: LLMProvider[] = [
+      {
+        id: 'openai',
+        type: 'openai',
+        label: 'OpenAI',
+        fallback_api_keys: [],
+        models: [{ model_id: 'gpt-4o', vision_capable: true }],
+      },
+    ]
+    mockGetLLMProviders.mockResolvedValue(providers)
+    mockGetActiveLLM.mockResolvedValue(active)
+    const onChange = vi.fn()
+
+    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /both/i })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('radio', { name: /both/i }))
+
+    // The level dropdown is visible (router is on by default) and starts on smart.
+    const levelTrigger = await screen.findByRole('button', { name: /smart \(layout-aware\)/i })
+    const desc = screen.getByTestId('smart-router-desc')
+    expect(desc.textContent).toMatch(/local Surya layout model/i)
+
+    // Open the custom select and pick beeg_brain; the pros/cons line updates live.
+    fireEvent.click(levelTrigger)
+    fireEvent.click(await screen.findByRole('button', { name: /beeg brain/i }))
+    expect(screen.getByTestId('smart-router-desc').textContent).toMatch(/highest accuracy/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /apply settings/i }))
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image_handling_mode: 'both',
+        smart_router_level: 'beeg_brain',
+      })
+    )
+  })
+
   it('disables understanding modes when no vision-capable model is configured', async () => {
     const providers: LLMProvider[] = [
       {
