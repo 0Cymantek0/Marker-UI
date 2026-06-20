@@ -27,6 +27,9 @@ from app.models.schemas import (
     ActiveLLM,
     FetchModelsRequest,
     LiveOverrideRequest,
+    GPUWorkerMode,
+    GPUWorkersConfigRequest,
+    GPUWorkersResolvedResponse,
 )
 from app.utils.secrets import (
     decrypt_value,
@@ -592,6 +595,126 @@ async def toggle_gpu(
         db.add(Setting(key="gpu_acceleration_enabled", value=val, category="gpu"))
     await db.commit()
     return {"status": "success", "enabled": body.enabled}
+
+
+# ------------------------------------------------------------------
+# Multi-GPU Worker Scaling
+# ------------------------------------------------------------------
+
+GPU_WORKER_MODE_KEY = "gpu_worker_mode"
+GPU_WORKER_COUNT_KEY = "gpu_worker_count"
+
+
+def _read_gpu_worker_settings(db_rows: dict[str, str]) -> tuple[GPUWorkerMode, Optional[int]]:
+    """Resolve (mode, manual_count) from the loaded setting rows, with defaults."""
+    raw_mode = db_rows.get(GPU_WORKER_MODE_KEY, GPUWorkerMode.auto.value)
+    try:
+        mode = GPUWorkerMode(raw_mode)
+    except ValueError:
+        mode = GPUWorkerMode.auto
+    raw_count = db_rows.get(GPU_WORKER_COUNT_KEY)
+    manual_count: Optional[int] = None
+    if raw_count:
+        try:
+            manual_count = int(raw_count)
+        except (TypeError, ValueError):
+            manual_count = None
+    return mode, manual_count
+
+
+async def _load_gpu_worker_rows(db: AsyncSession) -> dict[str, str]:
+    stmt = select(Setting).where(Setting.key.in_([GPU_WORKER_MODE_KEY, GPU_WORKER_COUNT_KEY]))
+    result = await db.execute(stmt)
+    return {row.key: row.value for row in result.scalars().all()}
+
+
+def get_effective_worker_count(mode: GPUWorkerMode, manual_count: Optional[int], detected: int) -> int:
+    """Fold settings + detected GPU count into the actual worker count to spawn."""
+    from app.core.gpu import resolve_worker_count
+
+    raw = manual_count if mode == GPUWorkerMode.manual else None
+    return resolve_worker_count(mode.value, raw, detected)
+
+
+@router.get("/gpu-workers/resolved", response_model=GPUWorkersResolvedResponse)
+async def get_gpu_workers_resolved(db: AsyncSession = Depends(get_db)) -> GPUWorkersResolvedResponse:
+    """Effective worker config: detected GPUs, resolved worker count, current mode.
+
+    Lets the UI show "Auto-detected: 3 GPUs" without recomputing detection, and
+    surfaces whether the running pool already reflects the saved settings.
+    """
+    from app.core.gpu import detect_gpus
+
+    rows = await _load_gpu_worker_rows(db)
+    mode, manual_count = _read_gpu_worker_settings(rows)
+    detected = detect_gpus()
+    effective = get_effective_worker_count(mode, manual_count, detected)
+
+    from app.main import _app_state
+    active_backend = _app_state.task_manager.backend_name
+
+    return GPUWorkersResolvedResponse(
+        mode=mode,
+        detected=detected,
+        effective=effective,
+        active=active_backend,
+        restart_required=_settings_require_restart(mode, manual_count),
+    )
+
+
+@router.put("/gpu-workers", response_model=GPUWorkersResolvedResponse)
+async def set_gpu_workers(
+    body: GPUWorkersConfigRequest,
+    db: AsyncSession = Depends(get_db),
+) -> GPUWorkersResolvedResponse:
+    """Persist the multi-GPU worker mode/count.
+
+    Changing the worker count cannot resize a live pool safely (spawning /
+    pinning a new GPU mid-flight is fragile), so this flags ``restart_required``
+    rather than hot-reloading. A server restart applies the change.
+    """
+    mode_rows: dict[str, str] = {
+        GPU_WORKER_MODE_KEY: body.mode.value,
+    }
+    if body.mode == GPUWorkerMode.manual and body.manual_count is not None:
+        mode_rows[GPU_WORKER_COUNT_KEY] = str(int(body.manual_count))
+
+    for key, val in mode_rows.items():
+        stmt = select(Setting).where(Setting.key == key)
+        row = (await db.execute(stmt)).scalar_one_or_none()
+        if row:
+            row.value = val
+            row.category = "gpu"
+        else:
+            db.add(Setting(key=key, value=val, category="gpu"))
+    await db.commit()
+
+    from app.core.gpu import detect_gpus
+
+    detected = detect_gpus()
+    effective = get_effective_worker_count(body.mode, body.manual_count, detected)
+    return GPUWorkersResolvedResponse(
+        mode=body.mode,
+        detected=detected,
+        effective=effective,
+        active=_app_state_active_backend(),
+        restart_required=True,
+    )
+
+
+def _settings_require_restart(mode: GPUWorkerMode, manual_count: Optional[int]) -> bool:
+    """Restart is always required to apply a worker-count change (live pool can't resize)."""
+    return True
+
+
+def _app_state_active_backend() -> str:
+    """Read the current task manager backend name without forcing import ordering."""
+    try:
+        from app.main import _app_state
+
+        return _app_state.task_manager.backend_name
+    except Exception:  # noqa: BLE001 - settings must never 500 on an init race
+        return "unknown"
 
 
 # ------------------------------------------------------------------

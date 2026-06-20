@@ -414,9 +414,9 @@ class MarkerService:
         self._initialized = False
         self._lock = threading.Lock()
 
-    def initialize(self) -> None:
+    def initialize(self, device: str | None = None) -> None:
         from app.services.gpu_service import gpu_service
-        
+
         # Wait for background GPU/CUDA installation to finish before importing torch/marker
         first_wait = True
         while gpu_service.status_dict["status"] == "installing":
@@ -445,8 +445,11 @@ class MarkerService:
 
             from marker.models import create_model_dict
 
-            logger.info("Loading marker model dict ...")
-            self._model_dict = create_model_dict()
+            # device is None in the single-node parent path (marker resolves the
+            # global TORCH_DEVICE_MODEL). A GPU worker passes its pinned device
+            # (e.g. "cuda:1") so its models load onto exactly that GPU.
+            logger.info("Loading marker model dict (device=%s) ...", device or "auto")
+            self._model_dict = create_model_dict(device=device) if device else create_model_dict()
             elapsed = time.perf_counter() - t0
             logger.info("Marker models loaded in %.1f s", elapsed)
             self._initialized = True
@@ -456,8 +459,9 @@ class MarkerService:
         self,
         filepath: str | Path,
         options: dict[str, Any],
+        device: str | None = None,
     ) -> dict[str, Any]:
-        self.initialize()
+        self.initialize(device=device)
 
         from marker.config.parser import ConfigParser
         from marker.output import text_from_rendered

@@ -217,6 +217,35 @@ class GPUToggleRequest(BaseModel):
     enabled: bool
 
 
+class GPUWorkerMode(str, Enum):
+    """How many conversion workers to run across GPUs.
+
+    * ``auto`` (default) — one worker per detected GPU, zero config.
+    * ``manual`` — honor an explicit worker count, clamped to the detected GPU
+      count.
+    """
+
+    auto = "auto"
+    manual = "manual"
+
+
+class GPUWorkersResolvedResponse(BaseModel):
+    """Effective worker configuration after folding settings + detected GPUs."""
+
+    mode: GPUWorkerMode
+    detected: int
+    effective: int
+    active: str
+    restart_required: bool
+
+
+class GPUWorkersConfigRequest(BaseModel):
+    """User override of the multi-GPU worker configuration."""
+
+    mode: GPUWorkerMode = GPUWorkerMode.auto
+    manual_count: Optional[int] = Field(default=None, ge=1)
+
+
 # ---------------------------------------------------------------------------
 # Dynamic LLM Providers
 # ---------------------------------------------------------------------------
