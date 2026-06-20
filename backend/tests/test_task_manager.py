@@ -8,13 +8,14 @@ import pytest
 import pytest_asyncio
 
 from app.services.task_manager import TaskManager
+from app.services.job_transport import WorkerEvent, WorkerEventType
 
 
 @pytest.fixture
 def task_manager():
     tm = TaskManager(max_workers=1)
     yield tm
-    tm._executor.shutdown(wait=False)
+    tm.shutdown(wait=False)
 
 
 # ---------------------------------------------------------------------------
@@ -238,4 +239,111 @@ class TestReportStageProgress:
         # Layout log would have forced progress to 30 in the fallback path; the
         # real-progress guard must prevent that regression.
         assert task_manager._progress["job"] == 50
+
+
+# ---------------------------------------------------------------------------
+# Pluggable backend + process drain path
+# ---------------------------------------------------------------------------
+
+
+class TestBackendSelection:
+    def test_default_is_thread_backend(self):
+        tm = TaskManager(max_workers=1)
+        try:
+            assert tm.backend_name == "thread"
+            assert tm._backend.is_process is False
+        finally:
+            tm.shutdown(wait=False)
+
+    def test_thread_backend_tracks_future(self):
+        # submit_job calls asyncio.get_event_loop().create_task(...), so we need a
+        # loop active. Save/restore the current loop so this test cannot leak
+        # state into later async tests in the same session.
+        prev_loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            tm = TaskManager(max_workers=2)
+            try:
+                tm.submit_job("j-thread", "/tmp/x", {"llm_provider": None}, object())
+                # The thread backend returns a tracked future.
+                assert "j-thread" in tm._tasks
+            finally:
+                tm.shutdown(wait=False)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(prev_loop)
+
+
+class TestWorkerEventDispatch:
+    """Feed scripted WorkerEvents through the drain path without spawning workers."""
+
+    def test_progress_event_advances_in_memory_progress(self, task_manager: TaskManager):
+        ev = WorkerEvent(
+            type=WorkerEventType.progress,
+            job_id="w-progress",
+            percent=44,
+            label="Recognizing text (10/20)",
+        )
+        task_manager._dispatch_worker_event(ev)
+        assert task_manager._progress["w-progress"] == 44
+        assert task_manager._job_status_text["w-progress"] == "Recognizing text (10/20)"
+
+    def test_log_event_appends_to_job_logs(self, task_manager: TaskManager):
+        task_manager._job_logs["w-log"] = []
+        ev = WorkerEvent(
+            type=WorkerEventType.log, job_id="w-log", message="hello", levelname="INFO"
+        )
+        task_manager._dispatch_worker_event(ev)
+        assert task_manager._job_logs["w-log"] == ["hello"]
+
+    def test_status_event_records_pid(self, task_manager: TaskManager):
+        ev = WorkerEvent(
+            type=WorkerEventType.status, job_id="w-pid", pid=4242, status_text="Loading..."
+        )
+        task_manager._dispatch_worker_event(ev)
+        assert task_manager._pids["w-pid"] == 4242
+        assert task_manager._job_status_text["w-pid"] == "Loading..."
+
+    def test_error_event_marks_job_failed_and_writes_db(self, task_manager: TaskManager):
+        with patch.object(task_manager, "_fail_job", new_callable=AsyncMock):
+            with patch.object(task_manager, "_run_async") as mock_run:
+                task_manager._proc_configs["w-err"] = {"output_format": "markdown"}
+                ev = WorkerEvent(
+                    type=WorkerEventType.error, job_id="w-err", error_message="boom"
+                )
+                task_manager._dispatch_worker_event(ev)
+        # Failure path invoked once + job marked done.
+        assert mock_run.call_count == 1
+        assert task_manager._progress["w-err"] == 0
+        assert task_manager._proc_jobs.get("w-err") == "done"
+
+    def test_result_event_finalizes_and_marks_completed(self, task_manager: TaskManager):
+        payload = {"text": "# md", "extension": "md", "images": {}}
+        with patch.object(task_manager, "_finalize_job", new_callable=AsyncMock):
+            with patch.object(task_manager, "_run_async") as mock_run:
+                task_manager._proc_configs["w-ok"] = {"output_format": "markdown"}
+                ev = WorkerEvent(type=WorkerEventType.result, job_id="w-ok", payload=payload)
+                task_manager._dispatch_worker_event(ev)
+        assert mock_run.call_count == 1
+        assert task_manager._progress["w-ok"] == 100
+        assert task_manager._proc_jobs.get("w-ok") == "done"
+
+
+class TestProcessJobStatus:
+    def test_proc_job_shows_processing_then_completed(self, task_manager: TaskManager):
+        with task_manager._lock:
+            task_manager._proc_jobs["p1"] = "running"
+        task_manager._progress["p1"] = 30
+        assert task_manager.get_status("p1")["status"] == "processing"
+
+        task_manager._progress["p1"] = 100
+        assert task_manager.get_status("p1")["status"] == "completed"
+
+    def test_proc_job_failed(self, task_manager: TaskManager):
+        with task_manager._lock:
+            task_manager._proc_jobs["p2"] = "failed"
+            task_manager._progress["p2"] = 0
+        assert task_manager.get_status("p2")["status"] == "failed"
+
 

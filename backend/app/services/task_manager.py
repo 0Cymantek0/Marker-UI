@@ -1,38 +1,71 @@
-"""Async task manager for background conversion jobs."""
+"""Async task manager for background conversion jobs.
+
+Two execution backends, selected once at construction:
+
+* ``ThreadExecutorBackend`` (default) — runs conversions in a ``ThreadPoolExecutor``
+  inside THIS process, exactly as before. Used for CPU-only and single-GPU
+  machines where there is nothing to parallelise across devices. The tqdm tap,
+  ``JobLogHandler``, and ``api_manager`` globals all work here because everything
+  shares one process.
+
+* ``ProcessExecutorBackend`` — spawns one worker PROCESS per GPU (via
+  ``mp.Pool``), each pinned to ``cuda:i``. Workers re-install the httpx
+  monkeypatch, seed their secrets, and stream ``WorkerEvent``s (progress / log /
+  status / result / error) back over a ``multiprocessing.Queue``. The parent's
+  drain thread maps those events into the SAME in-memory dicts the SSE
+  ``job_events`` endpoint already reads, so the frontend and the in-process path
+  are unaffected. The parent owns ALL database writes (no SQLite multi-process
+  contention). This is the seam a future multi-node phase reuses: swap the
+  ``QueueTransport`` for a Redis/HTTP transport and a worker becomes a remote
+  node with no call-site changes.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import multiprocessing as mp
 import os
 import signal
 import subprocess
 import sys
+import threading
+import time
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 
 import aiofiles
-import threading
-import time
 from fastapi import Request
 from sse_starlette.event import ServerSentEvent
 
 from app.database import async_session_factory
 from app.models.job import ConversionJob
+from app.services.job_transport import (
+    JobEnvelope,
+    QueueTransport,
+    WorkerEvent,
+    WorkerEventType,
+)
 
 logger = logging.getLogger(__name__)
 
 SSE_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 
-
-# Registry of thread ID to job ID
+# Registry of thread ID to job ID (ThreadExecutorBackend only).
 active_conversion_threads: dict[int, str] = {}
 
 
 class JobLogHandler(logging.Handler):
+    """Routes marker/app log records to the right job (in-process thread backend).
+
+    The process backend does NOT use this: its workers emit ``WorkerEvent.log``
+    over the queue, drained by ``TaskManager._dispatch_worker_event``.
+    """
+
     def __init__(self, task_manager: TaskManager) -> None:
         super().__init__()
         self.task_manager = task_manager
@@ -48,15 +81,178 @@ class JobLogHandler(logging.Handler):
             pass
 
 
+# ---------------------------------------------------------------------------
+# Execution backends
+# ---------------------------------------------------------------------------
+
+
+class ExecutorBackend(ABC):
+    """How conversions actually run: in-process threads or out-of-process workers."""
+
+    name: str = "abstract"
+    is_process: bool = False
+
+    @abstractmethod
+    def submit(
+        self,
+        run_job: Any,
+        job_id: str,
+        filepath: str,
+        config: dict[str, Any],
+        marker_service: Any,
+    ) -> Optional[asyncio.Future]:
+        ...
+
+    def shutdown(self, wait: bool = False) -> None:
+        """Release workers/threads. No-op by default."""
+
+    @abstractmethod
+    def supports_job(self, job_id: str) -> bool:
+        """True if this backend owns *job_id* right now."""
+
+
+class ThreadExecutorBackend(ExecutorBackend):
+    """In-process thread pool. Preserves the original single-node behavior."""
+
+    name = "thread"
+    is_process = False
+
+    def __init__(self, task_manager: TaskManager, max_workers: int = 2) -> None:
+        self._task_manager = task_manager
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        # job_id -> asyncio Future returned by loop.run_in_executor.
+        self._futures: dict[str, asyncio.Future[Any]] = {}
+
+    def submit(
+        self,
+        run_job: Any,
+        job_id: str,
+        filepath: str,
+        config: dict[str, Any],
+        marker_service: Any,
+    ) -> Optional[asyncio.Future]:
+        loop = asyncio.get_event_loop()
+        future = loop.run_in_executor(
+            self._executor,
+            run_job,
+            job_id,
+            filepath,
+            config,
+            marker_service,
+        )
+        self._futures[job_id] = future
+        return future
+
+    def supports_job(self, job_id: str) -> bool:
+        return job_id in self._futures
+
+    def pop(self, job_id: str) -> Optional[asyncio.Future]:
+        return self._futures.pop(job_id, None)
+
+    def get(self, job_id: str) -> Optional[asyncio.Future]:
+        return self._futures.get(job_id)
+
+    def shutdown(self, wait: bool = False) -> None:
+        self._executor.shutdown(wait=wait)
+
+
+class ProcessExecutorBackend(ExecutorBackend):
+    """One worker process per GPU, drained via the shared event queue.
+
+    Each worker runs ``worker_run_job`` and streams ``WorkerEvent``s back; the
+    parent never inspects the pool future's return value (workers return only a
+    job id for liveness). All real data — progress, logs, the document — flows
+    over the queue and is dispatched by ``TaskManager._drain_loop``.
+    """
+
+    name = "process"
+    is_process = True
+
+    def __init__(self, task_manager: TaskManager, detected_gpus: int, num_workers: int) -> None:
+        self._task_manager = task_manager
+        self._detected_gpus = detected_gpus
+        self._num_workers = max(1, num_workers)
+
+        # Shared worker-claim counter + guard, so pool_initializer can hand each
+        # worker a distinct device index even though the pool calls the SAME
+        # initializer for every worker.
+        self._claim_counter = mp.Value("i", 0)
+        self._claim_lock = mp.Lock()
+
+        # The event sink handed to workers (queue). The transport wraps it so the
+        # parent drain loop uses the same abstraction regardless of transport.
+        self._transport = QueueTransport()
+
+        # Lazily-imported worker entrypoints + secrets snapshot, captured now so
+        # spawn passes plain picklable data, never the live service.
+        from app.services.gpu_worker import pool_initializer, worker_run_job
+        from app.core.api_manager import export_secrets_snapshot
+
+        self._worker_run_job = worker_run_job
+        self._secrets_snapshot = export_secrets_snapshot()
+
+        self._pool = mp.Pool(
+            processes=self._num_workers,
+            initializer=pool_initializer,
+            initargs=(
+                self._claim_counter,
+                self._claim_lock,
+                detected_gpus,
+                self._transport.queue,
+                self._secrets_snapshot,
+            ),
+        )
+
+    @property
+    def transport(self) -> QueueTransport:
+        return self._transport
+
+    def submit(
+        self,
+        run_job: Any,  # unused: workers define their own run path
+        job_id: str,
+        filepath: str,
+        config: dict[str, Any],
+        marker_service: Any,  # unused: workers build their own service
+    ) -> Optional[asyncio.Future]:
+        envelope = JobEnvelope(
+            job_id=job_id,
+            filepath=filepath,
+            config=config,
+            device_str="worker-pinned",  # set per-worker by pool_initializer
+        )
+        # Apply_async so a dead worker surfaces; the result is ignored (events own delivery).
+        self._pool.apply_async(self._worker_run_job, (envelope,))
+        return None
+
+    def supports_job(self, job_id: str) -> bool:
+        return False  # process jobs are tracked by TaskManager._proc_jobs, not futures
+
+    def shutdown(self, wait: bool = False) -> None:
+        try:
+            self._pool.close()
+            self._pool.join()
+        except Exception:  # noqa: BLE001 - shutdown is best effort
+            pass
+        self._transport.close()
+
+
 class TaskManager:
     """Manages background conversion tasks with progress tracking."""
 
-    def __init__(self, max_workers: int = 2) -> None:
-        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+    def __init__(
+        self,
+        max_workers: int = 2,
+        backend: ExecutorBackend | None = None,
+    ) -> None:
+        # Pluggable executor. Default = thread backend (single-process, original
+        # behavior). Caller passes a ProcessExecutorBackend on multi-GPU boxes.
+        self._backend: ExecutorBackend = backend or ThreadExecutorBackend(self, max_workers=max_workers)
+
         self._tasks: dict[str, asyncio.Future[Any]] = {}
         self._progress: dict[str, int] = {}
         self._pids: dict[str, int] = {}
-        
+
         # In-memory logs and status texts
         self._job_logs: dict[str, list[str]] = {}
         self._job_status_text: dict[str, str] = {}
@@ -64,8 +260,20 @@ class TaskManager:
         # True once a real tqdm-derived progress value has arrived for the job;
         # disables the synthetic crawl so the two don't fight.
         self._job_has_real_progress: dict[str, bool] = {}
+        # Jobs run via the process backend: terminal status recorded by the drain
+        # thread so get_status() can resolve them without an asyncio future.
+        self._proc_jobs: dict[str, str] = {}
+        # job_id -> config for the process backend (needed at finalize time).
+        self._proc_configs: dict[str, dict[str, Any]] = {}
+        # job_id -> provider_id whose live model hot-swap we must clear on done.
+        self._job_providers: dict[str, Optional[str]] = {}
 
-        # Register custom log handler for marker and app
+        self._lock = threading.Lock()
+        self._drain_stop = threading.Event()
+        self._drain_thread: Optional[threading.Thread] = None
+
+        # Register custom log handler for marker and app (thread backend only;
+        # harmless when unused in process mode).
         self._log_handler = JobLogHandler(self)
         self._log_handler.setFormatter(
             logging.Formatter("[%(levelname)s] %(message)s")
@@ -73,11 +281,120 @@ class TaskManager:
         logging.getLogger("marker").addHandler(self._log_handler)
         logging.getLogger("app").addHandler(self._log_handler)
 
-        # Tap marker/surya tqdm bars for real per-stage progress.
+        # Tap marker/surya tqdm bars for real per-stage progress (thread backend).
         from app.services import progress_tracker
 
         progress_tracker.set_reporter(self.report_stage_progress)
         progress_tracker.install()
+
+        # Start the drain thread only for the process backend.
+        if self._backend.is_process:
+            self._start_drain_thread()
+
+    @property
+    def backend_name(self) -> str:
+        return self._backend.name
+
+    def _start_drain_thread(self) -> None:
+        """Background loop that reads worker events into the in-memory dicts."""
+        if self._drain_thread is not None:
+            return
+        self._drain_thread = threading.Thread(
+            target=self._drain_loop, name="worker-event-drain", daemon=True
+        )
+        self._drain_thread.start()
+
+    def _drain_loop(self) -> None:
+        """Block on the transport queue and dispatch each WorkerEvent."""
+        from app.services import progress_tracker  # noqa: F401 - keep reference warm
+
+        transport = self._backend.transport  # type: ignore[attr-defined]
+        while not self._drain_stop.is_set():
+            for event in transport.drain(timeout=0.5):
+                try:
+                    self._dispatch_worker_event(event)
+                except Exception:  # noqa: BLE001 - a bad event must not kill the drain loop
+                    logger.exception("Failed to dispatch worker event: %s", event)
+
+    def _dispatch_worker_event(self, event: WorkerEvent) -> None:
+        """Map one worker event into the in-memory dicts (and DB on terminal)."""
+        job_id = event.job_id
+
+        if event.type is WorkerEventType.progress:
+            self.report_stage_progress(job_id, event.percent, event.label)
+            return
+
+        if event.type is WorkerEventType.log:
+            self.add_job_log(job_id, event.message, event.levelname)
+            return
+
+        if event.type is WorkerEventType.status:
+            if event.pid is not None:
+                self._pids[job_id] = event.pid
+            if event.status_text:
+                self._job_status_text[job_id] = event.status_text
+            return
+
+        if event.type is WorkerEventType.result:
+            self._finalize_proc_job(job_id, event.payload)
+            return
+
+        if event.type is WorkerEventType.error:
+            self._fail_proc_job(job_id, event.error_message)
+            return
+
+    def _finalize_proc_job(self, job_id: str, result: dict[str, Any]) -> None:
+        """Persist a worker-completed job and mark it done (process backend)."""
+        config = self._proc_configs.pop(job_id, {})
+        self._progress[job_id] = 90
+        self._job_status_text[job_id] = "Finalizing results..."
+        try:
+            self._run_async(self._finalize_job(job_id, result, config))
+        except Exception:  # noqa: BLE001
+            logger.exception("finalize failed for process job %s", job_id)
+        self._progress[job_id] = 100
+        self._job_status_text[job_id] = "Conversion completed successfully."
+        self._cleanup_proc_job(job_id, config)
+
+    def _fail_proc_job(self, job_id: str, error_message: str) -> None:
+        """Record a worker failure (process backend)."""
+        self._progress[job_id] = 0
+        self._job_status_text[job_id] = f"Conversion failed: {error_message}"
+        try:
+            self._run_async(self._fail_job(job_id, error_message))
+        except Exception:  # noqa: BLE001
+            logger.exception("fail-job write failed for process job %s", job_id)
+        self._cleanup_proc_job(job_id, self._proc_configs.pop(job_id, {}))
+
+    def _cleanup_proc_job(self, job_id: str, config: dict[str, Any]) -> None:
+        with self._lock:
+            self._proc_jobs[job_id] = "done"
+            self._pids.pop(job_id, None)
+        # Drop any live model hot-swap for this job's provider so it never bleeds
+        # into an unrelated later job. Best effort; process backend overrides are
+        # per-worker so this is a no-op in practice but keeps the contract even.
+        provider_id = config.get("llm_provider")
+        if provider_id:
+            try:
+                from app.core.api_manager import clear_model_override, reset_stuck_counter
+
+                clear_model_override(provider_id)
+                reset_stuck_counter(provider_id)
+            except Exception:  # noqa: BLE001 - cleanup is best effort
+                pass
+
+    @staticmethod
+    def _run_async(coro: Any) -> Any:
+        """Run an async coroutine to completion from a sync (worker/drainer) context."""
+        try:
+            return asyncio.run(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
 
     def report_stage_progress(self, job_id: str, percent: int, label: str) -> None:
         """Sink for the tqdm progress tap. Monotonic, never regresses."""
@@ -101,46 +418,54 @@ class TaskManager:
         config: dict[str, Any],
         marker_service: Any,
     ) -> None:
-        """Start conversion in the thread pool and track the future."""
-        loop = asyncio.get_event_loop()
-        future = loop.run_in_executor(
-            self._executor,
+        """Start conversion via the selected backend and track the job."""
+        self._progress[job_id] = 10
+        self._job_logs[job_id] = []
+        self._job_status_text[job_id] = "Starting conversion..."
+        self._job_start_time[job_id] = time.time()
+        self._job_has_real_progress[job_id] = False
+        self._job_providers[job_id] = config.get("llm_provider")
+
+        future = self._backend.submit(
             self._run_conversion,
             job_id,
             filepath,
             config,
             marker_service,
         )
-        self._tasks[job_id] = future
-        self._progress[job_id] = 10
-        self._job_logs[job_id] = []
-        self._job_status_text[job_id] = "Starting conversion..."
-        self._job_start_time[job_id] = time.time()
-        self._job_has_real_progress[job_id] = False
 
-        def _on_done(fut: asyncio.Future[Any]) -> None:
-            exc = fut.exception()
-            if exc:
-                logger.error("Job %s failed: %s", job_id, exc)
-            self._tasks.pop(job_id, None)
+        if future is not None:
+            # Thread backend: track the asyncio future for status + done cleanup.
+            self._tasks[job_id] = future
 
-        future.add_done_callback(_on_done)
+            def _on_done(fut: asyncio.Future[Any]) -> None:
+                exc = fut.exception()
+                if exc:
+                    logger.error("Job %s failed: %s", job_id, exc)
+                self._tasks.pop(job_id, None)
 
-        # Synthetic crawl only until real tqdm-derived progress kicks in. Once a
-        # real stage value arrives the crawl stops so it never fights the truth.
-        async def _smooth_progress():
-            while job_id in self._tasks:
-                fut = self._tasks[job_id]
-                if fut.done():
-                    break
-                await asyncio.sleep(2)
-                if self._job_has_real_progress.get(job_id):
-                    continue
-                current = self._progress.get(job_id, 10)
-                if current < 12:
-                    self._progress[job_id] = current + 1
+            future.add_done_callback(_on_done)
 
-        loop.create_task(_smooth_progress())
+            # Synthetic crawl only until real tqdm-derived progress kicks in.
+            async def _smooth_progress():
+                while job_id in self._tasks:
+                    fut = self._tasks[job_id]
+                    if fut.done():
+                        break
+                    await asyncio.sleep(2)
+                    if self._job_has_real_progress.get(job_id):
+                        continue
+                    current = self._progress.get(job_id, 10)
+                    if current < 12:
+                        self._progress[job_id] = current + 1
+
+            asyncio.get_event_loop().create_task(_smooth_progress())
+        else:
+            # Process backend: no in-process future; record config for the drain
+            # thread's finalize/fail path and mark the job as worker-owned.
+            with self._lock:
+                self._proc_configs[job_id] = dict(config)
+                self._proc_jobs[job_id] = "running"
 
     # ------------------------------------------------------------------
     # Status helpers
@@ -174,13 +499,20 @@ class TaskManager:
         """Return current in-memory progress for *job_id*."""
         progress = self._progress.get(job_id, 0)
         future = self._tasks.get(job_id)
-        if future is None:
+        proc_state = self._proc_jobs.get(job_id)
+        if future is None and proc_state is None:
             status = "completed" if progress >= 100 else "pending"
-        elif future.done():
-            exc = future.exception()
-            status = "failed" if exc else "completed"
+        elif future is not None:
+            if future.done():
+                exc = future.exception()
+                status = "failed" if exc else "completed"
+            else:
+                status = "processing"
         else:
-            status = "processing"
+            # Process-backend job: resolve from recorded state.
+            status = "completed" if progress >= 100 else (
+                "failed" if proc_state == "failed" else "processing"
+            )
 
         message = self._job_status_text.get(job_id, "Processing document...")
         if message in ("Starting conversion...", "Loading marker converters...") and progress > 10:
@@ -221,21 +553,47 @@ class TaskManager:
         }
 
     async def cancel_job(self, job_id: str) -> bool:
-        """Attempt to cancel a running job and kill its underlying process."""
+        """Attempt to cancel a running job and kill its underlying process.
+
+        Thread backend: cancel the asyncio future. Process backend: kill the
+        pinned worker PID (the pool respawns a fresh worker). Both then mark the
+        job cancelled in the DB.
+        """
         future = self._tasks.get(job_id)
+        proc_state = self._proc_jobs.get(job_id)
+        cancelled = False
+
         if future and not future.done():
             cancelled = future.cancel()
             self._progress.pop(job_id, None)
             self._tasks.pop(job_id, None)
             self._job_has_real_progress.pop(job_id, None)
+        elif proc_state is not None:
+            cancelled = True
+            with self._lock:
+                self._proc_jobs.pop(job_id, None)
+                self._proc_configs.pop(job_id, None)
+            self._progress.pop(job_id, None)
+            self._job_has_real_progress.pop(job_id, None)
 
+        if cancelled:
             pid = self._pids.pop(job_id, None)
             if pid is not None:
                 self._kill_pid(pid)
-
             await self._update_job_status(job_id, "cancelled")
-            return cancelled
-        return False
+        return cancelled
+
+    def shutdown(self, wait: bool = False) -> None:
+        """Stop the drain thread and release the executor/pool."""
+        self._drain_stop.set()
+        # Unblock a blocking drain by pushing the stop sentinel.
+        transport = getattr(self._backend, "transport", None)
+        if transport is not None:
+            try:
+                transport.stop()
+            except Exception:  # noqa: BLE001
+                pass
+        self._backend.shutdown(wait=wait)
 
     @staticmethod
     def _kill_pid(pid: int) -> None:

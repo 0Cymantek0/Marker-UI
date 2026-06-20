@@ -90,6 +90,67 @@ def _load_models_background() -> None:
 
 
 
+def _configure_task_manager_backend() -> None:
+    """Swap the default thread TaskManager for a process-pool one when >1 GPU.
+
+    The multi-GPU process backend spawns one worker per detected GPU, each pinned
+    to a device. Single-GPU / CPU-only keeps the default thread backend (the
+    original single-process behavior), so the heavier spawn path only runs when
+    there is genuinely more than one GPU to fan out across.
+    """
+    try:
+        from app.core.gpu import detect_gpus
+        from app.routes.settings import (
+            _load_gpu_worker_rows,
+            _read_gpu_worker_settings,
+            get_effective_worker_count,
+        )
+        from app.database import async_session_factory
+
+        detected = detect_gpus()
+        if detected <= 1:
+            logger.info("GPU worker scaling: %d GPU(s) -> thread backend", detected)
+            return
+
+        import asyncio
+        from app.models.schemas import GPUWorkerMode
+
+        async def _read() -> None:
+            async with async_session_factory() as session:
+                rows = await _load_gpu_worker_rows(session)
+            return rows
+
+        try:
+            rows = asyncio.get_event_loop().run_until_complete(_read())
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                rows = loop.run_until_complete(_read())
+            finally:
+                loop.close()
+
+        mode, manual_count = _read_gpu_worker_settings(rows)
+        num_workers = get_effective_worker_count(mode, manual_count, detected)
+        if num_workers <= 1:
+            logger.info("GPU worker scaling: resolved to 1 worker -> thread backend")
+            return
+
+        from app.services.task_manager import ProcessExecutorBackend, TaskManager
+
+        backend = ProcessExecutorBackend(_app_state.task_manager, detected, num_workers)
+        old = _app_state.task_manager
+        _app_state.task_manager = TaskManager(backend=backend)
+        logger.info(
+            "GPU worker scaling: %d GPUs, %d workers -> process backend",
+            detected, num_workers,
+        )
+        # The old default thread manager is unused; leave it (its pool is empty).
+        del old
+    except Exception:  # noqa: BLE001 - never let backend selection break startup
+        logger.exception("GPU worker scaling: failed to configure process backend, falling back to threads")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     """Startup: initialise models & tables. Shutdown: cleanup."""
@@ -149,6 +210,10 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
         except Exception as e:
             logger.error("Failed to auto-trigger GPU installation: %s", e)
 
+    # Select the conversion backend based on detected GPUs + worker settings.
+    # Multi-GPU -> process pool (one worker per GPU). Single/CPU -> threads.
+    _configure_task_manager_backend()
+
     # Register download tracker retry callback
     from app.services.model_tracker import register_retry_callback
     register_retry_callback(_load_models_background)
@@ -158,7 +223,7 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     yield
 
     # Shutdown
-    _app_state.task_manager._executor.shutdown(wait=False)
+    _app_state.task_manager.shutdown(wait=False)
     logger.info("Shutdown complete")
 
 

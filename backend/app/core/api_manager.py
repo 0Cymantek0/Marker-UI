@@ -312,6 +312,55 @@ def get_secret(key: str) -> str:
         return _secrets_cache.get(key, "")
 
 
+def export_secrets_snapshot() -> dict[str, Any]:
+    """Return a plain-data, picklable copy of the secret/concurrency state.
+
+    A GPU worker process gets none of the parent's in-memory globals (they are
+    process-local). The parent reads this snapshot ONCE and passes it across the
+    spawn boundary so each worker can seed its own caches without re-hitting the
+    DB or the secret store. Plain dicts/lists only — never locks or semaphores.
+    """
+    with _cache_lock:
+        secrets = dict(_secrets_cache)
+        provider_keys = {pid: list(keys) for pid, keys in _provider_keys.items()}
+        active_index = dict(_active_key_index)
+    with _concurrency_lock:
+        concurrency = dict(_provider_concurrency)
+        hosts = dict(_provider_hosts)
+    return {
+        "secrets_cache": secrets,
+        "provider_keys": provider_keys,
+        "active_key_index": active_index,
+        "provider_concurrency": concurrency,
+        "provider_hosts": hosts,
+    }
+
+
+def seed_secrets_snapshot(snapshot: dict[str, Any]) -> None:
+    """Seed this process's secret/concurrency caches from an exported snapshot.
+
+    Called inside a worker's initializer after the httpx monkeypatch is
+    installed. Mirrors what ``load_secrets_from_db`` populates, minus the DB
+    round-trip and lazily-rebuilt semaphores.
+    """
+    if not snapshot:
+        return
+    with _cache_lock:
+        _secrets_cache.clear()
+        _secrets_cache.update(snapshot.get("secrets_cache", {}))
+        _provider_keys.clear()
+        _provider_keys.update(snapshot.get("provider_keys", {}))
+        _active_key_index.clear()
+        _active_key_index.update(snapshot.get("active_key_index", {}))
+    with _concurrency_lock:
+        _provider_concurrency.clear()
+        _provider_concurrency.update(snapshot.get("provider_concurrency", {}))
+        _provider_hosts.clear()
+        _provider_hosts.update(snapshot.get("provider_hosts", {}))
+        _sync_semaphores.clear()
+        _async_semaphores.clear()
+
+
 def _resolve_string(val: str) -> str:
     """Replace any 'secret:<key>' matches with their cached decrypted value."""
     def replace_match(match: re.Match[str]) -> str:
