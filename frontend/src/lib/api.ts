@@ -545,6 +545,32 @@ export async function toggleGPU(enabled: boolean): Promise<{ status: string; ena
   })
 }
 
+// ─── Multi-GPU Worker Scaling ─────────────────────────────────────────
+
+export type GPUWorkerMode = 'auto' | 'manual'
+
+export interface GPUWorkersResolved {
+  mode: GPUWorkerMode
+  detected: number
+  effective: number
+  active: string
+  restart_required: boolean
+}
+
+export async function getGPUWorkersResolved(): Promise<GPUWorkersResolved> {
+  return request<GPUWorkersResolved>('/settings/gpu-workers/resolved')
+}
+
+export async function setGPUWorkers(
+  mode: GPUWorkerMode,
+  manualCount?: number,
+): Promise<GPUWorkersResolved> {
+  return request<GPUWorkersResolved>('/settings/gpu-workers', {
+    method: 'PUT',
+    body: JSON.stringify({ mode, manual_count: manualCount }),
+  })
+}
+
 export async function selfHealModels(): Promise<{ success: boolean; healed_count: number; issues: string[]; message: string }> {
   return request<{ success: boolean; healed_count: number; issues: string[]; message: string }>('/models/self-heal', { method: 'POST' })
 }

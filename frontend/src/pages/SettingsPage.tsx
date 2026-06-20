@@ -31,7 +31,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/select'
-import { getSettings, getGPUStatus, installGPU, toggleGPU, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, updateSetting, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus } from '@/lib/api'
+import { getSettings, getGPUStatus, installGPU, toggleGPU, getGPUWorkersResolved, setGPUWorkers, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, updateSetting, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus, type GPUWorkerMode, type GPUWorkersResolved } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TestConnectionButton } from '@/components/features/settings/TestConnectionButton'
@@ -60,6 +60,12 @@ export function SettingsPage() {
   const [gpuEnabled, setGpuEnabled] = useState(false)
   const [gpuStatus, setGpuStatus] = useState<GPUStatus | null>(null)
   const [isPollingGpu, setIsPollingGpu] = useState(false)
+
+  // Multi-GPU worker scaling state
+  const [gpuWorkers, setGpuWorkers] = useState<GPUWorkersResolved | null>(null)
+  const [workerMode, setWorkerMode] = useState<GPUWorkerMode>('auto')
+  const [workerCount, setWorkerCount] = useState<number>(1)
+  const [isSavingWorkers, setIsSavingWorkers] = useState(false)
 
   // Image understanding defaults state
   const [vlmModel, setVlmModel] = useState<string>('')
@@ -206,6 +212,16 @@ export function SettingsPage() {
             console.error('Failed to auto-start GPU installation', e)
           }
         }
+
+        // Multi-GPU worker scaling (best effort; degrades silently on CPU-only).
+        try {
+          const resolved = await getGPUWorkersResolved()
+          setGpuWorkers(resolved)
+          setWorkerMode(resolved.mode)
+          setWorkerCount(Math.max(1, resolved.effective))
+        } catch (e) {
+          console.error('Failed to load GPU worker scaling state', e)
+        }
       } catch (err) {
         console.error('Failed to load settings data', err)
         toast.error('Failed to load settings configuration')
@@ -255,6 +271,21 @@ export function SettingsPage() {
       console.error('Failed to toggle GPU:', err)
       toast.error('Failed to toggle GPU acceleration')
       setGpuEnabled(!checked)
+    }
+  }
+
+  const handleSaveWorkerScaling = async () => {
+    setIsSavingWorkers(true)
+    try {
+      const resolved = await setGPUWorkers(workerMode, workerMode === 'manual' ? workerCount : undefined)
+      setGpuWorkers(resolved)
+      setWorkerCount(Math.max(1, resolved.effective))
+      toast.success('Worker scaling saved — restart the server to apply.')
+    } catch (err) {
+      console.error('Failed to save worker scaling:', err)
+      toast.error('Failed to save worker scaling')
+    } finally {
+      setIsSavingWorkers(false)
     }
   }
 
@@ -791,6 +822,101 @@ export function SettingsPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Multi-GPU Worker Scaling Section */}
+      <div className="space-y-4 pt-6 border-t border-border/20">
+        <div className="space-y-1">
+          <h3 className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-primary" />
+            Multi-GPU Scaling
+          </h3>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
+            Run one conversion worker per GPU to process documents in parallel. Auto-detect uses every GPU automatically; manual lets you cap the count for a shared machine.
+          </p>
+        </div>
+
+        <div className="p-4 rounded-xl border border-border/50 bg-card/45 space-y-4">
+          {/* Detected GPUs summary */}
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-muted-foreground font-semibold uppercase tracking-wider">Detected GPUs:</span>
+            <Badge variant={gpuWorkers && gpuWorkers.detected > 0 ? 'success' : 'secondary'} className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+              {gpuWorkers ? gpuWorkers.detected : '—'}
+            </Badge>
+            {gpuWorkers && (
+              <span className="text-muted-foreground/80">
+                Effective workers: <strong className="text-foreground">{gpuWorkers.effective}</strong> &middot; Active backend: <strong className="text-foreground">{gpuWorkers.active}</strong>
+              </span>
+            )}
+          </div>
+
+          {/* Mode radio: Auto / Manual */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {([
+              { value: 'auto', label: 'Auto (recommended)', desc: 'One worker per detected GPU. Zero config.' },
+              { value: 'manual', label: 'Manual', desc: 'Cap the worker count. Clamped to the detected GPU count.' },
+            ] as { value: GPUWorkerMode; label: string; desc: string }[]).map((opt) => {
+              const selected = workerMode === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setWorkerMode(opt.value)}
+                  className={cn(
+                    'p-3 rounded-xl border text-left transition-all',
+                    selected ? 'border-primary/60 bg-primary/10 text-foreground' : 'border-border/40 bg-card/35 text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                  )}
+                >
+                  <span className="block text-xs font-semibold text-foreground">{opt.label}</span>
+                  <span className="block text-[11px] text-muted-foreground mt-0.5 leading-normal">{opt.desc}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Manual count (advanced) */}
+          {workerMode === 'manual' && gpuWorkers && (
+            <div className="space-y-1.5 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">
+                  Worker Count
+                </label>
+                <span className="text-[11px] font-bold tabular-nums text-foreground">
+                  {Math.min(workerCount, Math.max(1, gpuWorkers.detected))} / {Math.max(1, gpuWorkers.detected)} GPUs
+                </span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={Math.max(1, gpuWorkers.detected)}
+                step={1}
+                value={Math.min(workerCount, Math.max(1, gpuWorkers.detected))}
+                onChange={(e) => setWorkerCount(Number(e.target.value))}
+                className="w-full h-6 appearance-none bg-transparent accent-primary cursor-pointer [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-muted"
+              />
+              <p className="text-[11px] text-muted-foreground leading-normal">
+                Each worker pins to one GPU and loads its own copy of the marker models (uses more VRAM).
+              </p>
+            </div>
+          )}
+
+          {/* Restart notice + save */}
+          {gpuWorkers?.restart_required && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-normal">
+              Changing the worker count restarts the pool — restart the server to apply.
+            </p>
+          )}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleSaveWorkerScaling}
+              disabled={isSavingWorkers || (workerMode === 'manual' && gpuWorkers && gpuWorkers.detected <= 0)}
+              className="text-xs font-bold uppercase tracking-wider px-4 rounded-lg shadow-sm h-9 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSavingWorkers ? 'Saving…' : 'Apply'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Hardware Tuning Section — coming soon (ISSUE-8). Disabled placeholder:
