@@ -224,6 +224,7 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
 
     try:
         from app.services.marker_service import MarkerService
+        from app.services.conversion_service import ConversionService
 
         svc = MarkerService()
         # Reuse the model dict loaded once in the initializer; if the initializer
@@ -232,8 +233,9 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
             svc._model_dict = _model_dict
             svc._initialized = True
 
+        conversion_svc = ConversionService(svc)
         device = None if _device_str == "cpu" else _device_str
-        result = svc.convert_file(envelope.filepath, dict(envelope.config), device=device)
+        result = conversion_svc.convert_file(envelope.filepath, dict(envelope.config), device=device)
 
         # Cache a model dict the lazy fallback may have created for later jobs.
         if _model_dict is None and svc._model_dict is not None:

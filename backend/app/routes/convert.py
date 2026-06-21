@@ -20,7 +20,7 @@ import aiofiles
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
 from app.database import get_db
 from app.models.job import ConversionJob
-from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse
+from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +280,7 @@ async def upload_file(
     from app.main import _app_state
 
     marker_service = _app_state.marker_service
+    conversion_service = _app_state.conversion_service
     task_manager = _app_state.task_manager
 
     llm_config = await _load_llm_config(db)
@@ -287,13 +288,36 @@ async def upload_file(
     from app.services.marker_service import build_marker_options
     options = build_marker_options(llm_config, config)
 
-    task_manager.submit_job(job_id, stored_path, options, marker_service)
+    task_manager.submit_job(job_id, stored_path, options, conversion_service)
 
     return ConversionResponse(
         job_id=job_id,
         status="pending",
         filename=original_name,
         output_format=output_format,
+    )
+
+
+@router.post("/plan", response_model=ConverterPlanResponse)
+async def plan_conversion(
+    req: ConvertPlanRequest,
+) -> ConverterPlanResponse:
+    """Predict the conversion plan for a file before uploading."""
+    from app.main import _app_state
+
+    # We pass an empty config because we just want the base decision.
+    plan = _app_state.conversion_service.plan_by_metadata(req.filename, req.size, {})
+    return ConverterPlanResponse(
+        engine=plan.engine,
+        label=plan.label,
+        confidence=plan.confidence,
+        reasons=plan.reasons,
+        needs_marker_models=plan.needs_marker_models,
+        needs_gpu=plan.needs_gpu,
+        needs_cloud=plan.needs_cloud,
+        optional_dependencies=plan.optional_dependencies,
+        fallback_chain=plan.fallback_chain,
+        warnings=plan.warnings,
     )
 
 

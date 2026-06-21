@@ -679,7 +679,7 @@ class TaskManager:
         job_id: str,
         filepath: str,
         config: dict[str, Any],
-        marker_service: Any,
+        conversion_service: Any,
     ) -> dict[str, Any]:
         """Runs inside ThreadPoolExecutor - updates DB on completion."""
         self._pids[job_id] = os.getpid()
@@ -687,8 +687,8 @@ class TaskManager:
         active_conversion_threads[thread_ident] = job_id
         try:
             self._progress[job_id] = 10
-            self._job_status_text[job_id] = "Loading marker converters..."
-            result = marker_service.convert_file(filepath, dict(config))
+            self._job_status_text[job_id] = "Starting conversion..."
+            result = conversion_service.convert_file(filepath, dict(config))
             self._progress[job_id] = 90
             self._job_status_text[job_id] = "Finalizing results..."
 

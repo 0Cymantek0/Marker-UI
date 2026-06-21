@@ -128,6 +128,31 @@ class TestRunJob:
         assert err.job_id == "job-err"
         assert gpu_worker._current_job_id is None
 
+    def test_docx_routed_to_office_docx(self):
+        _reset_globals()
+        qq = _q.Queue()
+        gpu_worker._event_queue = qq
+        gpu_worker._worker_id = 1
+        gpu_worker._device_str = "cuda:0"
+
+        fake_svc = MagicMock()
+        env = JobEnvelope(job_id="job-docx", filepath="report.docx", config={})
+
+        with patch("app.services.marker_service.MarkerService", return_value=fake_svc), \
+             patch("app.conversion.converters.office_docx.OfficeDocxConverter.convert") as mock_docx_convert:
+            
+            from app.conversion.result import UniversalConversionResult
+            mock_docx_convert.return_value = UniversalConversionResult(text="# Word Content", extension="md")
+            
+            ret = gpu_worker.worker_run_job(env)
+
+        assert ret == "job-docx"
+        mock_docx_convert.assert_called_once_with("report.docx", {}, device="cuda:0")
+        
+        events = _drain(qq)
+        result_ev = next(e for e in events if e.type == WorkerEventType.result)
+        assert result_ev.payload["text"] == "# Word Content"
+
 
 class TestQueueLogHandler:
     def test_routes_record_to_queue_only_with_active_job(self):

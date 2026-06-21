@@ -69,6 +69,18 @@ async def test_upload_valid_docx(client: AsyncClient):
     assert resp.json()["output_format"] == "html"
 
 
+@pytest.mark.asyncio
+async def test_upload_valid_pptx(client: AsyncClient):
+    files = {"file": ("presentation.pptx", io.BytesIO(b"PK pptx content"), "application/vnd.openxmlformats-officedocument.presentationml.presentation")}
+    resp = await client.post(
+        "/api/convert/upload",
+        files=files,
+        params={"output_format": "markdown"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["output_format"] == "markdown"
+
+
 # ---------------------------------------------------------------------------
 # Upload - invalid extension
 # ---------------------------------------------------------------------------

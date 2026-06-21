@@ -62,7 +62,7 @@ class FakeMarkerService:
     def initialize(self) -> None:
         self._initialized = True
 
-    def convert_file(self, filepath: str, options: dict[str, Any]) -> dict[str, Any]:
+    def convert_file(self, filepath: str, options: dict[str, Any], device: str | None = None) -> dict[str, Any]:
         """Return a deterministic fake conversion result."""
         return {
             "text": "# Fake Markdown\n\nConverted successfully.",
@@ -88,7 +88,7 @@ class FakeTaskManager:
         job_id: str,
         filepath: str,
         config: dict[str, Any],
-        marker_service: Any,
+        conversion_service: Any,
     ) -> None:
         """Immediately run the fake conversion so tests don't need threads."""
         self._progress[job_id] = 0
@@ -153,15 +153,19 @@ async def setup_db():
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """Provide an httpx AsyncClient wired to the FastAPI app with overrides."""
     from app.main import app, _app_state
+    from app.services.conversion_service import ConversionService
 
     fake_service = FakeMarkerService()
+    fake_conversion = ConversionService(fake_service)
     fake_tm = FakeTaskManager()
     fake_tm.set_marker_service(fake_service)
 
     original_ms = _app_state.marker_service
+    original_cs = _app_state.conversion_service
     original_tm = _app_state.task_manager
 
     _app_state.marker_service = fake_service  # type: ignore[assignment]
+    _app_state.conversion_service = fake_conversion  # type: ignore[assignment]
     _app_state.task_manager = fake_tm  # type: ignore[assignment]
 
     app.dependency_overrides[get_db] = _override_get_db
@@ -172,6 +176,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     # Restore
     _app_state.marker_service = original_ms  # type: ignore[assignment]
+    _app_state.conversion_service = original_cs  # type: ignore[assignment]
     _app_state.task_manager = original_tm  # type: ignore[assignment]
     app.dependency_overrides.clear()
 
