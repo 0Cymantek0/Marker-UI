@@ -32,10 +32,15 @@ Running Marker UI from source is useful if you want to develop features, inspect
    ```bash
    pip install -r requirements.txt
    ```
-4. Copy the environment configuration:
-   ```bash
-   cp .env.example .env
-   ```
+4. Copy the environment configuration (resides at the project root):
+   - **Linux/macOS**:
+     ```bash
+     cp ../.env.example .env
+     ```
+   - **Windows**:
+     ```powershell
+     cp ..\.env.example .env
+     ```
 5. Run the development server with hot-reload enabled:
    ```bash
    uvicorn app.main:app --reload --port 8000

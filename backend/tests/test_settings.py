@@ -449,8 +449,23 @@ class TestModelConfigVisionCapable:
         assert resp.status_code == 200
         providers = resp.json()
         assert len(providers) > 0
+        
+        # Add a model to each provider to verify response shape with models
         for p in providers:
-            assert p.get("models"), f"provider {p.get('id')} should seed with models"
+            p["models"] = [{"model_id": "test-model-" + p["id"], "vision_capable": False}]
+            
+        # Save them
+        resp = await settings_client.put(
+            "/api/settings/llm/providers", json=providers
+        )
+        assert resp.status_code == 200
+        
+        # GET again and verify
+        resp = await settings_client.get("/api/settings/llm/providers")
+        assert resp.status_code == 200
+        providers_after = resp.json()
+        for p in providers_after:
+            assert p.get("models"), f"provider {p.get('id')} should have models"
             for m in p["models"]:
                 assert "vision_capable" in m, (
                     f"model {m.get('model_id')} missing vision_capable key"
@@ -466,7 +481,16 @@ class TestModelConfigVisionCapable:
         assert resp.status_code == 200
         providers = resp.json()
         assert len(providers) > 0
-        assert len(providers[0]["models"]) > 0
+        
+        # Append a model if empty
+        if not providers[0]["models"]:
+            providers[0]["models"].append({
+                "model_id": "test-model",
+                "vision_capable": False,
+                "timeout": 60,
+                "max_retries": 3,
+                "max_output_tokens": 4096
+            })
 
         # Mark first model as vision-capable
         providers[0]["models"][0]["vision_capable"] = True

@@ -11,9 +11,9 @@ While Marker UI provides a robust interface for document conversion, there are s
 - To prevent broken image references, downloads are packaged as a `.zip` file containing both the Markdown file and the associated `images/` directory.
 - Direct copy-pasting of Markdown text from the history dashboard does not automatically download or embed the image assets.
 
-### 2. Lack of Visual Context Descriptions
-- The engine does not automatically generate rich text descriptions or alt-text for extracted charts, graphs, screenshots, or diagrams.
-- For vision-less LLMs, these elements appear as raw image links with no contextual text.
+### 2. Visual Context Descriptions Require VLM
+- Automatic generation of text descriptions, data tables, and Mermaid.js diagrams for visual assets requires enabling the Image Understanding VLM pipeline and configuring a vision-capable LLM.
+- If disabled, or if using vision-less models, these elements default to raw image links with no contextual text.
 
 ### 3. RAM & VRAM Footprint
 - Running the full neural pipeline (layout detection, OCR, and table analyzer) requires significant memory.

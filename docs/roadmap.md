@@ -30,10 +30,10 @@ This document outlines the planned evolutionary phases for Marker UI. We focus o
 - **Objective**: Solve the visual data gap for vision-less language models and downstream RAG pipelines.
 - **Problem Statement**: Still images currently get linked into the markdown file, separated from the PDF, and we have to download it as a zip to maintain the folder structure so that the images can be linked in the markdown. For a model that has no vision, this becomes difficult to read the whole thing.
 - **Approach**: We will find a way to have very accurate descriptions of images or representations of any chart or anything that is context-aware about the whole markdown file and would represent the visual aspects in text in a very lossless manner, as good as possible.
-  - Implement optional Vision-Language Model (VLM) pipelines (e.g., using local Llama-3.2-Vision, Qwen2-VL, or cloud API endpoints) to transcribe visual elements.
-  - Convert flowcharts, architectural diagrams, and system block diagrams directly into equivalent Mermaid.js graphs.
-  - Automatically convert graphs and charts into high-fidelity markdown data tables or structured JSON arrays.
-  - Generate deep, context-aware alt-text descriptions for photos and screenshots, placing them directly within the Markdown document.
+  - [x] Implement optional Vision-Language Model (VLM) pipelines (e.g., using local Llama-3.2-Vision, Qwen2-VL, or cloud API endpoints) to transcribe visual elements.
+  - [x] Convert flowcharts, architectural diagrams, and system block diagrams directly into equivalent Mermaid.js graphs.
+  - [x] Automatically convert graphs and charts into high-fidelity markdown data tables or structured JSON arrays.
+  - [x] Generate deep, context-aware alt-text descriptions for photos and screenshots, placing them directly within the Markdown document.
 
 ### 3. Website URL Compilation & Rich Media Extraction
 - Allow users to compile any website from a URL.

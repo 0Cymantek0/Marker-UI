@@ -311,29 +311,29 @@ async def save_llm_config(
 
     model_id = ""
     if provider_id == "gemini":
-        model_id = body.gemini_model_name or "gemini-2.0-flash"
+        model_id = body.gemini_model_name or ""
         if active_prov:
             if body.gemini_api_key: active_prov.api_key = body.gemini_api_key
     elif provider_id == "claude":
-        model_id = body.claude_model_name or "claude-3-7-sonnet-20250219"
+        model_id = body.claude_model_name or ""
         if active_prov:
             if body.claude_api_key: active_prov.api_key = body.claude_api_key
     elif provider_id == "openai":
-        model_id = body.openai_model or "gpt-4o-mini"
+        model_id = body.openai_model or ""
         if active_prov:
             if body.openai_api_key: active_prov.api_key = body.openai_api_key
             if body.openai_base_url: active_prov.base_url = body.openai_base_url
     elif provider_id == "ollama":
-        model_id = body.ollama_model or "llama3.2-vision"
+        model_id = body.ollama_model or ""
         if active_prov:
             if body.ollama_base_url: active_prov.base_url = body.ollama_base_url
     elif provider_id == "azure":
-        model_id = body.azure_deployment_name or "gpt-4o"
+        model_id = body.azure_deployment_name or ""
         if active_prov:
             if body.azure_api_key: active_prov.api_key = body.azure_api_key
             if body.azure_endpoint: active_prov.base_url = body.azure_endpoint
     elif provider_id == "vertex":
-        model_id = body.gemini_model_name or "gemini-2.0-flash"
+        model_id = body.gemini_model_name or ""
         if active_prov:
             if body.vertex_project_id: active_prov.api_key = body.vertex_project_id
             if body.vertex_location: active_prov.base_url = body.vertex_location
@@ -751,10 +751,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "api_key": encrypt_value(get_old("gemini_api_key")) if get_old("gemini_api_key") else None,
             "fallback_api_keys": [],
             "concurrency": 4,
-            "models": [
-                {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
-                {"model_id": "gemini-2.0-pro-exp-02-05", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
-            ]
+            "models": []
         },
         {
             "id": "claude",
@@ -763,10 +760,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "api_key": encrypt_value(get_old("claude_api_key")) if get_old("claude_api_key") else None,
             "fallback_api_keys": [],
             "concurrency": 4,
-            "models": [
-                {"model_id": get_old("claude_model_name") or "claude-3-7-sonnet-20250219", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
-                {"model_id": "claude-3-5-sonnet-20241022", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
-            ]
+            "models": []
         },
         {
             "id": "openai",
@@ -776,10 +770,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("openai_base_url") or "https://api.openai.com/v1",
             "fallback_api_keys": [],
             "concurrency": 4,
-            "models": [
-                {"model_id": get_old("openai_model") or "gpt-4o-mini", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False},
-                {"model_id": "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
-            ]
+            "models": []
         },
         {
             "id": "ollama",
@@ -788,9 +779,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("ollama_base_url") or "http://localhost:11434",
             "fallback_api_keys": [],
             "concurrency": 2,
-            "models": [
-                {"model_id": get_old("ollama_model") or "llama3.2-vision", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
-            ]
+            "models": []
         },
         {
             "id": "azure",
@@ -800,9 +789,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("azure_endpoint") or "",
             "fallback_api_keys": [],
             "concurrency": 4,
-            "models": [
-                {"model_id": get_old("azure_deployment_name") or "gpt-4o", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
-            ]
+            "models": []
         },
         {
             "id": "vertex",
@@ -812,9 +799,7 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
             "base_url": get_old("vertex_location") or "us-central1",
             "fallback_api_keys": [],
             "concurrency": 4,
-            "models": [
-                {"model_id": get_old("gemini_model_name") or "gemini-2.0-flash", "timeout": timeout, "max_retries": max_retries, "max_output_tokens": max_output, "vision_capable": False}
-            ]
+            "models": []
         }
     ]
 

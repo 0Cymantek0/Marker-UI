@@ -15,17 +15,17 @@ python -m pytest tests/ -v
 
 ## Test Suites Overview
 
-- **`test_crypto.py`**: Validates that Fernet encrypts setting credentials securely, empty values are preserved, and legacy plaintext values are decrypted gracefully without raising errors.
-- **`test_secrets.py`**: Asserts masking behavior (asterisks insertion in `api_key` matching JSON keys) and ensures short keys are completely masked.
-- **`test_upload.py`**: Tests upload endpoints, file extension validations, and size rejections.
-- **`test_settings.py`**: Verifies settings GET/PUT behaviors, defaults, and LLM configuration changes.
-- **`test_task_manager.py`**: Verifies that the task queue processes jobs sequentially, updates status codes on completion, and records execution logs.
+The backend contains a highly comprehensive suite of over 540 automated tests:
+- **`test_crypto.py` / `test_secrets.py`**: Validates credential encryption at rest and key masking in JSON responses.
+- **`test_upload.py` / `test_convert.py`**: Verifies allowed file types, upload size limits, and job execution SSE streams.
+- **`test_settings.py` / `test_providers.py`**: Asserts configuration CRUD and LLM provider registration.
+- **`test_task_manager.py` / `test_gpu_workers.py` / `test_job_transport.py`**: Validates thread pools, GPU routing, process workers, and IPC events.
+- **`test_vlm_service.py` / `test_image_cost.py` / `test_image_router.py`**: Tests image routing, cost estimation, and VLM JSON extraction.
 
 ---
 
 ## Known Testing Gaps
 
-While core backend units are covered, the following areas represent known gaps:
-1. **End-to-End Frontend Tests**: We do not currently run automated Cypress or Playwright suites to click through the React UI.
-2. **Real LLM Integration**: Tests use mocks instead of hitting live Gemini/Claude endpoints.
-3. **Model Weights Integrations**: Tests bypass the heavy model loading stage, using mock byte arrays (`b"%PDF-1.4 test content"`) to verify the CLI execution wrapper.
+1. **End-to-End Frontend Tests**: While React components are covered using Vitest, no automated Cypress or Playwright E2E visual flows are run.
+2. **Real LLM / VLM API Integration**: Production VLM services are verified using mock APIs (`FakeVLM`) rather than calling live cloud endpoints.
+3. **Local OCR Model Loading**: Standard testing avoids loading heavy Surya neural weights on CPU hosts, mocking OCR result structures instead.

@@ -16,9 +16,12 @@ The backend structure resides under `backend/app/`:
   - **`settings.py`**: Configuration endpoints, active LLM selections, and GPU/PyTorch status tracking.
   - **`models.py`**: Handles engine weight installation status.
 - **`models/`**:
-  - **`database.py`**: Database models (`Job`, `Setting`) mapped via SQLAlchemy.
+  - **`job.py`**: Defines the `ConversionJob` SQLAlchemy model representing a conversion job.
+  - **`settings.py`**: Defines the `Setting` SQLAlchemy model representing persistent parameters.
+  - **`schemas.py`**: Contains Pydantic models for API request/response serialization.
+- **`database.py`** (app root): Configures the SQLAlchemy async engine and async session factory.
 - **`services/`**:
-  - **`task_manager.py`**: Manages worker queues, subprocess thread pools, and live execution consoles.
+  - **`task_manager.py`**: Manages worker queues, Thread/Process executor backends, and SSE log/progress events.
 - **`utils/`**:
   - **`secrets.py`**: Key encryption and response masking helpers.
 

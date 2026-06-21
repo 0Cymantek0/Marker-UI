@@ -10,23 +10,19 @@ You can configure your preferred LLM provider on the **Settings** page:
 
 ### 1. OpenAI
 - **Keys Required**: OpenAI API Key (`sk-...`).
-- **Default Model**: `gpt-4o`.
-- **Custom Model**: Can be overridden with any standard chat model name (e.g. `gpt-4o-mini`).
+- **Models**: Configure the models and versions you wish to use (e.g. `gpt-4o`, `gpt-4o-mini`).
 
 ### 2. Google Gemini
 - **Keys Required**: Gemini API Key.
-- **Default Model**: `gemini-1.5-pro`.
-- **Custom Model**: E.g. `gemini-1.5-flash` or `gemini-2.0-flash-exp`.
+- **Models**: Configure the models and versions you wish to use (e.g. `gemini-2.0-flash`, `gemini-2.5-flash`).
 
 ### 3. Anthropic Claude
 - **Keys Required**: Anthropic API Key.
-- **Default Model**: `claude-3-5-sonnet-latest`.
-- **Custom Model**: E.g. `claude-3-5-haiku-latest`.
+- **Models**: Configure the models and versions you wish to use (e.g. `claude-3-7-sonnet-20250219`, `claude-3-5-sonnet-20241022`).
 
 ### 4. Ollama (Local)
 - **Base URL**: The local port address where Ollama is running (typically `http://127.0.0.1:11434` or `http://host.docker.internal:11434` if running inside Docker).
-- **Default Model**: `llama3`.
-- **Custom Model**: E.g. `mistral`, `gemma2`, or your own custom local models.
+- **Models**: Any local model downloaded to your Ollama node.
 
 ### 5. Azure OpenAI
 - **Credentials Required**: Azure API Key, Azure Endpoint, and Azure Deployment Name.

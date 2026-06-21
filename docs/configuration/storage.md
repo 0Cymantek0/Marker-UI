@@ -27,7 +27,7 @@ marker-ui/
 ### 1. Uploads Folder (`data/uploads/`)
 - When a document is uploaded via `POST /api/convert/upload`, the raw file is written here first.
 - Once the conversion job starts, the `TaskManager` references this file.
-- The file is deleted automatically from `uploads/` after the job is processed (either successfully or failed).
+- The file remains here until the job is explicitly deleted by the user (via the UI history dashboard or the `DELETE /api/convert/{job_id}` endpoint), at which point it is unlinked to reclaim space.
 
 ### 2. Output Folder (`data/output/`)
 - Converted results are saved into a folder named after the job UUID.

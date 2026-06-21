@@ -23,7 +23,7 @@ Navigate to the **History** page:
 - **Status Indicators**: Instantly spot successful, running, or failed jobs.
 - **Action Buttons**:
   - **Download**: Fetches the output. If the conversion extracted images, it returns a `.zip` archive containing the Markdown file and the associated images folder. If no images are present, it returns the raw output file (e.g. `.md`, `.json`, or `.html`).
-  - **Delete**: Permanently removes the job record from SQLite and deletes the corresponding files from `data/output/{job_id}/`.
+  - **Delete**: Permanently removes the job record from SQLite, deletes output files from `data/output/{job_id}/`, and deletes the uploaded input file from `data/uploads/`.
 
 ---
 
@@ -33,6 +33,6 @@ Document conversions can accumulate large volumes of text and extracted assets o
 
 To free up disk space:
 1. Navigate to the **Settings** page.
-2. Under **Database Management**, you will see options to:
-   - **Purge History**: Delete database records and local output files older than a specified duration.
-   - **Reset System**: Wipe all conversion history and database contents (excluding encrypted settings credentials).
+2. Under **System Maintenance**, you will see options to:
+   - **Self-Healing**: Verify files integrity and reinstall missing components.
+   - **Reset System**: Perform a full system reset. Note that enabling the "Delete user data" checkbox will completely drop all database tables, wiping all history, configuration settings, and saved LLM credentials, and returning the application to its first-run state.

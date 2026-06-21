@@ -22,7 +22,11 @@ Navigate to the **Convert** page:
 2. **Local Paths (Optional)**: If you are running the server locally, you can supply absolute path strings directly to avoid uploading massive files. (See [Local File Paths](local-file-paths.md)).
 3. **Select Options**:
    - **Output Format**: Choose Markdown, HTML, JSON, or Chunks.
-   - **Engine Mode**: Select `PdfConverter` (standard layouts) or `TableConverter` (data-heavy tables).
+   - **Converter Engine**: Select standard options:
+     - `PdfConverter`: Standard PDF/document layout, text, tables, and images.
+     - `TableConverter`: Table-focused layout optimized for spreadsheets.
+     - `OCRConverter`: OCR-only extraction for scanned/low-quality inputs.
+     - `ExtractionConverter`: Fast text-only parser bypassing heavy styling.
    - **LLM Refinement**: Toggle this to route outputs through a connected LLM to clean up OCR noise and fix structural flow.
 
 ---

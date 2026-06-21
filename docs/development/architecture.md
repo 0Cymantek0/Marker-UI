@@ -12,7 +12,7 @@ graph TD
   Nginx -->|Statics| Frontend[React App / Vite]
   Nginx -->|Proxy API| FastAPI[FastAPI Backend]
   FastAPI -->|Enqueue Jobs| TaskManager[TaskManager Queue]
-  TaskManager -->|Executes Subprocess| MarkerEngine[Marker CLI Engine]
+  TaskManager -->|Executes Job| MarkerEngine[Marker Python API]
   FastAPI -->|CRUD Config/Jobs| SQLite[(SQLite Database)]
 ```
 
@@ -30,11 +30,11 @@ graph TD
 3. **Backend API (FastAPI / Python)**:
    - Exposes REST endpoints to query and write settings, fetch job history, and handle file uploads.
    - Performs encryption on sensitive settings credentials using Fernet.
-4. **Task Manager (Thread Queue)**:
+4. **Task Manager (Thread Queue / Multiprocessing)**:
    - An in-memory concurrent worker queue.
    - Offloads conversion execution from the FastAPI request thread pool.
-   - Tracks stdout/stderr of running child processes.
+   - Runs conversions natively in Python using `ThreadExecutorBackend` (in-process threads) or `ProcessExecutorBackend` (spawned, GPU-pinned worker processes).
 5. **Marker Conversion Engine**:
-   - The deep learning models package. Runs OCR, page layout segmenter, and equation formatting.
+   - The deep learning models package. Invoked directly via Python API for OCR, page layout segmentation, and equation formatting.
 6. **SQLite Database**:
    - Stores job metadata, progress status, and encrypted settings.

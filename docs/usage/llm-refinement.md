@@ -18,9 +18,8 @@ While Marker UI's neural engine handles text extraction, layout segmentation, an
 
 To use LLM Refinement:
 1. Go to the **Settings** page.
-2. Select your provider under **LLM Service** (e.g. `Gemini`, `Claude`, `OpenAI`).
-3. Provide your API Key.
-4. (Optional) Customize the specific model name under **Model Overrides** (e.g. `gemini-1.5-pro` or `claude-3-5-sonnet`).
+2. In the **LLM Providers** section, click the keys/settings drawer buttons for your chosen service (Gemini, Claude, OpenAI, Ollama, Azure, Vertex) to enter API keys, base URLs, and customize timeout/retries.
+3. Set the active service and model globally using the **Active LLM Provider** dropdown selector card at the top of the settings page.
 5. Ensure the encryption key exists in `data/.secret_key` (this happens automatically on first startup).
 
 ---

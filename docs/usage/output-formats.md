@@ -37,4 +37,4 @@ When converting documents containing images, charts, or diagrams:
 1. **Extraction**: The underlying engine extracts images and stores them as separate files on the server.
 2. **Markdown Links**: The generated Markdown links these files using relative paths (e.g. `![Image 1](images/page_1_img_1.png)`).
 3. **ZIP Downloads**: To prevent broken image links, downloading a job with extracted images will package the Markdown file and the `images/` folder together into a single `.zip` archive.
-4. **Current Gaps**: Rich text descriptions or captions for charts, screenshots, and diagrams are not yet automatically generated.
+4. **Visual Refinements**: If the optional Image Understanding VLM pipeline is enabled, visual elements (like charts and diagrams) are transcribed directly into Markdown tables or Mermaid.js diagrams instead of static image links.
