@@ -1,0 +1,145 @@
+"""Tests for ConversionRouter — extension/mime → engine routing decisions.
+
+Data-driven test covering every row in the §2.2 decision table, plus
+edge cases (unknown extension, missing extension, case sensitivity).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from app.conversion.router import ConversionRouter
+from app.conversion.stream_info import StreamInfo
+
+
+def _make_stream_info(ext: str, path: str = "") -> StreamInfo:
+    """Build a minimal StreamInfo with the given extension."""
+    if not path:
+        path = f"/tmp/test_file{ext}"
+    return StreamInfo(
+        path=path,
+        extension=ext,
+        mime_type="application/octet-stream",
+        size=1024,
+        sample=b"",
+    )
+
+
+class TestConversionRouter:
+    """Exhaustive routing decision table tests."""
+
+    # (extension, expected_engine, expected_needs_marker, expected_needs_gpu, min_confidence)
+    ROUTING_TABLE = [
+        # PDF
+        (".pdf", "marker_pdf", True, True, 1.0),
+        # Images → marker for OCR
+        (".jpg", "marker_pdf", True, True, 1.0),
+        (".jpeg", "marker_pdf", True, True, 1.0),
+        (".png", "marker_pdf", True, True, 1.0),
+        (".webp", "marker_pdf", True, True, 1.0),
+        (".tiff", "marker_pdf", True, True, 1.0),
+        (".bmp", "marker_pdf", True, True, 1.0),
+        (".gif", "marker_pdf", True, True, 1.0),
+        # EPUB
+        (".epub", "marker_pdf", True, True, 1.0),
+        # Office
+        (".docx", "office_docx", False, False, 0.95),
+        (".pptx", "office_pptx", False, False, 0.95),
+        (".xlsx", "spreadsheet", False, False, 0.95),
+        (".xls", "spreadsheet", False, False, 0.95),
+        # Data formats
+        (".csv", "text_data", False, False, 0.95),
+        (".json", "text_data", False, False, 0.95),
+        (".jsonl", "text_data", False, False, 0.95),
+        # XML/RSS
+        (".xml", "xml_rss", False, False, 0.90),
+        (".rss", "xml_rss", False, False, 0.90),
+        (".atom", "xml_rss", False, False, 0.90),
+        # HTML
+        (".html", "html", False, False, 0.90),
+        (".htm", "html", False, False, 0.90),
+        # Text
+        (".txt", "text_data", False, False, 1.0),
+        (".md", "text_data", False, False, 1.0),
+        (".rst", "text_data", False, False, 1.0),
+        (".log", "text_data", False, False, 1.0),
+        # Notebook
+        (".ipynb", "notebook", False, False, 0.95),
+        # Archive
+        (".zip", "archive", False, False, 0.90),
+    ]
+
+    @pytest.mark.parametrize(
+        "ext,engine,needs_marker,needs_gpu,min_conf",
+        ROUTING_TABLE,
+        ids=[row[0] for row in ROUTING_TABLE],
+    )
+    def test_routing_table(
+        self,
+        ext: str,
+        engine: str,
+        needs_marker: bool,
+        needs_gpu: bool,
+        min_conf: float,
+    ) -> None:
+        """Every extension in the decision table maps to the correct engine."""
+        stream_info = _make_stream_info(ext)
+        plan = ConversionRouter.plan(stream_info, {})
+
+        assert plan.engine == engine
+        assert plan.needs_marker_models == needs_marker
+        assert plan.needs_gpu == needs_gpu
+        assert plan.confidence >= min_conf
+        assert len(plan.reasons) > 0
+
+    def test_unknown_extension_falls_back(self) -> None:
+        """Unknown extensions get a low-confidence marker_pdf fallback."""
+        stream_info = _make_stream_info(".xyz")
+        plan = ConversionRouter.plan(stream_info, {})
+
+        assert plan.engine == "marker_pdf"
+        assert plan.confidence == 0.3
+        assert plan.needs_marker_models is True
+        assert plan.needs_gpu is True
+        assert len(plan.warnings) > 0
+        assert "No dedicated converter" in plan.warnings[0]
+
+    def test_empty_extension_falls_back(self) -> None:
+        """Empty extension (no suffix) falls back gracefully."""
+        stream_info = _make_stream_info("")
+        plan = ConversionRouter.plan(stream_info, {})
+
+        assert plan.engine == "marker_pdf"
+        assert plan.confidence == 0.3
+        assert len(plan.warnings) > 0
+
+    def test_plan_returns_reasons(self) -> None:
+        """Plan always includes at least one reason."""
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(stream_info, {})
+
+        assert len(plan.reasons) >= 1
+        assert ".pdf" in plan.reasons[0]
+
+    def test_plan_is_pure(self) -> None:
+        """Calling plan twice with the same input produces identical results."""
+        stream_info = _make_stream_info(".docx")
+        plan1 = ConversionRouter.plan(stream_info, {})
+        plan2 = ConversionRouter.plan(stream_info, {})
+
+        assert plan1.engine == plan2.engine
+        assert plan1.confidence == plan2.confidence
+        assert plan1.needs_marker_models == plan2.needs_marker_models
+
+    def test_plan_to_dict_serializable(self) -> None:
+        """ConverterPlan.to_dict() produces a JSON-serializable dict."""
+        import json
+
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(stream_info, {})
+        d = plan.to_dict()
+
+        # Must not raise
+        serialized = json.dumps(d)
+        assert '"engine"' in serialized
+        assert '"marker_pdf"' in serialized

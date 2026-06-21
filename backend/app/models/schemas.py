@@ -299,3 +299,36 @@ class FetchModelsRequest(BaseModel):
     api_key: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Conversion Planning & Capabilities
+# ---------------------------------------------------------------------------
+
+class CapabilitiesResponse(BaseModel):
+    """Supported engines and their status."""
+
+    engines: dict[str, str]
+
+
+class ConvertPlanRequest(BaseModel):
+    """Request schema for predicting the conversion plan of a file."""
+
+    filename: str
+    size: int
+
+
+class ConverterPlanResponse(BaseModel):
+    """The predicted routing decision for a conversion."""
+
+    engine: str
+    label: str
+    confidence: float
+    reasons: list[str]
+    needs_marker_models: bool
+    needs_gpu: bool
+    needs_cloud: bool
+    optional_dependencies: list[str]
+    fallback_chain: list[str]
+    warnings: list[str]
+
+
+

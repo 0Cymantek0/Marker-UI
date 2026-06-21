@@ -15,9 +15,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
 from app.database import create_tables
-from app.routes import convert, settings, models
+from app.routes import convert, settings, models, capabilities
 from app.services.marker_service import MarkerService
 from app.services.task_manager import TaskManager
+from app.services.conversion_service import ConversionService
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class _AppState:
 
     def __init__(self) -> None:
         self.marker_service: MarkerService = MarkerService()
+        self.conversion_service: ConversionService = ConversionService(self.marker_service)
         self.task_manager: TaskManager = TaskManager()
 
 
@@ -249,6 +251,7 @@ app.add_middleware(
 app.include_router(convert.router)
 app.include_router(settings.router)
 app.include_router(models.router)
+app.include_router(capabilities.router)
 
 
 
