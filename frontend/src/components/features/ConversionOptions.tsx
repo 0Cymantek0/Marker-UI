@@ -325,9 +325,9 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
                           className="w-full md:w-full"
                         />
                         <p className="text-[11px] text-muted-foreground leading-normal" data-testid="smart-router-desc">
-                          {(SMART_ROUTER_OPTIONS.find(
+                          {((SMART_ROUTER_OPTIONS.find(
                             (o) => o.value === (tempConfig.smart_router_level ?? IU_DEFAULTS.smart_router_level),
-                          ) ?? SMART_ROUTER_OPTIONS[1]).desc}
+                          ) ?? SMART_ROUTER_OPTIONS[1]) as any).desc}
                         </p>
                       </div>
                     )}

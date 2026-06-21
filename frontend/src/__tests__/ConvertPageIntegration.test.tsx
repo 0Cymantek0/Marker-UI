@@ -12,6 +12,8 @@ const mockDownloadResult = vi.fn()
 const mockDeleteJob = vi.fn()
 const mockGetJobStatus = vi.fn()
 const mockGetHistory = vi.fn()
+const mockGetCapabilities = vi.fn()
+const mockPlanConversion = vi.fn()
 
 vi.mock('@/lib/api', () => ({
   uploadFile: (...args: any[]) => mockUploadFile(...args),
@@ -22,6 +24,8 @@ vi.mock('@/lib/api', () => ({
   getHistory: (...args: any[]) => mockGetHistory(...args),
   browseFiles: vi.fn(),
   browseFolder: vi.fn(),
+  getCapabilities: () => mockGetCapabilities(),
+  planConversion: (...args: any[]) => mockPlanConversion(...args),
 }))
 
 // Mock EventSource helper
@@ -49,6 +53,24 @@ describe('ConvertPage Integration with real hook', () => {
     })
     mockGetJobEvents.mockReturnValue(createMockEventSource())
     mockGetHistory.mockResolvedValue({ jobs: [], total: 0 })
+    mockGetCapabilities.mockResolvedValue({
+      engines: {
+        marker_pdf: 'ready',
+        office_docx: 'ready',
+      }
+    })
+    mockPlanConversion.mockResolvedValue({
+      engine: 'marker_pdf',
+      label: 'Marker PDF',
+      confidence: 1.0,
+      reasons: [],
+      needs_marker_models: true,
+      needs_gpu: true,
+      needs_cloud: false,
+      optional_dependencies: [],
+      fallback_chain: [],
+      warnings: [],
+    })
   })
 
   it('submits conversion and renders queue item without crashing', async () => {

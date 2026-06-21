@@ -578,3 +578,34 @@ export async function selfHealModels(): Promise<{ success: boolean; healed_count
 export async function resetModels(deleteUserData: boolean): Promise<{ success: boolean; deleted_models: string[]; user_data_reset: boolean; message: string }> {
   return request<{ success: boolean; deleted_models: string[]; user_data_reset: boolean; message: string }>(`/models/reset?delete_user_data=${deleteUserData}`, { method: 'POST' })
 }
+
+// ─── Capabilities & Conversion Planning ───────────────────────────────
+
+export interface CapabilitiesResponse {
+  engines: Record<string, string>
+}
+
+export interface ConverterPlanResponse {
+  engine: string
+  label: string
+  confidence: number
+  reasons: string[]
+  needs_marker_models: boolean
+  needs_gpu: boolean
+  needs_cloud: boolean
+  optional_dependencies: string[]
+  fallback_chain: string[]
+  warnings: string[]
+}
+
+export async function getCapabilities(): Promise<CapabilitiesResponse> {
+  return request<CapabilitiesResponse>('/capabilities')
+}
+
+export async function planConversion(filename: string, size: number): Promise<ConverterPlanResponse> {
+  return request<ConverterPlanResponse>('/convert/plan', {
+    method: 'POST',
+    body: JSON.stringify({ filename, size }),
+  })
+}
+

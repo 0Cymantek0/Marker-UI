@@ -10,6 +10,9 @@ import { OutputViewer } from '@/components/features/OutputViewer'
 import { ModelSwapDialog } from '@/components/features/conversion/ModelSwapDialog'
 import { useConversionQueue } from '@/hooks/useConversionQueue'
 import type { ConversionConfig } from '@/lib/api'
+import { useNavigate } from 'react-router-dom'
+import { planConversion, getCapabilities } from '@/lib/api'
+import type { ConverterPlanResponse } from '@/lib/api'
 import { Progress } from '@/components/ui/progress'
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -29,6 +32,7 @@ const DEFAULT_CONFIG: ConversionConfig = {
 }
 
 export function ConvertPage() {
+  const navigate = useNavigate()
   const [files, setFiles] = useState<File[]>([])
   const [localPaths, setLocalPaths] = useState<string>('')
   const [outputDir, setOutputDir] = useState<string>('')
@@ -48,6 +52,70 @@ export function ConvertPage() {
   // Model-swap dialog: which job it targets, and whether it auto-surfaced.
   const [swapJobId, setSwapJobId] = useState<string | null>(null)
   const [swapAuto, setSwapAuto] = useState(false)
+
+  const [conversionPlan, setConversionPlan] = useState<ConverterPlanResponse | null>(null)
+  const [checkingPlan, setCheckingPlan] = useState(false)
+  const [capabilities, setCapabilities] = useState<Record<string, string>>({})
+
+  // Fetch capabilities on mount and poll
+  useEffect(() => {
+    let active = true
+    const fetchCapabilities = async () => {
+      try {
+        const data = await getCapabilities()
+        if (active) {
+          setCapabilities(data.engines)
+        }
+      } catch (err) {
+        console.error('Failed to fetch capabilities:', err)
+      }
+    }
+    
+    fetchCapabilities()
+    const interval = setInterval(fetchCapabilities, 10000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [])
+
+  // Plan conversion when inputs or config change
+  useEffect(() => {
+    let active = true
+    const firstFile = files[0]
+    const filename = firstFile ? firstFile.name : localPaths.split('\n')[0]?.trim()
+    const size = firstFile ? firstFile.size : 1000 // mock size for local paths
+    
+    if (!filename) {
+      setConversionPlan(null)
+      return
+    }
+
+    const checkPlan = async () => {
+      setCheckingPlan(true)
+      try {
+        const plan = await planConversion(filename, size)
+        if (active) {
+          setConversionPlan(plan)
+        }
+      } catch (err) {
+        console.error('Failed to get conversion plan:', err)
+      } finally {
+        if (active) {
+          setCheckingPlan(false)
+        }
+      }
+    }
+
+    const timer = setTimeout(checkPlan, 300) // debounce
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [files, localPaths, config])
+
+  const engineStatus = conversionPlan ? capabilities[conversionPlan.engine] : null
+  const isModelsMissing = engineStatus === 'models_missing' || engineStatus === 'models_downloading'
 
   useEffect(() => {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
@@ -119,7 +187,21 @@ export function ConvertPage() {
     }
   }, [files, localPaths, config, outputDir, start])
 
+  const handleConvertClick = useCallback(() => {
+    if (isModelsMissing) {
+      navigate('/onboarding')
+      return
+    }
+    void handleConvert()
+  }, [isModelsMissing, navigate, handleConvert])
+
   const getButtonText = () => {
+    if (checkingPlan) return 'Checking File Type...'
+    if (isModelsMissing) {
+      return engineStatus === 'models_downloading'
+        ? 'Installing OCR models (click to track)...'
+        : 'Install local OCR models to continue'
+    }
     const parsedLocalPaths = localPaths
       .split('\n')
       .map((p) => p.trim())
@@ -163,6 +245,21 @@ export function ConvertPage() {
               outputDir={outputDir}
               onOutputDirChange={setOutputDir}
             />
+            {conversionPlan && (
+              <div className="mt-2 text-xs text-muted-foreground flex flex-col gap-1.5 p-3 rounded-xl border border-border/30 bg-muted/30 animate-fade-in">
+                <div className="flex items-center gap-1.5 justify-between">
+                  <span className="font-semibold text-foreground">Planned Engine:</span>
+                  <span className="font-mono text-primary bg-primary/5 px-2 py-0.5 rounded text-[10px]">
+                    {conversionPlan.label}
+                  </span>
+                </div>
+                {conversionPlan.warnings && conversionPlan.warnings.length > 0 && (
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 border-t border-border/10 pt-1">
+                    {conversionPlan.warnings.join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <hr className="border-border/30" />
@@ -182,8 +279,11 @@ export function ConvertPage() {
 
           {/* Action: Convert Button */}
           <Button
-            onClick={handleConvert}
-            disabled={files.length === 0 && localPaths.trim().length === 0}
+            onClick={handleConvertClick}
+            disabled={
+              checkingPlan ||
+              (!isModelsMissing && files.length === 0 && localPaths.trim().length === 0)
+            }
             className="w-full h-12 text-xs font-bold uppercase tracking-wider shadow-md rounded-xl hover:scale-[1.002] active:scale-[0.99] transition-all duration-200"
             size="lg"
           >

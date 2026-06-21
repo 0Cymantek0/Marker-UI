@@ -3,6 +3,16 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import '@testing-library/jest-dom'
 
+// Mock react-router-dom
+const mockNavigate = vi.fn()
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate
+  }
+})
+
 // Mock useConversionQueue hook
 const mockUseConversionQueue = vi.fn()
 vi.mock('@/hooks/useConversionQueue', () => ({
@@ -53,12 +63,36 @@ const mockGetLLMProviders = vi.fn().mockResolvedValue([
     ],
   },
 ])
+const mockGetCapabilities = vi.fn().mockResolvedValue({
+  engines: {
+    marker_pdf: 'ready',
+    office_docx: 'ready',
+    office_pptx: 'ready',
+    spreadsheet: 'ready',
+    text_data: 'ready',
+    html: 'ready',
+  }
+})
+const mockPlanConversion = vi.fn().mockResolvedValue({
+  engine: 'marker_pdf',
+  label: 'Marker PDF',
+  confidence: 1.0,
+  reasons: [],
+  needs_marker_models: true,
+  needs_gpu: true,
+  needs_cloud: false,
+  optional_dependencies: [],
+  fallback_chain: [],
+  warnings: [],
+})
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
   return {
     ...actual,
     getLLMProviders: () => mockGetLLMProviders(),
     applyLiveOverride: (body: unknown) => mockApplyLiveOverride(body),
+    getCapabilities: () => mockGetCapabilities(),
+    planConversion: (filename: string, size: number) => mockPlanConversion(filename, size),
   }
 })
 

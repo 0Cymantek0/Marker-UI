@@ -18,6 +18,13 @@ vi.mock('@/lib/api', () => ({
   selfHealModels: vi.fn(),
   resetModels: vi.fn(),
   updateSetting: vi.fn(),
+  getGPUWorkersResolved: vi.fn().mockResolvedValue({
+    mode: 'auto',
+    detected: 1,
+    effective: 1,
+    active: 'true',
+    restart_required: false,
+  }),
 }))
 
 vi.mock('sonner', () => ({

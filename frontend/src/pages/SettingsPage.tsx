@@ -910,7 +910,7 @@ export function SettingsPage() {
             <button
               type="button"
               onClick={handleSaveWorkerScaling}
-              disabled={isSavingWorkers || (workerMode === 'manual' && gpuWorkers && gpuWorkers.detected <= 0)}
+              disabled={isSavingWorkers || (workerMode === 'manual' && !!gpuWorkers && gpuWorkers.detected <= 0)}
               className="text-xs font-bold uppercase tracking-wider px-4 rounded-lg shadow-sm h-9 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSavingWorkers ? 'Saving…' : 'Apply'}
