@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from app.conversion.converters.marker_pdf import MarkerPdfConverter
+from app.conversion.converters.liteparse_pdf import LiteParsePdfConverter
 from app.conversion.converters.office_docx import OfficeDocxConverter
 from app.conversion.converters.office_pptx import OfficePptxConverter
 from app.conversion.registry import ConverterRegistry
@@ -39,6 +40,7 @@ class ConversionService:
 
         # Register Phase 0 converters.
         self._registry.register(MarkerPdfConverter(marker_service))
+        self._registry.register(LiteParsePdfConverter())
         self._registry.register(OfficeDocxConverter(marker_service))
         self._registry.register(OfficePptxConverter(marker_service))
 
@@ -161,7 +163,43 @@ class ConversionService:
             result.metadata["engine"] = fb_plan.to_dict()
             return result.to_legacy_envelope()
 
+        if plan.engine == "liteparse_pdf":
+            probe_data = config.get("probe_result") if isinstance(config, dict) else None
+            page_count = int((probe_data or {}).get("page_count") or 1) if isinstance(probe_data, dict) else 1
+            min_chars = max(100, page_count * 100)
+            if len((result.text or "").strip()) < min_chars:
+                logger.warning(
+                    "LiteParse output for '%s' looked too short (%d chars, %d pages); falling back to marker_pdf",
+                    filepath,
+                    len((result.text or "").strip()),
+                    page_count,
+                )
+                fb_plan = ConverterPlan(
+                    engine="marker_pdf",
+                    label=f"{plan.label} -> Marker PDF (short-output fallback)",
+                    confidence=min(plan.confidence, 0.5),
+                    reasons=plan.reasons + [
+                        f"LiteParse returned suspiciously short output (<100 chars/page); falling back to marker_pdf"
+                    ],
+                    needs_marker_models=True,
+                    needs_gpu=True,
+                    execution_backend="marker_worker",
+                    fallback_chain=["liteparse_pdf", "marker_pdf"],
+                    warnings=plan.warnings + ["LiteParse output was too short"],
+                )
+                fb_converter = self._registry.get("marker_pdf")
+                if fb_converter is None:
+                    raise RuntimeError("marker_pdf fallback converter is not registered")
+                result = fb_converter.convert(filepath, config, device=device)
+                result.metadata["engine"] = fb_plan.to_dict()
+                if isinstance(probe_data, dict):
+                    result.metadata["probe_result"] = probe_data
+                return result.to_legacy_envelope()
+
         # Inject the plan into metadata so job status/history can show it.
         result.metadata["engine"] = plan.to_dict()
+        probe_data = config.get("probe_result") if isinstance(config, dict) else None
+        if isinstance(probe_data, dict):
+            result.metadata["probe_result"] = probe_data
 
         return result.to_legacy_envelope()

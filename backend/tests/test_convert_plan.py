@@ -47,7 +47,7 @@ async def test_convert_plan_docx_with_registration(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_convert_plan_pdf(client: AsyncClient):
-    """Predicting plan for a pdf file selects marker_pdf."""
+    """Filename-only PDF plan is conservative and marked preliminary."""
     resp = await client.post(
         "/api/convert/plan",
         json={"filename": "document.pdf", "size": 5242880},
@@ -58,6 +58,8 @@ async def test_convert_plan_pdf(client: AsyncClient):
     assert plan["label"] == "Marker PDF"
     assert plan["needs_marker_models"] is True
     assert plan["needs_gpu"] is True
+    assert plan["preliminary"] is True
+    assert any("Preliminary" in warning for warning in plan["warnings"])
 
 
 @pytest.mark.asyncio

@@ -107,7 +107,7 @@ class TestConversionService:
 
         assert engine_meta["engine"] == "marker_pdf"
         assert engine_meta["label"] == "Marker PDF"
-        assert engine_meta["confidence"] == 1.0
+        assert engine_meta["confidence"] == 0.75
         assert engine_meta["needs_marker_models"] is True
         assert isinstance(engine_meta["reasons"], list)
 
@@ -139,7 +139,7 @@ class TestConversionService:
 
         assert plan.engine == "marker_pdf"
         assert plan.needs_marker_models is True
-        assert plan.confidence == 1.0
+        assert plan.confidence == 0.75
         # plan() should NOT trigger conversion
         assert len(fake_ms.convert_calls) == 0
 
@@ -216,3 +216,44 @@ class TestConversionService:
         assert engine_meta["engine"] == "marker_pdf"
         assert "runtime fallback" in engine_meta["label"].lower()
         assert engine_meta["fallback_chain"] == ["office_docx", "marker_pdf"]
+
+    def test_liteparse_short_output_falls_back_to_marker(self, tmp_path: Any) -> None:
+        """LiteParse fast path retries Marker when output is too short."""
+        from app.conversion.result import UniversalConversionResult
+
+        svc, fake_ms = self._make_service()
+        pdf_path = tmp_path / "clean.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        config = {
+            "probe_result": {
+                "page_count": 3,
+                "text_layer_score": 0.9,
+                "text_quality_score": 0.95,
+                "scan_likelihood": 0.05,
+                "sandwich_likelihood": 0.1,
+                "layout_complexity_score": 0.1,
+                "visual_complexity_score": 0.0,
+                "recommended_engine": "liteparse",
+                "reasons": ["strong extractable text layer"],
+                "sampled_image_count": 0,
+            }
+        }
+
+        liteparse = svc.registry.get("liteparse_pdf")
+        assert liteparse is not None
+        original = liteparse.convert
+
+        def short_convert(filepath, config, device=None):
+            return UniversalConversionResult(text="too short", extension="md")
+
+        liteparse.convert = short_convert  # type: ignore[assignment]
+        try:
+            result = svc.convert_file(str(pdf_path), config)
+        finally:
+            liteparse.convert = original  # type: ignore[assignment]
+
+        assert len(fake_ms.convert_calls) == 1
+        engine_meta = result["metadata"]["engine"]
+        assert engine_meta["engine"] == "marker_pdf"
+        assert "short-output fallback" in engine_meta["label"]
+        assert engine_meta["fallback_chain"] == ["liteparse_pdf", "marker_pdf"]

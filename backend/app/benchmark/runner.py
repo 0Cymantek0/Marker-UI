@@ -12,13 +12,24 @@ samples so the gate logic itself stays pure and unit-testable.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 from app.benchmark.metrics import BenchmarkScore, score_outputs
 
 # The regression threshold carried over from markitdown-integration-plan
 # decision #4: a config must match the golden output at least this well.
 GOLDEN_MATCH_THRESHOLD = 0.80
+
+PHASE3_PDF_CLASSES: tuple[str, ...] = (
+    "clean_digital",
+    "scanned",
+    "sandwich",
+    "table_heavy",
+    "formula_heavy",
+)
 
 
 @dataclass
@@ -65,6 +76,41 @@ class BenchmarkSample:
     hypothesis_table: object | None = None
 
 
+@dataclass
+class PdfBenchmarkCase:
+    """One Phase 3 PDF case with a golden reference."""
+
+    sample_id: str
+    pdf_path: str | Path
+    document_class: str
+    reference_text: str
+    reference_table: object | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PdfEngineOutput:
+    """Normalised output from one PDF engine run."""
+
+    text: str
+    table: object | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PdfBenchmarkComparison:
+    """Phase 3 Marker-vs-LiteParse report across the required PDF classes."""
+
+    marker_report: BenchmarkReport
+    liteparse_report: BenchmarkReport
+    verdict: dict[str, object]
+    covered_classes: tuple[str, ...]
+
+    @property
+    def ready_for_phase4(self) -> bool:
+        return bool(self.verdict.get("phase3_ready_for_phase4"))
+
+
 def run_benchmark(
     config_name: str,
     samples: list[BenchmarkSample],
@@ -81,6 +127,92 @@ def run_benchmark(
         for s in samples
     ]
     return BenchmarkReport(config_name=config_name, scores=scores)
+
+
+def validate_phase3_pdf_corpus(
+    cases: Sequence[PdfBenchmarkCase],
+    required_classes: Sequence[str] = PHASE3_PDF_CLASSES,
+) -> tuple[str, ...]:
+    """Validate that the Phase 3 corpus covers every planned PDF class."""
+    covered = {case.document_class for case in cases}
+    missing = tuple(cls for cls in required_classes if cls not in covered)
+    if missing:
+        raise ValueError(
+            "Phase 3 benchmark corpus missing required PDF classes: "
+            + ", ".join(missing)
+        )
+    return tuple(cls for cls in required_classes if cls in covered)
+
+
+def _coerce_pdf_output(output: PdfEngineOutput | dict[str, Any] | str) -> PdfEngineOutput:
+    if isinstance(output, PdfEngineOutput):
+        return output
+    if isinstance(output, str):
+        return PdfEngineOutput(text=output)
+    if isinstance(output, dict):
+        metadata = output.get("metadata") if isinstance(output.get("metadata"), dict) else {}
+        table = output.get("table") or metadata.get("table")
+        return PdfEngineOutput(
+            text=str(output.get("text") or ""),
+            table=table,
+            metadata=dict(metadata),
+        )
+    raise TypeError(f"Unsupported PDF benchmark output: {type(output).__name__}")
+
+
+def _run_pdf_engine(
+    config_name: str,
+    cases: Sequence[PdfBenchmarkCase],
+    engine: Callable[[PdfBenchmarkCase], PdfEngineOutput | dict[str, Any] | str],
+) -> BenchmarkReport:
+    samples: list[BenchmarkSample] = []
+    for case in cases:
+        output = _coerce_pdf_output(engine(case))
+        samples.append(
+            BenchmarkSample(
+                sample_id=f"{case.document_class}:{case.sample_id}",
+                reference_text=case.reference_text,
+                hypothesis_text=output.text,
+                reference_table=case.reference_table,
+                hypothesis_table=output.table,
+            )
+        )
+    return run_benchmark(config_name, samples)
+
+
+def compare_marker_liteparse_pdfs(
+    cases: Sequence[PdfBenchmarkCase],
+    marker_engine: Callable[[PdfBenchmarkCase], PdfEngineOutput | dict[str, Any] | str],
+    liteparse_engine: Callable[[PdfBenchmarkCase], PdfEngineOutput | dict[str, Any] | str],
+    *,
+    marker_name: str = "marker_pdf",
+    liteparse_name: str = "liteparse_pdf",
+    required_classes: Sequence[str] = PHASE3_PDF_CLASSES,
+) -> PdfBenchmarkComparison:
+    """Run the Phase 3 Marker-vs-LiteParse gate on the existing benchmark logic."""
+    covered_classes = validate_phase3_pdf_corpus(cases, required_classes)
+    marker_report = _run_pdf_engine(marker_name, cases, marker_engine)
+    liteparse_report = _run_pdf_engine(liteparse_name, cases, liteparse_engine)
+    verdict = compare_configs(marker_report, liteparse_report)
+    verdict.update(
+        {
+            "covered_classes": list(covered_classes),
+            "phase3_ready_for_phase4": (
+                marker_report.sample_count == liteparse_report.sample_count
+                and marker_report.sample_count >= len(required_classes)
+                and marker_report.passing
+                and liteparse_report.passing
+            ),
+            "marker_regressions": marker_report.regressions(),
+            "liteparse_regressions": liteparse_report.regressions(),
+        }
+    )
+    return PdfBenchmarkComparison(
+        marker_report=marker_report,
+        liteparse_report=liteparse_report,
+        verdict=verdict,
+        covered_classes=covered_classes,
+    )
 
 
 def compare_configs(

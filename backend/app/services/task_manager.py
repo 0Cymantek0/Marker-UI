@@ -360,7 +360,7 @@ class TaskManager:
             logger.exception("finalize failed for process job %s", job_id)
         self._progress[job_id] = 100
         self._job_status_text[job_id] = "Conversion completed successfully."
-        self._cleanup_proc_job(job_id, config)
+        self._cleanup_proc_job(job_id, config, state="done")
 
     def _fail_proc_job(self, job_id: str, error_message: str) -> None:
         """Record a worker failure (process backend)."""
@@ -370,11 +370,11 @@ class TaskManager:
             self._run_async(self._fail_job(job_id, error_message))
         except Exception:  # noqa: BLE001
             logger.exception("fail-job write failed for process job %s", job_id)
-        self._cleanup_proc_job(job_id, self._proc_configs.pop(job_id, {}))
+        self._cleanup_proc_job(job_id, self._proc_configs.pop(job_id, {}), state="failed")
 
-    def _cleanup_proc_job(self, job_id: str, config: dict[str, Any]) -> None:
+    def _cleanup_proc_job(self, job_id: str, config: dict[str, Any], *, state: str) -> None:
         with self._lock:
-            self._proc_jobs[job_id] = "done"
+            self._proc_jobs[job_id] = state
             self._pids.pop(job_id, None)
         # Drop any live model hot-swap for this job's provider so it never bleeds
         # into an unrelated later job. Best effort; process backend overrides are
@@ -432,7 +432,7 @@ class TaskManager:
         self._job_has_real_progress[job_id] = False
         self._job_providers[job_id] = config.get("llm_provider")
 
-        backend = self._select_backend(filepath, marker_service)
+        backend = self._select_backend(filepath, config, marker_service)
         future = backend.submit(
             self._run_conversion,
             job_id,
@@ -474,7 +474,7 @@ class TaskManager:
                 self._proc_configs[job_id] = dict(config)
                 self._proc_jobs[job_id] = "running"
 
-    def _select_backend(self, filepath: str, conversion_service: Any) -> ExecutorBackend:
+    def _select_backend(self, filepath: str, config: dict[str, Any], conversion_service: Any) -> ExecutorBackend:
         """Pick the executor for a job based on its ConversionPlan.
 
         Only the process backend splits routing: cpu_thread plans go to the CPU
@@ -486,7 +486,7 @@ class TaskManager:
         if not self._backend.is_process:
             return self._backend
         try:
-            plan = conversion_service.plan(filepath, {})
+            plan = conversion_service.plan(filepath, config)
             if plan.execution_backend == "cpu_thread":
                 return self._cpu_backend
         except Exception:  # noqa: BLE001 - a planning error must not block the job
@@ -802,8 +802,14 @@ class TaskManager:
         metadata = result.get("metadata") or {}
         # Only persist the image-understanding sidecar (a small list); drop any
         # large/binary metadata the renderer may have returned.
-        result_metadata = {"image_understanding": metadata.get("image_understanding") or []}
-        result_metadata_json = json.dumps(result_metadata) if result_metadata["image_understanding"] else None
+        result_metadata = {
+            "image_understanding": metadata.get("image_understanding") or [],
+        }
+        if metadata.get("engine"):
+            result_metadata["engine"] = metadata["engine"]
+        if metadata.get("probe_result"):
+            result_metadata["probe_result"] = metadata["probe_result"]
+        result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
         output_format = config.get("output_format", "markdown")
         original_name = config.get("original_name", "output")
         local_filepath = config.get("local_filepath")

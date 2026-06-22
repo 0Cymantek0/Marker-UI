@@ -7,6 +7,7 @@ import logging
 import tempfile
 import uuid
 import zipfile
+import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
@@ -14,10 +15,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTask
 
 import aiofiles
 
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
+from app.conversion.probe import probe_pdf
 from app.database import get_db
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
@@ -29,10 +32,55 @@ ALLOWED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp"
 }
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
+MAX_PAGE_RANGE_PAGES = 500
+HARD_MAX_PAGE_RANGE_PAGES = 2000
 
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _count_requested_pages(page_range: str) -> int:
+    count = 0
+    for part in page_range.split(","):
+        token = part.strip()
+        if not token:
+            continue
+        if "-" in token:
+            start_s, end_s = token.split("-", 1)
+            start = int(start_s)
+            end = int(end_s)
+            if start <= 0 or end <= 0 or end < start:
+                raise ValueError
+            count += end - start + 1
+        else:
+            page = int(token)
+            if page <= 0:
+                raise ValueError
+            count += 1
+    return count
+
+
+def _validate_page_range(page_range: str, page_count: int) -> None:
+    try:
+        requested = _count_requested_pages(page_range)
+        highest = 0
+        for part in page_range.split(","):
+            token = part.strip()
+            if not token:
+                continue
+            highest = max(highest, int(token.split("-")[-1]))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid page_range format") from exc
+    if highest > page_count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"page_range exceeds document length ({page_count} pages)",
+        )
+    if requested > HARD_MAX_PAGE_RANGE_PAGES:
+        raise HTTPException(status_code=400, detail="page_range exceeds hard cap of 2000 pages")
+    if requested > MAX_PAGE_RANGE_PAGES:
+        raise HTTPException(status_code=400, detail="page_range exceeds cap of 500 pages")
 
 
 def _parse_image_understanding(metadata_json: str | None) -> list[dict] | None:
@@ -49,6 +97,23 @@ def _parse_image_understanding(metadata_json: str | None) -> list[dict] | None:
         return None
     entries = parsed.get("image_understanding") if isinstance(parsed, dict) else None
     return entries or None
+
+
+def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | None:
+    if not metadata_json:
+        return None
+    try:
+        parsed = json.loads(metadata_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    metadata = {
+        key: parsed[key]
+        for key in ("engine", "probe_result")
+        if key in parsed and parsed[key]
+    }
+    return metadata or None
 
 
 async def _load_llm_config(db: AsyncSession) -> dict[str, Any]:
@@ -87,6 +152,7 @@ async def upload_file(
     output_dir: Optional[str] = Query(None, description="Optional custom output directory path"),
     output_format: str = Query("markdown", description="Output format: markdown, json, html, chunks"),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
+    engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
     use_llm: bool = Query(False, description="Enable LLM-assisted conversion"),
     llm_provider: Optional[str] = Query(None, description="LLM provider ID override"),
     llm_model: Optional[str] = Query(None, description="LLM model name override"),
@@ -203,6 +269,8 @@ async def upload_file(
     }
     if converter:
         config["converter_cls"] = converter
+    if engine_override:
+        config["engine_override"] = engine_override
     if use_llm:
         config["use_llm"] = True
     if llm_provider:
@@ -264,6 +332,12 @@ async def upload_file(
     if output_dir:
         config["output_dir"] = output_dir
 
+    if suffix == ".pdf":
+        probe_result = await asyncio.to_thread(probe_pdf, stored_path)
+        config["probe_result"] = probe_result.to_dict()
+        if page_range and probe_result.page_count > 0:
+            _validate_page_range(page_range, probe_result.page_count)
+
     # DB record
     job = ConversionJob(
         id=job_id,
@@ -305,8 +379,22 @@ async def plan_conversion(
     """Predict the conversion plan for a file before uploading."""
     from app.main import _app_state
 
-    # We pass an empty config because we just want the base decision.
-    plan = _app_state.conversion_service.plan_by_metadata(req.filename, req.size, {})
+    config: dict[str, Any] = {}
+    preliminary = True
+    if req.engine_override:
+        config["engine_override"] = req.engine_override
+    if req.local_filepath:
+        path = Path(req.local_filepath)
+        if path.is_absolute() and path.is_file() and path.suffix.lower() == ".pdf":
+            probe_result = await asyncio.to_thread(probe_pdf, path)
+            config["probe_result"] = probe_result.to_dict()
+            preliminary = False
+
+    plan = (
+        _app_state.conversion_service.plan(req.local_filepath, config)
+        if req.local_filepath and not preliminary
+        else _app_state.conversion_service.plan_by_metadata(req.filename, req.size, config)
+    )
     return ConverterPlanResponse(
         engine=plan.engine,
         label=plan.label,
@@ -319,6 +407,8 @@ async def plan_conversion(
         optional_dependencies=plan.optional_dependencies,
         fallback_chain=plan.fallback_chain,
         warnings=plan.warnings,
+        preliminary=preliminary,
+        probe_result=config.get("probe_result"),
     )
 
 
@@ -377,6 +467,7 @@ async def get_status(
         error_message=job.error_message,
         result_text=job.result_text,
         image_understanding=_parse_image_understanding(job.result_metadata_json),
+        conversion_metadata=_parse_conversion_metadata(job.result_metadata_json),
         created_at=job.created_at,
         completed_at=job.completed_at,
         filename=job.original_name,
@@ -433,7 +524,9 @@ async def download_result(
 
     result_path = Path(job.result_path)
     if result_path.is_dir():
-        tmp_zip = Path(tempfile.mktemp(suffix=".zip"))
+        tmp_file = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        tmp_zip = Path(tmp_file.name)
+        tmp_file.close()
         try:
             with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
                 for file_in_dir in sorted(result_path.rglob("*")):
@@ -443,6 +536,7 @@ async def download_result(
                 path=str(tmp_zip),
                 filename=f"{Path(job.original_name).stem}.zip",
                 media_type="application/zip",
+                background=BackgroundTask(tmp_zip.unlink, missing_ok=True),
             )
         except Exception:
             tmp_zip.unlink(missing_ok=True)
@@ -507,6 +601,7 @@ async def get_history(
                 filename=j.original_name,
                 output_format=j.output_format,
                 converter=converter,
+                conversion_metadata=_parse_conversion_metadata(j.result_metadata_json),
             )
         )
 

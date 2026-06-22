@@ -18,9 +18,14 @@ from app.benchmark.metrics import (
 from app.benchmark.runner import (
     GOLDEN_MATCH_THRESHOLD,
     BenchmarkReport,
+    PdfBenchmarkCase,
+    PdfEngineOutput,
+    PHASE3_PDF_CLASSES,
     BenchmarkSample,
+    compare_marker_liteparse_pdfs,
     compare_configs,
     run_benchmark,
+    validate_phase3_pdf_corpus,
 )
 
 
@@ -190,3 +195,79 @@ def test_compare_configs_swaps_when_better_and_passing():
 def test_threshold_is_eighty_percent():
     # Pin the golden-match threshold the gate inherits from markitdown #4.
     assert GOLDEN_MATCH_THRESHOLD == 0.80
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 Marker-vs-LiteParse PDF gate
+# ---------------------------------------------------------------------------
+
+
+def _phase3_cases() -> list[PdfBenchmarkCase]:
+    return [
+        PdfBenchmarkCase(
+            sample_id=f"{document_class}-1",
+            pdf_path=f"fixtures/{document_class}.pdf",
+            document_class=document_class,
+            reference_text=f"{document_class} reference 100",
+        )
+        for document_class in PHASE3_PDF_CLASSES
+    ]
+
+
+def test_phase3_corpus_requires_all_planned_pdf_classes():
+    incomplete = _phase3_cases()[:-1]
+
+    try:
+        validate_phase3_pdf_corpus(incomplete)
+    except ValueError as exc:
+        assert PHASE3_PDF_CLASSES[-1] in str(exc)
+    else:
+        raise AssertionError("Phase 3 corpus validation should fail")
+
+
+def test_phase3_compare_runs_marker_and_liteparse_across_required_classes():
+    calls: list[tuple[str, str]] = []
+
+    def marker_engine(case: PdfBenchmarkCase) -> PdfEngineOutput:
+        calls.append(("marker", case.document_class))
+        return PdfEngineOutput(text=case.reference_text)
+
+    def liteparse_engine(case: PdfBenchmarkCase) -> dict[str, object]:
+        calls.append(("liteparse", case.document_class))
+        return {"text": case.reference_text, "metadata": {"engine": "liteparse_pdf"}}
+
+    comparison = compare_marker_liteparse_pdfs(
+        _phase3_cases(),
+        marker_engine=marker_engine,
+        liteparse_engine=liteparse_engine,
+    )
+
+    assert comparison.marker_report.sample_count == len(PHASE3_PDF_CLASSES)
+    assert comparison.liteparse_report.sample_count == len(PHASE3_PDF_CLASSES)
+    assert comparison.ready_for_phase4
+    assert comparison.verdict["should_swap"] is False
+    assert comparison.covered_classes == PHASE3_PDF_CLASSES
+    assert calls == [
+        ("marker", document_class) for document_class in PHASE3_PDF_CLASSES
+    ] + [
+        ("liteparse", document_class) for document_class in PHASE3_PDF_CLASSES
+    ]
+
+
+def test_phase3_compare_blocks_phase4_when_liteparse_fails_gate():
+    def marker_engine(case: PdfBenchmarkCase) -> str:
+        return case.reference_text
+
+    def liteparse_engine(case: PdfBenchmarkCase) -> str:
+        return "garbage"
+
+    comparison = compare_marker_liteparse_pdfs(
+        _phase3_cases(),
+        marker_engine=marker_engine,
+        liteparse_engine=liteparse_engine,
+    )
+
+    assert comparison.marker_report.passing
+    assert not comparison.liteparse_report.passing
+    assert not comparison.ready_for_phase4
+    assert comparison.verdict["liteparse_regressions"]

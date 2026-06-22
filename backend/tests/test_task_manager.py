@@ -313,10 +313,10 @@ class TestWorkerEventDispatch:
                     type=WorkerEventType.error, job_id="w-err", error_message="boom"
                 )
                 task_manager._dispatch_worker_event(ev)
-        # Failure path invoked once + job marked done.
+        # Failure path invoked once + job marked failed.
         assert mock_run.call_count == 1
         assert task_manager._progress["w-err"] == 0
-        assert task_manager._proc_jobs.get("w-err") == "done"
+        assert task_manager._proc_jobs.get("w-err") == "failed"
 
     def test_result_event_finalizes_and_marks_completed(self, task_manager: TaskManager):
         payload = {"text": "# md", "extension": "md", "images": {}}
@@ -373,9 +373,9 @@ class TestExecutionBackendRouting:
         fake_cs = MagicMock()
         fake_cs.plan.return_value = cpu_plan
 
-        chosen = tm._select_backend("/tmp/report.docx", fake_cs)
+        chosen = tm._select_backend("/tmp/report.docx", {"probe_result": {"page_count": 1}}, fake_cs)
         assert chosen is tm._cpu_backend
-        fake_cs.plan.assert_called_once()
+        fake_cs.plan.assert_called_once_with("/tmp/report.docx", {"probe_result": {"page_count": 1}})
 
     def test_marker_plan_routes_to_process_backend(self):
         from app.conversion.result import ConverterPlan
@@ -397,7 +397,7 @@ class TestExecutionBackendRouting:
         fake_cs = MagicMock()
         fake_cs.plan.return_value = marker_plan
 
-        chosen = tm._select_backend("/tmp/doc.pdf", fake_cs)
+        chosen = tm._select_backend("/tmp/doc.pdf", {}, fake_cs)
         assert chosen is tm._backend
 
     def test_thread_backend_always_uses_primary(self):
@@ -422,7 +422,7 @@ class TestExecutionBackendRouting:
         fake_cs = MagicMock()
         fake_cs.plan.return_value = cpu_plan
 
-        chosen = tm._select_backend("/tmp/report.docx", fake_cs)
+        chosen = tm._select_backend("/tmp/report.docx", {}, fake_cs)
         assert chosen is tm._backend
         fake_cs.plan.assert_not_called()
 
@@ -436,7 +436,7 @@ class TestExecutionBackendRouting:
         fake_cs = MagicMock()
         fake_cs.plan.side_effect = RuntimeError("planning exploded")
 
-        chosen = tm._select_backend("/tmp/x.docx", fake_cs)
+        chosen = tm._select_backend("/tmp/x.docx", {}, fake_cs)
         assert chosen is tm._backend
 
 

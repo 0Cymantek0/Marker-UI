@@ -137,6 +137,7 @@ class JobStatusResponse(BaseModel):
     result_text: Optional[str] = None
     # Conversion metadata (e.g. per-image understanding info for the badge UI).
     image_understanding: Optional[list[dict]] = None
+    conversion_metadata: Optional[dict] = None
     created_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     filename: Optional[str] = None
@@ -314,6 +315,8 @@ class ConvertPlanRequest(BaseModel):
 
     filename: str
     size: int
+    local_filepath: Optional[str] = None
+    engine_override: Optional[str] = None
 
 
 class ConverterPlanResponse(BaseModel):
@@ -330,6 +333,8 @@ class ConverterPlanResponse(BaseModel):
     optional_dependencies: list[str]
     fallback_chain: list[str]
     warnings: list[str]
+    preliminary: bool = False
+    probe_result: Optional[dict] = None
 
 
 

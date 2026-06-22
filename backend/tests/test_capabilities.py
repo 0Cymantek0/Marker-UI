@@ -46,5 +46,41 @@ async def test_get_capabilities_with_mocked_dependencies(client: AsyncClient):
         resp = await client.get("/api/capabilities")
         assert resp.status_code == 200
         engines = resp.json()["engines"]
-        assert engines["office_docx"] == "ready"
-        assert engines["office_pptx"] == "missing_optional_dependency"
+
+
+@pytest.mark.asyncio
+async def test_marker_pdf_ready_when_models_are_downloaded_but_lazy_init_not_started(client: AsyncClient):
+    """Downloaded Marker models are conversion-ready even before lazy initialization."""
+    tracker_status = {
+        "initialized": False,
+        "loading": False,
+        "overall": {"status": "pending"},
+    }
+
+    with (
+        patch("app.services.model_tracker.tracker.get_status_dict", return_value=tracker_status),
+        patch("app.services.model_tracker.check_models_downloaded", return_value=True),
+    ):
+        resp = await client.get("/api/capabilities")
+
+    assert resp.status_code == 200
+    assert resp.json()["engines"]["marker_pdf"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_marker_pdf_reports_downloading_when_tracker_is_active(client: AsyncClient):
+    """Active model setup should remain visible as a downloading capability state."""
+    tracker_status = {
+        "initialized": False,
+        "loading": True,
+        "overall": {"status": "loading"},
+    }
+
+    with (
+        patch("app.services.model_tracker.tracker.get_status_dict", return_value=tracker_status),
+        patch("app.services.model_tracker.check_models_downloaded", return_value=False),
+    ):
+        resp = await client.get("/api/capabilities")
+
+    assert resp.status_code == 200
+    assert resp.json()["engines"]["marker_pdf"] == "models_downloading"

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,8 @@ _DEP_IMPORTS = {
     "markdownify": "markdownify",
     "charset-normalizer": "charset_normalizer",
     "defusedxml": "defusedxml",
+    "liteparse": "liteparse",
+    "pypdf": "pypdf",
 }
 
 # In-memory cache for fast lookups
@@ -62,13 +65,14 @@ def get_engine_status() -> dict[str, str]:
     - "models_missing": Needs Marker models, which are not downloaded.
     - "missing_optional_dependency": Missing required Python libraries.
     """
-    from app.services.model_tracker import tracker
+    from app.services.model_tracker import check_models_downloaded, tracker
 
     # 1. marker_pdf engine
     t_status = tracker.get_status_dict()
-    if t_status.get("initialized"):
+    overall_status = (t_status.get("overall") or {}).get("status")
+    if t_status.get("initialized") or check_models_downloaded():
         marker_pdf_status = "ready"
-    elif t_status.get("status") == "downloading":
+    elif t_status.get("loading") or overall_status in {"downloading", "loading"}:
         marker_pdf_status = "models_downloading"
     else:
         marker_pdf_status = "models_missing"
@@ -104,12 +108,17 @@ def get_engine_status() -> dict[str, str]:
         html_status = "missing_optional_dependency"
 
     # 7. text_data, notebook, archive are built-in/standard lib based
+    liteparse_status = "ready" if (
+        is_dependency_available("liteparse") or shutil.which("lit")
+    ) else "missing_optional_dependency"
+
     text_data_status = "ready"
     notebook_status = "ready"
     archive_status = "ready"
 
     return {
         "marker_pdf": marker_pdf_status,
+        "liteparse_pdf": liteparse_status,
         "office_docx": office_docx_status,
         "office_pptx": office_pptx_status,
         "spreadsheet": spreadsheet_status,

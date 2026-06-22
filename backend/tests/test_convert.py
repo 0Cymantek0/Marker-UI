@@ -9,6 +9,9 @@ from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from sqlalchemy import select
 
 from app.database import get_db
 from app.models.job import ConversionJob
@@ -19,6 +22,17 @@ from app.models.job import ConversionJob
 
 VALID_PDF_FILENAME = "test_document.pdf"
 MINIMAL_PDF_BYTES = b"%PDF-1.4 test content"
+
+
+def _digital_pdf_bytes(pages: int = 2) -> bytes:
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=letter)
+    for page in range(pages):
+        for idx in range(20):
+            c.drawString(72, 740 - idx * 20, f"Digital text page {page + 1} line {idx + 1} with useful words.")
+        c.showPage()
+    c.save()
+    return buf.getvalue()
 
 
 async def _upload_file(
@@ -55,6 +69,49 @@ async def test_upload_valid_extension_returns_200(
     assert body["status"] == "pending"
     assert body["filename"] == VALID_PDF_FILENAME
     assert body["output_format"] == "markdown"
+
+
+@pytest.mark.asyncio
+async def test_pdf_upload_persists_probe_result(client: AsyncClient, db_session):
+    resp = await _upload_file(client, content=_digital_pdf_bytes())
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+
+    assert config["probe_result"]["page_count"] == 2
+    assert config["probe_result"]["recommended_engine"] == "liteparse"
+
+
+@pytest.mark.asyncio
+async def test_upload_persists_engine_override(client: AsyncClient, db_session):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(),
+        extra_params={"engine_override": "marker_pdf"},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+
+    assert config["engine_override"] == "marker_pdf"
+
+
+@pytest.mark.asyncio
+async def test_pdf_upload_rejects_page_range_past_document(client: AsyncClient):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(pages=2),
+        extra_params={"page_range": "1-3"},
+    )
+
+    assert resp.status_code == 400
+    assert "document length" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

@@ -30,8 +30,8 @@ class TestConversionRouter:
 
     # (extension, expected_engine, expected_needs_marker, expected_needs_gpu, min_confidence)
     ROUTING_TABLE = [
-        # PDF
-        (".pdf", "marker_pdf", True, True, 1.0),
+        # PDF without bytes/probe stays conservative and preliminary.
+        (".pdf", "marker_pdf", True, True, 0.75),
         # Images → marker for OCR
         (".jpg", "marker_pdf", True, True, 1.0),
         (".jpeg", "marker_pdf", True, True, 1.0),
@@ -119,7 +119,7 @@ class TestConversionRouter:
         plan = ConversionRouter.plan(stream_info, {})
 
         assert len(plan.reasons) >= 1
-        assert ".pdf" in plan.reasons[0]
+        assert "PDF complexity" in plan.reasons[0]
 
     def test_plan_is_pure(self) -> None:
         """Calling plan twice with the same input produces identical results."""
@@ -157,7 +157,7 @@ class TestConversionRouter:
         plan_lower = ConversionRouter.plan(lower, {})
 
         assert plan_upper.engine == plan_lower.engine == "marker_pdf"
-        assert plan_upper.confidence == plan_lower.confidence == 1.0
+        assert plan_upper.confidence == plan_lower.confidence == 0.75
         assert plan_upper.needs_marker_models is True
 
     def test_uppercase_office_extension_routes_to_office(self) -> None:
@@ -168,3 +168,100 @@ class TestConversionRouter:
         assert plan.engine == "office_docx"
         assert plan.needs_marker_models is False
         assert plan.execution_backend == "cpu_thread"
+
+    def test_clean_digital_pdf_probe_routes_to_liteparse(self) -> None:
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(stream_info, {
+            "probe_result": {
+                "page_count": 2,
+                "text_layer_score": 0.9,
+                "text_quality_score": 0.95,
+                "scan_likelihood": 0.05,
+                "sandwich_likelihood": 0.1,
+                "layout_complexity_score": 0.1,
+                "visual_complexity_score": 0.0,
+                "recommended_engine": "liteparse",
+                "reasons": ["strong extractable text layer"],
+                "sampled_image_count": 0,
+            },
+            "image_handling_mode": "both",
+        })
+
+        assert plan.engine == "liteparse_pdf"
+        assert plan.needs_marker_models is False
+        assert plan.execution_backend == "cpu_thread"
+
+    def test_scanned_pdf_probe_routes_to_marker(self) -> None:
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(stream_info, {
+            "probe_result": {
+                "page_count": 2,
+                "text_layer_score": 0.0,
+                "text_quality_score": 0.0,
+                "scan_likelihood": 0.95,
+                "sandwich_likelihood": 0.55,
+                "layout_complexity_score": 0.0,
+                "visual_complexity_score": 0.9,
+                "recommended_engine": "marker",
+                "reasons": ["weak or missing extractable text layer"],
+                "sampled_image_count": 2,
+            }
+        })
+
+        assert plan.engine == "marker_pdf"
+        assert plan.needs_marker_models is True
+        assert plan.execution_backend == "marker_worker"
+
+    def test_image_understanding_both_routes_marker_only_when_images_exist(self) -> None:
+        stream_info = _make_stream_info(".pdf")
+        safe_probe = {
+            "page_count": 2,
+            "text_layer_score": 0.9,
+            "text_quality_score": 0.95,
+            "scan_likelihood": 0.05,
+            "sandwich_likelihood": 0.1,
+            "layout_complexity_score": 0.1,
+            "visual_complexity_score": 0.0,
+            "recommended_engine": "liteparse",
+            "reasons": ["strong extractable text layer"],
+            "sampled_image_count": 0,
+        }
+        with_no_images = ConversionRouter.plan(stream_info, {
+            "probe_result": safe_probe,
+            "image_handling_mode": "both",
+        })
+        with_images = ConversionRouter.plan(stream_info, {
+            "probe_result": {**safe_probe, "sampled_image_count": 1, "visual_complexity_score": 0.2},
+            "image_handling_mode": "both",
+        })
+
+        assert with_no_images.engine == "liteparse_pdf"
+        assert with_images.engine == "marker_pdf"
+
+    def test_pdf_engine_override_can_select_marker_over_liteparse(self) -> None:
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(stream_info, {
+            "engine_override": "marker_pdf",
+            "probe_result": {
+                "page_count": 2,
+                "text_layer_score": 0.9,
+                "text_quality_score": 0.95,
+                "scan_likelihood": 0.05,
+                "sandwich_likelihood": 0.1,
+                "layout_complexity_score": 0.1,
+                "visual_complexity_score": 0.0,
+                "recommended_engine": "liteparse",
+                "reasons": ["strong extractable text layer"],
+                "sampled_image_count": 0,
+            },
+        })
+
+        assert plan.engine == "marker_pdf"
+        assert "User selected engine override" in plan.reasons[0]
+
+    def test_incompatible_engine_override_is_ignored(self) -> None:
+        stream_info = _make_stream_info(".png")
+        plan = ConversionRouter.plan(stream_info, {"engine_override": "liteparse_pdf"})
+
+        assert plan.engine == "marker_pdf"
+        assert plan.label == "Marker Image OCR"
