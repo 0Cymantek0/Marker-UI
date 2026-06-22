@@ -51,7 +51,7 @@ describe('downloadResult', () => {
 
     const result = await downloadResult('job-dl-1')
 
-    expect(result).toBeInstanceOf(Blob)
+    expect(result.blob).toBeInstanceOf(Blob)
   })
 
   it('throws on error', async () => {

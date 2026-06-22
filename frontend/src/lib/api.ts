@@ -28,6 +28,7 @@ export interface ConversionConfig {
   language?: string
   disable_multiprocessing?: boolean
   debug?: boolean
+  conversion_profile?: 'auto' | 'fast' | 'high_accuracy'
   // --- Image-understanding pipeline knobs (mirror ImageUnderstandingConfig) ---
   router_enabled?: boolean
   smart_router_level?: SmartRouterLevel
@@ -298,6 +299,7 @@ export async function uploadFile(
 
   const params = new URLSearchParams()
   params.append('output_format', config.output_format)
+  if (config.conversion_profile) params.append('conversion_profile', config.conversion_profile)
   if (config.converter) params.append('converter', config.converter)
   if (config.engine_override) params.append('engine_override', config.engine_override)
   if (config.use_llm !== undefined) params.append('use_llm', String(config.use_llm))
@@ -354,10 +356,21 @@ export function getJobEvents(jobId: string): EventSource {
   return new EventSource(`${API_BASE}/convert/events/${jobId}`)
 }
 
-export async function downloadResult(jobId: string): Promise<Blob> {
+export async function downloadResult(jobId: string): Promise<{ blob: Blob; filename?: string }> {
   const res = await fetch(`${API_BASE}/convert/download/${jobId}`)
   if (!res.ok) throw new Error(`Download failed (${res.status})`)
-  return res.blob()
+
+  let filename: string | undefined
+  const disposition = res.headers.get('content-disposition')
+  if (disposition) {
+    const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+    if (filenameMatch && filenameMatch[1]) {
+      filename = filenameMatch[1].replace(/['"]/g, '')
+    }
+  }
+
+  const blob = await res.blob()
+  return { blob, filename }
 }
 
 export async function getHistory(page = 1, limit = 20): Promise<{ jobs: JobStatus[]; total: number }> {
@@ -613,11 +626,24 @@ export async function planConversion(
   filename: string,
   size: number,
   local_filepath?: string,
-  engine_override?: string
+  engine_override?: string,
+  conversion_profile?: 'auto' | 'fast' | 'high_accuracy',
+  image_handling_mode?: string,
+  converter?: string,
+  force_ocr?: boolean
 ): Promise<ConverterPlanResponse> {
   return request<ConverterPlanResponse>('/convert/plan', {
     method: 'POST',
-    body: JSON.stringify({ filename, size, local_filepath, engine_override }),
+    body: JSON.stringify({
+      filename,
+      size,
+      local_filepath,
+      engine_override,
+      conversion_profile,
+      image_handling_mode,
+      converter_cls: converter,
+      force_ocr,
+    }),
   })
 }
 
