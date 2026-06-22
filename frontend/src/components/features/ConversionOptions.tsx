@@ -36,7 +36,7 @@ const CONVERTERS: { value: ConverterType; label: string; desc: string }[] = [
   { value: 'PdfConverter', label: 'Standard PDF', desc: 'Extracts layout, text, tables, and images' },
   { value: 'TableConverter', label: 'Table Focused', desc: 'Optimized for spreadsheet/table sheets' },
   { value: 'OCRConverter', label: 'OCR Extraction', desc: 'Best for scanned or low-quality documents' },
-  { value: 'ExtractionConverter', label: 'Fast Text', desc: 'Quick plain-text parser without heavy styles' },
+  { value: 'ExtractionConverter', label: 'Marker Text Extract', desc: 'Marker extraction mode without LiteParse routing' },
 ]
 
 const IMAGE_HANDLING_OPTIONS: {

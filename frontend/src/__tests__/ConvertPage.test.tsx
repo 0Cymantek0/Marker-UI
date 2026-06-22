@@ -21,7 +21,17 @@ vi.mock('@/hooks/useConversionQueue', () => ({
 
 // Mock components that we don't want to render in full depth or that have external deps
 vi.mock('@/components/features/FileUpload', () => ({
-  FileUpload: () => <div data-testid="file-upload">FileUpload</div>
+  FileUpload: ({ onFilesSelect }: { onFilesSelect: (files: File[]) => void }) => (
+    <div data-testid="file-upload">
+      FileUpload
+      <button
+        type="button"
+        onClick={() => onFilesSelect([new File(['pdf'], 'sample.pdf', { type: 'application/pdf' })])}
+      >
+        Mock select PDF
+      </button>
+    </div>
+  )
 }))
 
 vi.mock('@/components/features/ConversionOptions', () => ({
@@ -80,10 +90,12 @@ const mockPlanConversion = vi.fn().mockResolvedValue({
   reasons: [],
   needs_marker_models: true,
   needs_gpu: true,
+  execution_backend: 'marker_worker',
   needs_cloud: false,
   optional_dependencies: [],
   fallback_chain: [],
   warnings: [],
+  preliminary: true,
 })
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
@@ -92,7 +104,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
     getLLMProviders: () => mockGetLLMProviders(),
     applyLiveOverride: (body: unknown) => mockApplyLiveOverride(body),
     getCapabilities: () => mockGetCapabilities(),
-    planConversion: (filename: string, size: number) => mockPlanConversion(filename, size),
+    planConversion: (filename: string, size: number, local_filepath?: string) => mockPlanConversion(filename, size, local_filepath),
   }
 })
 
@@ -120,6 +132,41 @@ describe('ConvertPage component', () => {
     // Console logs is closed by default
     expect(screen.queryByTestId('terminal-log')).not.toBeInTheDocument()
     expect(screen.getByText('Open Console')).toBeInTheDocument()
+  })
+
+  it('shows metadata-only engine plan as a preview, not a final choice', async () => {
+    mockPlanConversion.mockResolvedValueOnce({
+      engine: 'marker_pdf',
+      label: 'Marker PDF',
+      confidence: 0.75,
+      reasons: ['PDF complexity was not probed; using conservative Marker route'],
+      needs_marker_models: true,
+      needs_gpu: true,
+      execution_backend: 'marker_worker',
+      needs_cloud: false,
+      optional_dependencies: [],
+      fallback_chain: [],
+      warnings: ['Preliminary filename-only plan; upload/local probing may change selected engine'],
+      preliminary: true,
+    })
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+    fireEvent.click(screen.getByText('Mock select PDF'))
+
+    expect(await screen.findByText('Engine preview')).toBeInTheDocument()
+    expect(screen.getByText('Preliminary estimate. Final selection runs PDF probing during upload.')).toBeInTheDocument()
+    expect(screen.queryByText(/PDF complexity was not probed/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Preliminary filename-only plan/i)).not.toBeInTheDocument()
   })
 
   it('renders queue items and overall progress without crash', () => {

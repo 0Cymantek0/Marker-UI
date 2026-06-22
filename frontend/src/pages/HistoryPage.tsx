@@ -275,7 +275,7 @@ export function HistoryPage() {
               { value: 'PdfConverter', label: 'Standard PDF' },
               { value: 'TableConverter', label: 'Table Focused' },
               { value: 'OCRConverter', label: 'OCR Extraction' },
-              { value: 'ExtractionConverter', label: 'Fast Text' },
+              { value: 'ExtractionConverter', label: 'Marker Text Extract' },
             ]}
           />
         </div>

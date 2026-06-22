@@ -41,6 +41,7 @@ export interface JobState {
   isBunch?: boolean
   // Per-image understanding metadata for the badge UI.
   imageUnderstanding?: ImageUnderstandingMeta[] | null
+  conversionMetadata?: Record<string, any> | null
   // LLM provider/model this job runs under — lets the model-swap dialog
   // pre-fill and scope a same-provider hot-swap. Empty when not using an LLM.
   llmProvider?: string
@@ -99,10 +100,12 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         // the clean document text (the blob may be a ZIP, see resultText).
         let imageUnderstanding: ImageUnderstandingMeta[] | null = null
         let resultText: string | null = null
+        let conversionMetadata: Record<string, any> | null = null
         try {
           const status = await getJobStatus(jobId)
           imageUnderstanding = status.image_understanding ?? null
           resultText = status.result_text ?? null
+          conversionMetadata = status.conversion_metadata ?? null
         } catch {
           // Non-fatal: badges just won't render for this job.
         }
@@ -115,6 +118,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           resultBlob: blob,
           resultText,
           imageUnderstanding,
+          conversionMetadata,
           logs: [...prev.logs, '[SUCCESS] Result package successfully fetched and ready.'],
         }))
       })
@@ -156,6 +160,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           clearInterval(pollInterval)
           const imageUnderstanding = status.image_understanding ?? null
           const resultText = status.result_text ?? null
+          const conversionMetadata = status.conversion_metadata ?? null
           downloadResult(jobId)
             .then((blob) => {
               updateJob(id, (prev) => ({
@@ -167,6 +172,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
                 resultBlob: blob,
                 resultText,
                 imageUnderstanding,
+                conversionMetadata,
                 logs: [...prev.logs, '[SUCCESS] SSE disconnected, recovered via polling.'],
               }))
             })
@@ -180,6 +186,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
                 resultBlob: null,
                 resultText,
                 imageUnderstanding,
+                conversionMetadata,
                 logs: [...prev.logs, '[WARN] SSE disconnected. Polling recovered but download failed.'],
               }))
             })

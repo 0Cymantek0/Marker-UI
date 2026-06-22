@@ -66,10 +66,12 @@ describe('ConvertPage Integration with real hook', () => {
       reasons: [],
       needs_marker_models: true,
       needs_gpu: true,
+      execution_backend: 'marker_worker',
       needs_cloud: false,
       optional_dependencies: [],
       fallback_chain: [],
       warnings: [],
+      preliminary: true,
     })
   })
 

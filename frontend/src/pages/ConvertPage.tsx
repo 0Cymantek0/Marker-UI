@@ -3,6 +3,7 @@ import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat } from 'luc
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Select, type SelectOption } from '@/components/ui/select'
 import { FileUpload } from '@/components/features/FileUpload'
 import { ConversionOptions } from '@/components/features/ConversionOptions'
 import { TerminalLog } from '@/components/features/TerminalLog'
@@ -29,6 +30,49 @@ const DEFAULT_CONFIG: ConversionConfig = {
   language: '',
   disable_multiprocessing: false,
   debug: false,
+}
+
+const ENGINE_LABELS: Record<string, string> = {
+  marker_pdf: 'Marker PDF',
+  liteparse_pdf: 'LiteParse Fast PDF',
+  office_docx: 'Fast Office (Word)',
+  office_pptx: 'Fast Office (PowerPoint)',
+  spreadsheet: 'Fast Spreadsheet',
+  text_data: 'Text / Data',
+  xml_rss: 'XML / RSS',
+  html: 'HTML',
+  notebook: 'Jupyter Notebook',
+  archive: 'Archive (ZIP)',
+}
+
+function extensionFor(filename: string | undefined) {
+  const clean = filename?.split('?')[0]?.trim() ?? ''
+  const dot = clean.lastIndexOf('.')
+  return dot >= 0 ? clean.slice(dot).toLowerCase() : ''
+}
+
+function engineOptionsFor(filename: string | undefined, plan: ConverterPlanResponse | null): SelectOption[] {
+  const ext = extensionFor(filename)
+  let engines: string[] = []
+  if (ext === '.pdf') engines = ['liteparse_pdf', 'marker_pdf']
+  else if (['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(ext)) engines = ['marker_pdf']
+  else if (ext === '.docx') engines = ['office_docx', 'marker_pdf']
+  else if (ext === '.pptx') engines = ['office_pptx', 'marker_pdf']
+  else if (['.xlsx', '.xls'].includes(ext)) engines = ['spreadsheet']
+  else if (['.csv', '.json', '.jsonl', '.txt', '.md', '.rst', '.log'].includes(ext)) engines = ['text_data']
+  else if (['.xml', '.rss', '.atom'].includes(ext)) engines = ['xml_rss']
+  else if (['.html', '.htm'].includes(ext)) engines = ['html']
+  else if (ext === '.ipynb') engines = ['notebook']
+  else if (ext === '.zip') engines = ['archive']
+  else engines = plan ? [plan.engine] : []
+
+  if (plan && !engines.includes(plan.engine)) engines.unshift(plan.engine)
+  return engines.map((engine) => ({
+    value: engine,
+    label: engine === 'marker_pdf' && ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif'].includes(ext)
+      ? 'Marker Image OCR'
+      : ENGINE_LABELS[engine] ?? engine,
+  }))
 }
 
 export function ConvertPage() {
@@ -94,7 +138,8 @@ export function ConvertPage() {
     const checkPlan = async () => {
       setCheckingPlan(true)
       try {
-        const plan = await planConversion(filename, size)
+        const localPath = firstFile ? undefined : filename
+        const plan = await planConversion(filename, size, localPath, config.engine_override)
         if (active) {
           setConversionPlan(plan)
         }
@@ -114,8 +159,15 @@ export function ConvertPage() {
     }
   }, [files, localPaths, config])
 
-  const engineStatus = conversionPlan ? capabilities[conversionPlan.engine] : null
+  const firstFilename = files[0] ? files[0].name : localPaths.split('\n')[0]?.trim()
+  const engineOptions = engineOptionsFor(firstFilename, conversionPlan)
+  const selectedEngine = config.engine_override && engineOptions.some((opt) => opt.value === config.engine_override)
+    ? config.engine_override
+    : conversionPlan?.engine
+  const engineStatus = selectedEngine ? capabilities[selectedEngine] : null
   const isModelsMissing = engineStatus === 'models_missing' || engineStatus === 'models_downloading'
+  const visiblePlanReasons = conversionPlan?.preliminary ? [] : (conversionPlan?.reasons ?? [])
+  const visiblePlanWarnings = conversionPlan?.preliminary ? [] : (conversionPlan?.warnings ?? [])
 
   useEffect(() => {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
@@ -248,14 +300,34 @@ export function ConvertPage() {
             {conversionPlan && (
               <div className="mt-2 text-xs text-muted-foreground flex flex-col gap-1.5 p-3 rounded-xl border border-border/30 bg-muted/30 animate-fade-in">
                 <div className="flex items-center gap-1.5 justify-between">
-                  <span className="font-semibold text-foreground">Planned Engine:</span>
-                  <span className="font-mono text-primary bg-primary/5 px-2 py-0.5 rounded text-[10px]">
-                    {conversionPlan.label}
+                  <span className="font-semibold text-foreground">
+                    {conversionPlan.preliminary ? 'Engine preview' : 'Engine chosen'}
                   </span>
+                  <Select
+                    value={selectedEngine ?? conversionPlan.engine}
+                    options={engineOptions}
+                    onChange={(engine) => {
+                      setConfig((prev) => ({
+                        ...prev,
+                        engine_override: engine === conversionPlan.engine ? undefined : engine,
+                      }))
+                    }}
+                    className="w-48 md:w-48"
+                  />
                 </div>
-                {conversionPlan.warnings && conversionPlan.warnings.length > 0 && (
+                {conversionPlan.preliminary && (
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400">
+                    Preliminary estimate. Final selection runs PDF probing during upload.
+                  </div>
+                )}
+                {visiblePlanReasons.length > 0 && (
+                  <div className="text-[10px] leading-relaxed text-muted-foreground border-t border-border/10 pt-1">
+                    {visiblePlanReasons.slice(0, 3).join(' · ')}
+                  </div>
+                )}
+                {visiblePlanWarnings.length > 0 && (
                   <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 border-t border-border/10 pt-1">
-                    {conversionPlan.warnings.join(', ')}
+                    {visiblePlanWarnings.join(', ')}
                   </div>
                 )}
               </div>
@@ -357,6 +429,7 @@ export function ConvertPage() {
                   const isCompleted = job.phase === 'completed'
                   const isFailed = job.phase === 'failed'
                   const isQueued = job.phase === 'idle'
+                  const engineMeta = job.conversionMetadata?.engine
 
                   return (
                     <div
@@ -396,6 +469,14 @@ export function ConvertPage() {
                             <span className="text-[9px] text-muted-foreground font-mono bg-muted/65 px-1 py-0.5 rounded">
                               {job.outputFormat}
                             </span>
+                            {engineMeta?.label && (
+                              <span
+                                className="text-[9px] text-primary font-mono bg-primary/10 px-1 py-0.5 rounded truncate max-w-[170px]"
+                                title={(engineMeta.reasons ?? []).join(' · ')}
+                              >
+                                {engineMeta.label}
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 mt-1.5">

@@ -15,6 +15,7 @@ export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
 export interface ConversionConfig {
   output_format: OutputFormat
   converter: ConverterType
+  engine_override?: string
   use_llm?: boolean
   llm_provider?: string
   llm_model?: string
@@ -71,6 +72,7 @@ export interface JobStatus {
   error_message: string | null
   result_text: string | null
   image_understanding?: ImageUnderstandingMeta[] | null
+  conversion_metadata?: Record<string, any> | null
 }
 
 export interface SSEEvent {
@@ -162,6 +164,7 @@ export interface BackendJobStatus {
   error_message: string | null
   result_text: string | null
   image_understanding?: ImageUnderstandingMeta[] | null
+  conversion_metadata?: Record<string, any> | null
   filename: string
   message?: string | null
   logs?: string | null
@@ -296,6 +299,7 @@ export async function uploadFile(
   const params = new URLSearchParams()
   params.append('output_format', config.output_format)
   if (config.converter) params.append('converter', config.converter)
+  if (config.engine_override) params.append('engine_override', config.engine_override)
   if (config.use_llm !== undefined) params.append('use_llm', String(config.use_llm))
   if (config.llm_provider) params.append('llm_provider', config.llm_provider)
   if (config.llm_model) params.append('llm_model', config.llm_model)
@@ -592,20 +596,28 @@ export interface ConverterPlanResponse {
   reasons: string[]
   needs_marker_models: boolean
   needs_gpu: boolean
+  execution_backend: string
   needs_cloud: boolean
   optional_dependencies: string[]
   fallback_chain: string[]
   warnings: string[]
+  preliminary: boolean
+  probe_result?: Record<string, any> | null
 }
 
 export async function getCapabilities(): Promise<CapabilitiesResponse> {
   return request<CapabilitiesResponse>('/capabilities')
 }
 
-export async function planConversion(filename: string, size: number): Promise<ConverterPlanResponse> {
+export async function planConversion(
+  filename: string,
+  size: number,
+  local_filepath?: string,
+  engine_override?: string
+): Promise<ConverterPlanResponse> {
   return request<ConverterPlanResponse>('/convert/plan', {
     method: 'POST',
-    body: JSON.stringify({ filename, size }),
+    body: JSON.stringify({ filename, size, local_filepath, engine_override }),
   })
 }
 
