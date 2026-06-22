@@ -16,6 +16,7 @@ import { planConversion, getCapabilities } from '@/lib/api'
 import type { ConverterPlanResponse } from '@/lib/api'
 import { Progress } from '@/components/ui/progress'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { RoutingAnalysis } from '@/components/features/conversion/RoutingAnalysis'
 
 const DEFAULT_CONFIG: ConversionConfig = {
   output_format: 'markdown',
@@ -30,6 +31,7 @@ const DEFAULT_CONFIG: ConversionConfig = {
   language: '',
   disable_multiprocessing: false,
   debug: false,
+  conversion_profile: 'auto',
 }
 
 const AUTO_ENGINE = 'auto'
@@ -206,6 +208,10 @@ export function ConvertPage() {
             size,
             localPath,
             engineOverride && engineOverride !== AUTO_ENGINE ? engineOverride : undefined,
+            config.conversion_profile,
+            config.image_handling_mode,
+            config.converter,
+            config.force_ocr,
           )
           if (!active || !sourceKeySet.has(key)) return
           setSourcePlans((prev) => ({
@@ -250,7 +256,16 @@ export function ConvertPage() {
       active = false
       timers.forEach(clearTimeout)
     }
-  }, [selectedFiles, parsedLocalPaths, sourceKeys, engineOverrides])
+  }, [
+    selectedFiles,
+    parsedLocalPaths,
+    sourceKeys,
+    engineOverrides,
+    config.conversion_profile,
+    config.image_handling_mode,
+    config.converter,
+    config.force_ocr,
+  ])
 
   const checkingPlan = Object.values(sourcePlans).some((state) => state.loading)
   const selectedEngines = sourceKeys
@@ -332,6 +347,9 @@ export function ConvertPage() {
       status: sourcePlanStatus(planState, value),
       title: planState?.plan?.reasons.join(' · '),
       onChange: (engine: string) => setSourceEngine(entry.id, engine),
+      plan: planState?.plan ?? null,
+      loading: planState?.loading ?? false,
+      error: planState?.error ?? null,
     }
   })
 
@@ -346,6 +364,9 @@ export function ConvertPage() {
       status: sourcePlanStatus(planState, value),
       title: path,
       onChange: (engine: string) => setSourceEngine(key, engine),
+      plan: planState?.plan ?? null,
+      loading: planState?.loading ?? false,
+      error: planState?.error ?? null,
     }
   })
 
@@ -676,21 +697,29 @@ export function ConvertPage() {
           {/* Inline output preview for the selected completed job.
               Shows parsed markdown with per-image understanding badges (commit 6). */}
           {selectedJob && selectedJob.phase === 'completed' && (
-            <div className="glass-card border border-border/30 shadow-sm animate-fade-in">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20">
-                <h3 className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">
-                  Output Preview
-                  <span className="ml-2 text-muted-foreground/60 normal-case font-medium">
-                    {selectedJob.filename}
-                  </span>
-                </h3>
-              </div>
-              <div className="p-4">
-                <OutputViewer
-                  content={previewText}
-                  onDownload={() => download(selectedJob.id)}
-                  imageUnderstanding={selectedJob.imageUnderstanding}
+            <div className="space-y-4">
+              {selectedJob.conversionMetadata && (
+                <RoutingAnalysis
+                  plan={selectedJob.conversionMetadata}
+                  title="Routing & Probing Analysis"
                 />
+              )}
+              <div className="glass-card border border-border/30 shadow-sm animate-fade-in">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/20">
+                  <h3 className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">
+                    Output Preview
+                    <span className="ml-2 text-muted-foreground/60 normal-case font-medium">
+                      {selectedJob.filename}
+                    </span>
+                  </h3>
+                </div>
+                <div className="p-4">
+                  <OutputViewer
+                    content={previewText}
+                    onDownload={() => download(selectedJob.id)}
+                    imageUnderstanding={selectedJob.imageUnderstanding}
+                  />
+                </div>
               </div>
             </div>
           )}

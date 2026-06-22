@@ -26,6 +26,7 @@ import { getHistory, deleteJob, downloadResult, getJobStatus, type JobStatus } f
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/datetime'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { RoutingAnalysis } from '@/components/features/conversion/RoutingAnalysis'
 
 const STATUS_VARIANT = {
   pending: 'secondary' as const,
@@ -41,12 +42,12 @@ export function HistoryPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
-  
+
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [converterFilter, setConverterFilter] = useState<string>('all')
-  
+
   // Expanded job tracking
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null)
   const [loadingPreviews, setLoadingPreviews] = useState<Record<string, boolean>>({})
@@ -109,15 +110,23 @@ export function HistoryPage() {
   const handleDownload = async (e: React.MouseEvent, job: JobStatus) => {
     e.stopPropagation() // Prevent toggling expansion
     try {
-      const blob = await downloadResult(job.id)
+      const { blob, filename: headerFilename } = await downloadResult(job.id)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const isZip = blob.type === 'application/zip'
-      const extMap: Record<string, string> = { markdown: 'md', json: 'json', html: 'html', chunks: 'json' }
-      const ext = isZip ? 'zip' : (extMap[job.output_format || 'markdown'] || 'md')
-      const stem = job.filename.includes('.') ? job.filename.split('.').slice(0, -1).join('.') : job.filename
-      a.download = `${stem}.${ext}`
+
+      if (headerFilename) {
+        a.download = headerFilename
+      } else {
+        const isZip = blob.type === 'application/zip' || blob.type === 'application/x-zip-compressed'
+        const isJson = blob.type === 'application/json'
+        const isHtml = blob.type === 'text/html'
+        const ext = isZip ? 'zip' : isJson ? 'json' : isHtml ? 'html' : 'md'
+
+        const stem = job.filename.includes('.') ? job.filename.split('.').slice(0, -1).join('.') : job.filename
+        a.download = `${stem}.${ext}`
+      }
+
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -183,7 +192,7 @@ export function HistoryPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <PageHeader 
+      <PageHeader
         title="Conversion History"
         description="Browse, preview, and download previous document conversions."
       >
@@ -254,7 +263,7 @@ export function HistoryPage() {
             <Filter className="w-3.5 h-3.5" />
             <span>Filter:</span>
           </div>
-          
+
           <Select
             value={statusFilter}
             onChange={setStatusFilter}
@@ -300,8 +309,8 @@ export function HistoryPage() {
           {filteredJobs.map((job) => {
             const isExpanded = expandedJobId === job.id
             return (
-              <div 
-                key={job.id} 
+              <div
+                key={job.id}
                 className={cn(
                   'transition-all duration-200 cursor-pointer hover:bg-muted/10',
                   isExpanded ? 'bg-muted/5' : 'bg-transparent'
@@ -319,9 +328,16 @@ export function HistoryPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
                         <p className="text-sm font-semibold truncate text-foreground">{job.filename}</p>
-                        <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-[10px] py-0.5 px-1.5">
-                          {job.status}
-                        </Badge>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-[10px] py-0.5 px-1.5">
+                            {job.status}
+                          </Badge>
+                          {job.conversion_metadata?.engine?.label && (
+                            <Badge variant="outline" className="w-fit text-[9px] py-0 px-1 border-primary/20 bg-primary/5 text-primary">
+                              {job.conversion_metadata.engine.label}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-muted-foreground/90 font-medium">
                         <span className="uppercase text-primary font-bold">{job.output_format}</span>
@@ -345,7 +361,7 @@ export function HistoryPage() {
                           <Download className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                         </Button>
                       )}
-                      
+
                       <Button
                         variant="ghost"
                         size="icon"
@@ -389,7 +405,7 @@ export function HistoryPage() {
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Job ID</span>
                               <span className="text-xs font-mono break-all text-foreground/90 select-all block mt-1">{job.id}</span>
                             </div>
-                            
+
                             <div className="p-2.5 rounded-lg border border-border/30 bg-background/50">
                               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Completed At</span>
                               <span className="text-xs font-medium text-foreground/90 block mt-1">
@@ -402,6 +418,13 @@ export function HistoryPage() {
                               <span className="text-xs font-mono font-bold capitalize text-foreground/90 block mt-1">{job.status}</span>
                             </div>
                           </div>
+
+                          {job.conversion_metadata && (
+                            <RoutingAnalysis
+                              plan={job.conversion_metadata}
+                              title="Routing & Probing Analysis"
+                            />
+                          )}
 
                           {/* Error Traceback (if failed) */}
                           {job.status === 'failed' && job.error_message && (
