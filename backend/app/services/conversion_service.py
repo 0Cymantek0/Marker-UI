@@ -26,6 +26,45 @@ from app.conversion.stream_info import StreamInfo
 logger = logging.getLogger(__name__)
 
 
+def _count_page_range(page_range: Any) -> int | None:
+    if not page_range:
+        return None
+    try:
+        total = 0
+        for part in str(page_range).split(","):
+            token = part.strip()
+            if not token:
+                continue
+            if "-" in token:
+                start_s, end_s = token.split("-", 1)
+                start = int(start_s)
+                end = int(end_s)
+                if start <= 0 or end < start:
+                    return None
+                total += end - start + 1
+            else:
+                page = int(token)
+                if page <= 0:
+                    return None
+                total += 1
+        return total or None
+    except (TypeError, ValueError):
+        return None
+
+
+def _expected_liteparse_pages(config: dict[str, Any]) -> int:
+    probe_data = config.get("probe_result") if isinstance(config, dict) else None
+    probed_pages = (
+        int((probe_data or {}).get("page_count") or 1)
+        if isinstance(probe_data, dict)
+        else 1
+    )
+    requested_pages = _count_page_range(config.get("page_range"))
+    if requested_pages is None:
+        return max(1, probed_pages)
+    return max(1, min(requested_pages, max(1, probed_pages)))
+
+
 class ConversionService:
     """Orchestrates file conversion through the registry and router.
 
@@ -161,11 +200,14 @@ class ConversionService:
                 raise
             result = fb_converter.convert(filepath, config, device=device)
             result.metadata["engine"] = fb_plan.to_dict()
+            probe_data = config.get("probe_result") if isinstance(config, dict) else None
+            if isinstance(probe_data, dict):
+                result.metadata["probe_result"] = probe_data
             return result.to_legacy_envelope()
 
         if plan.engine == "liteparse_pdf":
             probe_data = config.get("probe_result") if isinstance(config, dict) else None
-            page_count = int((probe_data or {}).get("page_count") or 1) if isinstance(probe_data, dict) else 1
+            page_count = _expected_liteparse_pages(config)
             min_chars = max(100, page_count * 100)
             if len((result.text or "").strip()) < min_chars:
                 logger.warning(

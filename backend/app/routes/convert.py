@@ -72,6 +72,8 @@ def _validate_page_range(page_range: str, page_count: int) -> None:
             highest = max(highest, int(token.split("-")[-1]))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid page_range format") from exc
+    if requested <= 0:
+        raise HTTPException(status_code=400, detail="Invalid page_range format")
     if highest > page_count:
         raise HTTPException(
             status_code=400,
@@ -153,6 +155,7 @@ async def upload_file(
     output_format: str = Query("markdown", description="Output format: markdown, json, html, chunks"),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
     engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
+    conversion_profile: Optional[str] = Query(None, description="Conversion profile: auto, fast, high_accuracy"),
     use_llm: bool = Query(False, description="Enable LLM-assisted conversion"),
     llm_provider: Optional[str] = Query(None, description="LLM provider ID override"),
     llm_model: Optional[str] = Query(None, description="LLM model name override"),
@@ -271,6 +274,8 @@ async def upload_file(
         config["converter_cls"] = converter
     if engine_override:
         config["engine_override"] = engine_override
+    if conversion_profile:
+        config["conversion_profile"] = conversion_profile
     if use_llm:
         config["use_llm"] = True
     if llm_provider:
@@ -383,6 +388,14 @@ async def plan_conversion(
     preliminary = True
     if req.engine_override:
         config["engine_override"] = req.engine_override
+    if req.conversion_profile:
+        config["conversion_profile"] = req.conversion_profile
+    if req.image_handling_mode:
+        config["image_handling_mode"] = req.image_handling_mode
+    if req.converter_cls:
+        config["converter_cls"] = req.converter_cls
+    if req.force_ocr:
+        config["force_ocr"] = True
     if req.local_filepath:
         path = Path(req.local_filepath)
         if path.is_absolute() and path.is_file() and path.suffix.lower() == ".pdf":

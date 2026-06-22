@@ -31,6 +31,11 @@ PHASE3_PDF_CLASSES: tuple[str, ...] = (
     "formula_heavy",
 )
 
+PHASE3_LITEPARSE_FAST_PATH_CLASSES: tuple[str, ...] = (
+    "clean_digital",
+    "formula_heavy",
+)
+
 
 @dataclass
 class BenchmarkReport:
@@ -194,14 +199,27 @@ def compare_marker_liteparse_pdfs(
     marker_report = _run_pdf_engine(marker_name, cases, marker_engine)
     liteparse_report = _run_pdf_engine(liteparse_name, cases, liteparse_engine)
     verdict = compare_configs(marker_report, liteparse_report)
+    fast_path_classes = tuple(
+        document_class
+        for document_class in PHASE3_LITEPARSE_FAST_PATH_CLASSES
+        if document_class in required_classes
+    )
+    liteparse_fast_path = _class_gate(
+        liteparse_report,
+        fast_path_classes,
+    )
     verdict.update(
         {
             "covered_classes": list(covered_classes),
+            "liteparse_fast_path_classes": list(fast_path_classes),
+            "liteparse_fast_path_mean": liteparse_fast_path["mean_combined"],
+            "liteparse_fast_path_passes_gate": liteparse_fast_path["passes_gate"],
+            "liteparse_fast_path_regressions": liteparse_fast_path["regressions"],
+            "liteparse_fast_path_missing_classes": liteparse_fast_path["missing_classes"],
             "phase3_ready_for_phase4": (
                 marker_report.sample_count == liteparse_report.sample_count
                 and marker_report.sample_count >= len(required_classes)
-                and marker_report.passing
-                and liteparse_report.passing
+                and liteparse_fast_path["passes_gate"]
             ),
             "marker_regressions": marker_report.regressions(),
             "liteparse_regressions": liteparse_report.regressions(),
@@ -234,4 +252,39 @@ def compare_configs(
         "delta": delta,
         "candidate_passes_gate": candidate.passing,
         "should_swap": candidate.passing and delta > 0,
+    }
+
+
+def _document_class(sample_id: str) -> str:
+    return sample_id.split(":", 1)[0]
+
+
+def _class_gate(
+    report: BenchmarkReport,
+    document_classes: Sequence[str],
+    threshold: float = GOLDEN_MATCH_THRESHOLD,
+) -> dict[str, object]:
+    wanted = set(document_classes)
+    scores = [
+        score
+        for score in report.scores
+        if _document_class(score.sample_id) in wanted
+    ]
+    present = {_document_class(score.sample_id) for score in scores}
+    missing = [
+        document_class
+        for document_class in document_classes
+        if document_class not in present
+    ]
+    mean_combined = (
+        round(sum(score.combined for score in scores) / len(scores), 6)
+        if scores
+        else 0.0
+    )
+    regressions = [score.sample_id for score in scores if score.combined < threshold]
+    return {
+        "mean_combined": mean_combined,
+        "passes_gate": not missing and not regressions,
+        "regressions": regressions,
+        "missing_classes": missing,
     }

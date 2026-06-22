@@ -29,20 +29,53 @@ from app.conversion.converters.liteparse_pdf import LiteParsePdfConverter
 from app.conversion.converters.marker_pdf import MarkerPdfConverter
 from app.services.marker_service import MarkerService
 
+MAX_OUTPUT_PREVIEW_CHARS = 500
 
-def _liteparse_engine(converter: LiteParsePdfConverter):
+
+def _preview_text(text: str, limit: int = MAX_OUTPUT_PREVIEW_CHARS) -> str:
+    preview = " ".join((text or "").split())
+    if len(preview) <= limit:
+        return preview
+    return f"{preview[:limit].rstrip()}..."
+
+
+def _record_output(
+    observations: dict[str, dict[str, dict[str, Any]]],
+    engine_name: str,
+    case: PdfBenchmarkCase,
+    output: PdfEngineOutput,
+) -> None:
+    sample_key = f"{case.document_class}:{case.sample_id}"
+    observations.setdefault(engine_name, {})[sample_key] = {
+        "document_class": case.document_class,
+        "text_len": len(output.text or ""),
+        "text_preview": _preview_text(output.text),
+        "table_present": output.table is not None,
+        "metadata_keys": sorted(output.metadata.keys()),
+    }
+
+
+def _liteparse_engine(
+    converter: LiteParsePdfConverter,
+    observations: dict[str, dict[str, dict[str, Any]]],
+):
     def run(case: PdfBenchmarkCase) -> PdfEngineOutput:
         result = converter.convert(str(case.pdf_path), {"liteparse_timeout": 120})
-        return PdfEngineOutput(
+        output = PdfEngineOutput(
             text=result.text,
             table=result.metadata.get("table"),
             metadata=result.metadata,
         )
+        _record_output(observations, "liteparse_pdf", case, output)
+        return output
 
     return run
 
 
-def _marker_engine(converter: MarkerPdfConverter):
+def _marker_engine(
+    converter: MarkerPdfConverter,
+    observations: dict[str, dict[str, dict[str, Any]]],
+):
     def run(case: PdfBenchmarkCase) -> PdfEngineOutput:
         result = converter.convert(
             str(case.pdf_path),
@@ -52,11 +85,13 @@ def _marker_engine(converter: MarkerPdfConverter):
                 "image_handling_mode": "extraction",
             },
         )
-        return PdfEngineOutput(
+        output = PdfEngineOutput(
             text=result.text,
             table=result.metadata.get("table"),
             metadata=result.metadata,
         )
+        _record_output(observations, "marker_pdf", case, output)
+        return output
 
     return run
 
@@ -89,11 +124,12 @@ def main() -> int:
     cases = generate_phase3_pdf_cases(output_dir)
     marker_converter = MarkerPdfConverter(MarkerService())
     liteparse_converter = LiteParsePdfConverter()
+    output_observations: dict[str, dict[str, dict[str, Any]]] = {}
 
     comparison = compare_marker_liteparse_pdfs(
         cases,
-        marker_engine=_marker_engine(marker_converter),
-        liteparse_engine=_liteparse_engine(liteparse_converter),
+        marker_engine=_marker_engine(marker_converter, output_observations),
+        liteparse_engine=_liteparse_engine(liteparse_converter, output_observations),
     )
 
     report = {
@@ -102,6 +138,7 @@ def main() -> int:
         "verdict": comparison.verdict,
         "marker_report": _score_dict(comparison.marker_report),
         "liteparse_report": _score_dict(comparison.liteparse_report),
+        "engine_outputs": output_observations,
     }
     report_path = output_dir / args.report_name
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

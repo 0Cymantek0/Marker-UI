@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+
+
+def _write_digital_pdf(path: Path) -> None:
+    c = canvas.Canvas(str(path), pagesize=letter)
+    for idx in range(30):
+        c.drawString(72, 740 - idx * 20, f"Plan endpoint digital text line {idx + 1}.")
+    c.showPage()
+    c.save()
 
 
 @pytest.mark.asyncio
@@ -60,6 +71,42 @@ async def test_convert_plan_pdf(client: AsyncClient):
     assert plan["needs_gpu"] is True
     assert plan["preliminary"] is True
     assert any("Preliminary" in warning for warning in plan["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_convert_plan_local_pdf_applies_phase5_backend_knobs(
+    client: AsyncClient,
+    tmp_path: Path,
+):
+    pdf = tmp_path / "clean.pdf"
+    _write_digital_pdf(pdf)
+
+    fast_resp = await client.post(
+        "/api/convert/plan",
+        json={
+            "filename": "clean.pdf",
+            "size": pdf.stat().st_size,
+            "local_filepath": str(pdf),
+        },
+    )
+    assert fast_resp.status_code == 200
+    assert fast_resp.json()["engine"] == "liteparse_pdf"
+
+    accurate_resp = await client.post(
+        "/api/convert/plan",
+        json={
+            "filename": "clean.pdf",
+            "size": pdf.stat().st_size,
+            "local_filepath": str(pdf),
+            "conversion_profile": "high_accuracy",
+        },
+    )
+    assert accurate_resp.status_code == 200
+    plan = accurate_resp.json()
+    assert plan["engine"] == "marker_pdf"
+    assert any("High Accuracy" in reason for reason in plan["reasons"])
+    assert plan["preliminary"] is False
+    assert plan["probe_result"]["recommended_engine"] == "liteparse"
 
 
 @pytest.mark.asyncio

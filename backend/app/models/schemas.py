@@ -317,6 +317,10 @@ class ConvertPlanRequest(BaseModel):
     size: int
     local_filepath: Optional[str] = None
     engine_override: Optional[str] = None
+    conversion_profile: Optional[str] = None
+    image_handling_mode: Optional[str] = None
+    converter_cls: Optional[str] = None
+    force_ocr: bool = False
 
 
 class ConverterPlanResponse(BaseModel):

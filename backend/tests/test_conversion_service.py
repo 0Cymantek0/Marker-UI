@@ -217,6 +217,42 @@ class TestConversionService:
         assert "runtime fallback" in engine_meta["label"].lower()
         assert engine_meta["fallback_chain"] == ["office_docx", "marker_pdf"]
 
+    def test_liteparse_runtime_fallback_preserves_probe_metadata(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        pdf_path = tmp_path / "clean.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        config = {
+            "probe_result": {
+                "page_count": 2,
+                "text_layer_score": 0.9,
+                "text_quality_score": 0.95,
+                "scan_likelihood": 0.05,
+                "sandwich_likelihood": 0.1,
+                "layout_complexity_score": 0.1,
+                "visual_complexity_score": 0.0,
+                "recommended_engine": "liteparse",
+                "reasons": ["strong extractable text layer"],
+                "sampled_image_count": 0,
+            }
+        }
+
+        liteparse = svc.registry.get("liteparse_pdf")
+        assert liteparse is not None
+        original = liteparse.convert
+
+        def raising_convert(filepath, config, device=None):
+            raise RuntimeError("simulated liteparse failure")
+
+        liteparse.convert = raising_convert  # type: ignore[assignment]
+        try:
+            result = svc.convert_file(str(pdf_path), config)
+        finally:
+            liteparse.convert = original  # type: ignore[assignment]
+
+        assert len(fake_ms.convert_calls) == 1
+        assert result["metadata"]["probe_result"]["page_count"] == 2
+        assert result["metadata"]["engine"]["fallback_chain"] == ["liteparse_pdf", "marker_pdf"]
+
     def test_liteparse_short_output_falls_back_to_marker(self, tmp_path: Any) -> None:
         """LiteParse fast path retries Marker when output is too short."""
         from app.conversion.result import UniversalConversionResult
@@ -257,3 +293,42 @@ class TestConversionService:
         assert engine_meta["engine"] == "marker_pdf"
         assert "short-output fallback" in engine_meta["label"]
         assert engine_meta["fallback_chain"] == ["liteparse_pdf", "marker_pdf"]
+
+    def test_liteparse_short_output_threshold_respects_page_range(self, tmp_path: Any) -> None:
+        """A one-page range from a long PDF should not require full-doc output length."""
+        from app.conversion.result import UniversalConversionResult
+
+        svc, fake_ms = self._make_service()
+        pdf_path = tmp_path / "clean.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        config = {
+            "page_range": "3",
+            "probe_result": {
+                "page_count": 25,
+                "text_layer_score": 0.9,
+                "text_quality_score": 0.95,
+                "scan_likelihood": 0.05,
+                "sandwich_likelihood": 0.1,
+                "layout_complexity_score": 0.1,
+                "visual_complexity_score": 0.0,
+                "recommended_engine": "liteparse",
+                "reasons": ["strong extractable text layer"],
+                "sampled_image_count": 0,
+            },
+        }
+
+        liteparse = svc.registry.get("liteparse_pdf")
+        assert liteparse is not None
+        original = liteparse.convert
+
+        def range_convert(filepath, config, device=None):
+            return UniversalConversionResult(text="x" * 150, extension="md")
+
+        liteparse.convert = range_convert  # type: ignore[assignment]
+        try:
+            result = svc.convert_file(str(pdf_path), config)
+        finally:
+            liteparse.convert = original  # type: ignore[assignment]
+
+        assert len(fake_ms.convert_calls) == 0
+        assert result["metadata"]["engine"]["engine"] == "liteparse_pdf"

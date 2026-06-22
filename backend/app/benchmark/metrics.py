@@ -200,5 +200,8 @@ def score_outputs(
         table_score=t,
         facts=f,
         combined=combined,
-        details={"text_len": len(reference_text or "")},
+        details={
+            "reference_len": len(reference_text or ""),
+            "hypothesis_len": len(hypothesis_text or ""),
+        },
     )

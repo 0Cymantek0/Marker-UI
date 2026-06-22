@@ -103,6 +103,23 @@ async def test_upload_persists_engine_override(client: AsyncClient, db_session):
 
 
 @pytest.mark.asyncio
+async def test_upload_persists_conversion_profile(client: AsyncClient, db_session):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(),
+        extra_params={"conversion_profile": "high_accuracy"},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+
+    assert config["conversion_profile"] == "high_accuracy"
+
+
+@pytest.mark.asyncio
 async def test_pdf_upload_rejects_page_range_past_document(client: AsyncClient):
     resp = await _upload_file(
         client,
@@ -112,6 +129,18 @@ async def test_pdf_upload_rejects_page_range_past_document(client: AsyncClient):
 
     assert resp.status_code == 400
     assert "document length" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_pdf_upload_rejects_empty_page_range(client: AsyncClient):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(pages=2),
+        extra_params={"page_range": ","},
+    )
+
+    assert resp.status_code == 400
+    assert "Invalid page_range" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

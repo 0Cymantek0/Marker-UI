@@ -20,6 +20,7 @@ from app.benchmark.runner import (
     BenchmarkReport,
     PdfBenchmarkCase,
     PdfEngineOutput,
+    PHASE3_LITEPARSE_FAST_PATH_CLASSES,
     PHASE3_PDF_CLASSES,
     BenchmarkSample,
     compare_marker_liteparse_pdfs,
@@ -119,6 +120,7 @@ def test_score_outputs_perfect_text():
     )
     assert score.combined == 1.0
     assert score.cer == 0.0
+    assert score.details == {"reference_len": 11, "hypothesis_len": 11}
 
 
 def test_score_outputs_blends_table_when_present():
@@ -272,6 +274,30 @@ def test_phase3_compare_blocks_phase4_when_liteparse_fails_gate():
     assert not comparison.liteparse_report.passing
     assert not comparison.ready_for_phase4
     assert comparison.verdict["liteparse_regressions"]
+
+
+def test_phase3_ready_for_phase4_when_liteparse_fast_path_passes_only():
+    """Phase 3 gates fast-path routing, not a broad LiteParse PDF swap."""
+
+    def marker_engine(case: PdfBenchmarkCase) -> str:
+        return case.reference_text
+
+    def liteparse_engine(case: PdfBenchmarkCase) -> str:
+        if case.document_class in PHASE3_LITEPARSE_FAST_PATH_CLASSES:
+            return case.reference_text
+        return "garbage"
+
+    comparison = compare_marker_liteparse_pdfs(
+        _phase3_cases(),
+        marker_engine=marker_engine,
+        liteparse_engine=liteparse_engine,
+    )
+
+    assert not comparison.liteparse_report.passing
+    assert not comparison.verdict["candidate_passes_gate"]
+    assert comparison.verdict["liteparse_fast_path_passes_gate"]
+    assert comparison.verdict["liteparse_fast_path_regressions"] == []
+    assert comparison.ready_for_phase4
 
 
 def test_phase3_generated_pdf_corpus_covers_required_classes(tmp_path):

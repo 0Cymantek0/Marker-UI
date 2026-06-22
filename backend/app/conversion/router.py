@@ -154,6 +154,13 @@ _ENGINE_COMPATIBLE_EXTS: dict[str, frozenset[str]] = {
 }
 
 
+def _converter_short_name(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return raw.rsplit(".", 1)[-1]
+
+
 class ConversionRouter:
     """Stateless router: extension → ConverterPlan."""
 
@@ -233,9 +240,22 @@ class ConversionRouter:
         warnings: list[str] = []
         if not probe:
             warnings.append("Preliminary filename-only plan; upload/local probing may change selected engine")
+        else:
+            if probe.text_layer_score < 0.70:
+                reasons.append("text layer score is below LiteParse threshold")
+            if probe.text_quality_score < 0.80:
+                reasons.append("text quality score is below LiteParse threshold")
+            if probe.scan_likelihood > 0.20:
+                reasons.append("scan likelihood is above LiteParse threshold")
+            if probe.sandwich_likelihood > 0.40:
+                reasons.append("sandwich likelihood is above LiteParse threshold")
+            if probe.visual_complexity_score > 0.35:
+                reasons.append("visual/image complexity is above LiteParse threshold")
+            if probe.layout_complexity_score > 0.45:
+                reasons.append("layout complexity is above LiteParse threshold")
 
         profile = str(config.get("conversion_profile") or config.get("profile") or "").lower()
-        converter_cls = str(config.get("converter_cls") or "")
+        converter_cls = _converter_short_name(config.get("converter_cls"))
         image_mode = config.get("image_handling_mode")
         image_understanding_requested = image_mode in ("understanding", "both")
         force_marker_reasons: list[str] = []
