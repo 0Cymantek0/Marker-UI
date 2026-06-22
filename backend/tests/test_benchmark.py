@@ -27,6 +27,7 @@ from app.benchmark.runner import (
     run_benchmark,
     validate_phase3_pdf_corpus,
 )
+from app.benchmark.phase3_pdf_corpus import generate_phase3_pdf_cases, load_phase3_pdf_cases
 
 
 # ---------------------------------------------------------------------------
@@ -271,3 +272,14 @@ def test_phase3_compare_blocks_phase4_when_liteparse_fails_gate():
     assert not comparison.liteparse_report.passing
     assert not comparison.ready_for_phase4
     assert comparison.verdict["liteparse_regressions"]
+
+
+def test_phase3_generated_pdf_corpus_covers_required_classes(tmp_path):
+    cases = generate_phase3_pdf_cases(tmp_path)
+    loaded = load_phase3_pdf_cases(tmp_path)
+
+    assert validate_phase3_pdf_corpus(cases) == PHASE3_PDF_CLASSES
+    assert validate_phase3_pdf_corpus(loaded) == PHASE3_PDF_CLASSES
+    assert (tmp_path / "golden.json").is_file()
+    assert {case.document_class for case in cases} == set(PHASE3_PDF_CLASSES)
+    assert all(case.pdf_path.is_file() for case in cases)

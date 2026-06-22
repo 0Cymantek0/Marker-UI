@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import '@testing-library/jest-dom'
 
@@ -21,7 +21,18 @@ vi.mock('@/hooks/useConversionQueue', () => ({
 
 // Mock components that we don't want to render in full depth or that have external deps
 vi.mock('@/components/features/FileUpload', () => ({
-  FileUpload: ({ onFilesSelect }: { onFilesSelect: (files: File[]) => void }) => (
+  FileUpload: ({
+    onFilesSelect,
+    fileEngineControls = [],
+  }: {
+    onFilesSelect: (files: File[]) => void
+    fileEngineControls?: Array<{
+      value: string
+      status: string
+      options: Array<{ value: string; label: string }>
+      onChange: (value: string) => void
+    }>
+  }) => (
     <div data-testid="file-upload">
       FileUpload
       <button
@@ -30,6 +41,20 @@ vi.mock('@/components/features/FileUpload', () => ({
       >
         Mock select PDF
       </button>
+      {fileEngineControls.map((control, index) => (
+        <div data-testid={`file-engine-${index}`} key={index}>
+          <span>{control.status}</span>
+          <select
+            aria-label={`Engine for file ${index + 1}`}
+            value={control.value}
+            onChange={(event) => control.onChange(event.target.value)}
+          >
+            {control.options.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+      ))}
     </div>
   )
 }))
@@ -134,7 +159,7 @@ describe('ConvertPage component', () => {
     expect(screen.getByText('Open Console')).toBeInTheDocument()
   })
 
-  it('shows metadata-only engine plan as a preview, not a final choice', async () => {
+  it('shows metadata-only engine plan on the selected file as auto preview', async () => {
     mockPlanConversion.mockResolvedValueOnce({
       engine: 'marker_pdf',
       label: 'Marker PDF',
@@ -163,10 +188,39 @@ describe('ConvertPage component', () => {
     render(<ConvertPage />)
     fireEvent.click(screen.getByText('Mock select PDF'))
 
-    expect(await screen.findByText('Engine preview')).toBeInTheDocument()
-    expect(screen.getByText('Preliminary estimate. Final selection runs PDF probing during upload.')).toBeInTheDocument()
+    expect(await screen.findByText('Auto: backend will probe on upload')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /Engine for file 1/i })).toHaveValue('auto')
     expect(screen.queryByText(/PDF complexity was not probed/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Preliminary filename-only plan/i)).not.toBeInTheDocument()
+  })
+
+  it('passes selected file engine override per source when converting', async () => {
+    const start = vi.fn().mockResolvedValue(undefined)
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start,
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+    fireEvent.click(screen.getByText('Mock select PDF'))
+
+    const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
+    fireEvent.change(select, { target: { value: 'marker_pdf' } })
+    const convertButton = await screen.findByRole('button', { name: /Convert 1 Document/i })
+    await waitFor(() => expect(convertButton).not.toBeDisabled())
+    fireEvent.click(convertButton)
+
+    expect(start).toHaveBeenCalledTimes(1)
+    const call = start.mock.calls[0]!
+    expect(call[0]).toHaveLength(1)
+    expect(call[4].fileKeys).toHaveLength(1)
+    expect(call[4].fileEngineOverrides[call[4].fileKeys[0]]).toBe('marker_pdf')
   })
 
   it('renders queue items and overall progress without crash', () => {

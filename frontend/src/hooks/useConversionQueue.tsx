@@ -53,9 +53,21 @@ export interface JobState {
   swapPromptDismissed?: boolean
 }
 
+export interface SourceEngineOverrides {
+  fileKeys?: string[]
+  fileEngineOverrides?: Record<string, string>
+  localPathEngineOverrides?: Record<string, string>
+}
+
 interface ConversionContextType {
   jobs: JobState[]
-  start: (files: File[], localPaths: string[], config: ConversionConfig, outputDir?: string) => Promise<void>
+  start: (
+    files: File[],
+    localPaths: string[],
+    config: ConversionConfig,
+    outputDir?: string,
+    sourceEngineOverrides?: SourceEngineOverrides
+  ) => Promise<void>
   cancel: (id: string) => Promise<void>
   download: (id: string) => Promise<void>
   clearLogs: (id: string) => void
@@ -426,14 +438,33 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }
   }, [updateJob, attachJobEvents])
 
-  const start = useCallback(async (files: File[], localPaths: string[], config: ConversionConfig, outputDir?: string) => {
+  const start = useCallback(async (
+    files: File[],
+    localPaths: string[],
+    config: ConversionConfig,
+    outputDir?: string,
+    sourceEngineOverrides?: SourceEngineOverrides
+  ) => {
     const newJobs: JobState[] = []
+    const jobConfigs: Record<string, ConversionConfig> = {}
     const cleanLocalPaths = localPaths.map((p) => p.trim()).filter((p) => p.length > 0)
     const isBunch = (files.length + cleanLocalPaths.length) > 1
+    const configForOverride = (engineOverride?: string): ConversionConfig => {
+      const next = { ...config }
+      if (engineOverride && engineOverride !== 'auto') {
+        next.engine_override = engineOverride
+      } else {
+        delete next.engine_override
+      }
+      return next
+    }
 
     // Add files
-    for (const f of files) {
+    for (const [index, f] of files.entries()) {
       const id = 'file-' + Math.random().toString(36).substring(2, 9)
+      const sourceKey = sourceEngineOverrides?.fileKeys?.[index] ?? id
+      const engineOverride = sourceEngineOverrides?.fileEngineOverrides?.[sourceKey]
+      jobConfigs[id] = configForOverride(engineOverride)
       newJobs.push({
         id,
         filename: f.name,
@@ -459,6 +490,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     for (const lp of cleanLocalPaths) {
       const id = 'local-' + Math.random().toString(36).substring(2, 9)
       const filename = lp.split(/[/\\]/).pop() || lp
+      const engineOverride = sourceEngineOverrides?.localPathEngineOverrides?.[lp]
+      jobConfigs[id] = configForOverride(engineOverride)
       newJobs.push({
         id,
         filename,
@@ -482,9 +515,9 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
 
     setJobs((prev) => [...prev, ...newJobs])
 
-    // Run each job in background
+    // Run each job in background with its own engine override.
     for (const job of newJobs) {
-      void runJob(job, config, outputDir)
+      void runJob(job, jobConfigs[job.id] ?? configForOverride(), outputDir)
     }
   }, [runJob])
 

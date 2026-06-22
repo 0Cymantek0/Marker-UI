@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { UploadCloud, FileText, X, FileImage, FileCode, FileSpreadsheet, FolderOpen, Files, Link } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
+import { Select, type SelectOption } from '@/components/ui/select'
 import { browseFiles, browseFolder } from '@/lib/api'
 import { toast } from 'sonner'
 
@@ -12,11 +13,22 @@ interface FileUploadProps {
   selectedFiles: File[]
   onRemoveFile: (index: number) => void
   onClearAll: () => void
+  fileEngineControls?: SourceEngineControl[]
+  localPathEngineControls?: SourceEngineControl[]
   localPaths: string
   onLocalPathsChange: (paths: string) => void
   outputDir: string
   onOutputDirChange: (dir: string) => void
   disabled?: boolean
+}
+
+interface SourceEngineControl {
+  key: string
+  value: string
+  options: SelectOption[]
+  status: string
+  title?: string
+  onChange: (value: string) => void
 }
 
 function formatSize(bytes: number): string {
@@ -44,6 +56,8 @@ export function FileUpload({
   selectedFiles,
   onRemoveFile,
   onClearAll,
+  fileEngineControls,
+  localPathEngineControls,
   localPaths,
   onLocalPathsChange,
   outputDir,
@@ -101,6 +115,7 @@ export function FileUpload({
       if (selected.length > 0) {
         onFilesSelect(selected)
       }
+      e.target.value = ''
     },
     [onFilesSelect, disabled]
   )
@@ -206,6 +221,7 @@ export function FileUpload({
               <div className="space-y-1.5">
                 {selectedFiles.map((file, idx) => {
                   const Icon = getFileIcon(file.name)
+                  const engineControl = fileEngineControls?.[idx]
                   return (
                     <div
                       key={idx}
@@ -217,7 +233,23 @@ export function FileUpload({
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold truncate text-foreground">{file.name}</p>
                         <p className="text-[10px] text-muted-foreground">{formatSize(file.size)}</p>
+                        {engineControl && (
+                          <p className="text-[9px] text-muted-foreground truncate" title={engineControl.title}>
+                            {engineControl.status}
+                          </p>
+                        )}
                       </div>
+                      {engineControl && (
+                        <div className="w-32 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <Select
+                            value={engineControl.value}
+                            options={engineControl.options}
+                            onChange={engineControl.onChange}
+                            disabled={disabled}
+                            className="w-32 md:w-32"
+                          />
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => onRemoveFile(idx)}
@@ -261,6 +293,33 @@ export function FileUpload({
           <p className="text-[10px] text-muted-foreground/80 leading-normal">
             * Backend reads files directly from your computer. Outputs will save to the same folder as the input file unless a custom folder is specified below.
           </p>
+          {localPathEngineControls && localPathEngineControls.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              {localPathEngineControls.map((control) => (
+                <div
+                  key={control.key}
+                  className="flex items-center gap-2 p-2 rounded-xl border border-border/40 bg-card/50"
+                >
+                  <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold text-foreground truncate" title={control.title}>
+                      {control.title}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground truncate">
+                      {control.status}
+                    </p>
+                  </div>
+                  <Select
+                    value={control.value}
+                    options={control.options}
+                    onChange={control.onChange}
+                    disabled={disabled}
+                    className="w-32 md:w-32 shrink-0"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

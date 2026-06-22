@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -18,18 +19,52 @@ interface SelectProps {
 export function Select({ value, onChange, options, className, disabled }: SelectProps) {
   const [isOpen, setIsOpen] = React.useState(false)
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const dropdownRef = React.useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = React.useState<{ top: number; left: number; width: number } | null>(null)
 
   const selectedOption = options.find((opt) => opt.value === value)
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        dropdownRef.current && !dropdownRef.current.contains(target)
+      ) {
         setIsOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  React.useLayoutEffect(() => {
+    if (!isOpen) {
+      setCoords(null)
+      return
+    }
+
+    function updatePosition() {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setCoords({
+          top: rect.bottom + window.scrollY,
+          left: rect.left + window.scrollX,
+          width: rect.width,
+        })
+      }
+    }
+
+    updatePosition()
+
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [isOpen])
 
   return (
     <div ref={containerRef} className={cn('relative w-full md:w-44', isOpen && 'z-30', className)}>
@@ -52,8 +87,17 @@ export function Select({ value, onChange, options, className, disabled }: Select
         />
       </button>
 
-      {isOpen && !disabled && (
-        <div className="absolute z-50 min-w-full w-max max-w-[min(22rem,80vw)] mt-1.5 origin-top-right rounded-lg border border-border bg-background shadow-lg py-1 max-h-60 overflow-y-auto focus:outline-none animate-in fade-in slide-in-from-top-1 duration-100">
+      {isOpen && coords && !disabled && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'absolute',
+            top: `${coords.top + 6}px`,
+            left: `${coords.left}px`,
+            minWidth: `${coords.width}px`,
+          }}
+          className="z-50 w-max max-w-[min(22rem,80vw)] origin-top-right rounded-lg border border-border bg-background shadow-lg py-1 max-h-60 overflow-y-auto focus:outline-none animate-in fade-in slide-in-from-top-1 duration-100"
+        >
           {options.map((option) => {
             const isSelected = option.value === value
             return (
@@ -76,7 +120,8 @@ export function Select({ value, onChange, options, className, disabled }: Select
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

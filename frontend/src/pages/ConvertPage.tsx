@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Select, type SelectOption } from '@/components/ui/select'
+import type { SelectOption } from '@/components/ui/select'
 import { FileUpload } from '@/components/features/FileUpload'
 import { ConversionOptions } from '@/components/features/ConversionOptions'
 import { TerminalLog } from '@/components/features/TerminalLog'
@@ -30,6 +30,19 @@ const DEFAULT_CONFIG: ConversionConfig = {
   language: '',
   disable_multiprocessing: false,
   debug: false,
+}
+
+const AUTO_ENGINE = 'auto'
+
+interface SelectedUploadFile {
+  id: string
+  file: File
+}
+
+interface SourcePlanState {
+  plan: ConverterPlanResponse | null
+  loading: boolean
+  error: string | null
 }
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -67,17 +80,29 @@ function engineOptionsFor(filename: string | undefined, plan: ConverterPlanRespo
   else engines = plan ? [plan.engine] : []
 
   if (plan && !engines.includes(plan.engine)) engines.unshift(plan.engine)
-  return engines.map((engine) => ({
+  const engineOptions = engines.map((engine) => ({
     value: engine,
     label: engine === 'marker_pdf' && ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif'].includes(ext)
       ? 'Marker Image OCR'
       : ENGINE_LABELS[engine] ?? engine,
   }))
+  return [{ value: AUTO_ENGINE, label: 'Auto' }, ...engineOptions]
+}
+
+function sourcePlanStatus(sourcePlan: SourcePlanState | undefined, selectedEngine: string): string {
+  if (selectedEngine !== AUTO_ENGINE) {
+    return `Override: ${ENGINE_LABELS[selectedEngine] ?? selectedEngine}`
+  }
+  if (!sourcePlan || sourcePlan.loading) return 'Auto: checking route...'
+  if (sourcePlan.error) return 'Auto: route check unavailable'
+  if (!sourcePlan.plan) return 'Auto'
+  if (sourcePlan.plan.preliminary) return 'Auto: backend will probe on upload'
+  return `Auto selected: ${sourcePlan.plan.label}`
 }
 
 export function ConvertPage() {
   const navigate = useNavigate()
-  const [files, setFiles] = useState<File[]>([])
+  const [selectedFiles, setSelectedFiles] = useState<SelectedUploadFile[]>([])
   const [localPaths, setLocalPaths] = useState<string>('')
   const [outputDir, setOutputDir] = useState<string>('')
   const [config, setConfig] = useState<ConversionConfig>(() => {
@@ -97,8 +122,8 @@ export function ConvertPage() {
   const [swapJobId, setSwapJobId] = useState<string | null>(null)
   const [swapAuto, setSwapAuto] = useState(false)
 
-  const [conversionPlan, setConversionPlan] = useState<ConverterPlanResponse | null>(null)
-  const [checkingPlan, setCheckingPlan] = useState(false)
+  const [sourcePlans, setSourcePlans] = useState<Record<string, SourcePlanState>>({})
+  const [engineOverrides, setEngineOverrides] = useState<Record<string, string>>({})
   const [capabilities, setCapabilities] = useState<Record<string, string>>({})
 
   // Fetch capabilities on mount and poll
@@ -123,51 +148,118 @@ export function ConvertPage() {
     }
   }, [])
 
-  // Plan conversion when inputs or config change
+  const files = useMemo(() => selectedFiles.map((entry) => entry.file), [selectedFiles])
+  const parsedLocalPaths = useMemo(
+    () => localPaths.split('\n').map((p) => p.trim()).filter((p) => p.length > 0),
+    [localPaths]
+  )
+  const sourceKeys = useMemo(
+    () => [
+      ...selectedFiles.map((entry) => entry.id),
+      ...parsedLocalPaths.map((path) => `local:${path}`),
+    ],
+    [selectedFiles, parsedLocalPaths]
+  )
+
+  // Plan conversion for each source independently. Uploaded PDFs only get a
+  // filename-level preview here; backend upload still probes bytes before queueing.
   useEffect(() => {
-    let active = true
-    const firstFile = files[0]
-    const filename = firstFile ? firstFile.name : localPaths.split('\n')[0]?.trim()
-    const size = firstFile ? firstFile.size : 1000 // mock size for local paths
-    
-    if (!filename) {
-      setConversionPlan(null)
-      return
-    }
-
-    const checkPlan = async () => {
-      setCheckingPlan(true)
-      try {
-        const localPath = firstFile ? undefined : filename
-        const plan = await planConversion(filename, size, localPath, config.engine_override)
-        if (active) {
-          setConversionPlan(plan)
-        }
-      } catch (err) {
-        console.error('Failed to get conversion plan:', err)
-      } finally {
-        if (active) {
-          setCheckingPlan(false)
-        }
+    const sourceKeySet = new Set(sourceKeys)
+    setSourcePlans((prev) => {
+      const next: Record<string, SourcePlanState> = {}
+      let changed = Object.keys(prev).length !== sourceKeys.length
+      for (const key of sourceKeys) {
+        if (prev[key]) next[key] = prev[key]
+        if (!prev[key]) changed = true
       }
+      return changed ? next : prev
+    })
+    setEngineOverrides((prev) => {
+      const next: Record<string, string> = {}
+      let changed = false
+      for (const key of sourceKeys) {
+        if (prev[key]) next[key] = prev[key]
+      }
+      for (const key of Object.keys(prev)) {
+        if (!sourceKeySet.has(key)) changed = true
+      }
+      return changed ? next : prev
+    })
+
+    const timers: ReturnType<typeof setTimeout>[] = []
+    let active = true
+    const schedulePlan = (
+      key: string,
+      filename: string,
+      size: number,
+      localPath?: string,
+      engineOverride?: string,
+    ) => {
+      setSourcePlans((prev) => ({
+        ...prev,
+        [key]: { plan: prev[key]?.plan ?? null, loading: true, error: null },
+      }))
+      const timer = setTimeout(async () => {
+        try {
+          const plan = await planConversion(
+            filename,
+            size,
+            localPath,
+            engineOverride && engineOverride !== AUTO_ENGINE ? engineOverride : undefined,
+          )
+          if (!active || !sourceKeySet.has(key)) return
+          setSourcePlans((prev) => ({
+            ...prev,
+            [key]: { plan, loading: false, error: null },
+          }))
+        } catch (err) {
+          if (!active || !sourceKeySet.has(key)) return
+          setSourcePlans((prev) => ({
+            ...prev,
+            [key]: {
+              plan: prev[key]?.plan ?? null,
+              loading: false,
+              error: err instanceof Error ? err.message : 'Plan unavailable',
+            },
+          }))
+        }
+      }, 250)
+      timers.push(timer)
     }
 
-    const timer = setTimeout(checkPlan, 300) // debounce
+    selectedFiles.forEach((entry) => {
+      schedulePlan(
+        entry.id,
+        entry.file.name,
+        entry.file.size,
+        undefined,
+        engineOverrides[entry.id] ?? AUTO_ENGINE,
+      )
+    })
+    parsedLocalPaths.forEach((path) => {
+      schedulePlan(
+        `local:${path}`,
+        path.split(/[/\\]/).pop() || path,
+        1000,
+        path,
+        engineOverrides[`local:${path}`] ?? AUTO_ENGINE,
+      )
+    })
+
     return () => {
       active = false
-      clearTimeout(timer)
+      timers.forEach(clearTimeout)
     }
-  }, [files, localPaths, config])
+  }, [selectedFiles, parsedLocalPaths, sourceKeys, engineOverrides])
 
-  const firstFilename = files[0] ? files[0].name : localPaths.split('\n')[0]?.trim()
-  const engineOptions = engineOptionsFor(firstFilename, conversionPlan)
-  const selectedEngine = config.engine_override && engineOptions.some((opt) => opt.value === config.engine_override)
-    ? config.engine_override
-    : conversionPlan?.engine
-  const engineStatus = selectedEngine ? capabilities[selectedEngine] : null
-  const isModelsMissing = engineStatus === 'models_missing' || engineStatus === 'models_downloading'
-  const visiblePlanReasons = conversionPlan?.preliminary ? [] : (conversionPlan?.reasons ?? [])
-  const visiblePlanWarnings = conversionPlan?.preliminary ? [] : (conversionPlan?.warnings ?? [])
+  const checkingPlan = Object.values(sourcePlans).some((state) => state.loading)
+  const selectedEngines = sourceKeys
+    .map((key) => engineOverrides[key])
+    .filter((engine): engine is string => Boolean(engine) && engine !== AUTO_ENGINE)
+  const isModelsMissing = selectedEngines.some((engine) => {
+    const status = capabilities[engine]
+    return status === 'models_missing' || status === 'models_downloading'
+  })
 
   useEffect(() => {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
@@ -218,26 +310,67 @@ export function ConvertPage() {
     ? Math.round(jobs.reduce((sum, j) => sum + j.progress, 0) / jobs.length)
     : 0
 
-  const handleConvert = useCallback(async () => {
-    const parsedLocalPaths = localPaths
-      .split('\n')
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0)
+  const setSourceEngine = useCallback((sourceKey: string, engine: string) => {
+    setEngineOverrides((prev) => {
+      const next = { ...prev }
+      if (engine === AUTO_ENGINE) {
+        delete next[sourceKey]
+      } else {
+        next[sourceKey] = engine
+      }
+      return next
+    })
+  }, [])
 
+  const fileEngineControls = selectedFiles.map((entry) => {
+    const planState = sourcePlans[entry.id]
+    const value = engineOverrides[entry.id] ?? AUTO_ENGINE
+    return {
+      key: entry.id,
+      value,
+      options: engineOptionsFor(entry.file.name, planState?.plan ?? null),
+      status: sourcePlanStatus(planState, value),
+      title: planState?.plan?.reasons.join(' · '),
+      onChange: (engine: string) => setSourceEngine(entry.id, engine),
+    }
+  })
+
+  const localPathEngineControls = parsedLocalPaths.map((path) => {
+    const key = `local:${path}`
+    const planState = sourcePlans[key]
+    const value = engineOverrides[key] ?? AUTO_ENGINE
+    return {
+      key,
+      value,
+      options: engineOptionsFor(path, planState?.plan ?? null),
+      status: sourcePlanStatus(planState, value),
+      title: path,
+      onChange: (engine: string) => setSourceEngine(key, engine),
+    }
+  })
+
+  const handleConvert = useCallback(async () => {
     if (files.length === 0 && parsedLocalPaths.length === 0) {
       toast.error('Please select a file first or specify local paths')
       return
     }
 
     try {
-      await start(files, parsedLocalPaths, config, outputDir)
-      setFiles([])
+      await start(files, parsedLocalPaths, config, outputDir, {
+        fileKeys: selectedFiles.map((entry) => entry.id),
+        fileEngineOverrides: engineOverrides,
+        localPathEngineOverrides: Object.fromEntries(
+          parsedLocalPaths.map((path) => [path, engineOverrides[`local:${path}`] ?? AUTO_ENGINE])
+        ),
+      })
+      setSelectedFiles([])
       setLocalPaths('')
+      setEngineOverrides({})
       toast.success('Conversion queued successfully!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Conversion failed')
     }
-  }, [files, localPaths, config, outputDir, start])
+  }, [files, parsedLocalPaths, config, outputDir, start, selectedFiles, engineOverrides])
 
   const handleConvertClick = useCallback(() => {
     if (isModelsMissing) {
@@ -250,25 +383,19 @@ export function ConvertPage() {
   const getButtonText = () => {
     if (checkingPlan) return 'Checking File Type...'
     if (isModelsMissing) {
-      return engineStatus === 'models_downloading'
-        ? 'Installing OCR models (click to track)...'
-        : 'Install local OCR models to continue'
+      return 'Install selected engine models to continue'
     }
-    const parsedLocalPaths = localPaths
-      .split('\n')
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0)
     const total = files.length + parsedLocalPaths.length
     if (total === 0) return 'Convert Document'
     return `Convert ${total} Document${total > 1 ? 's' : ''}`
   }
 
   const handleRemoveFile = (idx: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== idx))
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const handleClearAll = () => {
-    setFiles([])
+    setSelectedFiles([])
   }
 
   return (
@@ -288,50 +415,25 @@ export function ConvertPage() {
               01 / SOURCE DOCUMENTS
             </h3>
             <FileUpload
-              onFilesSelect={(newFiles) => setFiles((prev) => [...prev, ...newFiles])}
+              onFilesSelect={(newFiles) => {
+                setSelectedFiles((prev) => [
+                  ...prev,
+                  ...newFiles.map((file) => ({
+                    id: `file:${file.name}:${file.size}:${file.lastModified}:${Math.random().toString(36).slice(2, 8)}`,
+                    file,
+                  })),
+                ])
+              }}
               selectedFiles={files}
               onRemoveFile={handleRemoveFile}
               onClearAll={handleClearAll}
+              fileEngineControls={fileEngineControls}
+              localPathEngineControls={localPathEngineControls}
               localPaths={localPaths}
               onLocalPathsChange={setLocalPaths}
               outputDir={outputDir}
               onOutputDirChange={setOutputDir}
             />
-            {conversionPlan && (
-              <div className="mt-2 text-xs text-muted-foreground flex flex-col gap-1.5 p-3 rounded-xl border border-border/30 bg-muted/30 animate-fade-in">
-                <div className="flex items-center gap-1.5 justify-between">
-                  <span className="font-semibold text-foreground">
-                    {conversionPlan.preliminary ? 'Engine preview' : 'Engine chosen'}
-                  </span>
-                  <Select
-                    value={selectedEngine ?? conversionPlan.engine}
-                    options={engineOptions}
-                    onChange={(engine) => {
-                      setConfig((prev) => ({
-                        ...prev,
-                        engine_override: engine === conversionPlan.engine ? undefined : engine,
-                      }))
-                    }}
-                    className="w-48 md:w-48"
-                  />
-                </div>
-                {conversionPlan.preliminary && (
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400">
-                    Preliminary estimate. Final selection runs PDF probing during upload.
-                  </div>
-                )}
-                {visiblePlanReasons.length > 0 && (
-                  <div className="text-[10px] leading-relaxed text-muted-foreground border-t border-border/10 pt-1">
-                    {visiblePlanReasons.slice(0, 3).join(' · ')}
-                  </div>
-                )}
-                {visiblePlanWarnings.length > 0 && (
-                  <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 border-t border-border/10 pt-1">
-                    {visiblePlanWarnings.join(', ')}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           <hr className="border-border/30" />
