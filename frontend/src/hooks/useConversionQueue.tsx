@@ -29,6 +29,7 @@ export interface JobState {
   jobId: string | null
   error: string | null
   resultBlob: Blob | null
+  resultFilename?: string
   // Clean document text from the DB (/status result_text). Used for the inline
   // preview. The download blob may be a ZIP (when images are extracted), so it
   // must NOT be decoded as text for preview — see ConvertPage.
@@ -106,7 +107,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }))
 
     downloadResult(jobId)
-      .then(async (blob) => {
+      .then(async ({ blob, filename }) => {
         // Fetch status to capture the per-image understanding sidecar (it is
         // persisted server-side only at finalize, so SSE can't carry it) and
         // the clean document text (the blob may be a ZIP, see resultText).
@@ -128,6 +129,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           statusText: 'Conversion complete',
           error: null,
           resultBlob: blob,
+          resultFilename: filename,
           resultText,
           imageUnderstanding,
           conversionMetadata,
@@ -174,7 +176,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           const resultText = status.result_text ?? null
           const conversionMetadata = status.conversion_metadata ?? null
           downloadResult(jobId)
-            .then((blob) => {
+            .then(({ blob, filename }) => {
               updateJob(id, (prev) => ({
                 ...prev,
                 phase: 'completed',
@@ -182,6 +184,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
                 statusText: 'Conversion complete',
                 error: null,
                 resultBlob: blob,
+                resultFilename: filename,
                 resultText,
                 imageUnderstanding,
                 conversionMetadata,
@@ -552,20 +555,38 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     const job = jobs.find((j) => j.id === id)
     if (!job || !job.jobId) return
 
-    const blob = job.resultBlob ?? await downloadResult(job.jobId)
+    let blob = job.resultBlob
+    let headerFilename = job.resultFilename
+
+    if (!blob) {
+      try {
+        const result = await downloadResult(job.jobId)
+        blob = result.blob
+        headerFilename = result.filename
+      } catch (err) {
+        console.error('Failed to download result:', err)
+        return
+      }
+    }
+
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    
-    const isZip = blob.type === 'application/zip'
-    const extMap: Record<string, string> = { markdown: 'md', json: 'json', html: 'html', chunks: 'json' }
-    const ext = isZip ? 'zip' : (extMap[job.outputFormat] || 'md')
-    
-    const stem = job.filename.includes('.') ? job.filename.split('.').slice(0, -1).join('.') : job.filename
-    if (job.isBunch) {
-      a.download = `marker-${stem}.${ext}`
+
+    if (headerFilename) {
+      a.download = headerFilename
     } else {
-      a.download = `${stem}.${ext}`
+      const isZip = blob.type === 'application/zip' || blob.type === 'application/x-zip-compressed'
+      const isJson = blob.type === 'application/json'
+      const isHtml = blob.type === 'text/html'
+      const ext = isZip ? 'zip' : isJson ? 'json' : isHtml ? 'html' : 'md'
+
+      const stem = job.filename.includes('.') ? job.filename.split('.').slice(0, -1).join('.') : job.filename
+      if (job.isBunch) {
+        a.download = `marker-${stem}.${ext}`
+      } else {
+        a.download = `${stem}.${ext}`
+      }
     }
 
     document.body.appendChild(a)
