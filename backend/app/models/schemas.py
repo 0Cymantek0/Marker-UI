@@ -325,6 +325,7 @@ class ConverterPlanResponse(BaseModel):
     reasons: list[str]
     needs_marker_models: bool
     needs_gpu: bool
+    execution_backend: str
     needs_cloud: bool
     optional_dependencies: list[str]
     fallback_chain: list[str]

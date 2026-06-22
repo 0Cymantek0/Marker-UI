@@ -248,6 +248,12 @@ class TaskManager:
         # Pluggable executor. Default = thread backend (single-process, original
         # behavior). Caller passes a ProcessExecutorBackend on multi-GPU boxes.
         self._backend: ExecutorBackend = backend or ThreadExecutorBackend(self, max_workers=max_workers)
+        # CPU thread pool for office/text jobs when a process (marker) backend is
+        # the primary. These jobs never need marker models or a GPU, so routing
+        # them here avoids spawning (or warming) a GPU process worker. When the
+        # primary backend is already the thread backend this pool stays idle and
+        # everything runs through self._backend as before.
+        self._cpu_backend: ExecutorBackend = ThreadExecutorBackend(self, max_workers=max_workers)
 
         self._tasks: dict[str, asyncio.Future[Any]] = {}
         self._progress: dict[str, int] = {}
@@ -426,7 +432,8 @@ class TaskManager:
         self._job_has_real_progress[job_id] = False
         self._job_providers[job_id] = config.get("llm_provider")
 
-        future = self._backend.submit(
+        backend = self._select_backend(filepath, marker_service)
+        future = backend.submit(
             self._run_conversion,
             job_id,
             filepath,
@@ -466,6 +473,25 @@ class TaskManager:
             with self._lock:
                 self._proc_configs[job_id] = dict(config)
                 self._proc_jobs[job_id] = "running"
+
+    def _select_backend(self, filepath: str, conversion_service: Any) -> ExecutorBackend:
+        """Pick the executor for a job based on its ConversionPlan.
+
+        Only the process backend splits routing: cpu_thread plans go to the CPU
+        thread pool, marker_worker plans go to the GPU process workers. When the
+        primary backend is the thread backend, all jobs use it (original behavior).
+        Planning failures fall back to the primary backend so a bad plan never
+        blocks a job.
+        """
+        if not self._backend.is_process:
+            return self._backend
+        try:
+            plan = conversion_service.plan(filepath, {})
+            if plan.execution_backend == "cpu_thread":
+                return self._cpu_backend
+        except Exception:  # noqa: BLE001 - a planning error must not block the job
+            logger.exception("Failed to plan execution backend for %s; using primary", filepath)
+        return self._backend
 
     # ------------------------------------------------------------------
     # Status helpers
@@ -586,6 +612,7 @@ class TaskManager:
     def shutdown(self, wait: bool = False) -> None:
         """Stop the drain thread and release the executor/pool."""
         self._drain_stop.set()
+        self._cpu_backend.shutdown(wait=wait)
         # Unblock a blocking drain by pushing the stop sentinel.
         transport = getattr(self._backend, "transport", None)
         if transport is not None:

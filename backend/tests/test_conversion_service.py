@@ -189,3 +189,30 @@ class TestConversionService:
         # Must not raise — result is plain dict with JSON-safe values
         serialized = json.dumps(result, default=str)
         assert '"text"' in serialized
+
+    def test_runtime_fallback_to_marker_when_converter_raises(self, tmp_path: Any) -> None:
+        """BUG-B: a failing office converter falls back to marker_pdf at runtime."""
+        svc, fake_ms = self._make_service()
+        docx_path = tmp_path / "corrupt.docx"
+        docx_path.write_bytes(b"PK not really a docx")
+
+        # Make the office_docx converter raise at runtime (e.g. BadZipFile).
+        office = svc.registry.get("office_docx")
+        assert office is not None
+        original = office.convert
+
+        def raising_convert(filepath, config, device=None):
+            raise RuntimeError("simulated BadZipFile")
+
+        office.convert = raising_convert  # type: ignore[assignment]
+        try:
+            result = svc.convert_file(str(docx_path), {})
+        finally:
+            office.convert = original  # type: ignore[assignment]
+
+        # The runtime fallback retried via marker_pdf (the fake marker service).
+        assert len(fake_ms.convert_calls) == 1
+        engine_meta = result["metadata"]["engine"]
+        assert engine_meta["engine"] == "marker_pdf"
+        assert "runtime fallback" in engine_meta["label"].lower()
+        assert engine_meta["fallback_chain"] == ["office_docx", "marker_pdf"]

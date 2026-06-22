@@ -314,6 +314,7 @@ async def plan_conversion(
         reasons=plan.reasons,
         needs_marker_models=plan.needs_marker_models,
         needs_gpu=plan.needs_gpu,
+        execution_backend=plan.execution_backend,
         needs_cloud=plan.needs_cloud,
         optional_dependencies=plan.optional_dependencies,
         fallback_chain=plan.fallback_chain,

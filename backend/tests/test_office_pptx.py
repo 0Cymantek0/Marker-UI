@@ -204,3 +204,62 @@ def test_office_pptx_chart_series_names():
     assert "| Series | Cat A | Cat B |" in result.text
     assert "|  | 10 | 20 |" in result.text
     assert "| 123.45 | 15 | 25 |" in result.text
+
+
+def test_office_pptx_merged_table_cells_not_duplicated():
+    """BUG-C: python-pptx returns the same _Cell for merged span positions.
+
+    A 2x2 table where row 1 col 0 is merged across both columns (so row.cells
+    returns [merged_cell, merged_cell]) must emit the text once, not twice.
+    """
+    converter = OfficePptxConverter()
+
+    merged_cell = MagicMock()
+    merged_cell.text = "Merged"
+
+    other_cell = MagicMock()
+    other_cell.text = "Other"
+
+    # Row 0: header cells (distinct)
+    header_a = MagicMock(); header_a.text = "H1"
+    header_b = MagicMock(); header_b.text = "H2"
+
+    row0 = MagicMock()
+    row0.cells = [header_a, header_b]
+
+    # Row 1: col 0 merged across both columns -> same object returned twice
+    row1 = MagicMock()
+    row1.cells = [merged_cell, merged_cell]
+
+    # Row 2: two DISTINCT cell objects with the same text must both render.
+    other_cell_b = MagicMock(); other_cell_b.text = "Other"
+    row2 = MagicMock()
+    row2.cells = [other_cell, other_cell_b]
+
+    mock_table = MagicMock()
+    mock_table.rows = [row0, row1, row2]
+
+    mock_shape = MagicMock()
+    mock_shape.shape_type = 3
+    mock_shape.has_table = True
+    mock_shape.has_chart = False
+    mock_shape.has_text_frame = False
+    mock_shape.table = mock_table
+
+    mock_slide = MagicMock()
+    mock_shapes = MagicMock()
+    mock_shapes.__iter__.return_value = [mock_shape]
+    mock_shapes.title = None
+    mock_slide.shapes = mock_shapes
+    mock_slide.has_notes_slide = False
+
+    mock_prs = MagicMock()
+    mock_prs.slides = [mock_slide]
+
+    with patch("app.conversion.converters.office_pptx.Presentation", return_value=mock_prs):
+        result = converter.convert("dummy.pptx", {})
+
+    # The merged cell text must appear exactly once (not duplicated).
+    assert result.text.count("Merged") == 1
+    # The distinct-cell row still renders both columns.
+    assert result.text.count("Other") == 2

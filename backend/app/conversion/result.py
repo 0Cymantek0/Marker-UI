@@ -8,7 +8,13 @@ converts it to the dict shape that ``_finalize_job`` already knows.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+# Which executor a plan should run on. Office/text jobs never need marker
+# models or a GPU, so they route to the lightweight CPU thread pool and avoid
+# spawning (or warming) a GPU process worker. Marker/scanned jobs route to the
+# marker worker pool when one is configured.
+ExecutionBackend = Literal["cpu_thread", "marker_worker"]
 
 
 @dataclass(frozen=True)
@@ -35,6 +41,7 @@ class ConverterPlan:
     reasons: list[str]
     needs_marker_models: bool
     needs_gpu: bool
+    execution_backend: ExecutionBackend = "marker_worker"
     needs_cloud: bool = False
     optional_dependencies: list[str] = field(default_factory=list)
     fallback_chain: list[str] = field(default_factory=list)
@@ -49,6 +56,7 @@ class ConverterPlan:
             "reasons": self.reasons,
             "needs_marker_models": self.needs_marker_models,
             "needs_gpu": self.needs_gpu,
+            "execution_backend": self.execution_backend,
             "needs_cloud": self.needs_cloud,
             "optional_dependencies": self.optional_dependencies,
             "fallback_chain": self.fallback_chain,

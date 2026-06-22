@@ -143,3 +143,28 @@ class TestConversionRouter:
         serialized = json.dumps(d)
         assert '"engine"' in serialized
         assert '"marker_pdf"' in serialized
+
+    def test_uppercase_extension_routes_correctly(self) -> None:
+        """ISSUE-K: a raw uppercase extension must route the same as lowercase.
+
+        Production paths (from_path, plan_by_metadata) lower-case the extension,
+        but a caller building a StreamInfo directly with an upper-case suffix
+        should still hit the routing table, not the low-confidence fallback.
+        """
+        upper = _make_stream_info(".PDF", path="/tmp/REPORT.PDF")
+        lower = _make_stream_info(".pdf")
+        plan_upper = ConversionRouter.plan(upper, {})
+        plan_lower = ConversionRouter.plan(lower, {})
+
+        assert plan_upper.engine == plan_lower.engine == "marker_pdf"
+        assert plan_upper.confidence == plan_lower.confidence == 1.0
+        assert plan_upper.needs_marker_models is True
+
+    def test_uppercase_office_extension_routes_to_office(self) -> None:
+        """An uppercase .DOCX routes to office_docx, not the marker fallback."""
+        upper = _make_stream_info(".DOCX", path="/tmp/REPORT.DOCX")
+        plan = ConversionRouter.plan(upper, {})
+
+        assert plan.engine == "office_docx"
+        assert plan.needs_marker_models is False
+        assert plan.execution_backend == "cpu_thread"

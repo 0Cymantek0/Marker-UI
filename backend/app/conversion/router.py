@@ -146,7 +146,11 @@ class ConversionRouter:
         resource requirements.  The plan is a recommendation — the caller
         checks whether the engine is actually registered.
         """
-        ext = stream_info.extension
+        # Normalize defensively: production paths (from_path, plan_by_metadata)
+        # already lower-case the extension, but a caller building a raw StreamInfo
+        # with an upper-case suffix should still route correctly rather than
+        # falling through to the low-confidence marker_pdf fallback.
+        ext = stream_info.extension.lower()
 
         entry = _EXT_TO_ENTRY.get(ext)
         if entry is not None:
@@ -158,6 +162,7 @@ class ConversionRouter:
                 reasons=[f"Matched extension '{ext}'"],
                 needs_marker_models=needs_marker,
                 needs_gpu=needs_gpu,
+                execution_backend="marker_worker" if needs_marker else "cpu_thread",
             )
 
         # Unknown extension → low-confidence fallback to marker_pdf.
@@ -168,5 +173,6 @@ class ConversionRouter:
             reasons=[f"Unknown extension '{ext}'; falling back to Marker PDF"],
             needs_marker_models=True,
             needs_gpu=True,
+            execution_backend="marker_worker",
             warnings=[f"No dedicated converter for '{ext}'; using Marker PDF as fallback"],
         )

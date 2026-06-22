@@ -220,7 +220,17 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     from app.services.model_tracker import register_retry_callback
     register_retry_callback(_load_models_background)
 
-    _load_models_background()
+    # Phase 1 lazy init: marker models load on first marker job, not at startup.
+    # An office-only deployment should never pay the multi-GB cold start.
+    # Set MARKER_PRELOAD_MODELS=true to restore eager startup loading.
+    from app.core.config import PRELOAD_MARKER_MODELS
+    if PRELOAD_MARKER_MODELS:
+        _load_models_background()
+    else:
+        logger.info(
+            "Marker model prewarming disabled (MARKER_PRELOAD_MODELS=false); "
+            "models will lazy-load on first marker job."
+        )
 
     yield
 

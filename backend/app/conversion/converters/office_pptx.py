@@ -123,8 +123,17 @@ class OfficePptxConverter(BaseConverter):
             rows_md = []
             for i, row in enumerate(table.rows):
                 cells = []
+                prev_cell = None
                 for cell in row.cells:
-                    cells.append(cell.text.strip().replace("\n", " "))
+                    # python-pptx returns the same _Cell object for every grid
+                    # position covered by a merged span; emitting its text for
+                    # each column duplicates content. Emit the text once and use
+                    # an empty cell for the spanned-over positions.
+                    if cell is prev_cell:
+                        cells.append("")
+                    else:
+                        cells.append(cell.text.strip().replace("\n", " "))
+                        prev_cell = cell
                 rows_md.append("| " + " | ".join(cells) + " |")
                 if i == 0:
                     rows_md.append("| " + " | ".join(["---"] * len(cells)) + " |")

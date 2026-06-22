@@ -182,10 +182,20 @@ def worker_initializer(
         logger.exception("worker %d: failed to wire progress/log routing", worker_id)
 
     # 3. Load the model dict onto the pinned device (the expensive cold start).
+    # Phase 1 lazy init: by default models are NOT loaded at pool spawn. They
+    # lazy-load on the first marker job via MarkerService.convert_file -> initialize().
+    # Set MARKER_PRELOAD_MODELS=true to eagerly warm each worker at spawn.
     try:
+        from app.core.config import PRELOAD_MARKER_MODELS
         from app.services.marker_service import MarkerService
 
         global _model_dict
+        if not PRELOAD_MARKER_MODELS:
+            logger.info(
+                "worker %d ready on device=%s (pid=%d); models lazy-load on first marker job",
+                worker_id, device_str, os.getpid(),
+            )
+            return
         svc = MarkerService()
         device = None if device_str == "cpu" else device_str
         svc.initialize(device=device)

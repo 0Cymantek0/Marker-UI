@@ -17,6 +17,11 @@ DEBUG: bool = os.getenv("MARKER_DEBUG", "false").lower() in ("true", "1", "yes")
 
 MAX_UPLOAD_SIZE: int = int(os.getenv("MARKER_MAX_UPLOAD_SIZE_MB", "100")) * 1024 * 1024
 
+# Model prewarming. Phase 1 default is lazy: marker models load on first marker
+# job rather than at startup, so an office-only deployment never pays the
+# multi-GB cold start. Set MARKER_PRELOAD_MODELS=true to restore eager loading.
+PRELOAD_MARKER_MODELS: bool = os.getenv("MARKER_PRELOAD_MODELS", "false").lower() in ("true", "1", "yes")
+
 # Database
 DATABASE_URL: str = os.getenv("MARKER_DATABASE_URL", f"sqlite+aiosqlite:///{DB_PATH}")
 

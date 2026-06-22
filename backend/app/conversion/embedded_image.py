@@ -367,7 +367,7 @@ class EmbeddedImageService:
             ocr_md = markdownify.markdownify(ocr_html).strip()
             markdown = "\n".join(html_parts + [ocr_md])
         elif route == "vlm" and payload:
-            from app.processors.image_understanding import render_extraction, ImageType
+            from app.conversion.image_rendering import render_extraction  # marker-free, avoids importing marker for office docs
             image_type = ImageType(image_type_str)
             rendered_html = render_extraction(image_type, payload)
             vlm_md = markdownify.markdownify(rendered_html).strip()

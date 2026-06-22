@@ -60,6 +60,7 @@ class ConversionService:
                 ],
                 needs_marker_models=True,
                 needs_gpu=True,
+                execution_backend="marker_worker",
                 fallback_chain=[plan.engine, "marker_pdf"],
                 warnings=plan.warnings + [
                     f"Converter for '{plan.engine}' not available in this build"
@@ -123,7 +124,42 @@ class ConversionService:
             plan.confidence,
         )
 
-        result = converter.convert(filepath, config, device=device)
+        try:
+            result = converter.convert(filepath, config, device=device)
+        except Exception as exc:
+            # Runtime fallback: if a non-marker converter fails (e.g. a corrupt
+            # DOCX/PPTX raises BadZipFile), re-plan to marker_pdf and retry so the
+            # user gets a best-effort conversion instead of a hard job failure.
+            # The plan-level fallback_chain only covers "no converter registered";
+            # this covers "converter present but raised at runtime".
+            if plan.engine == "marker_pdf":
+                raise
+            logger.warning(
+                "Engine '%s' failed on '%s' (%s); falling back to marker_pdf",
+                plan.engine,
+                filepath,
+                exc,
+            )
+            fb_plan = ConverterPlan(
+                engine="marker_pdf",
+                label=f"{plan.label} -> Marker PDF (runtime fallback)",
+                confidence=min(plan.confidence, 0.5),
+                reasons=plan.reasons + [
+                    f"Engine '{plan.engine}' raised {type(exc).__name__} at "
+                    f"runtime; falling back to marker_pdf"
+                ],
+                needs_marker_models=True,
+                needs_gpu=True,
+                execution_backend="marker_worker",
+                fallback_chain=[plan.engine, "marker_pdf"],
+                warnings=plan.warnings + [f"Runtime fallback: {exc}"],
+            )
+            fb_converter = self._registry.get(fb_plan.engine)
+            if fb_converter is None:
+                raise
+            result = fb_converter.convert(filepath, config, device=device)
+            result.metadata["engine"] = fb_plan.to_dict()
+            return result.to_legacy_envelope()
 
         # Inject the plan into metadata so job status/history can show it.
         result.metadata["engine"] = plan.to_dict()

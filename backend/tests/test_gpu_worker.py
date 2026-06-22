@@ -27,7 +27,10 @@ def _reset_globals():
 
 
 class TestInitializer:
-    def test_wires_monkeypatch_secrets_progress_and_model(self):
+    def test_lazy_default_does_not_load_models_at_init(self):
+        # Phase 1 lazy init: by default models are NOT loaded at pool spawn.
+        # The initializer wires monkeypatch/secrets/progress but skips the
+        # expensive model load; worker_run_job loads lazily on first marker job.
         _reset_globals()
         qq = _q.Queue()
         snapshot = {"secrets_cache": {"k": "v"}}
@@ -47,13 +50,33 @@ class TestInitializer:
         mock_seed.assert_called_once_with(snapshot)
         mock_set_reporter.assert_called_once()
         mock_install.assert_called_once()
-        # device "cuda:1" must be threaded into initialize().
-        fake_svc.initialize.assert_called_once_with(device="cuda:1")
-        assert gpu_worker._model_dict == {"layout_model": "fake"}
+        # Lazy: model load is deferred, so initialize() is NOT called at spawn.
+        fake_svc.initialize.assert_not_called()
+        assert gpu_worker._model_dict is None
         assert gpu_worker._device_str == "cuda:1"
         assert gpu_worker._worker_id == 1
 
-    def test_cpu_device_passes_none_to_initialize(self):
+    def test_eager_load_when_preload_enabled(self):
+        # When MARKER_PRELOAD_MODELS=true the initializer eagerly loads models
+        # onto the pinned device (the original warm-at-spawn behavior).
+        _reset_globals()
+        qq = _q.Queue()
+        fake_svc = MagicMock()
+        fake_svc._model_dict = {"layout_model": "fake"}
+
+        with patch("app.core.api_manager.setup_api_manager_monkeypatch"), \
+             patch("app.core.api_manager.seed_secrets_snapshot"), \
+             patch("app.services.progress_tracker.set_reporter"), \
+             patch("app.services.progress_tracker.install"), \
+             patch("app.services.marker_service.MarkerService", return_value=fake_svc), \
+             patch("app.core.config.PRELOAD_MARKER_MODELS", True):
+
+            gpu_worker.worker_initializer("cuda:1", 1, qq, {})
+
+        fake_svc.initialize.assert_called_once_with(device="cuda:1")
+        assert gpu_worker._model_dict == {"layout_model": "fake"}
+
+    def test_cpu_device_passes_none_to_initialize_when_eager(self):
         _reset_globals()
         qq = _q.Queue()
         fake_svc = MagicMock()
@@ -63,7 +86,8 @@ class TestInitializer:
              patch("app.core.api_manager.seed_secrets_snapshot"), \
              patch("app.services.progress_tracker.set_reporter"), \
              patch("app.services.progress_tracker.install"), \
-             patch("app.services.marker_service.MarkerService", return_value=fake_svc):
+             patch("app.services.marker_service.MarkerService", return_value=fake_svc), \
+             patch("app.core.config.PRELOAD_MARKER_MODELS", True):
 
             gpu_worker.worker_initializer("cpu", 0, qq, {})
 

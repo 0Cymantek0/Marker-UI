@@ -347,3 +347,96 @@ class TestProcessJobStatus:
         assert task_manager.get_status("p2")["status"] == "failed"
 
 
+class TestExecutionBackendRouting:
+    """Phase 1 section 15.2: office/text jobs route to the CPU pool, not the
+    GPU process workers, when a process backend is configured."""
+
+    def test_cpu_plan_routes_to_cpu_backend_on_process_config(self):
+        from app.conversion.result import ConverterPlan
+        from app.services.task_manager import TaskManager, ProcessExecutorBackend
+
+        tm = TaskManager(max_workers=1)
+        # Force the primary backend to look like a process backend without
+        # actually spawning workers.
+        tm._backend = MagicMock()
+        tm._backend.is_process = True
+
+        cpu_plan = ConverterPlan(
+            engine="office_docx",
+            label="Fast Office (Word)",
+            confidence=0.95,
+            reasons=["Matched extension '.docx'"],
+            needs_marker_models=False,
+            needs_gpu=False,
+            execution_backend="cpu_thread",
+        )
+        fake_cs = MagicMock()
+        fake_cs.plan.return_value = cpu_plan
+
+        chosen = tm._select_backend("/tmp/report.docx", fake_cs)
+        assert chosen is tm._cpu_backend
+        fake_cs.plan.assert_called_once()
+
+    def test_marker_plan_routes_to_process_backend(self):
+        from app.conversion.result import ConverterPlan
+        from app.services.task_manager import TaskManager
+
+        tm = TaskManager(max_workers=1)
+        tm._backend = MagicMock()
+        tm._backend.is_process = True
+
+        marker_plan = ConverterPlan(
+            engine="marker_pdf",
+            label="Marker PDF",
+            confidence=1.0,
+            reasons=["Matched extension '.pdf'"],
+            needs_marker_models=True,
+            needs_gpu=True,
+            execution_backend="marker_worker",
+        )
+        fake_cs = MagicMock()
+        fake_cs.plan.return_value = marker_plan
+
+        chosen = tm._select_backend("/tmp/doc.pdf", fake_cs)
+        assert chosen is tm._backend
+
+    def test_thread_backend_always_uses_primary(self):
+        # When the primary backend is the thread backend (single-process), the
+        # CPU pool is never selected even for cpu_thread plans.
+        from app.conversion.result import ConverterPlan
+        from app.services.task_manager import TaskManager
+
+        tm = TaskManager(max_workers=1)
+        # Default backend is the thread backend.
+        assert tm._backend.is_process is False
+
+        cpu_plan = ConverterPlan(
+            engine="office_docx",
+            label="Fast Office (Word)",
+            confidence=0.95,
+            reasons=["Matched extension '.docx'"],
+            needs_marker_models=False,
+            needs_gpu=False,
+            execution_backend="cpu_thread",
+        )
+        fake_cs = MagicMock()
+        fake_cs.plan.return_value = cpu_plan
+
+        chosen = tm._select_backend("/tmp/report.docx", fake_cs)
+        assert chosen is tm._backend
+        fake_cs.plan.assert_not_called()
+
+    def test_planning_failure_falls_back_to_primary(self):
+        from app.services.task_manager import TaskManager
+
+        tm = TaskManager(max_workers=1)
+        tm._backend = MagicMock()
+        tm._backend.is_process = True
+
+        fake_cs = MagicMock()
+        fake_cs.plan.side_effect = RuntimeError("planning exploded")
+
+        chosen = tm._select_backend("/tmp/x.docx", fake_cs)
+        assert chosen is tm._backend
+
+
