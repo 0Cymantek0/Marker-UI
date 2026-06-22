@@ -1,9 +1,11 @@
 import { useCallback, useRef, useState } from 'react'
-import { UploadCloud, FileText, X, FileImage, FileCode, FileSpreadsheet, FolderOpen, Files, Link } from 'lucide-react'
+import { UploadCloud, FileText, X, FileImage, FileCode, FileSpreadsheet, FolderOpen, Files, Link, ChevronDown, ChevronUp, Loader2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { browseFiles, browseFolder } from '@/lib/api'
+import type { ConverterPlanResponse } from '@/lib/api'
+import { RoutingAnalysis } from './conversion/RoutingAnalysis'
 import { toast } from 'sonner'
 
 const ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.pptx,.epub,.html,.htm,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
@@ -29,6 +31,9 @@ interface SourceEngineControl {
   status: string
   title?: string
   onChange: (value: string) => void
+  plan?: ConverterPlanResponse | null
+  loading?: boolean
+  error?: string | null
 }
 
 function formatSize(bytes: number): string {
@@ -44,11 +49,31 @@ function getFileIcon(name: string) {
   const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff']
   const spreadsheetExts = ['xlsx', 'xls', 'csv']
   const codeExts = ['html', 'htm', 'json', 'xml', 'js', 'ts']
-  
+
   if (imageExts.includes(ext)) return FileImage
   if (spreadsheetExts.includes(ext)) return FileSpreadsheet
   if (codeExts.includes(ext)) return FileCode
   return FileText
+}
+
+function PlanDetails({ control }: { control: SourceEngineControl }) {
+  if (control.loading) {
+    return (
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground rounded-lg border border-border/30 bg-card/30 p-3">
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+        Checking route...
+      </div>
+    )
+  }
+  if (control.error) {
+    return (
+      <div className="flex items-center gap-2 text-[11px] text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+        {control.error}
+      </div>
+    )
+  }
+  return control.plan ? <RoutingAnalysis plan={control.plan} /> : null
 }
 
 export function FileUpload({
@@ -66,7 +91,15 @@ export function FileUpload({
 }: FileUploadProps) {
   const [activeTab, setActiveTab] = useState<'upload' | 'local'>('upload')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({})
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const toggleExpandPlan = (key: string) => {
+    setExpandedPlans((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
+  }
 
   const handleBrowseLocalFiles = async () => {
     try {
@@ -184,11 +217,11 @@ export function FileUpload({
               onChange={handleChange}
               className="hidden"
             />
-            
+
             <div className={cn(
               'flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 shadow-sm border border-transparent',
-              isDragOver 
-                ? 'bg-primary/20 text-primary scale-110 border-primary/20' 
+              isDragOver
+                ? 'bg-primary/20 text-primary scale-110 border-primary/20'
                 : 'bg-muted/80 text-muted-foreground hover:bg-muted'
             )}>
               <UploadCloud className={cn('w-5.5 h-5.5 transition-transform duration-300', isDragOver && 'animate-bounce')} />
@@ -222,43 +255,64 @@ export function FileUpload({
                 {selectedFiles.map((file, idx) => {
                   const Icon = getFileIcon(file.name)
                   const engineControl = fileEngineControls?.[idx]
+                  const key = engineControl?.key ?? `upload-${idx}`
+                  const isExpanded = expandedPlans[key]
+                  const hasPlanDetails = !!engineControl && (!!engineControl.plan || !!engineControl.loading || !!engineControl.error)
+
                   return (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-2.5 p-2 rounded-xl border border-border/40 bg-card/50 text-left animate-fade-in"
-                    >
-                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary shrink-0">
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold truncate text-foreground">{file.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{formatSize(file.size)}</p>
+                    <div key={idx} className="space-y-1 animate-fade-in">
+                      <div
+                        className="flex items-center gap-2.5 p-2 rounded-xl border border-border/40 bg-card/50 text-left"
+                      >
+                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary shrink-0">
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate text-foreground">{file.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatSize(file.size)}</p>
+                          {engineControl && (
+                            <p className="text-[9px] text-muted-foreground truncate" title={engineControl.title}>
+                              {engineControl.status}
+                            </p>
+                          )}
+                        </div>
                         {engineControl && (
-                          <p className="text-[9px] text-muted-foreground truncate" title={engineControl.title}>
-                            {engineControl.status}
-                          </p>
+                          <div className="w-32 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <Select
+                              value={engineControl.value}
+                              options={engineControl.options}
+                              onChange={engineControl.onChange}
+                              disabled={disabled}
+                              className="w-32 md:w-32"
+                            />
+                          </div>
                         )}
+                        {hasPlanDetails && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpandPlan(key)}
+                            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                            aria-label={isExpanded ? "Collapse plan" : "Expand plan"}
+                          >
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onRemoveFile(idx)}
+                          disabled={disabled}
+                          className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-all disabled:opacity-50"
+                          aria-label="Remove file"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      {engineControl && (
-                        <div className="w-32 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <Select
-                            value={engineControl.value}
-                            options={engineControl.options}
-                            onChange={engineControl.onChange}
-                            disabled={disabled}
-                            className="w-32 md:w-32"
-                          />
+
+                      {isExpanded && engineControl && (
+                        <div className="pl-4 pr-1 pb-1 animate-slide-down">
+                          <PlanDetails control={engineControl} />
                         </div>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => onRemoveFile(idx)}
-                        disabled={disabled}
-                        className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-all disabled:opacity-50"
-                        aria-label="Remove file"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   )
                 })}
@@ -295,29 +349,49 @@ export function FileUpload({
           </p>
           {localPathEngineControls && localPathEngineControls.length > 0 && (
             <div className="space-y-1.5 pt-1">
-              {localPathEngineControls.map((control) => (
-                <div
-                  key={control.key}
-                  className="flex items-center gap-2 p-2 rounded-xl border border-border/40 bg-card/50"
-                >
-                  <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-semibold text-foreground truncate" title={control.title}>
-                      {control.title}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground truncate">
-                      {control.status}
-                    </p>
+              {localPathEngineControls.map((control) => {
+                const isExpanded = expandedPlans[control.key]
+                const hasPlanDetails = !!control.plan || !!control.loading || !!control.error
+                return (
+                  <div key={control.key} className="space-y-1">
+                    <div
+                      className="flex items-center gap-2 p-2 rounded-xl border border-border/40 bg-card/50"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-semibold text-foreground truncate" title={control.title}>
+                          {control.title}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground truncate">
+                          {control.status}
+                        </p>
+                      </div>
+                      <Select
+                        value={control.value}
+                        options={control.options}
+                        onChange={control.onChange}
+                        disabled={disabled}
+                        className="w-32 md:w-32 shrink-0"
+                      />
+                      {hasPlanDetails && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandPlan(control.key)}
+                          className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                          aria-label={isExpanded ? "Collapse plan" : "Expand plan"}
+                        >
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <div className="pl-4 pr-1 pb-1 animate-slide-down">
+                        <PlanDetails control={control} />
+                      </div>
+                    )}
                   </div>
-                  <Select
-                    value={control.value}
-                    options={control.options}
-                    onChange={control.onChange}
-                    disabled={disabled}
-                    className="w-32 md:w-32 shrink-0"
-                  />
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
