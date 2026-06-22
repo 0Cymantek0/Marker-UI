@@ -11,4 +11,6 @@ pydantic==2.10.4
 pydantic-settings==2.7.1
 python-dotenv==1.0.1
 cryptography==44.0.0
+pypdf>=5.0.0
+liteparse==2.1.1
 
