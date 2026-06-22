@@ -211,4 +211,34 @@ describe('ConversionOptions image understanding controls', () => {
     expect(extraction).not.toBeDisabled()
     expect(screen.getByText(/enable vision capability/i)).toBeInTheDocument()
   })
+
+  it('allows selecting different conversion profiles', async () => {
+    mockGetLLMProviders.mockResolvedValue([])
+    mockGetActiveLLM.mockResolvedValue(null)
+    const onChange = vi.fn()
+
+    const { rerender } = render(<ConversionOptions config={baseConfig} onChange={onChange} />)
+
+    expect(screen.getByRole('button', { name: /AutoProbes/i })).toBeInTheDocument()
+
+    const fastButton = screen.getByRole('button', { name: /FastPrefer/i })
+    expect(fastButton).toBeInTheDocument()
+    fireEvent.click(fastButton)
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ conversion_profile: 'fast' })
+    )
+
+    // Re-render with the new config to assert warning visibility
+    rerender(<ConversionOptions config={{ ...baseConfig, conversion_profile: 'fast' }} onChange={onChange} />)
+    expect(screen.getByText(/backend will automatically fall back to Marker PDF/i)).toBeInTheDocument()
+
+    const highAccuracyButton = screen.getByRole('button', { name: /High AccuracyForces/i })
+    expect(highAccuracyButton).toBeInTheDocument()
+    fireEvent.click(highAccuracyButton)
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ conversion_profile: 'high_accuracy' })
+    )
+  })
 })

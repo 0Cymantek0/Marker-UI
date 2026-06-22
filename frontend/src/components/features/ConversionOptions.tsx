@@ -39,6 +39,24 @@ const CONVERTERS: { value: ConverterType; label: string; desc: string }[] = [
   { value: 'ExtractionConverter', label: 'Marker Text Extract', desc: 'Marker extraction mode without LiteParse routing' },
 ]
 
+const CONVERSION_PROFILES: { value: 'auto' | 'fast' | 'high_accuracy'; label: string; desc: string }[] = [
+  {
+    value: 'auto',
+    label: 'Auto',
+    desc: 'Probes PDF to automatically choose the safest engine.',
+  },
+  {
+    value: 'fast',
+    label: 'Fast',
+    desc: 'Prefer fast path when backend deems PDF safe. Falls back automatically if unsafe.',
+  },
+  {
+    value: 'high_accuracy',
+    label: 'High Accuracy',
+    desc: 'Forces deep neural Marker PDF routing for maximum accuracy.',
+  },
+]
+
 const IMAGE_HANDLING_OPTIONS: {
   value: ImageHandlingMode
   label: string
@@ -216,6 +234,44 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
             )
           })}
         </div>
+      </div>
+
+      {/* Conversion Profile */}
+      <div className="space-y-3">
+        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+          Conversion Profile
+        </label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {CONVERSION_PROFILES.map((prof) => {
+            const isActive = (config.conversion_profile ?? 'auto') === prof.value
+            return (
+              <button
+                key={prof.value}
+                type="button"
+                onClick={() => update('conversion_profile', prof.value)}
+                disabled={disabled}
+                className={cn(
+                  'p-3.5 rounded-xl border text-left transition-all duration-200 hover:scale-[1.002] flex flex-col justify-between',
+                  isActive
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border/60 bg-card/45 text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                )}
+              >
+                <div>
+                  <span className={cn('block font-semibold text-xs', isActive ? 'text-primary-foreground' : 'text-foreground')}>{prof.label}</span>
+                  <span className={cn('block text-[10px] mt-1 leading-normal', isActive ? 'text-primary-foreground/85' : 'text-muted-foreground/90')}>
+                    {prof.desc}
+                  </span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        {(config.conversion_profile ?? 'auto') === 'fast' && (
+          <div className="text-[11px] text-amber-600 dark:text-amber-400 p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 leading-normal">
+            Even on the Fast path, the backend will automatically fall back to Marker PDF if the PDF is detected to be complex or unsafe to ensure accuracy.
+          </div>
+        )}
       </div>
 
       {/* Advanced Toggle */}
