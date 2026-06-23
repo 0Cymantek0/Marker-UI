@@ -221,7 +221,7 @@ describe('ConversionOptions image understanding controls', () => {
 
     expect(screen.getByRole('button', { name: /AutoProbes/i })).toBeInTheDocument()
 
-    const fastButton = screen.getByRole('button', { name: /FastPrefer/i })
+    const fastButton = screen.getByRole('button', { name: /FastForce/i })
     expect(fastButton).toBeInTheDocument()
     fireEvent.click(fastButton)
 
@@ -231,7 +231,7 @@ describe('ConversionOptions image understanding controls', () => {
 
     // Re-render with the new config to assert warning visibility
     rerender(<ConversionOptions config={{ ...baseConfig, conversion_profile: 'fast' }} onChange={onChange} />)
-    expect(screen.getByText(/backend will automatically fall back to Marker PDF/i)).toBeInTheDocument()
+    expect(screen.getByText(/may be less accurate/i)).toBeInTheDocument()
 
     const highAccuracyButton = screen.getByRole('button', { name: /High AccuracyForces/i })
     expect(highAccuracyButton).toBeInTheDocument()

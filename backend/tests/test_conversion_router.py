@@ -241,6 +241,49 @@ class TestConversionRouter:
         assert plan.engine == "marker_pdf"
         assert any(expected_reason.lower() in reason.lower() for reason in plan.reasons)
 
+    def test_fast_profile_routes_risky_pdf_to_liteparse_with_warning(self) -> None:
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(
+            stream_info,
+            {
+                "conversion_profile": "fast",
+                "probe_result": _safe_clean_pdf_probe(
+                    scan_likelihood=0.95,
+                    sandwich_likelihood=0.65,
+                    visual_complexity_score=0.9,
+                    sampled_image_count=3,
+                    recommended_engine="marker",
+                ),
+            },
+        )
+
+        assert plan.engine == "liteparse_pdf"
+        assert plan.execution_backend == "cpu_thread"
+        assert plan.fallback_chain == ["liteparse_pdf", "marker_pdf"]
+        assert any("Fast profile forces LiteParse" in warning for warning in plan.warnings)
+
+    def test_fast_profile_preliminary_pdf_routes_to_liteparse(self) -> None:
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(stream_info, {"conversion_profile": "fast"})
+
+        assert plan.engine == "liteparse_pdf"
+        assert plan.confidence == 0.55
+        assert any("Preliminary" in warning for warning in plan.warnings)
+
+    def test_fast_profile_does_not_override_marker_required_options(self) -> None:
+        stream_info = _make_stream_info(".pdf")
+        plan = ConversionRouter.plan(
+            stream_info,
+            {
+                "conversion_profile": "fast",
+                "force_ocr": True,
+                "probe_result": _safe_clean_pdf_probe(),
+            },
+        )
+
+        assert plan.engine == "marker_pdf"
+        assert any("force_ocr" in reason for reason in plan.reasons)
+
     def test_image_understanding_both_routes_marker_only_when_images_exist(self) -> None:
         stream_info = _make_stream_info(".pdf")
         safe_probe = _safe_clean_pdf_probe()

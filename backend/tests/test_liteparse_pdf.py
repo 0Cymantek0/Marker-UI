@@ -39,9 +39,16 @@ def test_liteparse_cli_uses_no_ocr_and_target_pages(tmp_path, monkeypatch) -> No
 
     assert result.text == "cli output"
     assert "--no-ocr" in seen["cmd"]
+    assert "--image-mode" in seen["cmd"]
+    assert seen["cmd"][seen["cmd"].index("--image-mode") + 1] == "off"
+    assert "--preserve-small-text" in seen["cmd"]
+    assert "--quiet" in seen["cmd"]
+    assert seen["cmd"][seen["cmd"].index("--max-pages") + 1] == "1000"
     assert seen["cmd"][seen["cmd"].index("--target-pages") + 1] == "1"
     assert result.metadata["liteparse"]["ocr_enabled"] is False
     assert result.metadata["liteparse"]["execution_mode"] == "cli"
+    assert result.metadata["liteparse"]["extract_links"] is True
+    assert result.metadata["liteparse"]["preserve_small_text"] is True
 
 
 def test_liteparse_python_api_fallback_runs_real_clean_pdf(tmp_path, monkeypatch) -> None:
@@ -57,5 +64,39 @@ def test_liteparse_python_api_fallback_runs_real_clean_pdf(tmp_path, monkeypatch
     assert result.metadata["liteparse"] == {
         "ocr_enabled": False,
         "image_mode": "off",
+        "extract_links": True,
+        "preserve_small_text": True,
+        "max_pages": 1000,
+        "target_pages": "1",
+        "num_workers": None,
         "execution_mode": "python_api",
     }
+
+
+def test_liteparse_cli_uses_probe_page_count_and_workers(tmp_path, monkeypatch) -> None:
+    pdf_path = tmp_path / "clean.pdf"
+    _write_text_pdf(pdf_path)
+    seen: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(liteparse_pdf, "_find_lit_executable", lambda: "lit")
+
+    def fake_run(cmd, **_kwargs):
+        seen["cmd"] = list(cmd)
+        output_path = Path(cmd[cmd.index("-o") + 1])
+        output_path.write_text("cli output", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(liteparse_pdf.subprocess, "run", fake_run)
+
+    result = LiteParsePdfConverter().convert(
+        str(pdf_path),
+        {
+            "liteparse_num_workers": 3,
+            "probe_result": {"page_count": 1200},
+        },
+    )
+
+    assert seen["cmd"][seen["cmd"].index("--max-pages") + 1] == "1200"
+    assert seen["cmd"][seen["cmd"].index("--num-workers") + 1] == "3"
+    assert result.metadata["liteparse"]["max_pages"] == 1200
+    assert result.metadata["liteparse"]["num_workers"] == 3

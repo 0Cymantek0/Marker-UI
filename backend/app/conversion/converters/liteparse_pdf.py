@@ -20,6 +20,9 @@ from app.conversion.result import UniversalConversionResult
 from app.conversion.stream_info import StreamInfo
 
 
+DEFAULT_LITEPARSE_MAX_PAGES = 1000
+
+
 def _find_lit_executable() -> str | None:
     direct = shutil.which("lit")
     if direct:
@@ -43,7 +46,37 @@ def _find_lit_executable() -> str | None:
     return None
 
 
-def _convert_with_python_api(filepath: str, page_range: str | None) -> str:
+def _coerce_positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _liteparse_max_pages(config: dict[str, Any]) -> int:
+    explicit = _coerce_positive_int(config.get("liteparse_max_pages"))
+    if explicit:
+        return explicit
+    probe_data = config.get("probe_result")
+    if isinstance(probe_data, dict):
+        probed_pages = _coerce_positive_int(probe_data.get("page_count"))
+        if probed_pages:
+            return max(DEFAULT_LITEPARSE_MAX_PAGES, probed_pages)
+    return DEFAULT_LITEPARSE_MAX_PAGES
+
+
+def _liteparse_num_workers(config: dict[str, Any]) -> int | None:
+    return _coerce_positive_int(config.get("liteparse_num_workers"))
+
+
+def _convert_with_python_api(
+    filepath: str,
+    page_range: str | None,
+    *,
+    max_pages: int,
+    num_workers: int | None,
+) -> str:
     """Fallback for installs where the package exists but ``lit`` is off PATH."""
     try:
         from liteparse import LiteParse
@@ -54,7 +87,11 @@ def _convert_with_python_api(filepath: str, page_range: str | None) -> str:
         ocr_enabled=False,
         output_format="markdown",
         image_mode="off",
+        extract_links=True,
+        preserve_very_small_text=True,
+        max_pages=max_pages,
         target_pages=page_range,
+        num_workers=num_workers,
         quiet=True,
     )
     result = parser.parse(filepath)
@@ -86,6 +123,8 @@ class LiteParsePdfConverter(BaseConverter):
     ) -> UniversalConversionResult:
         lit = _find_lit_executable()
         page_range = config.get("page_range")
+        max_pages = _liteparse_max_pages(config)
+        num_workers = _liteparse_num_workers(config)
         execution_mode = "python_api"
         if lit:
             execution_mode = "cli"
@@ -100,11 +139,17 @@ class LiteParsePdfConverter(BaseConverter):
                     "--no-ocr",
                     "--image-mode",
                     "off",
+                    "--preserve-small-text",
+                    "--max-pages",
+                    str(max_pages),
+                    "--quiet",
                     "-o",
                     str(output_path),
                 ]
                 if page_range:
                     cmd.extend(["--target-pages", str(page_range)])
+                if num_workers:
+                    cmd.extend(["--num-workers", str(num_workers)])
 
                 proc = subprocess.run(
                     cmd,
@@ -118,7 +163,12 @@ class LiteParsePdfConverter(BaseConverter):
                     raise RuntimeError(f"LiteParse failed: {stderr[:500]}")
                 text = output_path.read_text(encoding="utf-8") if output_path.exists() else proc.stdout
         else:
-            text = _convert_with_python_api(filepath, str(page_range) if page_range else None)
+            text = _convert_with_python_api(
+                filepath,
+                str(page_range) if page_range else None,
+                max_pages=max_pages,
+                num_workers=num_workers,
+            )
 
         return UniversalConversionResult(
             text=text or "",
@@ -128,6 +178,11 @@ class LiteParsePdfConverter(BaseConverter):
                 "liteparse": {
                     "ocr_enabled": False,
                     "image_mode": "off",
+                    "extract_links": True,
+                    "preserve_small_text": True,
+                    "max_pages": max_pages,
+                    "target_pages": str(page_range) if page_range else None,
+                    "num_workers": num_workers,
                     "execution_mode": execution_mode,
                 }
             },

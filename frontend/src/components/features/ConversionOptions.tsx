@@ -48,7 +48,7 @@ const CONVERSION_PROFILES: { value: 'auto' | 'fast' | 'high_accuracy'; label: st
   {
     value: 'fast',
     label: 'Fast',
-    desc: 'Prefer fast path when backend deems PDF safe. Falls back automatically if unsafe.',
+    desc: 'Force the faster LiteParse path first. Lower accuracy on complex PDFs.',
   },
   {
     value: 'high_accuracy',
@@ -269,7 +269,7 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
         </div>
         {(config.conversion_profile ?? 'auto') === 'fast' && (
           <div className="text-[11px] text-amber-600 dark:text-amber-400 p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 leading-normal">
-            Even on the Fast path, the backend will automatically fall back to Marker PDF if the PDF is detected to be complex or unsafe to ensure accuracy.
+            Fast runs LiteParse first even for riskier PDFs. This is faster but may be less accurate; empty or very short output still retries with Marker.
           </div>
         )}
       </div>

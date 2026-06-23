@@ -267,6 +267,7 @@ class ConversionRouter:
             force_marker_reasons.append("High Accuracy profile selected")
         if converter_cls in {"TableConverter", "OCRConverter"}:
             force_marker_reasons.append(f"{converter_cls} requires Marker")
+        hard_marker_reasons = list(force_marker_reasons)
 
         liteparse_safe = bool(
             probe
@@ -278,6 +279,27 @@ class ConversionRouter:
             and probe.layout_complexity_score <= 0.45
             and not force_marker_reasons
         )
+
+        fast_profile = profile in {"fast", "fast_path", "fast-path"}
+        if fast_profile and not hard_marker_reasons:
+            fast_warnings = warnings + [
+                "Fast profile forces LiteParse before Marker and can reduce accuracy on scanned or complex PDFs",
+                "Short or empty LiteParse output will still retry with Marker",
+            ]
+            fast_reasons = reasons + [
+                "Fast profile selected; routing to LiteParse despite conservative probe risk scores",
+            ]
+            return ConverterPlan(
+                engine="liteparse_pdf",
+                label="LiteParse Fast PDF",
+                confidence=0.65 if probe else 0.55,
+                reasons=fast_reasons,
+                needs_marker_models=False,
+                needs_gpu=False,
+                execution_backend="cpu_thread",
+                fallback_chain=["liteparse_pdf", "marker_pdf"],
+                warnings=fast_warnings,
+            )
 
         if liteparse_safe:
             return ConverterPlan(
