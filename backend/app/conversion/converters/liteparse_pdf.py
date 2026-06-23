@@ -18,6 +18,7 @@ from typing import Any
 from app.conversion.registry import BaseConverter
 from app.conversion.result import UniversalConversionResult
 from app.conversion.stream_info import StreamInfo
+from app.conversion.table_evidence import attach_table_evidence
 
 
 DEFAULT_LITEPARSE_MAX_PAGES = 1000
@@ -170,11 +171,8 @@ class LiteParsePdfConverter(BaseConverter):
                 num_workers=num_workers,
             )
 
-        return UniversalConversionResult(
-            text=text or "",
-            extension="md",
-            images={},
-            metadata={
+        metadata = attach_table_evidence(
+            {
                 "liteparse": {
                     "ocr_enabled": False,
                     "image_mode": "off",
@@ -186,4 +184,12 @@ class LiteParsePdfConverter(BaseConverter):
                     "execution_mode": execution_mode,
                 }
             },
+            text or "",
+        )
+
+        return UniversalConversionResult(
+            text=text or "",
+            extension="md",
+            images={},
+            metadata=metadata,
         )

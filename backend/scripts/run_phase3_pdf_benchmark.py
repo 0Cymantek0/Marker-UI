@@ -44,13 +44,23 @@ def _record_output(
     engine_name: str,
     case: PdfBenchmarkCase,
     output: PdfEngineOutput,
+    output_dir: Path,
 ) -> None:
     sample_key = f"{case.document_class}:{case.sample_id}"
+    table = output.table if isinstance(output.table, dict) else None
+    artifact_dir = output_dir / "engine_markdown" / engine_name
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    markdown_path = artifact_dir / f"{case.sample_id}.md"
+    markdown_path.write_text(output.text or "", encoding="utf-8")
     observations.setdefault(engine_name, {})[sample_key] = {
         "document_class": case.document_class,
         "text_len": len(output.text or ""),
         "text_preview": _preview_text(output.text),
         "table_present": output.table is not None,
+        "table_count": len(output.metadata.get("tables") or []),
+        "table_rows": len(table.get("rows") or []) if table else 0,
+        "table_columns": len(table.get("headers") or []) if table else 0,
+        "markdown_path": str(markdown_path.relative_to(output_dir)),
         "metadata_keys": sorted(output.metadata.keys()),
     }
 
@@ -58,6 +68,7 @@ def _record_output(
 def _liteparse_engine(
     converter: LiteParsePdfConverter,
     observations: dict[str, dict[str, dict[str, Any]]],
+    output_dir: Path,
 ):
     def run(case: PdfBenchmarkCase) -> PdfEngineOutput:
         result = converter.convert(str(case.pdf_path), {"liteparse_timeout": 120})
@@ -66,7 +77,7 @@ def _liteparse_engine(
             table=result.metadata.get("table"),
             metadata=result.metadata,
         )
-        _record_output(observations, "liteparse_pdf", case, output)
+        _record_output(observations, "liteparse_pdf", case, output, output_dir)
         return output
 
     return run
@@ -75,6 +86,7 @@ def _liteparse_engine(
 def _marker_engine(
     converter: MarkerPdfConverter,
     observations: dict[str, dict[str, dict[str, Any]]],
+    output_dir: Path,
 ):
     def run(case: PdfBenchmarkCase) -> PdfEngineOutput:
         result = converter.convert(
@@ -90,7 +102,7 @@ def _marker_engine(
             table=result.metadata.get("table"),
             metadata=result.metadata,
         )
-        _record_output(observations, "marker_pdf", case, output)
+        _record_output(observations, "marker_pdf", case, output, output_dir)
         return output
 
     return run
@@ -128,8 +140,8 @@ def main() -> int:
 
     comparison = compare_marker_liteparse_pdfs(
         cases,
-        marker_engine=_marker_engine(marker_converter, output_observations),
-        liteparse_engine=_liteparse_engine(liteparse_converter, output_observations),
+        marker_engine=_marker_engine(marker_converter, output_observations, output_dir),
+        liteparse_engine=_liteparse_engine(liteparse_converter, output_observations, output_dir),
     )
 
     report = {

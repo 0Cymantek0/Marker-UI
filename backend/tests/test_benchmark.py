@@ -29,6 +29,7 @@ from app.benchmark.runner import (
     validate_phase3_pdf_corpus,
 )
 from app.benchmark.phase3_pdf_corpus import generate_phase3_pdf_cases, load_phase3_pdf_cases
+from app.conversion.table_evidence import attach_table_evidence, extract_markdown_tables
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +135,57 @@ def test_score_outputs_blends_table_when_present():
     # Table is imperfect (0.75), so combined sits below 1.0 even though text matches.
     assert score.combined < 1.0
     assert score.table_score == 0.75
+
+
+def test_markdown_table_evidence_extracts_headers_and_rows():
+    tables = extract_markdown_tables(
+        "Report\n\n"
+        "| Quarter | Revenue | Cost |\n"
+        "| --- | --- | --- |\n"
+        "| Q1 | 100 | 40 |\n"
+        "| Q2 | 140 | 55 |\n"
+    )
+
+    assert tables == [
+        {
+            "source": "markdown",
+            "headers": ["Quarter", "Revenue", "Cost"],
+            "rows": [["Q1", "100", "40"], ["Q2", "140", "55"]],
+            "row_count": 2,
+            "column_count": 3,
+        }
+    ]
+
+
+def test_table_evidence_lets_markdown_table_score_as_structured_table():
+    text = (
+        "Table heavy benchmark.\n\n"
+        "| Quarter | Revenue | Cost |\n"
+        "| --- | --- | --- |\n"
+        "| Q1 | 100 | 40 |\n"
+        "| Q2 | 140 | 55 |\n"
+        "| Q3 | 160 | 65 |\n"
+    )
+    metadata = attach_table_evidence({"engine": "marker_pdf"}, text)
+
+    score = score_outputs(
+        sample_id="table_heavy",
+        reference_text="Quarter Q1 revenue 100 cost 40. Quarter Q2 revenue 140 cost 55. Quarter Q3 revenue 160 cost 65.",
+        hypothesis_text=text,
+        reference_table=[
+            ["Quarter", "Revenue", "Cost"],
+            ["Q1", "100", "40"],
+            ["Q2", "140", "55"],
+            ["Q3", "160", "65"],
+        ],
+        hypothesis_table=metadata["table"],
+    )
+
+    assert metadata["table_evidence"] == {
+        "source": "markdown_pipe_table",
+        "table_count": 1,
+    }
+    assert score.table_score == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +350,82 @@ def test_phase3_ready_for_phase4_when_liteparse_fast_path_passes_only():
     assert comparison.verdict["liteparse_fast_path_passes_gate"]
     assert comparison.verdict["liteparse_fast_path_regressions"] == []
     assert comparison.ready_for_phase4
+
+
+def test_phase3_table_heavy_uses_markdown_table_metadata_for_scoring():
+    table = [
+        ["Quarter", "Revenue", "Cost"],
+        ["Q1", "100", "40"],
+        ["Q2", "140", "55"],
+        ["Q3", "160", "65"],
+    ]
+    cases = [
+        PdfBenchmarkCase(
+            sample_id="clean",
+            pdf_path="fixtures/clean.pdf",
+            document_class="clean_digital",
+            reference_text="Clean digital reference 100",
+        ),
+        PdfBenchmarkCase(
+            sample_id="scanned",
+            pdf_path="fixtures/scanned.pdf",
+            document_class="scanned",
+            reference_text="Scanned reference 250",
+        ),
+        PdfBenchmarkCase(
+            sample_id="sandwich",
+            pdf_path="fixtures/sandwich.pdf",
+            document_class="sandwich",
+            reference_text="Sandwich account A 300 account B 450",
+            reference_table=[["Account", "Balance"], ["A", "300"], ["B", "450"]],
+        ),
+        PdfBenchmarkCase(
+            sample_id="table",
+            pdf_path="fixtures/table.pdf",
+            document_class="table_heavy",
+            reference_text="Table heavy benchmark. Quarter Q1 revenue 100 cost 40. Quarter Q2 revenue 140 cost 55. Quarter Q3 revenue 160 cost 65.",
+            reference_table=table,
+        ),
+        PdfBenchmarkCase(
+            sample_id="formula",
+            pdf_path="fixtures/formula.pdf",
+            document_class="formula_heavy",
+            reference_text="Formula reference 1",
+        ),
+    ]
+
+    table_markdown = (
+        "Table heavy benchmark.\n\n"
+        "| Quarter | Revenue | Cost |\n"
+        "| --- | --- | --- |\n"
+        "| Q1 | 100 | 40 |\n"
+        "| Q2 | 140 | 55 |\n"
+        "| Q3 | 160 | 65 |\n"
+    )
+
+    def marker_engine(case: PdfBenchmarkCase) -> PdfEngineOutput:
+        if case.document_class == "table_heavy":
+            metadata = attach_table_evidence({}, table_markdown)
+            return PdfEngineOutput(
+                text=table_markdown,
+                table=metadata["table"],
+                metadata=metadata,
+            )
+        return PdfEngineOutput(text=case.reference_text)
+
+    comparison = compare_marker_liteparse_pdfs(
+        cases,
+        marker_engine=marker_engine,
+        liteparse_engine=marker_engine,
+    )
+
+    table_score = next(
+        score
+        for score in comparison.marker_report.scores
+        if score.sample_id == "table_heavy:table"
+    )
+    assert table_score.table_score == 1.0
+    assert table_score.combined > 0.50
 
 
 def test_phase3_generated_pdf_corpus_covers_required_classes(tmp_path):

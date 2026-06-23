@@ -17,6 +17,7 @@ from typing import Any
 from app.conversion.registry import BaseConverter
 from app.conversion.result import UniversalConversionResult
 from app.conversion.stream_info import StreamInfo
+from app.conversion.table_evidence import attach_table_evidence
 
 
 class MarkerPdfConverter(BaseConverter):
@@ -55,9 +56,10 @@ class MarkerPdfConverter(BaseConverter):
     ) -> UniversalConversionResult:
         """Delegate to ``MarkerService.convert_file`` and wrap the result."""
         result = self._marker_service.convert_file(filepath, dict(config), device=device)
+        text = result.get("text", "")
         return UniversalConversionResult(
-            text=result.get("text", ""),
+            text=text,
             extension=result.get("extension", "md"),
             images=result.get("images", {}),
-            metadata=result.get("metadata", {}),
+            metadata=attach_table_evidence(result.get("metadata", {}), text),
         )
