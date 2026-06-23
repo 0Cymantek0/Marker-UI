@@ -29,6 +29,20 @@ In the **Advanced Settings** modal on the Convert page, choose from three modes:
 
 ---
 
+## Privacy Defaults
+
+Cloud image analysis is off unless explicitly enabled for a job. With cloud access disabled, the router can still omit decorative visuals and use local OCR where available, but it will not send image bytes to a remote VLM provider. Configure local or cloud providers in [VLM Providers Configuration](../configuration/vlm-providers.md).
+
+---
+
+## Supported Document Paths
+
+PDF image understanding runs inside Marker PDF's block pipeline, so charts, diagrams, screenshots, photos, equations, and decorative image blocks can be replaced or augmented before Markdown rendering. Native DOCX and PPTX conversion also process embedded images through the shared image-understanding service.
+
+Fast deterministic converters for CSV, JSON/JSONL, HTML, XML/RSS/Atom, Jupyter notebooks, XLSX workbooks, and ZIP archives do not run the Marker PDF image-block processor. They convert text-like structure directly and keep conversion local.
+
+---
+
 ## Error Handling
 
 If a VLM call fails due to rate limits or API issues:

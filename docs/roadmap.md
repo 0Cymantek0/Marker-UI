@@ -39,11 +39,35 @@ This document outlines the planned evolutionary phases for Marker UI. We focus o
 - Allow users to compile any website from a URL.
 - Convert all website information—including text, charts, bar graphs, imagery, audio, and video—into Markdown, JSON, HTML, and chunks formats.
 - **YouTube & Rich Video Processing**:
-  - Support full extraction of video data from YouTube.
-  - Employ an agentic framework or multimodal models to analyze the video from start to finish.
-  - Go beyond simple transcripts to extract intent, generate comprehensive descriptions for specific timestamps, and catalog exact highlight moments.
+  - Support full extraction of video data from YouTube or local video files only after explicit user action.
+  - Do not treat captions/transcripts as video understanding. Captions are one signal.
+  - Build a local-first multimodal pipeline: local ASR, scene/keyframe sampling, frame OCR, local VLM visual summaries, and timestamped fusion.
+  - Go beyond simple transcripts to extract intent, visible UI/slide states, charts, diagrams, actions, scene changes, and exact highlight moments.
   - Fetch external and metadata context: comments, video description, links/resources mentioned or talked about in the video.
   - Build a high-fidelity visual surrogate/description to act as a lossless textual replacement for the physical video.
+  - Keep cloud analyzers such as Azure Content Understanding optional only; plan equivalent local routes before adding any cloud-dependent path.
+
+### 3A. Local Audio / Voice Notes
+- Add local transcription for WAV, MP3, M4A, and MP4 audio tracks using a local ASR runtime selected by hardware.
+- Let users choose local STT models or explicit cloud STT models from configured providers such as OpenAI, Groq, Together AI, Deepgram, AssemblyAI, or Azure.
+- Support multi-audio upload that can either keep transcripts separate or merge related recordings into one organized Markdown document.
+- Add optional AI enhancement using a user-selected LLM, with strict rules: preserve meaning, do not invent facts, and map enhanced sections back to source transcript time spans.
+- Let users add optional context as text, background document, or background audio note; context helps organization but cannot override transcript facts.
+- Produce timestamped Markdown and JSON chunks with source IDs, speaker labels when available, model/provider metadata, and confidence warnings.
+- Use cloud transcription only as explicit opt-in fallback/comparison, never default.
+- Keep powerful controls discoverable through collapsible subgroups instead of one flat advanced-settings dump: transcription, speaker/audio quality, AI enhancement, batch merge, context/vocabulary, privacy/providers, and diagnostics.
+- Build provenance-preserving enhancement features as first-class controls: evidence-first output, confidence heatmap, vocabulary packs, second-pass correction, speaker identity memory, relationship classification, contradiction detection, audio-document fusion, style templates, and benchmark comparison.
+
+### 3B. Container & Archive Conversion
+- Treat archives as containers of virtual child files, not as one opaque blob.
+- Keep current ZIP manifest/inline-small-text mode as the fast safe inspection path.
+- Add recursive child conversion for supported files with file count, size, depth, path traversal, duplicate-path, unsafe-link, compression-ratio, token-budget, and cloud-permission limits.
+- For archives such as ZIP, let users choose either a converted Markdown ZIP with one Markdown file per child or a single combined Markdown document composed from all child results.
+- Route semantic containers through specialized converters first: DOCX/PPTX/XLSX through Office converters, IPYNB through notebook conversion, future EPUB through ebook conversion, and future email formats through email/attachment conversion.
+- For semantic containers, extract embedded media/attachments, send each child to its optimized pipeline, then compose one coherent Markdown document using parent structure, relationships, reading order, and child provenance.
+- Let users inspect a contained-file tree, include or skip children, and override expensive options such as OCR, image understanding, STT, AI enhancement, LLM composition, and cloud use per child.
+- Support nested containers bottom-up: convert leaves first, compose child containers next, then compose the parent without losing source IDs.
+- Output archive-relative or semantic-container-relative source IDs, warnings, skipped-file reports, and provenance maps.
 
 ### 4. Custom OCR Engine Selection
 - Allow users to select and configure custom OCR models.

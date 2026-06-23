@@ -65,7 +65,8 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Supported Output Formats](docs/usage/output-formats.md)
 - [Using Local Absolute Paths](docs/usage/local-file-paths.md)
 - [LLM Refinement Options](docs/usage/llm-refinement.md)
-- [Image Understanding & VLM Config](docs/usage/image-understanding.md)
+- [Image Understanding](docs/usage/image-understanding.md)
+- [Vision Model Provider Configuration](docs/configuration/vlm-providers.md)
 - [History & Storage Lifecycle](docs/usage/history-and-downloads.md)
 
 ### Technical Architecture & Reference
