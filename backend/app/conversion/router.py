@@ -56,7 +56,7 @@ _ROUTE_TABLE: list[tuple[frozenset[str], str, str, bool, bool, float]] = [
         0.95,
     ),
     (
-        frozenset({".xlsx", ".xls"}),
+        frozenset({".xlsx"}),
         "spreadsheet",
         "Fast Spreadsheet",
         False,
@@ -145,7 +145,7 @@ _ENGINE_COMPATIBLE_EXTS: dict[str, frozenset[str]] = {
     "liteparse_pdf": frozenset({".pdf"}),
     "office_docx": frozenset({".docx"}),
     "office_pptx": frozenset({".pptx"}),
-    "spreadsheet": frozenset({".xlsx", ".xls"}),
+    "spreadsheet": frozenset({".xlsx"}),
     "text_data": frozenset({".csv", ".json", ".jsonl", ".txt", ".md", ".rst", ".log"}),
     "xml_rss": frozenset({".xml", ".rss", ".atom"}),
     "html": frozenset({".html", ".htm"}),

@@ -14,10 +14,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.conversion.converters.archive import ArchiveConverter
+from app.conversion.converters.html import HtmlConverter
 from app.conversion.converters.marker_pdf import MarkerPdfConverter
+from app.conversion.converters.notebook import NotebookConverter
 from app.conversion.converters.liteparse_pdf import LiteParsePdfConverter
 from app.conversion.converters.office_docx import OfficeDocxConverter
 from app.conversion.converters.office_pptx import OfficePptxConverter
+from app.conversion.converters.spreadsheet import SpreadsheetConverter
+from app.conversion.converters.text_data import TextDataConverter
+from app.conversion.converters.xml_rss import XmlRssConverter
 from app.conversion.registry import ConverterRegistry
 from app.conversion.result import ConverterPlan
 from app.conversion.router import ConversionRouter
@@ -82,6 +88,12 @@ class ConversionService:
         self._registry.register(LiteParsePdfConverter())
         self._registry.register(OfficeDocxConverter(marker_service))
         self._registry.register(OfficePptxConverter(marker_service))
+        self._registry.register(SpreadsheetConverter())
+        self._registry.register(TextDataConverter())
+        self._registry.register(XmlRssConverter())
+        self._registry.register(HtmlConverter())
+        self._registry.register(NotebookConverter())
+        self._registry.register(ArchiveConverter())
 
     @property
     def registry(self) -> ConverterRegistry:

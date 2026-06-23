@@ -63,7 +63,6 @@ class TestConversionRouter:
         (".docx", "office_docx", False, False, 0.95),
         (".pptx", "office_pptx", False, False, 0.95),
         (".xlsx", "spreadsheet", False, False, 0.95),
-        (".xls", "spreadsheet", False, False, 0.95),
         # Data formats
         (".csv", "text_data", False, False, 0.95),
         (".json", "text_data", False, False, 0.95),
@@ -298,3 +297,10 @@ class TestConversionRouter:
 
         assert plan.engine == "marker_pdf"
         assert plan.label == "Marker Image OCR"
+
+    def test_legacy_xls_does_not_claim_xlsx_native_path(self) -> None:
+        stream_info = _make_stream_info(".xls")
+        plan = ConversionRouter.plan(stream_info, {})
+
+        assert plan.engine == "marker_pdf"
+        assert any("No dedicated converter" in warning for warning in plan.warnings)

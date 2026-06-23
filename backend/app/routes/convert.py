@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {
     ".pdf", ".docx", ".pptx", ".xlsx", ".epub", ".html",
+    ".htm", ".csv", ".json", ".jsonl", ".txt", ".md", ".rst",
+    ".log", ".xml", ".rss", ".atom", ".ipynb", ".zip",
     ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp"
 }
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB

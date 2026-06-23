@@ -107,7 +107,8 @@ def get_engine_status() -> dict[str, str]:
     else:
         html_status = "missing_optional_dependency"
 
-    # 7. text_data, notebook, archive are built-in/standard lib based
+    # 7. text_data, notebook, archive are built-in/standard lib based,
+    # with charset-normalizer improving non-UTF-8 decoding when present.
     liteparse_status = "ready" if (
         is_dependency_available("liteparse") or shutil.which("lit")
     ) else "missing_optional_dependency"
