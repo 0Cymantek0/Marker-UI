@@ -11,7 +11,7 @@ By wrapping deep-learning neural models with lightweight deterministic parsers a
 ### 1. Hybrid Conversion Orchestrator
 Unlike raw CLI utilities, Marker UI acts as a smart router that selects the most efficient extraction path based on document file types:
 - **Deep Neural Path (PDFs & Scans)**: Utilizes the `marker` and `surya` engines for text detection, layout segmentation, and OCR.
-- **Fast Deterministic Path (Office & Data formats)**: Routes `.docx`, `.xlsx`, and `.pptx` files to lightweight, model-free Python parsers (`mammoth`, `openpyxl`, `python-pptx`), achieving zero-GPU usage and sub-second conversions for clean files.
+- **Fast Deterministic Path (Office, Media & Data formats)**: Routes uploads, local paths, and guarded public URLs for `.docx`, `.xlsx`, legacy `.xls`, `.pptx`, `.msg`, audio, video, `.csv`, `.tsv`, JSON, text, HTML/XML, notebooks, and bounded recursive ZIP child conversion to lightweight local parsers/transcribers. Audio supports local timestamped transcripts, ffprobe media preflight, optional word timestamps, evidence-first notes with source maps, extractive summaries/actions/questions, confidence warnings, and ZIP batch briefs/appendices. Video remains experimental: local audio demux/transcription, bounded keyframe sampling, frame OCR when available, and timestamped frame/audio provenance. Clean deterministic files avoid Marker GPU work where possible.
 
 ### 2. Multi-GPU Parallel Worker Pool
 Built for speed and hardware scaling:
