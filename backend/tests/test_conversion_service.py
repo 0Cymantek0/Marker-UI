@@ -332,3 +332,196 @@ class TestConversionService:
 
         assert len(fake_ms.convert_calls) == 0
         assert result["metadata"]["engine"]["engine"] == "liteparse_pdf"
+
+    def test_auto_mixed_pdf_routing_skips_when_engine_override_set(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        pdf_path = tmp_path / "mixed.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        config = {
+            "engine_override": "marker_pdf",
+            "probe_result": _mixed_probe_result(),
+        }
+
+        result = svc.convert_file(str(pdf_path), config)
+
+        assert result["metadata"]["engine"]["engine"] == "marker_pdf"
+        assert "mixed_engine_segments" not in result["metadata"]
+        assert len(fake_ms.convert_calls) == 1
+
+    def test_auto_mixed_pdf_routing_runs_segments_and_merges_metadata(self, tmp_path: Any) -> None:
+        from app.conversion.result import UniversalConversionResult
+
+        svc, fake_ms = self._make_service()
+        pdf_path = tmp_path / "mixed.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        config = {
+            "probe_result": _mixed_probe_result(),
+        }
+        liteparse = svc.registry.get("liteparse_pdf")
+        marker = svc.registry.get("marker_pdf")
+        assert liteparse is not None
+        assert marker is not None
+        liteparse_calls: list[dict[str, Any]] = []
+        marker_calls: list[dict[str, Any]] = []
+        original_liteparse = liteparse.convert
+        original_marker = marker.convert
+
+        def liteparse_convert(filepath, config, device=None):
+            liteparse_calls.append(dict(config))
+            return UniversalConversionResult(
+                text="liteparse segment output " * 20,
+                extension="md",
+                metadata={"segment_engine": "liteparse"},
+            )
+
+        def marker_convert(filepath, config, device=None):
+            marker_calls.append(dict(config))
+            return UniversalConversionResult(
+                text=(
+                    "marker segment output\n\n"
+                    "| Quarter | Revenue | Cost |\n"
+                    "| --- | --- | --- |\n"
+                    "| Q1 | 100 | 40 |"
+                ),
+                extension="md",
+                images={"image.png": b"data"},
+                metadata={"segment_engine": "marker"},
+            )
+
+        liteparse.convert = liteparse_convert  # type: ignore[assignment]
+        marker.convert = marker_convert  # type: ignore[assignment]
+        try:
+            result = svc.convert_file(str(pdf_path), config)
+        finally:
+            liteparse.convert = original_liteparse  # type: ignore[assignment]
+            marker.convert = original_marker  # type: ignore[assignment]
+
+        assert len(fake_ms.convert_calls) == 0
+        assert [call["page_range"] for call in liteparse_calls] == ["1-2"]
+        assert [call["page_range"] for call in marker_calls] == ["2"]
+        assert "<!-- pages: 1-2 -->" in result["text"]
+        assert "<!-- pages: 3 -->" in result["text"]
+        assert "segment_2_image.png" in result["images"]
+        assert result["metadata"]["engine"]["engine"] == "mixed_pdf"
+        assert result["metadata"]["table"] == {
+            "headers": ["Quarter", "Revenue", "Cost"],
+            "rows": [["Q1", "100", "40"]],
+        }
+        assert result["metadata"]["table_evidence"]["table_count"] == 1
+        assert "PDF probe found page-level engine split" in result["metadata"]["engine"]["reasons"]
+        segments = result["metadata"]["mixed_engine_segments"]
+        assert [(item["page_range"], item["actual_engine"]) for item in segments] == [
+            ("1-2", "liteparse_pdf"),
+            ("3", "marker_pdf"),
+        ]
+
+    def test_mixed_pdf_plan_reports_segments_for_auto_pdf(self, tmp_path: Any) -> None:
+        svc, _fake_ms = self._make_service()
+        pdf_path = tmp_path / "mixed.pdf"
+        pdf_path.write_bytes(b"%PDF")
+
+        plan = svc.plan(str(pdf_path), {"probe_result": _mixed_probe_result()})
+
+        assert plan.engine == "mixed_pdf"
+        assert plan.label == "Mixed PDF routing"
+        assert plan.needs_marker_models is True
+        assert "1-2:liteparse_pdf" in plan.reasons[-1]
+        assert "3:marker_pdf" in plan.reasons[-1]
+
+    def test_mixed_pdf_routing_falls_back_only_short_liteparse_segment(
+        self,
+        tmp_path: Any,
+    ) -> None:
+        from app.conversion.result import UniversalConversionResult
+
+        svc, _fake_ms = self._make_service()
+        pdf_path = tmp_path / "mixed.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        config = {
+            "enable_mixed_pdf_routing": True,
+            "probe_result": _mixed_probe_result(first_segment_pages=[1]),
+        }
+        liteparse = svc.registry.get("liteparse_pdf")
+        marker = svc.registry.get("marker_pdf")
+        assert liteparse is not None
+        assert marker is not None
+        marker_ranges: list[str] = []
+        original_liteparse = liteparse.convert
+        original_marker = marker.convert
+
+        def short_liteparse(filepath, config, device=None):
+            return UniversalConversionResult(text="short", extension="md")
+
+        def marker_convert(filepath, config, device=None):
+            marker_ranges.append(config["page_range"])
+            return UniversalConversionResult(
+                text=f"marker output for {config['page_range']} " + ("x" * 120),
+                extension="md",
+            )
+
+        liteparse.convert = short_liteparse  # type: ignore[assignment]
+        marker.convert = marker_convert  # type: ignore[assignment]
+        try:
+            result = svc.convert_file(str(pdf_path), config)
+        finally:
+            liteparse.convert = original_liteparse  # type: ignore[assignment]
+            marker.convert = original_marker  # type: ignore[assignment]
+
+        assert marker_ranges == ["0", "1-2"]
+        segments = result["metadata"]["mixed_engine_segments"]
+        assert segments[0]["requested_engine"] == "liteparse_pdf"
+        assert segments[0]["actual_engine"] == "marker_pdf"
+        assert "short" in segments[0]["fallback_reason"].lower()
+        assert segments[1]["actual_engine"] == "marker_pdf"
+
+
+def _mixed_probe_result(first_segment_pages: list[int] | None = None) -> dict[str, Any]:
+    first_segment_pages = first_segment_pages or [1, 2]
+    page_results: list[dict[str, Any]] = []
+    for page in first_segment_pages:
+        page_results.append(
+            {
+                "page_number": page,
+                "text_layer_score": 0.9,
+                "text_quality_score": 1.0,
+                "scan_likelihood": 0.0,
+                "sandwich_likelihood": 0.0,
+                "layout_complexity_score": 0.0,
+                "visual_complexity_score": 0.0,
+                "recommended_engine": "liteparse",
+                "reasons": ["LiteParse fast path is safe"],
+                "text_chars": 1000,
+                "image_count": 0,
+                "full_page_image": False,
+            }
+        )
+    for page in [p for p in [1, 2, 3] if p not in first_segment_pages]:
+        page_results.append(
+            {
+                "page_number": page,
+                "text_layer_score": 0.0,
+                "text_quality_score": 0.0,
+                "scan_likelihood": 1.0,
+                "sandwich_likelihood": 0.8,
+                "layout_complexity_score": 0.0,
+                "visual_complexity_score": 0.9,
+                "recommended_engine": "marker",
+                "reasons": ["scan likelihood is high"],
+                "text_chars": 0,
+                "image_count": 1,
+                "full_page_image": True,
+            }
+        )
+    return {
+        "page_count": 3,
+        "text_layer_score": 0.5,
+        "text_quality_score": 0.7,
+        "scan_likelihood": 0.5,
+        "sandwich_likelihood": 0.5,
+        "layout_complexity_score": 0.0,
+        "visual_complexity_score": 0.5,
+        "recommended_engine": "marker",
+        "reasons": ["mixed page risk"],
+        "sampled_image_count": 1,
+        "page_results": sorted(page_results, key=lambda item: item["page_number"]),
+    }

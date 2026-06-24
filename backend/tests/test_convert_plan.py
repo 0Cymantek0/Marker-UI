@@ -110,6 +110,110 @@ async def test_convert_plan_local_pdf_applies_phase5_backend_knobs(
 
 
 @pytest.mark.asyncio
+async def test_convert_plan_local_pdf_reports_mixed_segments(
+    client: AsyncClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    pdf = tmp_path / "mixed.pdf"
+    pdf.write_bytes(b"%PDF")
+    probe_payload = {
+        "page_count": 3,
+        "text_layer_score": 0.5,
+        "text_quality_score": 0.7,
+        "scan_likelihood": 0.5,
+        "sandwich_likelihood": 0.5,
+        "layout_complexity_score": 0.0,
+        "visual_complexity_score": 0.5,
+        "recommended_engine": "marker",
+        "reasons": ["mixed page risk"],
+        "sampled_image_count": 1,
+        "page_results": [
+            {
+                "page_number": 1,
+                "text_layer_score": 0.9,
+                "text_quality_score": 1.0,
+                "scan_likelihood": 0.0,
+                "sandwich_likelihood": 0.0,
+                "layout_complexity_score": 0.0,
+                "visual_complexity_score": 0.0,
+                "recommended_engine": "liteparse",
+                "reasons": ["LiteParse fast path is safe"],
+                "text_chars": 1000,
+                "image_count": 0,
+                "full_page_image": False,
+            },
+            {
+                "page_number": 2,
+                "text_layer_score": 0.0,
+                "text_quality_score": 0.0,
+                "scan_likelihood": 1.0,
+                "sandwich_likelihood": 0.8,
+                "layout_complexity_score": 0.0,
+                "visual_complexity_score": 0.9,
+                "recommended_engine": "marker",
+                "reasons": ["scan likelihood is high"],
+                "text_chars": 0,
+                "image_count": 1,
+                "full_page_image": True,
+            },
+            {
+                "page_number": 3,
+                "text_layer_score": 0.0,
+                "text_quality_score": 0.0,
+                "scan_likelihood": 1.0,
+                "sandwich_likelihood": 0.8,
+                "layout_complexity_score": 0.0,
+                "visual_complexity_score": 0.9,
+                "recommended_engine": "marker",
+                "reasons": ["scan likelihood is high"],
+                "text_chars": 0,
+                "image_count": 1,
+                "full_page_image": True,
+            },
+        ],
+    }
+
+    class _FakeProbe:
+        def to_dict(self):
+            return probe_payload
+
+    monkeypatch.setattr("app.routes.convert.probe_pdf", lambda _path: _FakeProbe())
+
+    resp = await client.post(
+        "/api/convert/plan",
+        json={
+            "filename": "mixed.pdf",
+            "size": pdf.stat().st_size,
+            "local_filepath": str(pdf),
+        },
+    )
+
+    assert resp.status_code == 200
+    plan = resp.json()
+    assert plan["engine"] == "mixed_pdf"
+    assert plan["preliminary"] is False
+    assert plan["mixed_engine_segments"] == [
+        {
+            "pages": [1],
+            "page_range": "1",
+            "requested_engine": "liteparse_pdf",
+            "actual_engine": "liteparse_pdf",
+            "reasons": ["LiteParse fast path is safe"],
+            "fallback_reason": None,
+        },
+        {
+            "pages": [2, 3],
+            "page_range": "2-3",
+            "requested_engine": "marker_pdf",
+            "actual_engine": "marker_pdf",
+            "reasons": ["scan likelihood is high"],
+            "fallback_reason": None,
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_convert_plan_unknown_extension(client: AsyncClient):
     """Predicting plan for unknown extension falls back to marker_pdf with warnings."""
     resp = await client.post(

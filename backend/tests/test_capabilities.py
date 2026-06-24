@@ -18,9 +18,12 @@ async def test_get_capabilities_returns_200(client: AsyncClient):
     engines = body["engines"]
     
     # Assert standard engines are represented
+    assert "audio" in engines
+    assert "video" in engines
     assert "marker_pdf" in engines
     assert "office_docx" in engines
     assert "office_pptx" in engines
+    assert "outlook_msg" in engines
     assert "spreadsheet" in engines
     assert "text_data" in engines
     assert "html" in engines
@@ -46,6 +49,67 @@ async def test_get_capabilities_with_mocked_dependencies(client: AsyncClient):
         resp = await client.get("/api/capabilities")
         assert resp.status_code == 200
         engines = resp.json()["engines"]
+        assert engines["audio"] == "ready"
+        assert engines["spreadsheet"] == "ready"
+        assert engines["outlook_msg"] == "ready"
+        assert engines["office_pptx"] == "missing_optional_dependency"
+
+
+@pytest.mark.asyncio
+async def test_spreadsheet_reports_missing_when_xlrd_missing(client: AsyncClient):
+    """Legacy .xls support requires xlrd in addition to openpyxl."""
+    with patch("app.conversion.dependencies.is_dependency_available") as mock_dep:
+        def side_effect(name):
+            if name == "xlrd":
+                return False
+            return True
+
+        mock_dep.side_effect = side_effect
+
+        resp = await client.get("/api/capabilities")
+        assert resp.status_code == 200
+        assert resp.json()["engines"]["spreadsheet"] == "missing_optional_dependency"
+
+
+@pytest.mark.asyncio
+async def test_outlook_msg_reports_missing_when_extract_msg_missing(client: AsyncClient):
+    with patch("app.conversion.dependencies.is_dependency_available") as mock_dep:
+        def side_effect(name):
+            if name == "extract-msg":
+                return False
+            return True
+
+        mock_dep.side_effect = side_effect
+
+        resp = await client.get("/api/capabilities")
+        assert resp.status_code == 200
+        assert resp.json()["engines"]["outlook_msg"] == "missing_optional_dependency"
+
+
+@pytest.mark.asyncio
+async def test_audio_reports_missing_when_faster_whisper_missing(client: AsyncClient):
+    with patch("app.conversion.dependencies.is_dependency_available") as mock_dep:
+        def side_effect(name):
+            if name == "faster-whisper":
+                return False
+            return True
+
+        mock_dep.side_effect = side_effect
+
+        resp = await client.get("/api/capabilities")
+        assert resp.status_code == 200
+        assert resp.json()["engines"]["audio"] == "missing_optional_dependency"
+
+
+@pytest.mark.asyncio
+async def test_video_reports_missing_when_ffmpeg_missing(client: AsyncClient):
+    with (
+        patch("app.conversion.dependencies.is_dependency_available", return_value=True),
+        patch("app.conversion.dependencies.shutil.which", return_value=None),
+    ):
+        resp = await client.get("/api/capabilities")
+        assert resp.status_code == 200
+        assert resp.json()["engines"]["video"] == "missing_optional_dependency"
 
 
 @pytest.mark.asyncio

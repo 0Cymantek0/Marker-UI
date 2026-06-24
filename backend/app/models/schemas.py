@@ -339,6 +339,7 @@ class ConverterPlanResponse(BaseModel):
     warnings: list[str]
     preliminary: bool = False
     probe_result: Optional[dict] = None
+    mixed_engine_segments: Optional[list[dict]] = None
 
 
 

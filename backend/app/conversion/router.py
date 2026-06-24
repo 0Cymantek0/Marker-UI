@@ -40,6 +40,22 @@ _ROUTE_TABLE: list[tuple[frozenset[str], str, str, bool, bool, float]] = [
         1.0,
     ),
     (
+        frozenset({".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac"}),
+        "audio",
+        "Local Audio Transcript",
+        False,
+        False,
+        0.95,
+    ),
+    (
+        frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"}),
+        "video",
+        "Local Video Timeline",
+        False,
+        False,
+        0.90,
+    ),
+    (
         frozenset({".docx"}),
         "office_docx",
         "Fast Office (Word)",
@@ -56,7 +72,15 @@ _ROUTE_TABLE: list[tuple[frozenset[str], str, str, bool, bool, float]] = [
         0.95,
     ),
     (
-        frozenset({".xlsx"}),
+        frozenset({".msg"}),
+        "outlook_msg",
+        "Outlook MSG",
+        False,
+        False,
+        0.95,
+    ),
+    (
+        frozenset({".xlsx", ".xls"}),
         "spreadsheet",
         "Fast Spreadsheet",
         False,
@@ -64,7 +88,7 @@ _ROUTE_TABLE: list[tuple[frozenset[str], str, str, bool, bool, float]] = [
         0.95,
     ),
     (
-        frozenset({".csv"}),
+        frozenset({".csv", ".tsv"}),
         "text_data",
         "Text / Data",
         False,
@@ -129,9 +153,12 @@ for _exts, _engine, _label, _marker, _gpu, _conf in _ROUTE_TABLE:
 
 _ENGINE_META: dict[str, tuple[str, bool, bool, float]] = {
     "marker_pdf": ("Marker PDF", True, True, 1.0),
+    "audio": ("Local Audio Transcript", False, False, 0.95),
+    "video": ("Local Video Timeline", False, False, 0.90),
     "liteparse_pdf": ("LiteParse Fast PDF", False, False, 0.9),
     "office_docx": ("Fast Office (Word)", False, False, 0.95),
     "office_pptx": ("Fast Office (PowerPoint)", False, False, 0.95),
+    "outlook_msg": ("Outlook MSG", False, False, 0.95),
     "spreadsheet": ("Fast Spreadsheet", False, False, 0.95),
     "text_data": ("Text / Data", False, False, 0.95),
     "xml_rss": ("XML / RSS", False, False, 0.90),
@@ -142,11 +169,14 @@ _ENGINE_META: dict[str, tuple[str, bool, bool, float]] = {
 
 _ENGINE_COMPATIBLE_EXTS: dict[str, frozenset[str]] = {
     "marker_pdf": frozenset({".pdf", ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp", ".gif", ".epub"}),
+    "audio": frozenset({".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac"}),
+    "video": frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"}),
     "liteparse_pdf": frozenset({".pdf"}),
     "office_docx": frozenset({".docx"}),
     "office_pptx": frozenset({".pptx"}),
-    "spreadsheet": frozenset({".xlsx"}),
-    "text_data": frozenset({".csv", ".json", ".jsonl", ".txt", ".md", ".rst", ".log"}),
+    "outlook_msg": frozenset({".msg"}),
+    "spreadsheet": frozenset({".xlsx", ".xls"}),
+    "text_data": frozenset({".csv", ".tsv", ".json", ".jsonl", ".txt", ".md", ".rst", ".log"}),
     "xml_rss": frozenset({".xml", ".rss", ".atom"}),
     "html": frozenset({".html", ".htm"}),
     "notebook": frozenset({".ipynb"}),

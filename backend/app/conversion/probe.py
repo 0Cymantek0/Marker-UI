@@ -22,6 +22,50 @@ PdfEngineRecommendation = Literal["liteparse", "marker"]
 
 
 @dataclass
+class PageProbeResult:
+    page_number: int
+    text_layer_score: float
+    text_quality_score: float
+    scan_likelihood: float
+    sandwich_likelihood: float
+    layout_complexity_score: float
+    visual_complexity_score: float
+    recommended_engine: PdfEngineRecommendation
+    reasons: list[str] = field(default_factory=list)
+    text_chars: int = 0
+    image_count: int = 0
+    full_page_image: bool = False
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "PageProbeResult":
+        return cls(
+            page_number=int(data.get("page_number") or 0),
+            text_layer_score=float(data.get("text_layer_score") or 0.0),
+            text_quality_score=float(data.get("text_quality_score") or 0.0),
+            scan_likelihood=float(data.get("scan_likelihood") or 0.0),
+            sandwich_likelihood=float(data.get("sandwich_likelihood") or 0.0),
+            layout_complexity_score=float(data.get("layout_complexity_score") or 0.0),
+            visual_complexity_score=float(data.get("visual_complexity_score") or 0.0),
+            recommended_engine=(
+                "liteparse" if data.get("recommended_engine") == "liteparse" else "marker"
+            ),
+            reasons=list(data.get("reasons") or []),
+            text_chars=int(data.get("text_chars") or 0),
+            image_count=int(data.get("image_count") or 0),
+            full_page_image=bool(data.get("full_page_image")),
+        )
+
+
+@dataclass
+class PdfRoutingSegment:
+    pages: list[int]
+    engine: PdfEngineRecommendation
+    reasons: list[str] = field(default_factory=list)
+    fallback_chain: list[PdfEngineRecommendation] = field(default_factory=list)
+    source_probe_ids: list[int] = field(default_factory=list)
+
+
+@dataclass
 class PdfProbeResult:
     page_count: int
     text_layer_score: float
@@ -36,6 +80,7 @@ class PdfProbeResult:
     sampled_text_chars: int = 0
     sampled_image_count: int = 0
     full_page_image_pages: int = 0
+    page_results: list[PageProbeResult] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -58,6 +103,11 @@ class PdfProbeResult:
             sampled_text_chars=int(data.get("sampled_text_chars") or 0),
             sampled_image_count=int(data.get("sampled_image_count") or 0),
             full_page_image_pages=int(data.get("full_page_image_pages") or 0),
+            page_results=[
+                PageProbeResult.from_mapping(item)
+                for item in data.get("page_results") or []
+                if isinstance(item, dict)
+            ],
         )
 
 
@@ -170,6 +220,93 @@ def _layout_complexity(page: Any) -> float:
     return _clamp(column_score * 0.65 + short_line_ratio * 0.35)
 
 
+def _routing_reasons(
+    *,
+    text_layer_score: float,
+    text_quality_score: float,
+    scan_likelihood: float,
+    sandwich_likelihood: float,
+    visual_complexity_score: float,
+    layout_complexity_score: float,
+) -> tuple[PdfEngineRecommendation, list[str]]:
+    reasons: list[str] = []
+    if text_layer_score >= 0.70:
+        reasons.append("strong extractable text layer")
+    else:
+        reasons.append("weak or missing extractable text layer")
+    if text_quality_score >= 0.80:
+        reasons.append("text quality is high")
+    else:
+        reasons.append("text quality is poor or sparse")
+    if scan_likelihood > 0.20:
+        reasons.append("scan likelihood is high")
+    if sandwich_likelihood > 0.40:
+        reasons.append("image/text sandwich likelihood is high")
+    if visual_complexity_score > 0.35:
+        reasons.append("embedded image density is high")
+    if layout_complexity_score > 0.45:
+        reasons.append("layout complexity is high")
+
+    liteparse_safe = (
+        text_layer_score >= 0.70
+        and text_quality_score >= 0.80
+        and scan_likelihood <= 0.20
+        and sandwich_likelihood <= 0.40
+        and visual_complexity_score <= 0.35
+        and layout_complexity_score <= 0.45
+    )
+    if liteparse_safe:
+        reasons.append("LiteParse fast path is safe")
+        return "liteparse", reasons
+    reasons.append("Marker deep path is safer")
+    return "marker", reasons
+
+
+def _page_probe_result(
+    *,
+    page_number: int,
+    text: str,
+    image_count: int,
+    full_page_like: int,
+    layout_complexity_score: float,
+) -> PageProbeResult:
+    text_chars = len(text.strip())
+    text_layer_score = _clamp(min(text_chars / 900, 1.0))
+    text_quality_score = _clamp(_text_quality(text))
+    full_page_image = full_page_like > 0
+    visual_complexity_score = _clamp(
+        (image_count / 3.0) * 0.45 + (0.55 if full_page_image else 0.0)
+    )
+    scan_likelihood = _clamp((1.0 - text_layer_score) * 0.65 + (0.35 if full_page_image else 0.0))
+    sandwich_likelihood = _clamp(
+        visual_complexity_score * 0.55
+        + text_layer_score * 0.25
+        + (1.0 - text_quality_score) * 0.20
+    )
+    recommended_engine, reasons = _routing_reasons(
+        text_layer_score=text_layer_score,
+        text_quality_score=text_quality_score,
+        scan_likelihood=scan_likelihood,
+        sandwich_likelihood=sandwich_likelihood,
+        visual_complexity_score=visual_complexity_score,
+        layout_complexity_score=layout_complexity_score,
+    )
+    return PageProbeResult(
+        page_number=page_number,
+        text_layer_score=round(text_layer_score, 3),
+        text_quality_score=round(text_quality_score, 3),
+        scan_likelihood=round(scan_likelihood, 3),
+        sandwich_likelihood=round(sandwich_likelihood, 3),
+        layout_complexity_score=round(layout_complexity_score, 3),
+        visual_complexity_score=round(visual_complexity_score, 3),
+        recommended_engine=recommended_engine,
+        reasons=reasons,
+        text_chars=text_chars,
+        image_count=image_count,
+        full_page_image=full_page_image,
+    )
+
+
 def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResult:
     path = Path(filepath)
     if PdfReader is None:
@@ -207,7 +344,7 @@ def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResul
     image_counts: list[int] = []
     full_page_image_pages = 0
     layout_scores: list[float] = []
-    all_text: list[str] = []
+    page_results: list[PageProbeResult] = []
 
     for idx in sampled_pages:
         page = reader.pages[idx]
@@ -215,14 +352,21 @@ def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResul
             text = page.extract_text() or ""
         except Exception:
             text = ""
-        all_text.append(text)
         page_text_lengths.append(len(text.strip()))
         qualities.append(_text_quality(text))
         image_count, full_page_like = _page_images(page)
         image_counts.append(image_count)
         if full_page_like:
             full_page_image_pages += 1
-        layout_scores.append(_layout_complexity(page))
+        layout_complexity_score = _layout_complexity(page)
+        layout_scores.append(layout_complexity_score)
+        page_results.append(_page_probe_result(
+            page_number=idx + 1,
+            text=text,
+            image_count=image_count,
+            full_page_like=full_page_like,
+            layout_complexity_score=layout_complexity_score,
+        ))
 
     sampled = max(1, len(sampled_pages))
     avg_chars = mean(page_text_lengths) if page_text_lengths else 0.0
@@ -240,36 +384,14 @@ def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResul
         + (1.0 - text_quality_score) * 0.20
     )
 
-    reasons: list[str] = []
-    if text_layer_score >= 0.70:
-        reasons.append("strong extractable text layer")
-    else:
-        reasons.append("weak or missing extractable text layer")
-    if text_quality_score >= 0.80:
-        reasons.append("text quality is high")
-    else:
-        reasons.append("text quality is poor or sparse")
-    if scan_likelihood > 0.20:
-        reasons.append("scan likelihood is high")
-    if sandwich_likelihood > 0.40:
-        reasons.append("image/text sandwich likelihood is high")
-    if visual_complexity_score > 0.35:
-        reasons.append("embedded image density is high")
-    if layout_complexity_score > 0.45:
-        reasons.append("layout complexity is high")
-
-    liteparse_safe = (
-        text_layer_score >= 0.70
-        and text_quality_score >= 0.80
-        and scan_likelihood <= 0.20
-        and sandwich_likelihood <= 0.40
-        and visual_complexity_score <= 0.35
-        and layout_complexity_score <= 0.45
+    recommended_engine, reasons = _routing_reasons(
+        text_layer_score=text_layer_score,
+        text_quality_score=text_quality_score,
+        scan_likelihood=scan_likelihood,
+        sandwich_likelihood=sandwich_likelihood,
+        visual_complexity_score=visual_complexity_score,
+        layout_complexity_score=layout_complexity_score,
     )
-    if liteparse_safe:
-        reasons.append("LiteParse fast path is safe")
-    else:
-        reasons.append("Marker deep path is safer")
 
     return PdfProbeResult(
         page_count=page_count,
@@ -279,10 +401,57 @@ def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResul
         sandwich_likelihood=round(sandwich_likelihood, 3),
         layout_complexity_score=round(layout_complexity_score, 3),
         visual_complexity_score=round(visual_complexity_score, 3),
-        recommended_engine="liteparse" if liteparse_safe else "marker",
+        recommended_engine=recommended_engine,
         reasons=reasons,
         sampled_pages=[p + 1 for p in sampled_pages],
         sampled_text_chars=sum(page_text_lengths),
         sampled_image_count=sum(image_counts),
         full_page_image_pages=full_page_image_pages,
+        page_results=page_results,
     )
+
+
+def plan_pdf_routing_segments(probe: PdfProbeResult) -> list[PdfRoutingSegment]:
+    """Group page-level probe results into contiguous same-engine segments.
+
+    This is groundwork for future mixed-engine routing. It intentionally uses
+    only page probes already present in ``probe`` and does not imply current
+    conversion uses mixed engines.
+    """
+    if not probe.page_results:
+        return []
+
+    ordered = sorted(probe.page_results, key=lambda item: item.page_number)
+    segments: list[PdfRoutingSegment] = []
+    current_engine = ordered[0].recommended_engine
+    current_pages: list[int] = []
+    current_reasons: list[str] = []
+    source_ids: list[int] = []
+
+    def flush() -> None:
+        if not current_pages:
+            return
+        fallback_chain = ["liteparse", "marker"] if current_engine == "liteparse" else []
+        segments.append(PdfRoutingSegment(
+            pages=list(current_pages),
+            engine=current_engine,
+            reasons=list(dict.fromkeys(current_reasons)),
+            fallback_chain=fallback_chain,
+            source_probe_ids=list(source_ids),
+        ))
+
+    previous_page = ordered[0].page_number - 1
+    for page in ordered:
+        contiguous = page.page_number == previous_page + 1
+        if page.recommended_engine != current_engine or not contiguous:
+            flush()
+            current_engine = page.recommended_engine
+            current_pages = []
+            current_reasons = []
+            source_ids = []
+        current_pages.append(page.page_number)
+        current_reasons.extend(page.reasons)
+        source_ids.append(page.page_number)
+        previous_page = page.page_number
+    flush()
+    return segments

@@ -8,8 +8,11 @@ import tempfile
 import uuid
 import zipfile
 import asyncio
+import ipaddress
+import socket
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -18,9 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
 import aiofiles
+import httpx
 
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
-from app.conversion.probe import probe_pdf
+from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
@@ -28,18 +32,60 @@ from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryRes
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {
-    ".pdf", ".docx", ".pptx", ".xlsx", ".epub", ".html",
-    ".htm", ".csv", ".json", ".jsonl", ".txt", ".md", ".rst",
+    ".pdf", ".docx", ".pptx", ".msg", ".xlsx", ".xls", ".epub", ".html",
+    ".htm", ".csv", ".tsv", ".json", ".jsonl", ".txt", ".md", ".rst",
     ".log", ".xml", ".rss", ".atom", ".ipynb", ".zip",
+    ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac",
+    ".mp4", ".mov", ".mkv", ".webm", ".avi",
     ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp"
 }
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 MAX_PAGE_RANGE_PAGES = 500
 HARD_MAX_PAGE_RANGE_PAGES = 2000
+MAX_URL_REDIRECTS = 5
 
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+_CONTENT_TYPE_EXTENSIONS = {
+    "application/pdf": ".pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.ms-outlook": ".msg",
+    "application/zip": ".zip",
+    "text/html": ".html",
+    "application/xhtml+xml": ".html",
+    "text/csv": ".csv",
+    "text/tab-separated-values": ".tsv",
+    "application/json": ".json",
+    "application/x-ndjson": ".jsonl",
+    "application/xml": ".xml",
+    "text/xml": ".xml",
+    "text/plain": ".txt",
+    "text/markdown": ".md",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/tiff": ".tiff",
+    "image/bmp": ".bmp",
+    "image/gif": ".gif",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/flac": ".flac",
+    "audio/ogg": ".ogg",
+    "audio/aac": ".aac",
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/x-matroska": ".mkv",
+    "video/webm": ".webm",
+    "video/x-msvideo": ".avi",
+}
 
 
 def _count_requested_pages(page_range: str) -> int:
@@ -61,6 +107,99 @@ def _count_requested_pages(page_range: str) -> int:
                 raise ValueError
             count += 1
     return count
+
+
+def _safe_source_url(raw_url: str) -> str:
+    parsed = urlparse(raw_url)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _assert_safe_source_url(raw_url: str) -> None:
+    parsed = urlparse(raw_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="source_url must be an http(s) URL")
+    if parsed.username or parsed.password:
+        raise HTTPException(status_code=400, detail="source_url must not contain credentials")
+    try:
+        addresses = socket.getaddrinfo(parsed.hostname, parsed.port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise HTTPException(status_code=400, detail="source_url host could not be resolved") from exc
+    for family, _socktype, _proto, _canonname, sockaddr in addresses:
+        host = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="source_url resolved to an invalid address") from exc
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise HTTPException(status_code=400, detail="source_url resolves to a private or local network address")
+
+
+def _filename_from_content_disposition(value: str | None) -> str | None:
+    if not value:
+        return None
+    for part in value.split(";"):
+        key, sep, raw = part.strip().partition("=")
+        if sep and key.lower() in {"filename", "filename*"}:
+            filename = raw.strip().strip('"')
+            if "''" in filename:
+                filename = filename.split("''", 1)[1]
+            return Path(filename.replace("\\", "/")).name
+    return None
+
+
+def _extension_for_download(url: str, headers: httpx.Headers) -> tuple[str, str]:
+    content_type = (headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+    header_name = _filename_from_content_disposition(headers.get("content-disposition"))
+    path_name = Path(urlparse(url).path).name
+    filename = header_name or path_name or "download"
+    ext_from_type = _CONTENT_TYPE_EXTENSIONS.get(content_type)
+    ext_from_name = Path(filename).suffix.lower()
+    suffix = ext_from_type or ext_from_name
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported downloaded content type or extension '{content_type or suffix}'",
+        )
+    stem = Path(filename).stem or "download"
+    safe_stem = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in stem)[:80] or "download"
+    return f"{safe_stem}{suffix}", suffix
+
+
+async def _download_source_url(raw_url: str, destination: Path) -> tuple[str, str, str]:
+    current_url = raw_url
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
+        for _ in range(MAX_URL_REDIRECTS + 1):
+            _assert_safe_source_url(current_url)
+            async with client.stream("GET", current_url) as response:
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise HTTPException(status_code=400, detail="source_url redirect missing Location header")
+                    current_url = urljoin(current_url, location)
+                    continue
+                if response.status_code >= 400:
+                    raise HTTPException(status_code=400, detail=f"source_url returned HTTP {response.status_code}")
+                original_name, suffix = _extension_for_download(current_url, response.headers)
+                total = 0
+                async with aiofiles.open(destination, "wb") as f:
+                    async for chunk in response.aiter_bytes(1024 * 1024):
+                        total += len(chunk)
+                        if total > MAX_UPLOAD_SIZE:
+                            destination.unlink(missing_ok=True)
+                            raise HTTPException(
+                                status_code=413,
+                                detail=f"Downloaded file exceeds maximum size of {MAX_UPLOAD_SIZE} bytes.",
+                            )
+                        await f.write(chunk)
+                return original_name, suffix, _safe_source_url(current_url)
+    raise HTTPException(status_code=400, detail="source_url exceeded redirect limit")
 
 
 def _validate_page_range(page_range: str, page_count: int) -> None:
@@ -114,10 +253,49 @@ def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | No
         return None
     metadata = {
         key: parsed[key]
-        for key in ("engine", "probe_result")
+        for key in ("engine", "probe_result", "mixed_engine_segments")
         if key in parsed and parsed[key]
     }
     return metadata or None
+
+
+def _planned_mixed_segments(probe_data: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(probe_data, dict) or not probe_data.get("page_results"):
+        return None
+    probe = PdfProbeResult.from_mapping(probe_data)
+    segments = plan_pdf_routing_segments(probe)
+    if len(segments) <= 1:
+        return None
+    return [
+        {
+            "pages": list(segment.pages),
+            "page_range": _pages_to_range(segment.pages),
+            "requested_engine": (
+                "liteparse_pdf" if segment.engine == "liteparse" else "marker_pdf"
+            ),
+            "actual_engine": (
+                "liteparse_pdf" if segment.engine == "liteparse" else "marker_pdf"
+            ),
+            "reasons": list(segment.reasons),
+            "fallback_reason": None,
+        }
+        for segment in segments
+    ]
+
+
+def _pages_to_range(pages: list[int]) -> str:
+    if not pages:
+        return ""
+    ranges: list[str] = []
+    start = prev = sorted(pages)[0]
+    for page in sorted(pages)[1:]:
+        if page == prev + 1:
+            prev = page
+            continue
+        ranges.append(str(start) if start == prev else f"{start}-{prev}")
+        start = prev = page
+    ranges.append(str(start) if start == prev else f"{start}-{prev}")
+    return ",".join(ranges)
 
 
 async def _load_llm_config(db: AsyncSession) -> dict[str, Any]:
@@ -153,6 +331,7 @@ async def _load_llm_config(db: AsyncSession) -> dict[str, Any]:
 async def upload_file(
     file: Optional[UploadFile] = File(None),
     local_filepath: Optional[str] = Query(None, description="Optional local absolute file path on the server"),
+    source_url: Optional[str] = Query(None, description="Optional public http(s) document URL"),
     output_dir: Optional[str] = Query(None, description="Optional custom output directory path"),
     output_format: str = Query("markdown", description="Output format: markdown, json, html, chunks"),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
@@ -174,6 +353,12 @@ async def upload_file(
     disable_image_extraction: bool = Query(False, description="Skip extracting images"),
     page_range: Optional[str] = Query(None, description="Page range e.g. '1-5,8,10-12'"),
     lang: Optional[str] = Query(None, description="Document language hint"),
+    audio_output_mode: Optional[str] = Query(None, description="Audio output: transcript, meeting_notes, lecture_notes, or enhanced"),
+    audio_model: Optional[str] = Query(None, description="Local STT model name for faster-whisper"),
+    audio_vocabulary: Optional[str] = Query(None, description="Comma/newline-separated vocabulary hints for audio transcription"),
+    audio_context: Optional[str] = Query(None, description="Context used only to organize audio batch output"),
+    audio_low_confidence_threshold: Optional[float] = Query(None, ge=0.0, le=1.0, description="Segment confidence threshold for audio warnings"),
+    audio_word_timestamps: bool = Query(False, description="Request word-level timestamps from the STT engine when supported"),
     disable_multiprocessing: bool = Query(False, description="Run single-threaded"),
     strip_existing_ocr: bool = Query(False, description="Strip existing OCR text"),
     redo_inline_math: bool = Query(False, description="Re-render inline math"),
@@ -197,16 +382,21 @@ async def upload_file(
     db: AsyncSession = Depends(get_db),
 ) -> ConversionResponse:
     """Accept a document upload or local file path, create a job, and start conversion."""
-    if not file and not local_filepath:
+    source_count = sum(1 for item in (file, local_filepath, source_url) if item)
+    if source_count == 0:
         raise HTTPException(
             status_code=400,
-            detail="Either an uploaded file or a local_filepath must be provided.",
+            detail="Either an uploaded file, local_filepath, or source_url must be provided.",
         )
+    if source_count > 1:
+        raise HTTPException(status_code=400, detail="Provide only one input source.")
 
     original_name = ""
     suffix = ""
     stored_path = ""
     is_local = False
+    source_url_safe: str | None = None
+    job_id = str(uuid.uuid4())
 
     if local_filepath:
         path = Path(local_filepath)
@@ -224,6 +414,13 @@ async def upload_file(
         suffix = path.suffix.lower()
         stored_path = str(path)
         is_local = True
+    elif source_url:
+        stored_path_obj = UPLOAD_DIR / f"{job_id}.download"
+        original_name, suffix, source_url_safe = await _download_source_url(source_url, stored_path_obj)
+        final_path = UPLOAD_DIR / f"{job_id}{suffix}"
+        stored_path_obj.replace(final_path)
+        stored_path = str(final_path)
+        is_local = False
     else:
         if not file or not file.filename:
             raise HTTPException(status_code=400, detail="No file or filename provided")
@@ -239,7 +436,6 @@ async def upload_file(
         )
     input_format = suffix.lstrip(".")
 
-    job_id = str(uuid.uuid4())
     stored_name = f"{job_id}{suffix}"
 
     if not is_local and file:
@@ -297,6 +493,18 @@ async def upload_file(
         config["page_range"] = page_range
     if lang:
         config["lang"] = lang
+    if audio_output_mode in {"transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"}:
+        config["audio_output_mode"] = audio_output_mode
+    if audio_model:
+        config["audio_model"] = audio_model
+    if audio_vocabulary:
+        config["audio_vocabulary"] = audio_vocabulary
+    if audio_context:
+        config["audio_context"] = audio_context
+    if audio_low_confidence_threshold is not None:
+        config["audio_low_confidence_threshold"] = audio_low_confidence_threshold
+    if audio_word_timestamps:
+        config["audio_word_timestamps"] = True
     if disable_multiprocessing:
         config["disable_multiprocessing"] = True
     if strip_existing_ocr:
@@ -336,6 +544,8 @@ async def upload_file(
         config["max_batch_retries"] = max_batch_retries
     if local_filepath:
         config["local_filepath"] = local_filepath
+    if source_url_safe:
+        config["source_url"] = source_url_safe
     if output_dir:
         config["output_dir"] = output_dir
 
@@ -424,6 +634,11 @@ async def plan_conversion(
         warnings=plan.warnings,
         preliminary=preliminary,
         probe_result=config.get("probe_result"),
+        mixed_engine_segments=(
+            _planned_mixed_segments(config.get("probe_result"))
+            if plan.engine == "mixed_pdf"
+            else None
+        ),
     )
 
 

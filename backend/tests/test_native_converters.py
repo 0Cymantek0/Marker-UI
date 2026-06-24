@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 from openpyxl import Workbook
 
 from app.conversion.converters.archive import ArchiveConverter
+from app.conversion.converters.audio import AudioConverter, _transcribe_audio
 from app.conversion.converters.html import HtmlConverter
 from app.conversion.converters.notebook import NotebookConverter
+from app.conversion.converters.outlook_msg import OutlookMsgConverter
 from app.conversion.converters.spreadsheet import SpreadsheetConverter
 from app.conversion.converters.text_data import TextDataConverter
+from app.conversion.converters.video import VideoConverter
 from app.conversion.converters.xml_rss import XmlRssConverter
 from app.services.conversion_service import ConversionService
 
@@ -27,10 +35,13 @@ def test_service_registers_every_advertised_native_engine() -> None:
 
     for engine in [
         "archive",
+        "audio",
         "html",
         "notebook",
+        "outlook_msg",
         "spreadsheet",
         "text_data",
+        "video",
         "xml_rss",
     ]:
         assert svc.registry.has(engine)
@@ -45,6 +56,22 @@ def test_text_data_converter_turns_csv_into_markdown_table(tmp_path: Path) -> No
     assert "| name | score |" in result.text
     assert "| Ada | 10 |" in result.text
     assert result.metadata["engine_detail"]["format"] == "csv"
+
+
+def test_text_data_converter_turns_tsv_into_markdown_table(tmp_path: Path) -> None:
+    path = tmp_path / "data.tsv"
+    path.write_text("name\tscore\tnote\nAda\t10\tuses | pipes\nLinus\t9\tline one\n", encoding="utf-8")
+
+    result = TextDataConverter().convert(str(path), {})
+
+    assert "| name | score | note |" in result.text
+    assert "| Ada | 10 | uses \\| pipes |" in result.text
+    assert "| Linus | 9 | line one |" in result.text
+    assert result.metadata["engine_detail"] == {
+        "format": "tsv",
+        "rows": 3,
+        "truncated": False,
+    }
 
 
 def test_html_converter_drops_scripts_and_emits_markdown(tmp_path: Path) -> None:
@@ -119,14 +146,310 @@ def test_spreadsheet_converter_reads_xlsx_sheets(tmp_path: Path) -> None:
     assert "| Ada | 10 |" in result.text
 
 
+def test_spreadsheet_converter_reads_legacy_xls_sheets(tmp_path: Path) -> None:
+    xlwt = pytest.importorskip("xlwt")
+    path = tmp_path / "legacy.xls"
+    wb = xlwt.Workbook()
+    ws = wb.add_sheet("Legacy Scores")
+    for row_idx, row in enumerate([["name", "score", "active"], ["Ada", 10, True], ["Linus", 9.5, False]]):
+        for col_idx, value in enumerate(row):
+            ws.write(row_idx, col_idx, value)
+    wb.save(str(path))
+
+    result = SpreadsheetConverter().convert(str(path), {})
+
+    assert "## Sheet: Legacy Scores" in result.text
+    assert "| name | score | active |" in result.text
+    assert "| Ada | 10 | True |" in result.text
+    assert "| Linus | 9.5 | False |" in result.text
+    assert result.metadata["engine_detail"]["format"] == "xls"
+    assert result.metadata["engine_detail"]["sheets"] == [
+        {
+            "name": "Legacy Scores",
+            "rows": 3,
+            "columns": 3,
+            "truncated": False,
+        }
+    ]
+
+
+def test_outlook_msg_converter_renders_body_headers_and_safe_attachments(monkeypatch, tmp_path: Path) -> None:
+    class FakeMessage:
+        subject = "Quarterly Update"
+        sender = "Ops <ops@example.com>"
+        to = "Team <team@example.com>"
+        cc = ""
+        date = "2026-06-24 10:30:00+00:00"
+        body = "Body line 1\r\nBody line 2"
+        header = "X-Attach-Path: C:\\Users\\person\\secret\\report.xlsx"
+        attachments = [
+            SimpleNamespace(
+                longFilename="C:\\Users\\person\\secret\\report.xlsx",
+                shortFilename=None,
+                mimetype="application/vnd.ms-excel",
+                data=b"12345",
+            )
+        ]
+
+        def __init__(self, filepath: str) -> None:
+            self.filepath = filepath
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    import extract_msg
+
+    monkeypatch.setattr(extract_msg, "Message", FakeMessage)
+    path = tmp_path / "mail.msg"
+    path.write_bytes(b"fake msg")
+
+    result = OutlookMsgConverter().convert(str(path), {})
+
+    assert "# Quarterly Update" in result.text
+    assert "- **From:** Ops <ops@example.com>" in result.text
+    assert "Body line 1\nBody line 2" in result.text
+    assert "`report.xlsx`, application/vnd.ms-excel, 5 bytes" in result.text
+    detail = result.metadata["engine_detail"]
+    assert detail["format"] == "msg"
+    assert detail["attachment_count"] == 1
+    assert detail["attachments"][0]["filename"] == "report.xlsx"
+    assert detail["attachments"][0]["unsafe_original_name_redacted"] is True
+    assert "C:\\Users" not in detail["headers"]
+    assert "[redacted-path]" in detail["headers"]
+
+
+def test_audio_converter_renders_timestamped_local_transcript(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "voice.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    def fake_transcribe(filepath, config, device=None):
+        assert filepath == str(path)
+        return {
+            "language": "en",
+            "duration": 2.5,
+            "model": "tiny.en",
+            "segments": [
+                {"start": 0.0, "end": 1.25, "text": "hello world", "confidence": 0.92},
+                {"start": 1.25, "end": 2.5, "text": "second line", "confidence": 0.4},
+            ],
+        }
+
+    monkeypatch.setattr("app.conversion.converters.audio._transcribe_audio", fake_transcribe)
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.probe_audio",
+        lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
+    )
+
+    result = AudioConverter().convert(str(path), {})
+
+    assert "# Audio Transcript: voice" in result.text
+    assert "- **Language:** en" in result.text
+    assert "- **Media:** pcm_s16le, 16000 Hz, 1 ch" in result.text
+    assert "`00:00.000-00:01.250` hello world" in result.text
+    assert "`00:01.250-00:02.500` second line" in result.text
+    assert "## Source Map" in result.text
+    assert "voice_seg_0001" in result.text
+    assert "low_confidence" in result.text
+    detail = result.metadata["engine_detail"]
+    assert detail["format"] == "wav"
+    assert detail["language"] == "en"
+    assert detail["duration"] == 2.5
+    assert detail["segment_count"] == 2
+    assert detail["model"] == "tiny.en"
+    assert detail["output_mode"] == "transcript"
+    assert detail["media_info"]["codec"] == "pcm_s16le"
+    transcript = result.metadata["audio"]["transcript"]
+    assert transcript["segments"][0]["segment_id"] == "voice_seg_0001"
+    assert transcript["segments"][1]["warnings"] == ["low_confidence"]
+
+
+def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "meeting.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    def fake_transcribe(filepath, config, device=None):
+        return {
+            "language": "en",
+            "duration": 1.0,
+            "model": "tiny.en",
+            "segments": [
+                {"start": 0.0, "end": 1.0, "text": "ship the table parser fix", "confidence": 0.88},
+            ],
+        }
+
+    monkeypatch.setattr("app.conversion.converters.audio._transcribe_audio", fake_transcribe)
+
+    result = AudioConverter().convert(str(path), {"audio_output_mode": "meeting_notes"})
+
+    assert "# Audio Document: meeting" in result.text
+    assert "ship the table parser fix [meeting.wav 00:00.000-00:01.000 speaker_0 | `meeting_seg_0001`]" in result.text
+    assert "## Original Transcript" in result.text
+    assert result.metadata["engine_detail"]["output_mode"] == "meeting_notes"
+    assert result.metadata["audio"]["enhancement"] == {
+        "mode": "meeting_notes",
+        "provider": "local_deterministic",
+        "provenance_required": True,
+    }
+
+
+def test_audio_transcribe_passes_vocabulary_and_word_timestamp_options(monkeypatch, tmp_path: Path) -> None:
+    seen: dict[str, object] = {}
+
+    class FakeWord:
+        word = "Marker"
+        start = 0.1
+        end = 0.4
+        probability = 0.8
+
+    class FakeSegment:
+        start = 0.0
+        end = 0.5
+        text = "Marker"
+        no_speech_prob = 0.05
+        words = [FakeWord()]
+
+    class FakeInfo:
+        language = "en"
+        duration = 0.5
+
+    class FakeWhisperModel:
+        def __init__(self, model_name, device, compute_type):
+            seen["model_name"] = model_name
+            seen["device"] = device
+            seen["compute_type"] = compute_type
+
+        def transcribe(self, filepath, **kwargs):
+            seen["filepath"] = filepath
+            seen["kwargs"] = kwargs
+            return [FakeSegment()], FakeInfo()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "faster_whisper",
+        SimpleNamespace(WhisperModel=FakeWhisperModel),
+    )
+    path = tmp_path / "voice.wav"
+    path.write_bytes(b"RIFF fake")
+
+    result = _transcribe_audio(
+        str(path),
+        {
+            "audio_model": "base.en",
+            "audio_device": "cpu",
+            "audio_compute_type": "int8",
+            "audio_vocabulary": "Marker, LiteParse",
+            "audio_word_timestamps": True,
+        },
+    )
+
+    assert seen["model_name"] == "base.en"
+    assert seen["kwargs"]["initial_prompt"] == "Vocabulary terms: Marker, LiteParse"
+    assert seen["kwargs"]["word_timestamps"] is True
+    assert result["segments"][0]["words"] == [
+        {"word": "Marker", "start": 0.1, "end": 0.4, "confidence": 0.8}
+    ]
+
+
 def test_archive_converter_lists_zip_without_extracting(tmp_path: Path) -> None:
     path = tmp_path / "bundle.zip"
+    nested = tmp_path / "nested.zip"
+    with zipfile.ZipFile(nested, "w") as zf:
+        zf.writestr("inner.txt", "nested hello")
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("notes/readme.txt", "hello archive")
+        zf.writestr("data/metrics.tsv", "metric\tvalue\nrevenue\t100\n")
+        zf.write(nested, "nested/archive.zip")
+        zf.writestr("scan.pdf", b"%PDF fake")
         zf.writestr("../sneaky.txt", "bad path")
 
     result = ArchiveConverter().convert(str(path), {})
 
     assert "`notes/readme.txt`" in result.text
     assert "hello archive" in result.text
+    assert "`data/metrics.tsv`" in result.text
+    assert "| metric | value |" in result.text
+    assert "`nested/archive.zip`" in result.text
+    assert "nested hello" in result.text
     assert "suspicious-name" in result.text
+    detail = result.metadata["engine_detail"]
+    assert detail["format"] == "zip"
+    assert detail["converted_children"] == 3
+    assert detail["skipped_children"] == 2
+    assert any(item["path"] == "scan.pdf" and item["action"] == "skipped" for item in detail["manifest"])
+    assert any(item["path"] == "../sneaky.txt" and item["reason"] == "suspicious archive path" for item in detail["manifest"])
+
+
+def test_archive_converter_builds_multi_audio_document(monkeypatch, tmp_path: Path) -> None:
+    def fake_transcribe(filepath, config, device=None):
+        label = config["audio_source_label"]
+        if label.endswith("part1.wav"):
+            text = "project alpha kickoff today"
+        else:
+            text = "project alpha follow up tomorrow"
+        return {
+            "language": "en",
+            "duration": 1.2,
+            "model": "tiny.en",
+            "segments": [{"start": 0.0, "end": 1.2, "text": text, "confidence": 0.9}],
+        }
+
+    monkeypatch.setattr("app.conversion.converters.audio._transcribe_audio", fake_transcribe)
+    path = tmp_path / "audio_batch.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("calls/part1.wav", b"RIFF fake one")
+        zf.writestr("calls/part2.wav", b"RIFF fake two")
+
+    result = ArchiveConverter().convert(str(path), {})
+
+    assert "## Audio Batch Document" in result.text
+    assert "# Multi-Audio Document: audio_batch.zip" in result.text
+    assert "project alpha kickoff today [calls/part1.wav 00:00.000-00:01.200 speaker_0 | `part1_seg_0001`]" in result.text
+    assert "project alpha follow up tomorrow [calls/part2.wav 00:00.000-00:01.200 speaker_0 | `part2_seg_0001`]" in result.text
+    batch = result.metadata["engine_detail"]["audio_batch"]
+    assert batch["source_count"] == 2
+    assert batch["segment_count"] == 2
+    assert batch["relationship"]["label"] == "related_or_follow_up"
+
+
+def test_video_converter_builds_visual_timeline_from_real_silent_video(tmp_path: Path) -> None:
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("ffmpeg/ffprobe unavailable")
+    path = tmp_path / "silent.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=160x90:d=2",
+            "-vf",
+            "drawbox=x=0:y=0:w=80:h=90:color=red:t=fill",
+            "-pix_fmt",
+            "yuv420p",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = VideoConverter().convert(
+        str(path),
+        {"video_max_frames": 2, "video_frame_interval_s": 1.0, "video_frame_ocr": False},
+    )
+
+    assert "# Video Timeline: silent" in result.text
+    assert "## Multimodal Timeline" in result.text
+    assert "**Frame:** 160x90" in result.text
+    assert "**Frame OCR:** unavailable (disabled)" in result.text
+    assert "_No audio transcript available._" in result.text
+    detail = result.metadata["engine_detail"]
+    assert detail["format"] == "mp4"
+    assert detail["width"] == 160
+    assert detail["height"] == 90
+    assert detail["frame_count"] >= 1
+    assert detail["has_audio"] is False
+    assert result.metadata["video"]["provenance"]["frames"] is True
+    assert result.metadata["video"]["provenance"]["cloud"] is False

@@ -59,12 +59,23 @@ class TestConversionRouter:
         (".gif", "marker_pdf", True, True, 1.0),
         # EPUB
         (".epub", "marker_pdf", True, True, 1.0),
+        # Audio
+        (".wav", "audio", False, False, 0.95),
+        (".mp3", "audio", False, False, 0.95),
+        (".m4a", "audio", False, False, 0.95),
+        # Video
+        (".mp4", "video", False, False, 0.90),
+        (".mov", "video", False, False, 0.90),
+        (".webm", "video", False, False, 0.90),
         # Office
         (".docx", "office_docx", False, False, 0.95),
         (".pptx", "office_pptx", False, False, 0.95),
+        (".msg", "outlook_msg", False, False, 0.95),
         (".xlsx", "spreadsheet", False, False, 0.95),
+        (".xls", "spreadsheet", False, False, 0.95),
         # Data formats
         (".csv", "text_data", False, False, 0.95),
+        (".tsv", "text_data", False, False, 0.95),
         (".json", "text_data", False, False, 0.95),
         (".jsonl", "text_data", False, False, 0.95),
         # XML/RSS
@@ -341,9 +352,10 @@ class TestConversionRouter:
         assert plan.engine == "marker_pdf"
         assert plan.label == "Marker Image OCR"
 
-    def test_legacy_xls_does_not_claim_xlsx_native_path(self) -> None:
+    def test_legacy_xls_routes_to_real_spreadsheet_reader(self) -> None:
         stream_info = _make_stream_info(".xls")
         plan = ConversionRouter.plan(stream_info, {})
 
-        assert plan.engine == "marker_pdf"
-        assert any("No dedicated converter" in warning for warning in plan.warnings)
+        assert plan.engine == "spreadsheet"
+        assert plan.label == "Fast Spreadsheet"
+        assert plan.needs_marker_models is False

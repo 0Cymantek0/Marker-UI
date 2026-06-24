@@ -18,6 +18,9 @@ _DEP_IMPORTS = {
     "mammoth": "mammoth",
     "python-pptx": "pptx",
     "openpyxl": "openpyxl",
+    "xlrd": "xlrd",
+    "extract-msg": "extract_msg",
+    "faster-whisper": "faster_whisper",
     "pandas": "pandas",
     "lxml": "lxml",
     "beautifulsoup4": "bs4",
@@ -90,24 +93,44 @@ def get_engine_status() -> dict[str, str]:
         office_pptx_status = "missing_optional_dependency"
 
     # 4. spreadsheet engine
-    if is_dependency_available("openpyxl"):
+    if is_dependency_available("openpyxl") and is_dependency_available("xlrd"):
         spreadsheet_status = "ready"
     else:
         spreadsheet_status = "missing_optional_dependency"
 
-    # 5. xml_rss engine
+    # 5. audio engine
+    if is_dependency_available("faster-whisper"):
+        audio_status = "ready"
+    else:
+        audio_status = "missing_optional_dependency"
+
+    # 6. video engine
+    if shutil.which("ffmpeg") and shutil.which("ffprobe") and is_dependency_available("faster-whisper"):
+        video_status = "ready"
+    elif shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        video_status = "missing_optional_dependency"
+    else:
+        video_status = "missing_optional_dependency"
+
+    # 7. outlook_msg engine
+    if is_dependency_available("extract-msg"):
+        outlook_msg_status = "ready"
+    else:
+        outlook_msg_status = "missing_optional_dependency"
+
+    # 8. xml_rss engine
     if is_dependency_available("defusedxml") and is_dependency_available("beautifulsoup4"):
         xml_rss_status = "ready"
     else:
         xml_rss_status = "missing_optional_dependency"
 
-    # 6. html engine
+    # 8. html engine
     if is_dependency_available("beautifulsoup4") and is_dependency_available("markdownify"):
         html_status = "ready"
     else:
         html_status = "missing_optional_dependency"
 
-    # 7. text_data, notebook, archive are built-in/standard lib based,
+    # 9. text_data, notebook, archive are built-in/standard lib based,
     # with charset-normalizer improving non-UTF-8 decoding when present.
     liteparse_status = "ready" if (
         is_dependency_available("liteparse") or shutil.which("lit")
@@ -119,9 +142,12 @@ def get_engine_status() -> dict[str, str]:
 
     return {
         "marker_pdf": marker_pdf_status,
+        "audio": audio_status,
+        "video": video_status,
         "liteparse_pdf": liteparse_status,
         "office_docx": office_docx_status,
         "office_pptx": office_pptx_status,
+        "outlook_msg": outlook_msg_status,
         "spreadsheet": spreadsheet_status,
         "text_data": text_data_status,
         "xml_rss": xml_rss_status,
