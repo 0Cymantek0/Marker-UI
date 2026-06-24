@@ -77,6 +77,41 @@ describe('RoutingAnalysis Component', () => {
     expect(screen.getByText('92%')).toBeInTheDocument()
   })
 
+  it('renders mixed PDF segment metadata from completed jobs', () => {
+    render(
+      <RoutingAnalysis
+        plan={{
+          engine: {
+            ...mockPlan,
+            engine: 'mixed_pdf',
+            label: 'Mixed PDF routing',
+            execution_backend: 'marker_worker',
+          },
+          mixed_engine_segments: [
+            {
+              page_range: '1',
+              requested_engine: 'liteparse_pdf',
+              actual_engine: 'liteparse_pdf',
+            },
+            {
+              page_range: '2-3',
+              requested_engine: 'marker_pdf',
+              actual_engine: 'marker_pdf',
+              fallback_reason: null,
+            },
+          ],
+        }}
+      />
+    )
+
+    expect(screen.getByTestId('mixed-routing-segments')).toBeInTheDocument()
+    expect(screen.getByText('Page Segments')).toBeInTheDocument()
+    expect(screen.getByText('Pages 1')).toBeInTheDocument()
+    expect(screen.getByText('Pages 2-3')).toBeInTheDocument()
+    expect(screen.getByText('LiteParse')).toBeInTheDocument()
+    expect(screen.getByText('Marker')).toBeInTheDocument()
+  })
+
   it('highlights unsafe scores with AlertTriangle', () => {
     const unsafePlan: ConverterPlanResponse = {
       ...mockPlan,

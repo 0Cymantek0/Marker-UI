@@ -8,7 +8,7 @@ import type { ConverterPlanResponse } from '@/lib/api'
 import { RoutingAnalysis } from './conversion/RoutingAnalysis'
 import { toast } from 'sonner'
 
-const ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.pptx,.epub,.html,.htm,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
+const ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.msg,.epub,.html,.htm,.csv,.tsv,.json,.jsonl,.txt,.md,.rst,.log,.xml,.rss,.atom,.ipynb,.zip,.wav,.mp3,.m4a,.flac,.ogg,.aac,.mp4,.mov,.mkv,.webm,.avi,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
 
 interface FileUploadProps {
   onFilesSelect: (files: File[]) => void
@@ -47,7 +47,7 @@ function formatSize(bytes: number): string {
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase() || ''
   const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff']
-  const spreadsheetExts = ['xlsx', 'xls', 'csv']
+  const spreadsheetExts = ['xlsx', 'xls', 'csv', 'tsv']
   const codeExts = ['html', 'htm', 'json', 'xml', 'js', 'ts']
 
   if (imageExts.includes(ext)) return FileImage

@@ -29,6 +29,12 @@ const DEFAULT_CONFIG: ConversionConfig = {
   disable_image_extraction: false,
   page_range: '',
   language: '',
+  audio_output_mode: 'transcript',
+  audio_model: 'tiny.en',
+  audio_vocabulary: '',
+  audio_context: '',
+  audio_low_confidence_threshold: 0.65,
+  audio_word_timestamps: false,
   disable_multiprocessing: false,
   debug: false,
   conversion_profile: 'auto',
@@ -49,9 +55,12 @@ interface SourcePlanState {
 
 const ENGINE_LABELS: Record<string, string> = {
   marker_pdf: 'Marker PDF',
+  audio: 'Local Audio Transcript',
+  video: 'Local Video Timeline',
   liteparse_pdf: 'LiteParse Fast PDF',
   office_docx: 'Fast Office (Word)',
   office_pptx: 'Fast Office (PowerPoint)',
+  outlook_msg: 'Outlook MSG',
   spreadsheet: 'Fast Spreadsheet',
   text_data: 'Text / Data',
   xml_rss: 'XML / RSS',
@@ -70,11 +79,14 @@ function engineOptionsFor(filename: string | undefined, plan: ConverterPlanRespo
   const ext = extensionFor(filename)
   let engines: string[] = []
   if (ext === '.pdf') engines = ['liteparse_pdf', 'marker_pdf']
+  else if (['.wav', '.mp3', '.m4a', '.flac', '.ogg', '.aac'].includes(ext)) engines = ['audio']
+  else if (['.mp4', '.mov', '.mkv', '.webm', '.avi'].includes(ext)) engines = ['video']
   else if (['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(ext)) engines = ['marker_pdf']
   else if (ext === '.docx') engines = ['office_docx', 'marker_pdf']
   else if (ext === '.pptx') engines = ['office_pptx', 'marker_pdf']
+  else if (ext === '.msg') engines = ['outlook_msg']
   else if (['.xlsx', '.xls'].includes(ext)) engines = ['spreadsheet']
-  else if (['.csv', '.json', '.jsonl', '.txt', '.md', '.rst', '.log'].includes(ext)) engines = ['text_data']
+  else if (['.csv', '.tsv', '.json', '.jsonl', '.txt', '.md', '.rst', '.log'].includes(ext)) engines = ['text_data']
   else if (['.xml', '.rss', '.atom'].includes(ext)) engines = ['xml_rss']
   else if (['.html', '.htm'].includes(ext)) engines = ['html']
   else if (ext === '.ipynb') engines = ['notebook']

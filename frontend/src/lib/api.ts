@@ -11,6 +11,7 @@ export type ConverterType =
 export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
 export type OcrEngine = 'surya' | 'glm_ocr' | 'paddleocr_vl' | 'mistral_ocr'
 export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
+export type AudioOutputMode = 'transcript' | 'enhanced' | 'notes' | 'meeting_notes' | 'lecture_notes'
 
 export interface ConversionConfig {
   output_format: OutputFormat
@@ -26,6 +27,12 @@ export interface ConversionConfig {
   disable_image_extraction?: boolean
   page_range?: string
   language?: string
+  audio_output_mode?: AudioOutputMode
+  audio_model?: string
+  audio_vocabulary?: string
+  audio_context?: string
+  audio_low_confidence_threshold?: number
+  audio_word_timestamps?: boolean
   disable_multiprocessing?: boolean
   debug?: boolean
   conversion_profile?: 'auto' | 'fast' | 'high_accuracy'
@@ -290,7 +297,8 @@ export async function uploadFile(
   file: File | null,
   config: ConversionConfig,
   localFilepath?: string,
-  outputDir?: string
+  outputDir?: string,
+  sourceUrl?: string
 ): Promise<ConversionResponse> {
   const form = new FormData()
   if (file) {
@@ -312,6 +320,12 @@ export async function uploadFile(
   if (config.disable_image_extraction !== undefined) params.append('disable_image_extraction', String(config.disable_image_extraction))
   if (config.page_range) params.append('page_range', config.page_range)
   if (config.language) params.append('lang', config.language)
+  if (config.audio_output_mode) params.append('audio_output_mode', config.audio_output_mode)
+  if (config.audio_model) params.append('audio_model', config.audio_model)
+  if (config.audio_vocabulary) params.append('audio_vocabulary', config.audio_vocabulary)
+  if (config.audio_context) params.append('audio_context', config.audio_context)
+  if (config.audio_low_confidence_threshold !== undefined) params.append('audio_low_confidence_threshold', String(config.audio_low_confidence_threshold))
+  if (config.audio_word_timestamps !== undefined) params.append('audio_word_timestamps', String(config.audio_word_timestamps))
   if (config.disable_multiprocessing !== undefined) params.append('disable_multiprocessing', String(config.disable_multiprocessing))
   if (config.debug !== undefined) params.append('debug', String(config.debug))
   // --- Image-understanding pipeline knobs (1:1 query-param names) ---
@@ -329,6 +343,7 @@ export async function uploadFile(
   if (config.vlm_batch_size !== undefined) params.append('vlm_batch_size', String(config.vlm_batch_size))
   if (config.max_batch_retries !== undefined) params.append('max_batch_retries', String(config.max_batch_retries))
   if (localFilepath) params.append('local_filepath', localFilepath)
+  if (sourceUrl) params.append('source_url', sourceUrl)
   if (outputDir) params.append('output_dir', outputDir)
 
   const res = await fetch(`${API_BASE}/convert/upload?${params.toString()}`, {
@@ -616,6 +631,7 @@ export interface ConverterPlanResponse {
   warnings: string[]
   preliminary: boolean
   probe_result?: Record<string, any> | null
+  mixed_engine_segments?: Array<Record<string, any>> | null
 }
 
 export async function getCapabilities(): Promise<CapabilitiesResponse> {

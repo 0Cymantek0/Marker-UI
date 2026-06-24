@@ -41,6 +41,36 @@ vi.mock('@/components/features/FileUpload', () => ({
       >
         Mock select PDF
       </button>
+      <button
+        type="button"
+        onClick={() => onFilesSelect([new File(['name\tscore\nAda\t10\n'], 'sample.tsv', { type: 'text/tab-separated-values' })])}
+      >
+        Mock select TSV
+      </button>
+      <button
+        type="button"
+        onClick={() => onFilesSelect([new File(['xls'], 'legacy.xls', { type: 'application/vnd.ms-excel' })])}
+      >
+        Mock select XLS
+      </button>
+      <button
+        type="button"
+        onClick={() => onFilesSelect([new File(['msg'], 'mail.msg', { type: 'application/vnd.ms-outlook' })])}
+      >
+        Mock select MSG
+      </button>
+      <button
+        type="button"
+        onClick={() => onFilesSelect([new File(['wav'], 'voice.wav', { type: 'audio/wav' })])}
+      >
+        Mock select WAV
+      </button>
+      <button
+        type="button"
+        onClick={() => onFilesSelect([new File(['mp4'], 'clip.mp4', { type: 'video/mp4' })])}
+      >
+        Mock select MP4
+      </button>
       {fileEngineControls.map((control, index) => (
         <div data-testid={`file-engine-${index}`} key={index}>
           <span>{control.status}</span>
@@ -221,6 +251,171 @@ describe('ConvertPage component', () => {
     expect(call[0]).toHaveLength(1)
     expect(call[4].fileKeys).toHaveLength(1)
     expect(call[4].fileEngineOverrides[call[4].fileKeys[0]]).toBe('marker_pdf')
+  })
+
+  it('offers the text data engine for TSV uploads', async () => {
+    mockPlanConversion.mockResolvedValueOnce({
+      engine: 'text_data',
+      label: 'Text / Data',
+      confidence: 0.95,
+      reasons: ["Matched extension '.tsv'"],
+      needs_marker_models: false,
+      needs_gpu: false,
+      execution_backend: 'cpu_thread',
+      needs_cloud: false,
+      optional_dependencies: [],
+      fallback_chain: [],
+      warnings: [],
+      preliminary: true,
+    })
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+    fireEvent.click(screen.getByText('Mock select TSV'))
+
+    const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
+    expect(within(select).getByRole('option', { name: 'Text / Data' })).toHaveValue('text_data')
+  })
+
+  it('offers the spreadsheet engine for legacy XLS uploads', async () => {
+    mockPlanConversion.mockResolvedValueOnce({
+      engine: 'spreadsheet',
+      label: 'Fast Spreadsheet',
+      confidence: 0.95,
+      reasons: ["Matched extension '.xls'"],
+      needs_marker_models: false,
+      needs_gpu: false,
+      execution_backend: 'cpu_thread',
+      needs_cloud: false,
+      optional_dependencies: [],
+      fallback_chain: [],
+      warnings: [],
+      preliminary: true,
+    })
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+    fireEvent.click(screen.getByText('Mock select XLS'))
+
+    const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
+    expect(within(select).getByRole('option', { name: 'Fast Spreadsheet' })).toHaveValue('spreadsheet')
+  })
+
+  it('offers the Outlook MSG engine for MSG uploads', async () => {
+    mockPlanConversion.mockResolvedValueOnce({
+      engine: 'outlook_msg',
+      label: 'Outlook MSG',
+      confidence: 0.95,
+      reasons: ["Matched extension '.msg'"],
+      needs_marker_models: false,
+      needs_gpu: false,
+      execution_backend: 'cpu_thread',
+      needs_cloud: false,
+      optional_dependencies: [],
+      fallback_chain: [],
+      warnings: [],
+      preliminary: true,
+    })
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+    fireEvent.click(screen.getByText('Mock select MSG'))
+
+    const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
+    expect(within(select).getByRole('option', { name: 'Outlook MSG' })).toHaveValue('outlook_msg')
+  })
+
+  it('offers the local audio transcript engine for audio uploads', async () => {
+    mockPlanConversion.mockResolvedValueOnce({
+      engine: 'audio',
+      label: 'Local Audio Transcript',
+      confidence: 0.95,
+      reasons: ["Matched extension '.wav'"],
+      needs_marker_models: false,
+      needs_gpu: false,
+      execution_backend: 'cpu_thread',
+      needs_cloud: false,
+      optional_dependencies: [],
+      fallback_chain: [],
+      warnings: [],
+      preliminary: true,
+    })
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+    fireEvent.click(screen.getByText('Mock select WAV'))
+
+    const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
+    expect(within(select).getByRole('option', { name: 'Local Audio Transcript' })).toHaveValue('audio')
+  })
+
+  it('offers the local video timeline engine for video uploads', async () => {
+    mockPlanConversion.mockResolvedValueOnce({
+      engine: 'video',
+      label: 'Local Video Timeline',
+      confidence: 0.9,
+      reasons: ["Matched extension '.mp4'"],
+      needs_marker_models: false,
+      needs_gpu: false,
+      execution_backend: 'cpu_thread',
+      needs_cloud: false,
+      optional_dependencies: [],
+      fallback_chain: [],
+      warnings: [],
+      preliminary: true,
+    })
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+    fireEvent.click(screen.getByText('Mock select MP4'))
+
+    const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
+    expect(within(select).getByRole('option', { name: 'Local Video Timeline' })).toHaveValue('video')
   })
 
   it('renders queue items and overall progress without crash', () => {
