@@ -13,7 +13,7 @@ from app.conversion.result import UniversalConversionResult
 from app.conversion.stream_info import StreamInfo
 
 
-_TEXT_EXTENSIONS = frozenset({".txt", ".md", ".rst", ".log", ".csv", ".json", ".jsonl"})
+_TEXT_EXTENSIONS = frozenset({".txt", ".md", ".rst", ".log", ".csv", ".tsv", ".json", ".jsonl"})
 
 
 def decode_text_file(filepath: str | Path) -> str:
@@ -75,12 +75,15 @@ class TextDataConverter(BaseConverter):
         ext = Path(filepath).suffix.lower()
         text = decode_text_file(filepath)
 
-        if ext == ".csv":
+        if ext in {".csv", ".tsv"}:
             sample = text[:4096]
-            try:
-                dialect = csv.Sniffer().sniff(sample)
-            except csv.Error:
-                dialect = csv.excel
+            if ext == ".tsv":
+                dialect = csv.excel_tab
+            else:
+                try:
+                    dialect = csv.Sniffer().sniff(sample)
+                except csv.Error:
+                    dialect = csv.excel
             rows = list(csv.reader(io.StringIO(text), dialect))
             max_rows = int(config.get("text_data_max_rows", 500))
             truncated = len(rows) > max_rows
@@ -90,7 +93,7 @@ class TextDataConverter(BaseConverter):
             return UniversalConversionResult(
                 text=markdown,
                 extension="md",
-                metadata={"engine_detail": {"format": "csv", "rows": len(rows), "truncated": truncated}},
+                metadata={"engine_detail": {"format": ext.lstrip("."), "rows": len(rows), "truncated": truncated}},
             )
 
         if ext == ".json":
