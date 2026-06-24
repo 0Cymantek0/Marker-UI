@@ -51,6 +51,71 @@ PHASE3_REFERENCE_TABLES: dict[str, list[list[str]] | None] = {
     "formula_heavy": None,
 }
 
+MANUAL_REAL_TABLE_REFERENCE_TEXT = (
+    "Real table-heavy sample tables page 1. The page contains actor roles, "
+    "example column headers, footnoted expenditure by function, and film credits."
+)
+
+MANUAL_REAL_TABLE_REFERENCE_TABLES: list[dict[str, object]] = [
+    {
+        "caption": "Table 1",
+        "headers": [
+            "Column header (TH)",
+            "Column header (TH)",
+            "Column header (TH)",
+        ],
+        "rows": [
+            ["Row header (TH)", "Data cell (TD)", "Data cell (TD)"],
+            ["Row header(TH)", "Data cell (TD)", "Data cell (TD)"],
+        ],
+    },
+    {
+        "caption": "Table 2: example of footnotes referenced from within a table",
+        "headers": ["Expenditure by function \u00a3 million", "", "2009/10", "2010/11 1"],
+        "rows": [
+            ["Policy functions", "Financial", "22.5", "30.57"],
+            ["", "Information 2", "10.2", "14.8"],
+            ["", "Contingency", "2.6", "1.2"],
+            ["Remunerated functions", "Agency services 3", "44.7", "35.91"],
+            ["", "Payments", "22.41", "19.88"],
+            ["", "Banking", "22.90", "44.23"],
+            ["", "Other", "12.69", "10.32"],
+        ],
+    },
+    {
+        "caption": 'Table 3: "film credits" style layout',
+        "headers": ["Main character", "Daniel Radcliffe"],
+        "rows": [
+            ["Sidekick 1", "Rupert Grint"],
+            ["Sidekick 2", "Emma Watson"],
+            ["Lovable ogre", "Robbie Coltrane"],
+            ["Professor", "Maggie Smith"],
+            ["Headmaster", "Richard Harris"],
+        ],
+    },
+]
+
+MIXED_ROUTING_REFERENCE_TEXT = (
+    "Mixed routing benchmark page 1. Clean digital revenue 100 cost 40. "
+    "Mixed routing benchmark page 2. Scanned invoice total 250 tax 25. "
+    "Mixed routing benchmark page 3. Quarter Q1 revenue 100 cost 40. "
+    "Quarter Q2 revenue 140 cost 55."
+)
+
+MIXED_ROUTING_REFERENCE_TABLE = [
+    ["Quarter", "Revenue", "Cost"],
+    ["Q1", "100", "40"],
+    ["Q2", "140", "55"],
+]
+
+REAL_MIXED_ROUTING_REFERENCE_TEXT = (
+    "Real mixed routing public-pages benchmark. National Bank president and "
+    "chief executive officer message discusses 2024, Canadian Western Bank, "
+    "Alberta, and the bank's 165th anniversary. The middle page is an image-only "
+    "public scan. The table page contains example column headers, footnoted "
+    "expenditure by function, and film credits."
+)
+
 
 def _draw_text_page(c: Any, lines: list[str]) -> None:
     c.setFont("Helvetica", 12)
@@ -159,6 +224,62 @@ def _write_pdf(document_class: str, path: Path) -> None:
     raise ValueError(f"Unknown Phase 3 document class: {document_class}")
 
 
+def _write_mixed_routing_pdf(path: Path) -> None:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import Table
+
+    c = canvas.Canvas(str(path), pagesize=letter)
+    _draw_text_page(
+        c,
+        [
+            "Mixed routing benchmark page 1.",
+            "Clean digital revenue 100 cost 40.",
+            "This page is intentionally dense searchable text for the fast path.",
+            "It repeats normal prose without images, tables, scans, or columns.",
+            "The routing probe should see a clean text layer and high quality text.",
+            "This keeps the first page suitable for LiteParse in mixed routing.",
+            "Additional ordinary prose makes the text layer score high enough.",
+            "The content is plain paragraph text with stable fonts and spacing.",
+            "No raster image dominates this page and no OCR recovery is needed.",
+            "This line adds words only so numeric benchmark facts remain unchanged.",
+            "The conversion should preserve the revenue and cost facts above.",
+            "The remaining filler is deliberately generic document body text.",
+            "It makes the page representative of a normal clean digital report.",
+            "The mixed benchmark can then exercise LiteParse on this segment.",
+            "The later pages still require Marker for scan and table handling.",
+            "End of clean digital mixed routing benchmark body text.",
+        ],
+    )
+
+    img = _text_image(
+        [
+            "Mixed routing benchmark page 2.",
+            "Scanned invoice total 250 tax 25.",
+        ]
+    )
+    c.drawImage(ImageReader(img), 36, 72, width=540, height=700)
+    c.showPage()
+
+    c.setFont("Helvetica", 12)
+    c.drawString(72, 740, "Mixed routing benchmark page 3.")
+    table = Table(
+        [
+            ["Quarter", "Revenue", "Cost"],
+            ["Q1", "100", "40"],
+            ["Q2", "140", "55"],
+        ],
+        colWidths=[120, 120, 120],
+    )
+    table.wrapOn(c, 420, 300)
+    table.drawOn(c, 72, 620)
+    c.drawString(72, 570, "Quarter Q1 revenue 100 cost 40.")
+    c.drawString(72, 550, "Quarter Q2 revenue 140 cost 55.")
+    c.showPage()
+    c.save()
+
+
 def generate_phase3_pdf_cases(output_dir: str | Path) -> list[PdfBenchmarkCase]:
     """Generate the five required Phase 3 PDF classes and golden sidecar."""
     out = Path(output_dir)
@@ -211,3 +332,131 @@ def load_phase3_pdf_cases(output_dir: str | Path) -> list[PdfBenchmarkCase]:
             )
         )
     return cases
+
+
+def generate_mixed_routing_pdf_case(output_dir: str | Path) -> PdfBenchmarkCase:
+    """Generate a three-page clean/scanned/table mixed-routing gate fixture."""
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    pdf_path = out / "mixed_routing.pdf"
+    _write_mixed_routing_pdf(pdf_path)
+    return PdfBenchmarkCase(
+        sample_id="mixed_routing",
+        pdf_path=pdf_path,
+        document_class="mixed_routing",
+        reference_text=MIXED_ROUTING_REFERENCE_TEXT,
+        reference_table=MIXED_ROUTING_REFERENCE_TABLE,
+        metadata={
+            "expected_segments": [
+                {"page_range": "1", "engine": "liteparse_pdf"},
+                {"page_range": "2-3", "engine": "marker_pdf"},
+            ],
+        },
+    )
+
+
+def _manifest_source_url(base: Path, filename: str) -> str | None:
+    manifest_path = base / "MANIFEST.json"
+    if not manifest_path.is_file():
+        return None
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    web_pdfs = manifest.get("web_pdfs") if isinstance(manifest, dict) else {}
+    if not isinstance(web_pdfs, dict):
+        return None
+    return web_pdfs.get(filename)
+
+
+def generate_real_mixed_routing_pdf_case(
+    fixture_dir: str | Path,
+    output_dir: str | Path,
+) -> PdfBenchmarkCase:
+    """Build a mixed-routing gate fixture from existing public/manual PDFs.
+
+    The output is a three-page composite:
+    1. clean searchable annual-report prose (LiteParse-safe),
+    2. image-only scanned public sample (Marker-required),
+    3. table-heavy public sample page (Marker-required).
+    """
+    from pypdf import PdfReader, PdfWriter
+
+    base = Path(fixture_dir)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    sources = {
+        "clean_annual_report.pdf": 5,
+        "scanned_image_only.pdf": 1,
+        "table_heavy_sample_tables.pdf": 1,
+    }
+    missing = [filename for filename in sources if not (base / filename).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            "Missing real mixed-routing PDF fixtures: " + ", ".join(missing)
+        )
+
+    writer = PdfWriter()
+    for filename, page_number in sources.items():
+        reader = PdfReader(str(base / filename))
+        page_index = page_number - 1
+        if len(reader.pages) <= page_index:
+            raise ValueError(f"{filename} does not contain page {page_number}")
+        writer.add_page(reader.pages[page_index])
+
+    pdf_path = out / "real_mixed_public_pages.pdf"
+    with pdf_path.open("wb") as handle:
+        writer.write(handle)
+
+    return PdfBenchmarkCase(
+        sample_id="real_mixed_public_pages",
+        pdf_path=pdf_path,
+        document_class="mixed_routing",
+        reference_text=REAL_MIXED_ROUTING_REFERENCE_TEXT,
+        reference_table=MANUAL_REAL_TABLE_REFERENCE_TABLES,
+        metadata={
+            "expected_segments": [
+                {"page_range": "1", "engine": "liteparse_pdf"},
+                {"page_range": "2-3", "engine": "marker_pdf"},
+            ],
+            "source_pages": {
+                filename: page_number for filename, page_number in sources.items()
+            },
+            "source_urls": {
+                filename: _manifest_source_url(base, filename)
+                for filename in sources
+            },
+        },
+    )
+
+
+def load_manual_real_table_heavy_pdf_cases(
+    fixture_dir: str | Path,
+) -> list[PdfBenchmarkCase]:
+    """Load optional real-doc table-heavy cases from the manual fixture area.
+
+    These fixtures are intentionally not generated by this module. They come
+    from public sample documents listed in the local MANIFEST, so callers must
+    opt in and provide the fixture directory explicitly.
+    """
+    base = Path(fixture_dir)
+    pdf_path = base / "table_heavy_sample_tables.pdf"
+    if not pdf_path.is_file():
+        raise FileNotFoundError(f"Missing real table-heavy PDF fixture: {pdf_path}")
+
+    return [
+        PdfBenchmarkCase(
+            sample_id="real_table_heavy_sample_tables_page1",
+            pdf_path=pdf_path,
+            document_class="real_table_heavy",
+            reference_text=MANUAL_REAL_TABLE_REFERENCE_TEXT,
+            reference_table=MANUAL_REAL_TABLE_REFERENCE_TABLES,
+            metadata={
+                "conversion_options": {
+                    "page_range": "1",
+                },
+                "source_url": _manifest_source_url(
+                    base,
+                    "table_heavy_sample_tables.pdf",
+                ),
+            },
+        )
+    ]

@@ -72,6 +72,10 @@ wer = word_error_rate
 # TEDS-lite (table structure similarity)
 # ---------------------------------------------------------------------------
 
+def _normalize_cell(value: Any) -> str:
+    return " ".join(str(value or "").split())
+
+
 def _parse_table(table: Any) -> list[list[str]]:
     """Normalise a table into a list-of-rows-of-cell-strings.
 
@@ -79,25 +83,50 @@ def _parse_table(table: Any) -> list[list[str]]:
     TablePayload shape) or a raw list-of-rows. Cells are stripped strings.
     """
     if isinstance(table, dict):
-        headers = table.get("headers") or []
-        rows = table.get("rows") or []
-        grid = ([list(headers)] if headers else []) + [list(r) for r in rows]
+        if isinstance(table.get("grid"), list):
+            grid = [list(r) for r in table["grid"]]
+        else:
+            headers = table.get("headers") or []
+            rows = table.get("rows") or []
+            grid = ([list(headers)] if headers else []) + [list(r) for r in rows]
     elif isinstance(table, list):
         grid = [list(r) for r in table]
     else:
         grid = []
-    return [[str(c).strip() for c in row] for row in grid]
+    return [[_normalize_cell(c) for c in row] for row in grid]
 
 
-def table_similarity(reference: Any, hypothesis: Any) -> float:
-    """Cell-match recall for two tables in [0, 1] (a practical TEDS stand-in).
+def _looks_like_single_table(table: Any) -> bool:
+    if isinstance(table, dict):
+        return bool({"headers", "rows", "grid"} & set(table))
+    if not isinstance(table, list):
+        return False
+    if not table:
+        return True
+    first = table[0]
+    return not (
+        isinstance(first, dict)
+        or (
+            isinstance(first, list)
+            and first
+            and isinstance(first[0], (dict, list))
+        )
+    )
 
-    Scores the fraction of **reference** cells reproduced at the same (row, col)
-    in the hypothesis. 1.0 = every reference cell matched (identical tables);
-    a shape mismatch or wrong cell drives it below 1.0 because the unmatched
-    reference cells count against the score. Reference-recall framing (like
-    :func:`facts_recall`) keeps it comparable across configs.
-    """
+
+def _table_collection(table: Any) -> list[Any]:
+    if table is None:
+        return []
+    if isinstance(table, dict) and isinstance(table.get("tables"), list):
+        return list(table["tables"])
+    if _looks_like_single_table(table):
+        return [table]
+    if isinstance(table, list):
+        return list(table)
+    return []
+
+
+def _single_table_similarity(reference: Any, hypothesis: Any) -> float:
     ref = _parse_table(reference)
     hyp = _parse_table(hypothesis)
     if not ref and not hyp:
@@ -115,6 +144,41 @@ def table_similarity(reference: Any, hypothesis: Any) -> float:
             if ref_cell == hyp_cell:
                 matched += 1
     return round(matched / total, 6) if total else 0.0
+
+
+def table_similarity(reference: Any, hypothesis: Any) -> float:
+    """Cell-match recall for table collections in [0, 1].
+
+    Scores the fraction of **reference** cells reproduced at the same (row, col)
+    in the hypothesis. When multiple reference tables exist, each reference
+    table is matched to the best remaining hypothesis table and averaged. This
+    keeps table-heavy documents from depending on incidental prose or table
+    ordering while still requiring the structured cells to be present.
+    """
+    ref_tables = _table_collection(reference)
+    hyp_tables = _table_collection(hypothesis)
+    if not ref_tables and not hyp_tables:
+        return 1.0
+    if not ref_tables or not hyp_tables:
+        return 0.0
+
+    unused = set(range(len(hyp_tables)))
+    scores: list[float] = []
+    for ref_table in ref_tables:
+        ranked = sorted(
+            (
+                (_single_table_similarity(ref_table, hyp_tables[hyp_index]), hyp_index)
+                for hyp_index in unused
+            ),
+            reverse=True,
+        )
+        if not ranked:
+            scores.append(0.0)
+            continue
+        score, hyp_index = ranked[0]
+        unused.remove(hyp_index)
+        scores.append(score)
+    return round(sum(scores) / len(scores), 6) if scores else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -176,10 +240,10 @@ def score_outputs(
 ) -> BenchmarkScore:
     """Score one sample across all metrics and blend into a single number.
 
-    The combined score rewards text accuracy (``1 - CER``), word accuracy
-    (``1 - WER``), fact recall, and — when a table is supplied — table
-    similarity, equally weighted over whichever components apply. Higher is
-    better; the §9.4 gate compares this across engine configs.
+    Text-only samples use text accuracy (``1 - CER``), word accuracy
+    (``1 - WER``), and fact recall. Table samples use structure and fact recall
+    as the primary channels because prose renderings and Markdown tables are
+    semantically equivalent but text-edit metrics treat them as unrelated.
     """
     c = character_error_rate(reference_text, hypothesis_text)
     w = word_error_rate(reference_text, hypothesis_text)
@@ -188,9 +252,12 @@ def score_outputs(
     if reference_table is not None or hypothesis_table is not None:
         t = table_similarity(reference_table, hypothesis_table)
 
-    components = [1.0 - c, 1.0 - w, f]
     if t is not None:
-        components.append(t)
+        components = [t, f]
+        scoring_mode = "table_structured"
+    else:
+        components = [1.0 - c, 1.0 - w, f]
+        scoring_mode = "text"
     combined = round(sum(components) / len(components), 6)
 
     return BenchmarkScore(
@@ -203,5 +270,6 @@ def score_outputs(
         details={
             "reference_len": len(reference_text or ""),
             "hypothesis_len": len(hypothesis_text or ""),
+            "scoring_mode": scoring_mode,
         },
     )

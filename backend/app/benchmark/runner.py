@@ -116,6 +116,19 @@ class PdfBenchmarkComparison:
         return bool(self.verdict.get("phase3_ready_for_phase4"))
 
 
+@dataclass
+class MixedPdfRoutingComparison:
+    """Gate report for experimental per-page mixed PDF routing."""
+
+    marker_report: BenchmarkReport
+    mixed_report: BenchmarkReport
+    verdict: dict[str, object]
+
+    @property
+    def ready_for_default(self) -> bool:
+        return bool(self.verdict.get("ready_for_default_mixed_pdf_routing"))
+
+
 def run_benchmark(
     config_name: str,
     samples: list[BenchmarkSample],
@@ -156,7 +169,12 @@ def _coerce_pdf_output(output: PdfEngineOutput | dict[str, Any] | str) -> PdfEng
         return PdfEngineOutput(text=output)
     if isinstance(output, dict):
         metadata = output.get("metadata") if isinstance(output.get("metadata"), dict) else {}
-        table = output.get("table") or metadata.get("table")
+        table = (
+            output.get("tables")
+            or metadata.get("tables")
+            or output.get("table")
+            or metadata.get("table")
+        )
         return PdfEngineOutput(
             text=str(output.get("text") or ""),
             table=table,
@@ -183,6 +201,28 @@ def _run_pdf_engine(
             )
         )
     return run_benchmark(config_name, samples)
+
+
+def _run_pdf_engine_with_outputs(
+    config_name: str,
+    cases: Sequence[PdfBenchmarkCase],
+    engine: Callable[[PdfBenchmarkCase], PdfEngineOutput | dict[str, Any] | str],
+) -> tuple[BenchmarkReport, list[tuple[PdfBenchmarkCase, PdfEngineOutput]]]:
+    outputs: list[tuple[PdfBenchmarkCase, PdfEngineOutput]] = []
+    samples: list[BenchmarkSample] = []
+    for case in cases:
+        output = _coerce_pdf_output(engine(case))
+        outputs.append((case, output))
+        samples.append(
+            BenchmarkSample(
+                sample_id=f"{case.document_class}:{case.sample_id}",
+                reference_text=case.reference_text,
+                hypothesis_text=output.text,
+                reference_table=case.reference_table,
+                hypothesis_table=output.table,
+            )
+        )
+    return run_benchmark(config_name, samples), outputs
 
 
 def compare_marker_liteparse_pdfs(
@@ -230,6 +270,78 @@ def compare_marker_liteparse_pdfs(
         liteparse_report=liteparse_report,
         verdict=verdict,
         covered_classes=covered_classes,
+    )
+
+
+def compare_mixed_pdf_routing(
+    cases: Sequence[PdfBenchmarkCase],
+    marker_engine: Callable[[PdfBenchmarkCase], PdfEngineOutput | dict[str, Any] | str],
+    mixed_engine: Callable[[PdfBenchmarkCase], PdfEngineOutput | dict[str, Any] | str],
+    *,
+    marker_name: str = "marker_pdf",
+    mixed_name: str = "mixed_pdf",
+    required_classes: Sequence[str] = ("mixed_routing",),
+) -> MixedPdfRoutingComparison:
+    """Gate mixed routing against whole-file Marker before default enablement.
+
+    Mixed routing only becomes default-worthy when it passes the golden gate,
+    is no worse than whole-file Marker, and reports real segment metadata with
+    both LiteParse and Marker segments.
+    """
+    validate_phase3_pdf_corpus(cases, required_classes)
+    marker_report, _marker_outputs = _run_pdf_engine_with_outputs(
+        marker_name,
+        cases,
+        marker_engine,
+    )
+    mixed_report, mixed_outputs = _run_pdf_engine_with_outputs(
+        mixed_name,
+        cases,
+        mixed_engine,
+    )
+    verdict = compare_configs(marker_report, mixed_report)
+    segment_failures: list[str] = []
+    for case, output in mixed_outputs:
+        segments = output.metadata.get("mixed_engine_segments")
+        if not isinstance(segments, list) or len(segments) < 2:
+            segment_failures.append(f"{case.document_class}:{case.sample_id}")
+            continue
+        engines = {
+            str(segment.get("actual_engine"))
+            for segment in segments
+            if isinstance(segment, dict)
+        }
+        page_ranges = [
+            segment.get("page_range")
+            for segment in segments
+            if isinstance(segment, dict)
+        ]
+        if not {"liteparse_pdf", "marker_pdf"}.issubset(engines) or any(
+            not page_range for page_range in page_ranges
+        ):
+            segment_failures.append(f"{case.document_class}:{case.sample_id}")
+
+    mixed_no_worse = mixed_report.mean_combined >= marker_report.mean_combined
+    verdict.update(
+        {
+            "mixed_passes_gate": mixed_report.passing,
+            "mixed_no_worse_than_marker": mixed_no_worse,
+            "mixed_segment_metadata_failures": segment_failures,
+            "marker_regressions": marker_report.regressions(),
+            "mixed_regressions": mixed_report.regressions(),
+            "ready_for_default_mixed_pdf_routing": (
+                mixed_report.passing
+                and mixed_no_worse
+                and not segment_failures
+                and marker_report.sample_count == mixed_report.sample_count
+                and marker_report.sample_count >= len(required_classes)
+            ),
+        }
+    )
+    return MixedPdfRoutingComparison(
+        marker_report=marker_report,
+        mixed_report=mixed_report,
+        verdict=verdict,
     )
 
 

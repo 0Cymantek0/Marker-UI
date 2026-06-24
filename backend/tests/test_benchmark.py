@@ -8,6 +8,8 @@ golden-match gate and beats the baseline.
 
 from __future__ import annotations
 
+import json
+
 from app.benchmark.metrics import (
     character_error_rate,
     facts_recall,
@@ -24,12 +26,25 @@ from app.benchmark.runner import (
     PHASE3_PDF_CLASSES,
     BenchmarkSample,
     compare_marker_liteparse_pdfs,
+    compare_mixed_pdf_routing,
     compare_configs,
     run_benchmark,
     validate_phase3_pdf_corpus,
 )
-from app.benchmark.phase3_pdf_corpus import generate_phase3_pdf_cases, load_phase3_pdf_cases
-from app.conversion.table_evidence import attach_table_evidence, extract_markdown_tables
+from app.benchmark.phase3_pdf_corpus import (
+    generate_mixed_routing_pdf_case,
+    generate_real_mixed_routing_pdf_case,
+    generate_phase3_pdf_cases,
+    load_manual_real_table_heavy_pdf_cases,
+    load_phase3_pdf_cases,
+)
+from app.conversion.table_evidence import (
+    attach_table_evidence,
+    extract_html_tables,
+    extract_marker_json_tables,
+    extract_markdown_tables,
+    extract_tables,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +123,19 @@ def test_table_similarity_handles_shape_mismatch():
     assert 0.0 <= score < 1.0
 
 
+def test_table_similarity_matches_multiple_tables_best_effort():
+    ref = [
+        {"headers": ["A"], "rows": [["1"]]},
+        {"headers": ["B"], "rows": [["2"]]},
+    ]
+    hyp = [
+        {"headers": ["B"], "rows": [["2"]]},
+        {"headers": ["A"], "rows": [["1"]]},
+    ]
+
+    assert table_similarity(ref, hyp) == 1.0
+
+
 # ---------------------------------------------------------------------------
 # Combined score
 # ---------------------------------------------------------------------------
@@ -121,7 +149,11 @@ def test_score_outputs_perfect_text():
     )
     assert score.combined == 1.0
     assert score.cer == 0.0
-    assert score.details == {"reference_len": 11, "hypothesis_len": 11}
+    assert score.details == {
+        "reference_len": 11,
+        "hypothesis_len": 11,
+        "scoring_mode": "text",
+    }
 
 
 def test_score_outputs_blends_table_when_present():
@@ -146,15 +178,11 @@ def test_markdown_table_evidence_extracts_headers_and_rows():
         "| Q2 | 140 | 55 |\n"
     )
 
-    assert tables == [
-        {
-            "source": "markdown",
-            "headers": ["Quarter", "Revenue", "Cost"],
-            "rows": [["Q1", "100", "40"], ["Q2", "140", "55"]],
-            "row_count": 2,
-            "column_count": 3,
-        }
-    ]
+    assert tables[0]["source"] == "markdown_pipe_table"
+    assert tables[0]["headers"] == ["Quarter", "Revenue", "Cost"]
+    assert tables[0]["rows"] == [["Q1", "100", "40"], ["Q2", "140", "55"]]
+    assert tables[0]["row_count"] == 2
+    assert tables[0]["column_count"] == 3
 
 
 def test_table_evidence_lets_markdown_table_score_as_structured_table():
@@ -182,10 +210,174 @@ def test_table_evidence_lets_markdown_table_score_as_structured_table():
     )
 
     assert metadata["table_evidence"] == {
-        "source": "markdown_pipe_table",
+        "source": "rendered_text_tables",
         "table_count": 1,
+        "sources": ["markdown_pipe_table"],
     }
     assert score.table_score == 1.0
+    assert score.combined == 1.0
+    assert score.details["scoring_mode"] == "table_structured"
+
+
+def test_markdown_table_evidence_handles_caption_and_missing_outer_pipes():
+    tables = extract_markdown_tables(
+        "**Table 1: sample values**\n\n"
+        "Name | Score\n"
+        "--- | ---\n"
+        "Ada | 98\n"
+        "Lin | 91\n"
+    )
+
+    assert tables[0]["caption"] == "Table 1: sample values"
+    assert tables[0]["headers"] == ["Name", "Score"]
+    assert tables[0]["rows"] == [["Ada", "98"], ["Lin", "91"]]
+
+
+def test_markdown_table_evidence_promotes_first_data_row_after_empty_header():
+    tables = extract_markdown_tables(
+        "|  |  |  |\n"
+        "| --- | --- | --- |\n"
+        "| Quarter | Revenue | Cost |\n"
+        "| Q1 | 100 | 40 |\n"
+    )
+
+    assert tables[0]["headers"] == ["Quarter", "Revenue", "Cost"]
+    assert tables[0]["rows"] == [["Q1", "100", "40"]]
+
+
+def test_html_table_evidence_preserves_spans_and_caption():
+    tables = extract_html_tables(
+        "<table><caption>Table 2: regions</caption>"
+        "<tr><th rowspan='2'>Region</th><th colspan='2'>Sales</th></tr>"
+        "<tr><th>2025</th><th>2026</th></tr>"
+        "<tr><td>North</td><td>10</td><td>12</td></tr>"
+        "</table>"
+    )
+
+    assert tables[0]["caption"] == "Table 2: regions"
+    assert tables[0]["headers"] == ["Region", "Sales", ""]
+    assert tables[0]["rows"] == [["", "2025", "2026"], ["North", "10", "12"]]
+    assert tables[0]["cells"][0]["rowspan"] == 2
+    assert tables[0]["cells"][1]["colspan"] == 2
+
+
+def test_table_evidence_stitches_repeated_markdown_headers():
+    tables = extract_tables(
+        "Page 1\n\n"
+        "| Quarter | Revenue | Cost |\n"
+        "| --- | --- | --- |\n"
+        "| Q1 | 100 | 40 |\n"
+        "\nPage 2\n\n"
+        "| Quarter | Revenue | Cost |\n"
+        "| --- | --- | --- |\n"
+        "| Q2 | 140 | 55 |\n"
+    )
+
+    assert len(tables) == 1
+    assert tables[0]["multi_page"] is True
+    assert tables[0]["segment_count"] == 2
+    assert tables[0]["headers"] == ["Quarter", "Revenue", "Cost"]
+    assert tables[0]["rows"] == [["Q1", "100", "40"], ["Q2", "140", "55"]]
+
+
+def test_table_evidence_stitches_html_cells_with_row_offsets():
+    tables = extract_tables(
+        "<table><tr><th>Quarter</th><th>Revenue</th></tr>"
+        "<tr><td>Q1</td><td>100</td></tr></table>"
+        "<p>continued on next page</p>"
+        "<table><tr><th>Quarter</th><th>Revenue</th></tr>"
+        "<tr><td>Q2</td><td>140</td></tr></table>"
+    )
+
+    assert len(tables) == 1
+    assert tables[0]["rows"] == [["Q1", "100"], ["Q2", "140"]]
+    assert tables[0]["segment_count"] == 2
+    assert [cell["row"] for cell in tables[0]["cells"] if cell["text"] in {"Q1", "Q2"}] == [1, 2]
+
+
+def test_attach_table_evidence_reports_stitched_table_count():
+    metadata = attach_table_evidence(
+        {},
+        "| Quarter | Revenue |\n"
+        "| --- | --- |\n"
+        "| Q1 | 100 |\n\n"
+        "| Quarter | Revenue |\n"
+        "| --- | --- |\n"
+        "| Q2 | 140 |\n",
+    )
+
+    assert metadata["table_evidence"]["table_count"] == 1
+    assert metadata["tables"][0]["segment_count"] == 2
+    assert metadata["table"]["rows"] == [["Q1", "100"], ["Q2", "140"]]
+
+
+def test_marker_json_table_evidence_preserves_layout_cells():
+    payload = {
+        "children": [
+            {
+                "id": "page-1",
+                "block_type": "BlockTypes.Page",
+                "html": "",
+                "bbox": [0, 0, 600, 800],
+                "polygon": [[0, 0], [600, 0], [600, 800], [0, 800]],
+                "children": [
+                    {
+                        "id": "table-1",
+                        "block_type": "BlockTypes.Table",
+                        "html": (
+                            "<table><tr><th>Quarter</th><th>Revenue</th></tr>"
+                            "<tr><td>Q1</td><td>100</td></tr></table>"
+                        ),
+                        "bbox": [72, 100, 420, 200],
+                        "polygon": [[72, 100], [420, 100], [420, 200], [72, 200]],
+                        "children": [
+                            {
+                                "id": "cell-1",
+                                "block_type": "BlockTypes.TableCell",
+                                "html": "<th>Quarter</th>",
+                                "bbox": [72, 100, 200, 130],
+                                "polygon": [[72, 100], [200, 100], [200, 130], [72, 130]],
+                            },
+                            {
+                                "id": "cell-2",
+                                "block_type": "BlockTypes.TableCell",
+                                "html": "<th>Revenue</th>",
+                                "bbox": [200, 100, 420, 130],
+                                "polygon": [[200, 100], [420, 100], [420, 130], [200, 130]],
+                            },
+                            {
+                                "id": "cell-3",
+                                "block_type": "BlockTypes.TableCell",
+                                "html": "<td>Q1</td>",
+                                "bbox": [72, 130, 200, 160],
+                                "polygon": [[72, 130], [200, 130], [200, 160], [72, 160]],
+                            },
+                            {
+                                "id": "cell-4",
+                                "block_type": "BlockTypes.TableCell",
+                                "html": "<td>100</td>",
+                                "bbox": [200, 130, 420, 160],
+                                "polygon": [[200, 130], [420, 130], [420, 160], [200, 160]],
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    tables = extract_marker_json_tables(json.dumps(payload))
+    routed_tables = extract_tables(json.dumps(payload))
+
+    assert tables[0]["source"] == "marker_json_table"
+    assert len(routed_tables) == 1
+    assert routed_tables[0]["source"] == "marker_json_table"
+    assert tables[0]["page_number"] == 1
+    assert tables[0]["bbox"] == [72, 100, 420, 200]
+    assert tables[0]["headers"] == ["Quarter", "Revenue"]
+    assert tables[0]["rows"] == [["Q1", "100"]]
+    assert tables[0]["cells"][2]["block_id"] == "cell-3"
+    assert tables[0]["cells"][2]["bbox"] == [72, 130, 200, 160]
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +617,8 @@ def test_phase3_table_heavy_uses_markdown_table_metadata_for_scoring():
         if score.sample_id == "table_heavy:table"
     )
     assert table_score.table_score == 1.0
-    assert table_score.combined > 0.50
+    assert table_score.combined == 1.0
+    assert table_score.details["scoring_mode"] == "table_structured"
 
 
 def test_phase3_generated_pdf_corpus_covers_required_classes(tmp_path):
@@ -437,3 +630,143 @@ def test_phase3_generated_pdf_corpus_covers_required_classes(tmp_path):
     assert (tmp_path / "golden.json").is_file()
     assert {case.document_class for case in cases} == set(PHASE3_PDF_CLASSES)
     assert all(case.pdf_path.is_file() for case in cases)
+
+
+def test_manual_real_table_heavy_case_loads_optional_public_fixture(tmp_path):
+    fixture_dir = tmp_path / "manual_real_docs"
+    fixture_dir.mkdir()
+    (fixture_dir / "table_heavy_sample_tables.pdf").write_bytes(b"%PDF-1.4\n")
+    (fixture_dir / "MANIFEST.json").write_text(
+        '{"web_pdfs":{"table_heavy_sample_tables.pdf":"https://example.com/sample.pdf"}}',
+        encoding="utf-8",
+    )
+
+    cases = load_manual_real_table_heavy_pdf_cases(fixture_dir)
+
+    assert len(cases) == 1
+    assert cases[0].document_class == "real_table_heavy"
+    assert cases[0].metadata["conversion_options"] == {"page_range": "1"}
+    assert cases[0].metadata["source_url"] == "https://example.com/sample.pdf"
+    assert len(cases[0].reference_table) == 3
+
+
+def test_mixed_routing_gate_requires_no_worse_score_and_segment_metadata():
+    case = PdfBenchmarkCase(
+        sample_id="mixed",
+        pdf_path="fixtures/mixed.pdf",
+        document_class="mixed_routing",
+        reference_text="Page 1 clean 100. Page 2 scanned 250. Page 3 table Q1 100.",
+        reference_table=[["Quarter", "Revenue"], ["Q1", "100"]],
+    )
+
+    def marker_engine(_case: PdfBenchmarkCase) -> PdfEngineOutput:
+        return PdfEngineOutput(text=case.reference_text, table=case.reference_table)
+
+    def mixed_engine(_case: PdfBenchmarkCase) -> PdfEngineOutput:
+        return PdfEngineOutput(
+            text=case.reference_text,
+            table=case.reference_table,
+            metadata={
+                "mixed_engine_segments": [
+                    {"page_range": "1", "actual_engine": "liteparse_pdf"},
+                    {"page_range": "2-3", "actual_engine": "marker_pdf"},
+                ]
+            },
+        )
+
+    comparison = compare_mixed_pdf_routing([case], marker_engine, mixed_engine)
+
+    assert comparison.ready_for_default
+    assert comparison.verdict["mixed_no_worse_than_marker"] is True
+    assert comparison.verdict["mixed_segment_metadata_failures"] == []
+
+
+def test_mixed_routing_gate_blocks_missing_segment_metadata():
+    case = PdfBenchmarkCase(
+        sample_id="mixed",
+        pdf_path="fixtures/mixed.pdf",
+        document_class="mixed_routing",
+        reference_text="Page 1 clean 100. Page 2 scanned 250.",
+    )
+
+    def perfect_engine(_case: PdfBenchmarkCase) -> PdfEngineOutput:
+        return PdfEngineOutput(text=case.reference_text)
+
+    comparison = compare_mixed_pdf_routing([case], perfect_engine, perfect_engine)
+
+    assert not comparison.ready_for_default
+    assert comparison.verdict["mixed_segment_metadata_failures"] == [
+        "mixed_routing:mixed"
+    ]
+
+
+def test_generate_mixed_routing_pdf_case_has_expected_segments(tmp_path):
+    case = generate_mixed_routing_pdf_case(tmp_path)
+
+    assert case.document_class == "mixed_routing"
+    assert case.pdf_path.is_file()
+    assert case.metadata["expected_segments"] == [
+        {"page_range": "1", "engine": "liteparse_pdf"},
+        {"page_range": "2-3", "engine": "marker_pdf"},
+    ]
+    assert "Scanned invoice total 250" in case.reference_text
+    assert case.reference_table == [
+        ["Quarter", "Revenue", "Cost"],
+        ["Q1", "100", "40"],
+        ["Q2", "140", "55"],
+    ]
+
+
+def test_generate_real_mixed_routing_pdf_case_merges_public_pages(tmp_path):
+    from reportlab.pdfgen import canvas
+
+    fixture_dir = tmp_path / "manual_real_docs"
+    output_dir = tmp_path / "phase3"
+    fixture_dir.mkdir()
+
+    def write_pdf(path, pages):
+        c = canvas.Canvas(str(path))
+        for lines in pages:
+            y = 740
+            for line in lines:
+                c.drawString(72, y, line)
+                y -= 18
+            c.showPage()
+        c.save()
+
+    write_pdf(
+        fixture_dir / "clean_annual_report.pdf",
+        [
+            [f"Annual filler page {page}"]
+            for page in range(1, 5)
+        ]
+        + [["Message From the President and Chief Executive Officer", "2024 CWB Alberta"]],
+    )
+    write_pdf(fixture_dir / "scanned_image_only.pdf", [["Scanned image placeholder"]])
+    write_pdf(
+        fixture_dir / "table_heavy_sample_tables.pdf",
+        [["Table 4: table 3 with column headers added", "Daniel Radcliffe"]],
+    )
+    (fixture_dir / "MANIFEST.json").write_text(
+        '{"web_pdfs":{"clean_annual_report.pdf":"https://example.com/a.pdf",'
+        '"scanned_image_only.pdf":"https://example.com/s.pdf",'
+        '"table_heavy_sample_tables.pdf":"https://example.com/t.pdf"}}',
+        encoding="utf-8",
+    )
+
+    case = generate_real_mixed_routing_pdf_case(fixture_dir, output_dir)
+
+    assert case.document_class == "mixed_routing"
+    assert case.sample_id == "real_mixed_public_pages"
+    assert case.pdf_path.is_file()
+    assert case.metadata["expected_segments"] == [
+        {"page_range": "1", "engine": "liteparse_pdf"},
+        {"page_range": "2-3", "engine": "marker_pdf"},
+    ]
+    assert case.metadata["source_pages"] == {
+        "clean_annual_report.pdf": 5,
+        "scanned_image_only.pdf": 1,
+        "table_heavy_sample_tables.pdf": 1,
+    }
+    assert case.metadata["source_urls"]["clean_annual_report.pdf"] == "https://example.com/a.pdf"
+    assert len(case.reference_table) == 3
