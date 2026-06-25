@@ -43,7 +43,10 @@ LLM_SERVICE_MAP: dict[str, str] = {
     "openai": "marker.services.openai.OpenAIService",
     "custom_openai": "marker.services.openai.OpenAIService",
     "claude": "marker.services.claude.ClaudeService",
-    "custom_anthropic": "marker.services.claude.ClaudeService",
+    # Custom Anthropic routes through our subclass so base_url is set on the
+    # client instance instead of mutating the process-global ANTHROPIC_BASE_URL
+    # env var (UCM-004.5). That keeps concurrent custom-anthropic jobs isolated.
+    "custom_anthropic": "app.services.custom_anthropic_service.CustomAnthropicService",
     "ollama": "marker.services.ollama.OllamaService",
     "azure": "marker.services.azure_openai.AzureOpenAIService",
     "vertex": "marker.services.vertex.GoogleVertexService",
@@ -241,12 +244,14 @@ def build_marker_options(
             options["claude_api_key"] = secret_placeholder
             options["claude_model_name"] = model_id
         elif p_type == "custom_anthropic":
-            import os
-            # Set environment variable for anthropic SDK
-            os.environ["ANTHROPIC_BASE_URL"] = prov.get("base_url") or "https://api.anthropic.com/v1"
+            # Pass base_url through marker options so our CustomAnthropicService
+            # pins it on the client instance (UCM-004.5). Never mutate
+            # os.environ here: that is process-global and would leak across
+            # concurrent custom-anthropic jobs using different providers.
             options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["claude_api_key"] = secret_placeholder
             options["claude_model_name"] = model_id
+            options["base_url"] = prov.get("base_url") or "https://api.anthropic.com/v1"
         elif p_type in ("openai", "custom_openai"):
             options["llm_service"] = LLM_SERVICE_MAP[p_type]
             options["openai_api_key"] = secret_placeholder
