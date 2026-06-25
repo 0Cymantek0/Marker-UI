@@ -295,6 +295,53 @@ async def test_agent_api_submit_job_uses_real_task_manager_and_conversion(
 
 
 
+@pytest.mark.asyncio
+async def test_mcp_delete_job_output_schema_is_files_removed_list(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """UCM-004.1: marker_delete_job structured output must declare files_removed as list[str]."""
+    import app.mcp_server as mcp_server
+
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    result_file = tmp_path / "deleted.md"
+    result_file.write_text("# gone", encoding="utf-8")
+    db_session.add(
+        ConversionJob(
+            id="22222222-2222-4221-8222-222222222222",
+            filename="deleted.csv",
+            original_name="deleted.csv",
+            status="completed",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            result_text="# gone",
+            result_path=str(result_file),
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    tools = await mcp_server.mcp.list_tools()
+    delete_tool = next(tool for tool in tools if tool.name == "marker_delete_job")
+    files_removed_schema = delete_tool.outputSchema["properties"]["files_removed"]
+    assert files_removed_schema["type"] == "array"
+    assert files_removed_schema["items"]["type"] == "string"
+
+    result = await agent_api.delete_job(
+        "22222222-2222-4221-8222-222222222222",
+        delete_files=True,
+    )
+    assert isinstance(result["files_removed"], list)
+    assert any(Path(path).name == "deleted.md" for path in result["files_removed"])
+
+
 def test_mcp_streamable_http_refuses_non_loopback_without_auth_token():
     from app.mcp_server import run
 

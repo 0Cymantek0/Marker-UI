@@ -118,7 +118,10 @@ class JobStatusOutput(MarkerOutputModel):
 class DeleteJobOutput(MarkerOutputModel):
     status: str = Field(description="Deletion status.", examples=["deleted"])
     job_id: str = Field(description="Deleted job id.", examples=["11111111-1111-4111-8111-111111111111"])
-    files_removed: bool = Field(description="True when files were removed.", examples=[True])
+    files_removed: list[str] = Field(
+        description="Resolved paths of files/directories removed during deletion. Empty when none were removed.",
+        examples=[["C:\\path\\to\\output.md"]],
+    )
 
 
 class SettingsOutput(MarkerOutputModel):
