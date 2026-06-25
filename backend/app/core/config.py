@@ -16,6 +16,11 @@ PORT: int = int(os.getenv("MARKER_PORT", "8000"))
 DEBUG: bool = os.getenv("MARKER_DEBUG", "false").lower() in ("true", "1", "yes")
 
 MAX_UPLOAD_SIZE: int = int(os.getenv("MARKER_MAX_UPLOAD_SIZE_MB", "100")) * 1024 * 1024
+SOURCE_URL_ALLOWLIST: tuple[str, ...] = tuple(
+    item.strip().lower()
+    for item in os.getenv("MARKER_SOURCE_URL_ALLOWLIST", "").split(",")
+    if item.strip()
+)
 
 # Model prewarming. Phase 1 default is lazy: marker models load on first marker
 # job rather than at startup, so an office-only deployment never pays the

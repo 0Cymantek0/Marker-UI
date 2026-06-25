@@ -33,13 +33,13 @@ from app.models.job import ConversionJob
 from app.models.settings import Setting
 from app.routes.convert import (
     ALLOWED_EXTENSIONS,
-    _download_source_url,
     _planned_mixed_segments,
     _validate_page_range,
 )
 from app.services.conversion_service import ConversionService
 from app.services.marker_service import MarkerService, build_marker_options
 from app.services.output_writer import write_conversion_output
+from app.services.safe_url_fetcher import SafeUrlFetchError, download_source_url
 from app.utils.secrets import decrypt_value, encrypt_value, is_masked, is_sensitive_key, mask_value
 
 
@@ -826,19 +826,19 @@ def _validate_page_range_safe(page_range: str, page_count: int) -> None:
 
 async def _download_source_url_safe(raw_url: str, destination: Path) -> tuple[str, str, str]:
     try:
-        return await _download_source_url(raw_url, destination)
-    except HTTPException as exc:
+        downloaded = await download_source_url(
+            raw_url,
+            destination,
+            allowed_extensions=ALLOWED_EXTENSIONS,
+        )
+        return downloaded.original_name, downloaded.suffix, downloaded.safe_url
+    except SafeUrlFetchError as exc:
         detail = str(exc.detail)
-        lowered = detail.lower()
-        if "private or local network" in lowered or "could not be resolved" in lowered:
+        if exc.category == "unsafe":
             from app.errors import UrlUnsafeError
 
             raise UrlUnsafeError(detail, details={"url": raw_url}) from exc
-        if "credentials" in lowered or "must be an http" in lowered:
-            from app.errors import UrlUnsafeError
-
-            raise UrlUnsafeError(detail, details={"url": raw_url}) from exc
-        if "exceeds maximum size" in lowered or "exceeded redirect" in lowered:
+        if exc.category == "blocked":
             from app.errors import NetworkBlockedError
 
             raise NetworkBlockedError(detail, details={"url": raw_url}) from exc

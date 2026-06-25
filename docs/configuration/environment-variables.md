@@ -12,8 +12,9 @@ Marker UI backend is configured using standard environment variables. You can se
 | `MARKER_PORT` | The port the FastAPI server listens on. | `8000` |
 | `MARKER_DEBUG` | Enables verbose FastAPI debugging and stack traces. | `false` |
 | `MARKER_MAX_UPLOAD_SIZE_MB` | Maximum file size allowed for uploads (in Megabytes). | `100` |
+| `MARKER_SOURCE_URL_ALLOWLIST` | Optional comma-separated host allowlist for `source_url` downloads. Empty allows any public, non-local HTTP(S) host that passes SSRF checks. Entries match exact hosts and subdomains; `*.example.com` is also supported. | unset |
 | `MARKER_DATABASE_URL` | SQLAlchemy connection URL for database persistence. | `sqlite+aiosqlite:///data/marker_ui.db` |
-| `MARKER_PRELOAD_MODELS` | Preload Marker models at worker startup when `true`; disable for lightweight CLI/MCP startup with `false`. | `true` |
+| `MARKER_PRELOAD_MODELS` | Preload Marker models at worker startup when `true`; keep lazy for lightweight CLI/MCP startup with `false`. | `false` |
 | `MARKER_MCP_AUTH_TOKEN` | Bearer token required when MCP Streamable HTTP binds to any non-loopback host. Localhost stdio and loopback HTTP do not require it. | unset |
 
 ---
@@ -33,6 +34,7 @@ environment:
   - MARKER_HOST=0.0.0.0
   - MARKER_PORT=8000
   - MARKER_MAX_UPLOAD_SIZE_MB=200
+  - MARKER_SOURCE_URL_ALLOWLIST=docs.example.com,*.trusted.example
 ```
 
 ### Source (Local shell)
@@ -41,5 +43,6 @@ Create a `.env` file in the root of the project:
 MARKER_HOST=127.0.0.1
 MARKER_PORT=8000
 MARKER_MAX_UPLOAD_SIZE_MB=50
+MARKER_SOURCE_URL_ALLOWLIST=docs.example.com
 ```
 FastAPI reads these variables on startup via Python's `os.getenv` system.

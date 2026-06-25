@@ -8,11 +8,8 @@ import tempfile
 import uuid
 import zipfile
 import asyncio
-import ipaddress
-import socket
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import urljoin, urlparse, urlunparse
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -21,13 +18,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
 import aiofiles
-import httpx
 
 from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
+from app.services.safe_url_fetcher import (
+    SafeUrlFetchError,
+    assert_safe_source_url,
+    download_source_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,6 @@ ALLOWED_EXTENSIONS = {
 }
 MAX_PAGE_RANGE_PAGES = 500
 HARD_MAX_PAGE_RANGE_PAGES = 2000
-MAX_URL_REDIRECTS = 5
 
 # MAX_UPLOAD_SIZE is imported from app.core.config so the upload + source_url
 # download paths share a single source of truth driven by
@@ -50,46 +50,6 @@ MAX_URL_REDIRECTS = 5
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-_CONTENT_TYPE_EXTENSIONS = {
-    "application/pdf": ".pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-    "application/vnd.ms-excel": ".xls",
-    "application/vnd.ms-outlook": ".msg",
-    "application/zip": ".zip",
-    "text/html": ".html",
-    "application/xhtml+xml": ".html",
-    "text/csv": ".csv",
-    "text/tab-separated-values": ".tsv",
-    "application/json": ".json",
-    "application/x-ndjson": ".jsonl",
-    "application/xml": ".xml",
-    "text/xml": ".xml",
-    "text/plain": ".txt",
-    "text/markdown": ".md",
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "image/tiff": ".tiff",
-    "image/bmp": ".bmp",
-    "image/gif": ".gif",
-    "audio/wav": ".wav",
-    "audio/x-wav": ".wav",
-    "audio/mpeg": ".mp3",
-    "audio/mp4": ".m4a",
-    "audio/x-m4a": ".m4a",
-    "audio/flac": ".flac",
-    "audio/ogg": ".ogg",
-    "audio/aac": ".aac",
-    "video/mp4": ".mp4",
-    "video/quicktime": ".mov",
-    "video/x-matroska": ".mkv",
-    "video/webm": ".webm",
-    "video/x-msvideo": ".avi",
-}
-
 
 def _count_requested_pages(page_range: str) -> int:
     count = 0
@@ -112,97 +72,24 @@ def _count_requested_pages(page_range: str) -> int:
     return count
 
 
-def _safe_source_url(raw_url: str) -> str:
-    parsed = urlparse(raw_url)
-    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
-
-
 def _assert_safe_source_url(raw_url: str) -> None:
-    parsed = urlparse(raw_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise HTTPException(status_code=400, detail="source_url must be an http(s) URL")
-    if parsed.username or parsed.password:
-        raise HTTPException(status_code=400, detail="source_url must not contain credentials")
     try:
-        addresses = socket.getaddrinfo(parsed.hostname, parsed.port, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise HTTPException(status_code=400, detail="source_url host could not be resolved") from exc
-    for family, _socktype, _proto, _canonname, sockaddr in addresses:
-        host = sockaddr[0]
-        try:
-            ip = ipaddress.ip_address(host)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="source_url resolved to an invalid address") from exc
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise HTTPException(status_code=400, detail="source_url resolves to a private or local network address")
-
-
-def _filename_from_content_disposition(value: str | None) -> str | None:
-    if not value:
-        return None
-    for part in value.split(";"):
-        key, sep, raw = part.strip().partition("=")
-        if sep and key.lower() in {"filename", "filename*"}:
-            filename = raw.strip().strip('"')
-            if "''" in filename:
-                filename = filename.split("''", 1)[1]
-            return Path(filename.replace("\\", "/")).name
-    return None
-
-
-def _extension_for_download(url: str, headers: httpx.Headers) -> tuple[str, str]:
-    content_type = (headers.get("content-type") or "").split(";", 1)[0].strip().lower()
-    header_name = _filename_from_content_disposition(headers.get("content-disposition"))
-    path_name = Path(urlparse(url).path).name
-    filename = header_name or path_name or "download"
-    ext_from_type = _CONTENT_TYPE_EXTENSIONS.get(content_type)
-    ext_from_name = Path(filename).suffix.lower()
-    suffix = ext_from_type or ext_from_name
-    if suffix not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported downloaded content type or extension '{content_type or suffix}'",
-        )
-    stem = Path(filename).stem or "download"
-    safe_stem = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in stem)[:80] or "download"
-    return f"{safe_stem}{suffix}", suffix
+        assert_safe_source_url(raw_url)
+    except SafeUrlFetchError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 async def _download_source_url(raw_url: str, destination: Path) -> tuple[str, str, str]:
-    current_url = raw_url
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
-        for _ in range(MAX_URL_REDIRECTS + 1):
-            _assert_safe_source_url(current_url)
-            async with client.stream("GET", current_url) as response:
-                if response.status_code in {301, 302, 303, 307, 308}:
-                    location = response.headers.get("location")
-                    if not location:
-                        raise HTTPException(status_code=400, detail="source_url redirect missing Location header")
-                    current_url = urljoin(current_url, location)
-                    continue
-                if response.status_code >= 400:
-                    raise HTTPException(status_code=400, detail=f"source_url returned HTTP {response.status_code}")
-                original_name, suffix = _extension_for_download(current_url, response.headers)
-                total = 0
-                async with aiofiles.open(destination, "wb") as f:
-                    async for chunk in response.aiter_bytes(1024 * 1024):
-                        total += len(chunk)
-                        if total > MAX_UPLOAD_SIZE:
-                            destination.unlink(missing_ok=True)
-                            raise HTTPException(
-                                status_code=413,
-                                detail=f"Downloaded file exceeds maximum size of {MAX_UPLOAD_SIZE} bytes.",
-                            )
-                        await f.write(chunk)
-                return original_name, suffix, _safe_source_url(current_url)
-    raise HTTPException(status_code=400, detail="source_url exceeded redirect limit")
+    try:
+        downloaded = await download_source_url(
+            raw_url,
+            destination,
+            allowed_extensions=ALLOWED_EXTENSIONS,
+            max_bytes=MAX_UPLOAD_SIZE,
+        )
+    except SafeUrlFetchError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return downloaded.original_name, downloaded.suffix, downloaded.safe_url
 
 
 def _validate_page_range(page_range: str, page_count: int) -> None:
