@@ -11,13 +11,13 @@ import json
 import shutil
 import tempfile
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
+from app.agent_contract import ConversionOptionsModel as AgentConversionOptions
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -65,41 +65,6 @@ MAX_READ_CHARS = 100_000
 
 _db_session_factory = async_session_factory
 _db_tables_ready = False
-
-
-@dataclass(frozen=True)
-class AgentConversionOptions:
-    """Common conversion knobs exposed to CLI and MCP callers.
-
-    ``extra_options`` is the escape hatch for less common GUI query parameters
-    so agent tools stay small while still preserving full backend reach.
-    """
-
-    output_format: str = "markdown"
-    converter_cls: str | None = None
-    engine_override: str | None = None
-    conversion_profile: str | None = None
-    use_llm: bool = False
-    llm_provider: str | None = None
-    llm_model: str | None = None
-    image_handling_mode: str = "extraction"
-    allow_cloud_vlm: bool = False
-    force_ocr: bool = False
-    paginate_output: bool = False
-    disable_image_extraction: bool = False
-    page_range: str | None = None
-    lang: str | None = None
-    audio_output_mode: str | None = None
-    audio_model: str | None = None
-    audio_vocabulary: str | None = None
-    audio_context: str | None = None
-    audio_low_confidence_threshold: float | None = None
-    audio_word_timestamps: bool = False
-    disable_multiprocessing: bool = False
-    strip_existing_ocr: bool = False
-    redo_inline_math: bool = False
-    debug: bool = False
-    extra_options: dict[str, Any] = field(default_factory=dict)
 
 
 def parse_extra_options(items: list[str] | None) -> dict[str, Any]:
