@@ -800,6 +800,7 @@ class TaskManager:
         result_text = result.get("text", "")
         images = result.get("images", {})
         metadata = result.get("metadata") or {}
+        assets = result.get("assets") or []
         # Only persist the image-understanding sidecar (a small list); drop any
         # large/binary metadata the renderer may have returned.
         result_metadata = {
@@ -809,6 +810,8 @@ class TaskManager:
             result_metadata["engine"] = metadata["engine"]
         if metadata.get("probe_result"):
             result_metadata["probe_result"] = metadata["probe_result"]
+        if metadata.get("mixed_engine_segments"):
+            result_metadata["mixed_engine_segments"] = metadata["mixed_engine_segments"]
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
         output_format = config.get("output_format", "markdown")
         original_name = config.get("original_name", "output")

@@ -440,3 +440,96 @@ class TestExecutionBackendRouting:
         assert chosen is tm._backend
 
 
+# ---------------------------------------------------------------------------
+# _finalize_job metadata persistence (UCM-004.2 / UCM-004.4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_persists_mixed_engine_segments_and_assets(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """UCM-004.2/4: _finalize_job must persist mixed_engine_segments and asset list."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'final.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "33333333-3333-4333-8333-333333333333"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="mixed.pdf",
+            original_name="mixed.pdf",
+            status="pending",
+            input_format="pdf",
+            output_format="markdown",
+            config_json='{"output_format": "markdown", "original_name": "mixed.pdf"}',
+        ))
+        await session.commit()
+
+    segments = [
+        {
+            "pages": [1, 2],
+            "page_range": "1-2",
+            "requested_engine": "liteparse_pdf",
+            "actual_engine": "liteparse_pdf",
+            "reasons": ["strong extractable text layer"],
+            "fallback_chain": ["liteparse_pdf", "marker_pdf"],
+            "fallback_reason": None,
+        },
+        {
+            "pages": [3],
+            "page_range": "3",
+            "requested_engine": "marker_pdf",
+            "actual_engine": "marker_pdf",
+            "reasons": ["scan likelihood is high"],
+            "fallback_chain": [],
+            "fallback_reason": None,
+        },
+    ]
+    assets = [
+        {"name": "sheets/Sheet1.csv", "media_type": "text/csv", "path": str(tmp_path / "Sheet1.csv")},
+    ]
+    result_payload = {
+        "text": "# Mixed\n\nbody",
+        "extension": "md",
+        "images": {},
+        "metadata": {
+            "engine": {"engine": "mixed_pdf", "label": "Mixed PDF routing"},
+            "probe_result": {"page_count": 3},
+            "mixed_engine_segments": segments,
+            "assets": assets,
+        },
+    }
+    config = {"output_format": "markdown", "original_name": "mixed.pdf"}
+
+    tm = TaskManager(max_workers=1)
+    try:
+        await tm._finalize_job(job_id, result_payload, config)
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row.status == "completed"
+        metadata = json.loads(row.result_metadata_json)
+        assert metadata["mixed_engine_segments"] == segments
+        assert metadata["engine"] == {"engine": "mixed_pdf", "label": "Mixed PDF routing"}
+        assert metadata["probe_result"] == {"page_count": 3}
+
+    await engine.dispose()
+
+
