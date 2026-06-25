@@ -459,10 +459,15 @@ async def test_agent_api_converts_same_file_without_clobbering_previous_output(t
         options=AgentConversionOptions(output_format="markdown"),
     )
     second_path = Path(second["output"]["text_path"])
+    second_manifest = Path(second["output"]["manifest_path"])
 
     assert first_path != second_path
     assert first_path.read_text(encoding="utf-8") == "sentinel"
     assert "| alpha | 1 |" in second_path.read_text(encoding="utf-8")
+    assert second_manifest.is_file()
+    manifest = json.loads(second_manifest.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "marker.output_manifest.v1"
+    assert manifest["output"]["text_path"] == str(second_path.resolve())
 
 
 @pytest.mark.asyncio
@@ -602,6 +607,7 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
             assert converted["ok"] is True
             assert converted["truncated"] is True
             assert converted["metadata"]["engine"]["engine"] == "text_data"
+            assert Path(converted["output"]["manifest_path"]).is_file()
 
             read_response = await session.call_tool(
                 "marker_read_output",

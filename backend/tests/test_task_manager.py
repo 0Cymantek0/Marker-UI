@@ -570,7 +570,13 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
             status="pending",
             input_format="pdf",
             output_format="markdown",
-            config_json='{"output_format": "markdown", "original_name": "mixed.pdf"}',
+            config_json=json.dumps(
+                {
+                    "output_format": "markdown",
+                    "original_name": "mixed.pdf",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
         ))
         await session.commit()
 
@@ -609,7 +615,11 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
         },
         "assets": assets,
     }
-    config = {"output_format": "markdown", "original_name": "mixed.pdf"}
+    config = {
+        "output_format": "markdown",
+        "original_name": "mixed.pdf",
+        "output_dir": str(tmp_path / "out"),
+    }
 
     tm = TaskManager(max_workers=1)
     try:
@@ -624,6 +634,9 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
         assert metadata["mixed_engine_segments"] == segments
         assert metadata["engine"] == {"engine": "mixed_pdf", "label": "Mixed PDF routing"}
         assert metadata["probe_result"] == {"page_count": 3}
+        assert Path(metadata["manifest_path"]).is_file()
+        manifest = json.loads(Path(metadata["manifest_path"]).read_text(encoding="utf-8"))
+        assert manifest["schema_version"] == "marker.output_manifest.v1"
         # UCM-004.4: bytes-backed assets must be written to disk and recorded.
         assert metadata["assets"]
         asset_entry = metadata["assets"][0]

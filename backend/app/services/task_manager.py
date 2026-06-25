@@ -38,12 +38,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
-import aiofiles
 from fastapi import Request
 from sse_starlette.event import ServerSentEvent
 
 from app.database import async_session_factory
 from app.models.job import ConversionJob
+from app.services.output_writer import write_conversion_output
 from app.services.job_transport import (
     JobEnvelope,
     QueueTransport,
@@ -892,9 +892,7 @@ class TaskManager:
                 return
 
         result_text = result.get("text", "")
-        images = result.get("images", {})
         metadata = result.get("metadata") or {}
-        assets = result.get("assets") or []
         # Only persist the image-understanding sidecar (a small list); drop any
         # large/binary metadata the renderer may have returned.
         result_metadata = {
@@ -912,9 +910,6 @@ class TaskManager:
         local_filepath = config.get("local_filepath")
         output_dir = config.get("output_dir")
 
-        ext_map = {"markdown": "md", "json": "json", "html": "html", "chunks": "json"}
-        extension = ext_map.get(output_format, "md")
-
         # Determine target base directory
         if output_dir:
             target_dir = Path(output_dir)
@@ -923,90 +918,21 @@ class TaskManager:
         else:
             target_dir = Path("data/output")
 
-        target_dir.mkdir(parents=True, exist_ok=True)
-
-        # We save as a directory if images are extracted OR non-image assets
-        # are produced (e.g. spreadsheet/archive CSV sidecars).
-        has_images = bool(images) and not config.get("disable_image_extraction", False)
-        has_assets = bool(assets)
-
-        if has_images or has_assets:
-            if output_dir or local_filepath:
-                stem = Path(original_name).stem
-                job_output_dir = target_dir / stem
-            else:
-                job_output_dir = target_dir / job_id
-
-            job_output_dir.mkdir(parents=True, exist_ok=True)
-
-            # Save the main document
-            doc_name = f"{Path(original_name).stem}.{extension}"
-            doc_path = job_output_dir / doc_name
-            async with aiofiles.open(doc_path, "w", encoding="utf-8") as f:
-                await f.write(result_text)
-
-            # Save extracted images
-            for img_name, img in images.items():
-                img_path = job_output_dir / img_name
-                try:
-                    if hasattr(img, "save"):
-                        img.save(img_path)
-                    else:
-                        img_path.write_bytes(img)
-                except Exception as e:
-                    logger.error("Failed to save image %s: %s", img_name, e)
-
-            # Persist non-image sidecar assets (UCM-004.4). Each asset dict is
-            # the transport shape from conversion.result.asset_to_dict and may
-            # carry either ``data`` bytes or a PIL ``pil`` object. We record
-            # the resolved path + media type so downstream manifests list them.
-            written_assets: list[dict[str, Any]] = []
-            for asset in assets:
-                if not isinstance(asset, dict):
-                    continue
-                name = str(asset.get("name") or "").strip()
-                if not name:
-                    continue
-                # Normalize any platform separators so nested paths resolve.
-                relative = Path(name.replace("\\", "/"))
-                asset_path = job_output_dir / relative
-                asset_path.parent.mkdir(parents=True, exist_ok=True)
-                payload = asset.get("data")
-                pil = asset.get("pil")
-                try:
-                    if pil is not None and hasattr(pil, "save"):
-                        pil.save(asset_path)
-                    elif isinstance(payload, (bytes, bytearray)):
-                        asset_path.write_bytes(payload)
-                    else:
-                        continue
-                except Exception as exc:
-                    logger.error("Failed to save asset %s: %s", name, exc)
-                    continue
-                written_assets.append(
-                    {
-                        "name": name,
-                        "relative_path": str(relative).replace("\\", "/"),
-                        "path": str(asset_path.resolve()),
-                        "media_type": asset.get("media_type") or "application/octet-stream",
-                    }
-                )
-            if written_assets:
-                result_metadata["assets"] = written_assets
-                result_metadata_json = json.dumps(result_metadata)
-
-            final_path = job_output_dir
-        else:
-            if output_dir or local_filepath:
-                stem = Path(original_name).stem
-                doc_path = target_dir / f"{stem}.{extension}"
-            else:
-                doc_path = target_dir / f"{job_id}.{extension}"
-
-            async with aiofiles.open(doc_path, "w", encoding="utf-8") as f:
-                await f.write(result_text)
-
-            final_path = doc_path
+        written = write_conversion_output(
+            result,
+            source_name=original_name or job_id,
+            output_base=target_dir,
+            output_format=output_format,
+            conversion_config=config,
+            layout="directory_if_assets",
+            disable_image_extraction=bool(config.get("disable_image_extraction", False)),
+            job_id=job_id,
+            source_url=config.get("source_url"),
+        )
+        if written.asset_entries:
+            result_metadata["assets"] = written.asset_entries
+        result_metadata["manifest_path"] = str(written.manifest_path.resolve())
+        result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
 
         async with async_session_factory() as session:
             from sqlalchemy import update
@@ -1019,7 +945,7 @@ class TaskManager:
                     status="completed",
                     result_text=result_text,
                     result_metadata_json=result_metadata_json,
-                    result_path=str(final_path),
+                    result_path=str(written.final_path),
                     progress=100,
                     completed_at=datetime.now(timezone.utc),
                 )
