@@ -43,6 +43,7 @@ Optimizes token usage and third-party API costs:
 ## Key Features
 
 - **Drag-and-Drop Zone**: Intuitive React 19 interface supporting multiple simultaneous file uploads.
+- **CLI & MCP Server**: Headless conversion for Codex, Claude Code, Gemini CLI, OpenCode, Antigravity, and other MCP clients. Agents can plan, convert, and page through outputs without a GUI.
 - **Live Execution Console**: Watch stages progress (`Extracting Text`, `Running Layout Models`, `OCR Processing`) in real-time, streamed via Server-Sent Events (SSE).
 - **Onboarding Page**: Clear, real-time download and speed progress indicators during the first-time setup of local neural weights.
 - **System Maintenance**: Built-in self-healing checkers to verify weight file integrity and reset pipelines.
@@ -64,6 +65,7 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Converting Documents & Formats](docs/usage/convert-documents.md)
 - [Supported Output Formats](docs/usage/output-formats.md)
 - [Using Local Absolute Paths](docs/usage/local-file-paths.md)
+- [CLI and MCP Agent Tools](docs/usage/cli-and-mcp.md)
 - [LLM Refinement Options](docs/usage/llm-refinement.md)
 - [Image Understanding](docs/usage/image-understanding.md)
 - [Vision Model Provider Configuration](docs/configuration/vlm-providers.md)

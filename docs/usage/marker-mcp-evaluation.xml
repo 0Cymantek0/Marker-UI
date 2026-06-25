@@ -1,0 +1,42 @@
+<evaluation>
+  <qa_pair>
+    <question>You need to convert a local CSV named C:\path\to\scores.csv, inspect only a short preview first, then continue reading if the response is truncated. Which exact ordered MCP tools should you use? Answer as comma-separated tool names.</question>
+    <answer>marker_plan_conversion, marker_convert_file, marker_read_output</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>You submitted a long PDF conversion asynchronously and received a job id. Which tool should you poll until the job reaches completed, failed, or cancelled? Answer with the exact tool name.</question>
+    <answer>marker_get_job_status</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>You need to confirm available engines, then submit a long conversion job, then page the saved output after completion. Which exact ordered MCP tools should you use? Answer as comma-separated tool names.</question>
+    <answer>marker_list_capabilities, marker_submit_job, marker_get_job_status, marker_read_output</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>A user asks whether configured provider secrets are present, but you must not reveal API keys. Which MCP tool lists settings with sensitive values masked? Answer with the exact tool name.</question>
+    <answer>marker_list_settings</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>You need to read one persisted setting named openai_api_key while preserving secret masking. Which MCP tool should you call? Answer with the exact tool name.</question>
+    <answer>marker_get_setting</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>A conversion response returns truncated=true and next_offset=20000. Which tool and offset should be used for the next page? Answer in the form tool:offset.</question>
+    <answer>marker_read_output:20000</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>A user provides ftp://example.com/file.pdf as source_url. Based on Marker MCP safety rules, should the conversion URL be accepted or rejected? Answer accepted or rejected.</question>
+    <answer>rejected</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>For cloud image understanding, which boolean parameter must remain false unless the user explicitly permits sending image crops to a configured cloud VLM provider? Answer with the exact parameter name.</question>
+    <answer>allow_cloud_vlm</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>You want MCP HTTP reachable from 0.0.0.0. Which environment variable must be set so the server requires bearer authentication? Answer with the exact variable name.</question>
+    <answer>MARKER_MCP_AUTH_TOKEN</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>You need to verify registered tools and run the deterministic TSV conversion smoke check from an MCP client. Which tool should you call? Answer with the exact tool name.</question>
+    <answer>marker_self_test</answer>
+  </qa_pair>
+</evaluation>

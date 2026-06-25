@@ -13,6 +13,8 @@ Marker UI backend is configured using standard environment variables. You can se
 | `MARKER_DEBUG` | Enables verbose FastAPI debugging and stack traces. | `false` |
 | `MARKER_MAX_UPLOAD_SIZE_MB` | Maximum file size allowed for uploads (in Megabytes). | `100` |
 | `MARKER_DATABASE_URL` | SQLAlchemy connection URL for database persistence. | `sqlite+aiosqlite:///data/marker_ui.db` |
+| `MARKER_PRELOAD_MODELS` | Preload Marker models at worker startup when `true`; disable for lightweight CLI/MCP startup with `false`. | `true` |
+| `MARKER_MCP_AUTH_TOKEN` | Bearer token required when MCP Streamable HTTP binds to any non-loopback host. Localhost stdio and loopback HTTP do not require it. | unset |
 
 ---
 
