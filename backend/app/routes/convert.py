@@ -23,7 +23,7 @@ from starlette.background import BackgroundTask
 import aiofiles
 import httpx
 
-from app.core.config import UPLOAD_DIR, OUTPUT_DIR
+from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
 from app.models.job import ConversionJob
@@ -39,10 +39,13 @@ ALLOWED_EXTENSIONS = {
     ".mp4", ".mov", ".mkv", ".webm", ".avi",
     ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp"
 }
-MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 MAX_PAGE_RANGE_PAGES = 500
 HARD_MAX_PAGE_RANGE_PAGES = 2000
 MAX_URL_REDIRECTS = 5
+
+# MAX_UPLOAD_SIZE is imported from app.core.config so the upload + source_url
+# download paths share a single source of truth driven by
+# MARKER_MAX_UPLOAD_SIZE_MB.
 
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 

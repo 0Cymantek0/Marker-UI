@@ -106,6 +106,28 @@ class TestUploadSizeLimit:
             assert resp.status_code == 413
             assert "exceeds maximum size" in resp.json()["detail"]
 
+    @pytest.mark.asyncio
+    async def test_max_upload_size_env_override_takes_effect(self, monkeypatch: pytest.MonkeyPatch):
+        """UCM-004.3: MARKER_MAX_UPLOAD_SIZE_MB must drive the enforced limit at import time."""
+        import importlib
+
+        import app.core.config as cfg_mod
+
+        monkeypatch.setenv("MARKER_MAX_UPLOAD_SIZE_MB", "1")
+        importlib.reload(cfg_mod)
+        try:
+            # 1 MB expressed in bytes
+            assert cfg_mod.MAX_UPLOAD_SIZE == 1 * 1024 * 1024
+
+            # convert.py must read this value from config (single source of truth).
+            import app.routes.convert as convert_mod
+            importlib.reload(convert_mod)
+            assert convert_mod.MAX_UPLOAD_SIZE == cfg_mod.MAX_UPLOAD_SIZE
+        finally:
+            monkeypatch.delenv("MARKER_MAX_UPLOAD_SIZE_MB", raising=False)
+            importlib.reload(cfg_mod)
+            importlib.reload(convert_mod)
+
 
 # ---------------------------------------------------------------------------
 # Streaming / successful upload
