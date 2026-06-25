@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import agent_api
+from app.errors import OutputExistsError
 from app.main import _app_state
 from app.agent_api import AgentConversionOptions, convert_document, plan_conversion, read_output, self_test
 from app.database import Base
@@ -472,7 +473,7 @@ async def test_agent_api_explicit_output_path_refuses_existing_file(tmp_path: Pa
     output_path.parent.mkdir()
     output_path.write_text("sentinel", encoding="utf-8")
 
-    with pytest.raises(FileExistsError):
+    with pytest.raises(OutputExistsError):
         await convert_document(
             local_file_path=str(source),
             output_path=str(output_path),
@@ -481,6 +482,26 @@ async def test_agent_api_explicit_output_path_refuses_existing_file(tmp_path: Pa
         )
 
     assert output_path.read_text(encoding="utf-8") == "sentinel"
+
+
+@pytest.mark.asyncio
+async def test_agent_api_explicit_output_path_raises_typed_output_exists_error(tmp_path: Path):
+    """UCM-002: existing output path raises OutputExistsError with stable code."""
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\n", encoding="utf-8")
+    output_path = tmp_path / "out" / "fixed.md"
+    output_path.parent.mkdir()
+    output_path.write_text("sentinel", encoding="utf-8")
+
+    with pytest.raises(OutputExistsError) as exc_info:
+        await convert_document(
+            local_file_path=str(source),
+            output_path=str(output_path),
+            max_chars=5000,
+            options=AgentConversionOptions(output_format="markdown"),
+        )
+    assert exc_info.value.code == "OUTPUT_EXISTS"
+    assert exc_info.value.exit_code == 11
 
 
 def test_marker_pyproject_exposes_console_entrypoint():

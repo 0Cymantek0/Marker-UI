@@ -24,6 +24,15 @@ from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
 from app.database import async_session_factory, create_tables
+from app.errors import (
+    InputNotFoundError,
+    MarkerError,
+    OutputExistsError,
+    OutputWriteFailedError,
+    UnsupportedFormatError,
+    UsageError,
+    from_exception,
+)
 from app.models.job import ConversionJob
 from app.models.settings import Setting
 from app.routes.convert import (
@@ -242,7 +251,7 @@ async def plan_conversion(
     else:
         effective_filename = filename or (source_path.name if source_path else "")
         if not effective_filename:
-            raise ValueError("Provide local_file_path or filename")
+            raise UsageError("Provide local_file_path or filename")
         plan = service.plan_by_metadata(effective_filename, size, config)
         effective_size = size
     return {
@@ -269,7 +278,7 @@ async def convert_document(
     options: AgentConversionOptions | None = None,
 ) -> dict[str, Any]:
     if bool(local_file_path) == bool(source_url):
-        raise ValueError("Provide exactly one of local_file_path or source_url")
+        raise UsageError("Provide exactly one of local_file_path or source_url")
     options = options or AgentConversionOptions()
     max_chars = max(0, min(max_chars, MAX_READ_CHARS))
     output_base = Path(output_dir).expanduser() if output_dir else OUTPUT_DIR / "agent"
@@ -311,7 +320,7 @@ async def submit_conversion_job(
     options: AgentConversionOptions | None = None,
 ) -> dict[str, Any]:
     if bool(local_file_path) == bool(source_url):
-        raise ValueError("Provide exactly one of local_file_path or source_url")
+        raise UsageError("Provide exactly one of local_file_path or source_url")
     await _ensure_db_tables()
     options = options or AgentConversionOptions()
     job_id = str(uuid.uuid4())
@@ -427,7 +436,10 @@ async def _convert_resolved_path(
 def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHARS) -> dict[str, Any]:
     output_path = Path(path).expanduser()
     if not output_path.is_file():
-        raise FileNotFoundError(f"Output file not found: {path}")
+        raise InputNotFoundError(
+            f"Output file not found: {path}",
+            details={"path": str(path)},
+        )
     offset = max(0, offset)
     limit = max(1, min(limit, MAX_READ_CHARS))
     text_chars = _count_text_chars(output_path)
@@ -509,7 +521,10 @@ async def get_job_status(
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
         if not job:
-            raise FileNotFoundError(f"Job not found: {job_id}")
+            raise InputNotFoundError(
+                f"Job not found: {job_id}",
+                details={"job_id": job_id},
+            )
         data = _job_to_dict(job, include_result_text=include_result_text, max_chars=max_chars)
     if data["status"] not in {"completed", "failed", "cancelled"}:
         live = _task_manager_status(job_id)
@@ -527,7 +542,10 @@ async def delete_job(job_id: str, *, delete_files: bool = True) -> dict[str, Any
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
         if not job:
-            raise FileNotFoundError(f"Job not found: {job_id}")
+            raise InputNotFoundError(
+                f"Job not found: {job_id}",
+                details={"job_id": job_id},
+            )
         cleanup_paths = _job_cleanup_paths(job) if delete_files else []
         await _cancel_job_best_effort(job_id)
         await session.delete(job)
@@ -554,7 +572,10 @@ async def get_setting(key: str) -> dict[str, Any]:
     async with _db_session_factory() as session:
         row = await _get_setting_row(session, key)
         if not row:
-            raise FileNotFoundError(f"Setting not found: {key}")
+            raise InputNotFoundError(
+                f"Setting not found: {key}",
+                details={"key": key},
+            )
         return _setting_to_dict(row)
 
 
@@ -819,10 +840,15 @@ async def _prepare_runtime(config: dict[str, Any]) -> None:
 
 def _validate_supported_path(path: Path) -> None:
     if not path.is_file():
-        raise FileNotFoundError(f"Input file not found: {path}")
+        raise InputNotFoundError(
+            f"Input file not found: {path}",
+            hint="Check the path or pass --source-url for remote files.",
+            details={"path": str(path)},
+        )
     if path.suffix.lower() not in ALLOWED_EXTENSIONS:
-        raise ValueError(
-            f"Unsupported file type '{path.suffix}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        raise UnsupportedFormatError(
+            f"Unsupported file type '{path.suffix}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            details={"suffix": path.suffix, "allowed": sorted(ALLOWED_EXTENSIONS)},
         )
 
 
@@ -830,14 +856,30 @@ def _validate_page_range_safe(page_range: str, page_count: int) -> None:
     try:
         _validate_page_range(page_range, page_count)
     except HTTPException as exc:
-        raise ValueError(str(exc.detail)) from exc
+        raise UsageError(str(exc.detail), details={"page_range": page_range}) from exc
 
 
 async def _download_source_url_safe(raw_url: str, destination: Path) -> tuple[str, str, str]:
     try:
         return await _download_source_url(raw_url, destination)
     except HTTPException as exc:
-        raise ValueError(str(exc.detail)) from exc
+        detail = str(exc.detail)
+        lowered = detail.lower()
+        if "private or local network" in lowered or "could not be resolved" in lowered:
+            from app.errors import UrlUnsafeError
+
+            raise UrlUnsafeError(detail, details={"url": raw_url}) from exc
+        if "credentials" in lowered or "must be an http" in lowered:
+            from app.errors import UrlUnsafeError
+
+            raise UrlUnsafeError(detail, details={"url": raw_url}) from exc
+        if "exceeds maximum size" in lowered or "exceeded redirect" in lowered:
+            from app.errors import NetworkBlockedError
+
+            raise NetworkBlockedError(detail, details={"url": raw_url}) from exc
+        from app.errors import NetworkFetchFailedError
+
+        raise NetworkFetchFailedError(detail, details={"url": raw_url}, retryable=True) from exc
 
 
 def _save_result(
@@ -852,7 +894,11 @@ def _save_result(
     if output_path:
         text_path = output_path
         if text_path.exists():
-            raise FileExistsError(f"Output file already exists: {text_path}")
+            raise OutputExistsError(
+                f"Output file already exists: {text_path}",
+                hint="Pass --overwrite to replace it, or choose a different output path.",
+                details={"path": str(text_path)},
+            )
     else:
         text_path = _next_available_output_path(
             output_base / f"{_safe_stem(source_name)}.{extension}"
@@ -880,7 +926,7 @@ def _next_available_output_path(path: Path) -> Path:
         candidate = path.with_name(f"{path.stem}-{index}{path.suffix}")
         if not candidate.exists():
             return candidate
-    raise FileExistsError(f"No available output filename for: {path}")
+    raise OutputWriteFailedError(f"No available output filename for: {path}", details={"path": str(path)})
 
 
 def _safe_stem(name: str) -> str:

@@ -31,6 +31,7 @@ from app.agent_api import (
     self_test,
     submit_conversion_job,
 )
+from app.errors import ERROR_SCHEMA_VERSION, MarkerError, from_exception
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,13 +115,55 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         parser.print_help()
         return 2
-    except Exception as exc:  # noqa: BLE001 - CLI must present clean errors
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
+    except SystemExit:
+        raise
+    except BaseException as exc:  # noqa: BLE001 - CLI must present clean errors
+        return _handle_cli_error(exc, args)
+
+
+def _handle_cli_error(exc: BaseException, args: argparse.Namespace | None) -> int:
+    """Convert any exception to a stable CLI failure (exit code + output).
+
+    JSON mode emits one ``marker.error.v1`` object on stderr. Non-JSON mode
+    prints ``Error: <message>`` on stderr. Stack traces only when ``--debug``.
+    """
+
+    as_json = bool(getattr(args, "json", False))
+    debug = bool(getattr(args, "cli_debug", False))
+    err = from_exception(exc)
+    payload = err.to_payload()
+    if as_json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False, default=str), file=sys.stderr)
+    else:
+        hint = f" Hint: {err.hint}" if err.hint else ""
+        print(f"Error: {err.message}{hint}", file=sys.stderr)
+    if debug:
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+    return err.exit_code
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="marker", description="Marker CLI and MCP server")
+    parser.add_argument(
+        "--debug",
+        dest="cli_debug",
+        action="store_true",
+        help="Print stack traces on error (global)",
+    )
+    parser.add_argument(
+        "--quiet",
+        dest="cli_quiet",
+        action="store_true",
+        help="Suppress non-error diagnostics (global)",
+    )
+    parser.add_argument(
+        "--verbose",
+        dest="cli_verbose",
+        action="store_true",
+        help="Emit extra diagnostic messages (global)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     caps = sub.add_parser("capabilities", help="List supported formats, engines, and MCP tools")

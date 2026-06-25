@@ -39,6 +39,7 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 desktop.ini
+nul
 
 # Runtime data
 data/
