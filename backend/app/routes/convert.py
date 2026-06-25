@@ -256,7 +256,7 @@ def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | No
         return None
     metadata = {
         key: parsed[key]
-        for key in ("engine", "probe_result", "mixed_engine_segments")
+        for key in ("engine", "probe_result", "mixed_engine_segments", "assets")
         if key in parsed and parsed[key]
     }
     return metadata or None

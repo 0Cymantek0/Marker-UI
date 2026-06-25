@@ -647,7 +647,13 @@ def _job_to_dict(
         "result_chars": len(result_text),
         "conversion_metadata": {
             key: metadata[key]
-            for key in ("engine", "probe_result", "mixed_engine_segments", "image_understanding")
+            for key in (
+                "engine",
+                "probe_result",
+                "mixed_engine_segments",
+                "image_understanding",
+                "assets",
+            )
             if key in metadata and metadata[key]
         },
     }
@@ -854,6 +860,7 @@ def _save_result(
     text_path.parent.mkdir(parents=True, exist_ok=True)
     text_path.write_text(text, encoding="utf-8")
     asset_paths = _write_images(result.get("images") or {}, text_path)
+    asset_paths.extend(_write_assets(result.get("assets") or [], text_path))
     return {
         "text_path": str(text_path.resolve()),
         "asset_paths": asset_paths,
@@ -898,5 +905,50 @@ def _write_images(images: dict[str, Any], text_path: Path) -> list[str]:
             target.write_bytes(value)
         else:
             target.write_text(str(value), encoding="utf-8")
+        paths.append(str(target.resolve()))
+    return paths
+
+
+def _write_assets(assets: list[Any], text_path: Path) -> list[str]:
+    """Persist non-image sidecar assets (UCM-004.4).
+
+    Mirrors TaskManager._finalize_job asset handling for the synchronous
+    convert_document path. Each entry may be the transport dict produced by
+    conversion.result.asset_to_dict (with ``data`` bytes or a PIL ``pil``
+    object) or the raw Asset dataclass.
+    """
+    if not assets:
+        return []
+    asset_dir = text_path.with_suffix("")
+    asset_dir = asset_dir.parent / f"{asset_dir.name}_assets"
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[str] = []
+    for raw_asset in assets:
+        if isinstance(raw_asset, dict):
+            name = str(raw_asset.get("name") or "").strip()
+            payload = raw_asset.get("data")
+            pil = raw_asset.get("pil")
+            media_type = raw_asset.get("media_type") or "application/octet-stream"
+        else:
+            name = getattr(raw_asset, "name", "") or ""
+            payload = getattr(raw_asset, "data", None)
+            pil = getattr(raw_asset, "pil", None)
+            media_type = getattr(raw_asset, "media_type", None) or "application/octet-stream"
+        if not name:
+            continue
+        relative = Path(name.replace("\\", "/"))
+        target = asset_dir / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if pil is not None and hasattr(pil, "save"):
+                pil.save(target)
+            elif isinstance(payload, (bytes, bytearray)):
+                target.write_bytes(payload)
+            else:
+                # Skip asset payloads that cannot be materialised (e.g. when a
+                # transport dict crossed a process boundary without bytes).
+                continue
+        except OSError:
+            continue
         paths.append(str(target.resolve()))
     return paths

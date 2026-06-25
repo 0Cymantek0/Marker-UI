@@ -80,10 +80,35 @@ class UniversalConversionResult:
     assets: list[Asset] = field(default_factory=list)
 
     def to_legacy_envelope(self) -> dict[str, Any]:
-        """Convert to the dict shape ``_finalize_job`` expects."""
+        """Convert to the dict shape ``_finalize_job`` expects.
+
+        ``assets`` is carried as a list of lightweight dicts so the envelope
+        remains JSON-serialisable across the process worker boundary (PIL
+        images are still transported through ``images``). Finalizers and the
+        output writer persist the underlying bytes/PIL objects from
+        ``self.assets`` directly when present in-process.
+        """
         return {
             "text": self.text,
             "extension": self.extension,
             "images": self.images,
             "metadata": self.metadata,
+            "assets": [asset_to_dict(asset) for asset in self.assets],
         }
+
+
+def asset_to_dict(asset: Asset) -> dict[str, Any]:
+    """Serialise an ``Asset`` to a transport-safe dict.
+
+    Bytes payloads are preserved so single-process converters can write them
+    to disk in the finalizer. PIL payloads are kept as objects in-process and
+    represented by their name when crossing the worker boundary (PIL images
+    are not picklable in every build); the process worker path transports PIL
+    through ``images`` instead.
+    """
+    return {
+        "name": asset.name,
+        "media_type": asset.media_type,
+        "data": asset.data if asset.data is not None else None,
+        "pil": asset.pil,
+    }

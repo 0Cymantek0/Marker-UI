@@ -501,7 +501,7 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
         },
     ]
     assets = [
-        {"name": "sheets/Sheet1.csv", "media_type": "text/csv", "path": str(tmp_path / "Sheet1.csv")},
+        {"name": "sheets/Sheet1.csv", "media_type": "text/csv", "data": b"col\nval\n"},
     ]
     result_payload = {
         "text": "# Mixed\n\nbody",
@@ -513,6 +513,7 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
             "mixed_engine_segments": segments,
             "assets": assets,
         },
+        "assets": assets,
     }
     config = {"output_format": "markdown", "original_name": "mixed.pdf"}
 
@@ -529,6 +530,12 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
         assert metadata["mixed_engine_segments"] == segments
         assert metadata["engine"] == {"engine": "mixed_pdf", "label": "Mixed PDF routing"}
         assert metadata["probe_result"] == {"page_count": 3}
+        # UCM-004.4: bytes-backed assets must be written to disk and recorded.
+        assert metadata["assets"]
+        asset_entry = metadata["assets"][0]
+        assert asset_entry["name"] == "sheets/Sheet1.csv"
+        assert asset_entry["media_type"] == "text/csv"
+        assert Path(asset_entry["path"]).read_bytes() == b"col\nval\n"
 
     await engine.dispose()
 

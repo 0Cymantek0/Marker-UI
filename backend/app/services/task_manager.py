@@ -831,10 +831,12 @@ class TaskManager:
 
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # We save as a directory if images are extracted
+        # We save as a directory if images are extracted OR non-image assets
+        # are produced (e.g. spreadsheet/archive CSV sidecars).
         has_images = bool(images) and not config.get("disable_image_extraction", False)
+        has_assets = bool(assets)
 
-        if has_images:
+        if has_images or has_assets:
             if output_dir or local_filepath:
                 stem = Path(original_name).stem
                 job_output_dir = target_dir / stem
@@ -859,6 +861,45 @@ class TaskManager:
                         img_path.write_bytes(img)
                 except Exception as e:
                     logger.error("Failed to save image %s: %s", img_name, e)
+
+            # Persist non-image sidecar assets (UCM-004.4). Each asset dict is
+            # the transport shape from conversion.result.asset_to_dict and may
+            # carry either ``data`` bytes or a PIL ``pil`` object. We record
+            # the resolved path + media type so downstream manifests list them.
+            written_assets: list[dict[str, Any]] = []
+            for asset in assets:
+                if not isinstance(asset, dict):
+                    continue
+                name = str(asset.get("name") or "").strip()
+                if not name:
+                    continue
+                # Normalize any platform separators so nested paths resolve.
+                relative = Path(name.replace("\\", "/"))
+                asset_path = job_output_dir / relative
+                asset_path.parent.mkdir(parents=True, exist_ok=True)
+                payload = asset.get("data")
+                pil = asset.get("pil")
+                try:
+                    if pil is not None and hasattr(pil, "save"):
+                        pil.save(asset_path)
+                    elif isinstance(payload, (bytes, bytearray)):
+                        asset_path.write_bytes(payload)
+                    else:
+                        continue
+                except Exception as exc:
+                    logger.error("Failed to save asset %s: %s", name, exc)
+                    continue
+                written_assets.append(
+                    {
+                        "name": name,
+                        "relative_path": str(relative).replace("\\", "/"),
+                        "path": str(asset_path.resolve()),
+                        "media_type": asset.get("media_type") or "application/octet-stream",
+                    }
+                )
+            if written_assets:
+                result_metadata["assets"] = written_assets
+                result_metadata_json = json.dumps(result_metadata)
 
             final_path = job_output_dir
         else:
