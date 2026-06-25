@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import threading
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -252,6 +254,7 @@ class TestBackendSelection:
         try:
             assert tm.backend_name == "thread"
             assert tm._backend.is_process is False
+            assert tm._backend.max_workers == 1
         finally:
             tm.shutdown(wait=False)
 
@@ -269,6 +272,89 @@ class TestBackendSelection:
                 # The thread backend returns a tracked future.
                 assert "j-thread" in tm._tasks
             finally:
+                tm.shutdown(wait=False)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(prev_loop)
+
+    def test_cancelled_thread_future_cleanup_does_not_raise(self):
+        prev_loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        class _CancelledBackend:
+            is_process = False
+            name = "thread"
+
+            def __init__(self):
+                self.future = loop.create_future()
+                self.future.cancel()
+
+            def submit(self, run_job, job_id, filepath, config, marker_service):
+                return self.future
+
+            def supports_job(self, job_id):
+                return False
+
+            def shutdown(self, wait=False):
+                pass
+
+        try:
+            backend = _CancelledBackend()
+            tm = TaskManager(max_workers=1, backend=backend)
+            try:
+                tm.submit_job("j-cancelled", "/tmp/x", {"llm_provider": None}, object())
+                loop.run_until_complete(asyncio.sleep(0))
+                assert "j-cancelled" not in tm._tasks
+            finally:
+                tm.shutdown(wait=False)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(prev_loop)
+
+    def test_second_marker_job_reports_waiting_on_one_wide_marker_pool(self):
+        from app.conversion.result import ConverterPlan
+
+        prev_loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        started = threading.Event()
+        release = threading.Event()
+
+        class _FakeConversionService:
+            def plan(self, filepath, config):
+                return ConverterPlan(
+                    engine="marker_pdf",
+                    label="Marker PDF",
+                    confidence=1.0,
+                    reasons=[],
+                    needs_marker_models=True,
+                    needs_gpu=True,
+                    execution_backend="marker_worker",
+                )
+
+            def convert_file(self, filepath, config):
+                if filepath == "/tmp/first.pdf":
+                    started.set()
+                    release.wait(timeout=5)
+                return {"text": "ok", "extension": "md", "images": {}}
+
+        try:
+            tm = TaskManager(max_workers=2)
+            try:
+                svc = _FakeConversionService()
+                tm.submit_job("first", "/tmp/first.pdf", {"llm_provider": None}, svc)
+                assert started.wait(timeout=2)
+
+                tm.submit_job("second", "/tmp/second.pdf", {"llm_provider": None}, svc)
+                status = tm.get_status("second")
+
+                assert status["status"] == "processing"
+                assert status["message"] == "Waiting for marker model worker..."
+                assert tm._job_started["second"] is False
+            finally:
+                release.set()
+                loop.run_until_complete(asyncio.sleep(0.1))
                 tm.shutdown(wait=False)
         finally:
             loop.close()
@@ -306,7 +392,11 @@ class TestWorkerEventDispatch:
         assert task_manager._job_status_text["w-pid"] == "Loading..."
 
     def test_error_event_marks_job_failed_and_writes_db(self, task_manager: TaskManager):
-        with patch.object(task_manager, "_fail_job", new_callable=AsyncMock):
+        with patch.object(
+            task_manager,
+            "_fail_job",
+            new=MagicMock(return_value="fail-coro"),
+        ):
             with patch.object(task_manager, "_run_async") as mock_run:
                 task_manager._proc_configs["w-err"] = {"output_format": "markdown"}
                 ev = WorkerEvent(
@@ -320,7 +410,11 @@ class TestWorkerEventDispatch:
 
     def test_result_event_finalizes_and_marks_completed(self, task_manager: TaskManager):
         payload = {"text": "# md", "extension": "md", "images": {}}
-        with patch.object(task_manager, "_finalize_job", new_callable=AsyncMock):
+        with patch.object(
+            task_manager,
+            "_finalize_job",
+            new=MagicMock(return_value="finalize-coro"),
+        ):
             with patch.object(task_manager, "_run_async") as mock_run:
                 task_manager._proc_configs["w-ok"] = {"output_format": "markdown"}
                 ev = WorkerEvent(type=WorkerEventType.result, job_id="w-ok", payload=payload)
@@ -400,9 +494,9 @@ class TestExecutionBackendRouting:
         chosen = tm._select_backend("/tmp/doc.pdf", {}, fake_cs)
         assert chosen is tm._backend
 
-    def test_thread_backend_always_uses_primary(self):
-        # When the primary backend is the thread backend (single-process), the
-        # CPU pool is never selected even for cpu_thread plans.
+    def test_cpu_plan_routes_to_cpu_backend_on_thread_config(self):
+        # In single-process mode, CPU-safe work still uses the CPU pool so it
+        # can run in parallel while marker jobs queue on the one-wide marker pool.
         from app.conversion.result import ConverterPlan
         from app.services.task_manager import TaskManager
 
@@ -423,8 +517,8 @@ class TestExecutionBackendRouting:
         fake_cs.plan.return_value = cpu_plan
 
         chosen = tm._select_backend("/tmp/report.docx", {}, fake_cs)
-        assert chosen is tm._backend
-        fake_cs.plan.assert_not_called()
+        assert chosen is tm._cpu_backend
+        fake_cs.plan.assert_called_once_with("/tmp/report.docx", {})
 
     def test_planning_failure_falls_back_to_primary(self):
         from app.services.task_manager import TaskManager

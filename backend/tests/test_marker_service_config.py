@@ -6,10 +6,14 @@ so they are silently dropped unless marker_service.convert_file re-injects them
 after the parser runs. These tests pin that behaviour.
 """
 
+import threading
+import time
+
 from marker.config.parser import ConfigParser
 
 from app.services.marker_service import (
     IMAGE_UNDERSTANDING_CONFIG_KEYS,
+    MarkerService,
     build_marker_options,
 )
 
@@ -78,6 +82,71 @@ def test_build_marker_options_preserves_custom_keys():
     assert opts["ocr_engine"] == "surya"
     assert opts["vlm_batch_size"] == 16
     assert opts["ocr_min_text_density"] == 0.6
+
+
+def test_marker_service_serializes_shared_model_conversions(monkeypatch):
+    """Shared marker/surya predictors are stateful, so convert calls must not overlap."""
+    import app.services.marker_service as marker_service_mod
+    import marker.output as marker_output
+
+    active = 0
+    max_active = 0
+    active_lock = threading.Lock()
+    start_gate = threading.Barrier(2)
+
+    class _FakeRendered:
+        metadata = {}
+
+    class _FakeConverter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __call__(self, filepath):
+            nonlocal active, max_active
+            with active_lock:
+                active += 1
+                max_active = max(max_active, active)
+            time.sleep(0.1)
+            with active_lock:
+                active -= 1
+            return _FakeRendered()
+
+    def fake_text_from_rendered(rendered):
+        return "ok", "md", {}
+
+    monkeypatch.setattr(
+        marker_service_mod,
+        "_CONVERTERS",
+        {"PdfConverter": _FakeConverter},
+    )
+    monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
+
+    service = MarkerService()
+    service._initialized = True
+    service._model_dict = {"recognition": object()}
+    errors = []
+
+    def run_one(path):
+        try:
+            start_gate.wait()
+            return service.convert_file(
+                path,
+                {"converter_cls": "PdfConverter", "output_format": "markdown"},
+            )
+        except Exception as exc:  # noqa: BLE001 - asserted below from parent thread
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=run_one, args=("one.pdf",)),
+        threading.Thread(target=run_one, args=("two.pdf",)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert max_active == 1
 
 
 def test_reinjection_restores_custom_keys_after_config_parser():

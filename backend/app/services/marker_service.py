@@ -418,6 +418,7 @@ class MarkerService:
         self._model_dict: dict[str, Any] | None = None
         self._initialized = False
         self._lock = threading.Lock()
+        self._conversion_lock = threading.Lock()
 
     def initialize(self, device: str | None = None) -> None:
         from app.services.gpu_service import gpu_service
@@ -487,25 +488,26 @@ class MarkerService:
             if _k in options:
                 config_dict[_k] = options[_k]
 
-        converter = converter_cls(
-            config=config_dict,
-            artifact_dict=self._model_dict,
-            processor_list=config_parser.get_processors(),
-            renderer=_select_renderer(options, config_parser.get_renderer()),
-            llm_service=config_parser.get_llm_service(),
-        )
+        with self._conversion_lock:
+            converter = converter_cls(
+                config=config_dict,
+                artifact_dict=self._model_dict,
+                processor_list=config_parser.get_processors(),
+                renderer=_select_renderer(options, config_parser.get_renderer()),
+                llm_service=config_parser.get_llm_service(),
+            )
 
-        rendered = run_with_oom_retry(
-            lambda: converter(str(filepath)),
-            self._model_dict,
-        )
-        text, ext, images = text_from_rendered(rendered)
+            rendered = run_with_oom_retry(
+                lambda: converter(str(filepath)),
+                self._model_dict,
+            )
+            text, ext, images = text_from_rendered(rendered)
 
-        metadata = getattr(rendered, "metadata", None) or {}
-        image_understanding_meta = _collect_image_understanding_meta(converter)
-        if image_understanding_meta:
-            metadata = dict(metadata)
-            metadata["image_understanding"] = image_understanding_meta
+            metadata = getattr(rendered, "metadata", None) or {}
+            image_understanding_meta = _collect_image_understanding_meta(converter)
+            if image_understanding_meta:
+                metadata = dict(metadata)
+                metadata["image_understanding"] = image_understanding_meta
 
         return {
             "text": text,

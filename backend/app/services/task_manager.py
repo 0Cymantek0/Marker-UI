@@ -112,16 +112,33 @@ class ExecutorBackend(ABC):
 
 
 class ThreadExecutorBackend(ExecutorBackend):
-    """In-process thread pool. Preserves the original single-node behavior."""
+    """In-process thread pool for one resource class."""
 
     name = "thread"
     is_process = False
 
-    def __init__(self, task_manager: TaskManager, max_workers: int = 2) -> None:
+    def __init__(
+        self,
+        task_manager: TaskManager,
+        max_workers: int = 2,
+        *,
+        resource_name: str = "thread",
+        queued_message: str = "Waiting for conversion worker...",
+    ) -> None:
         self._task_manager = task_manager
-        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._max_workers = max(1, max_workers)
+        self.resource_name = resource_name
+        self.queued_message = queued_message
+        self._executor = ThreadPoolExecutor(
+            max_workers=self._max_workers,
+            thread_name_prefix=f"conversion-{resource_name}",
+        )
         # job_id -> asyncio Future returned by loop.run_in_executor.
         self._futures: dict[str, asyncio.Future[Any]] = {}
+
+    @property
+    def max_workers(self) -> int:
+        return self._max_workers
 
     def submit(
         self,
@@ -132,13 +149,14 @@ class ThreadExecutorBackend(ExecutorBackend):
         marker_service: Any,
     ) -> Optional[asyncio.Future]:
         loop = asyncio.get_event_loop()
+
+        def _run_with_start() -> Any:
+            self._task_manager._mark_job_started(job_id)
+            return run_job(job_id, filepath, config, marker_service)
+
         future = loop.run_in_executor(
             self._executor,
-            run_job,
-            job_id,
-            filepath,
-            config,
-            marker_service,
+            _run_with_start,
         )
         self._futures[job_id] = future
         return future
@@ -245,17 +263,27 @@ class TaskManager:
         max_workers: int = 2,
         backend: ExecutorBackend | None = None,
     ) -> None:
-        # Pluggable executor. Default = thread backend (single-process, original
-        # behavior). Caller passes a ProcessExecutorBackend on multi-GPU boxes.
-        self._backend: ExecutorBackend = backend or ThreadExecutorBackend(self, max_workers=max_workers)
-        # CPU thread pool for office/text jobs when a process (marker) backend is
-        # the primary. These jobs never need marker models or a GPU, so routing
-        # them here avoids spawning (or warming) a GPU process worker. When the
-        # primary backend is already the thread backend this pool stays idle and
-        # everything runs through self._backend as before.
-        self._cpu_backend: ExecutorBackend = ThreadExecutorBackend(self, max_workers=max_workers)
+        # Pluggable marker executor. Default single-process marker jobs get one
+        # worker because marker/surya predictors keep mutable per-job cache state.
+        # Safe CPU-only converters use the separate CPU pool below.
+        self._backend: ExecutorBackend = backend or ThreadExecutorBackend(
+            self,
+            max_workers=1,
+            resource_name="marker",
+            queued_message="Waiting for marker model worker...",
+        )
+        # CPU thread pool for office/text/archive jobs. These never need marker
+        # models or a GPU, so they can use system parallelism without touching
+        # the unsafe shared marker predictor state.
+        self._cpu_backend: ExecutorBackend = ThreadExecutorBackend(
+            self,
+            max_workers=max_workers,
+            resource_name="cpu",
+            queued_message="Waiting for CPU conversion worker...",
+        )
 
         self._tasks: dict[str, asyncio.Future[Any]] = {}
+        self._smooth_tasks: dict[str, asyncio.Task[Any]] = {}
         self._progress: dict[str, int] = {}
         self._pids: dict[str, int] = {}
 
@@ -266,6 +294,10 @@ class TaskManager:
         # True once a real tqdm-derived progress value has arrived for the job;
         # disables the synthetic crawl so the two don't fight.
         self._job_has_real_progress: dict[str, bool] = {}
+        # False while a ThreadPoolExecutor future exists but has not started
+        # running yet. This lets status APIs report honest queue/wait messages.
+        self._job_started: dict[str, bool] = {}
+        self._job_queued_message: dict[str, str] = {}
         # Jobs run via the process backend: terminal status recorded by the drain
         # thread so get_status() can resolve them without an asyncio future.
         self._proc_jobs: dict[str, str] = {}
@@ -273,6 +305,9 @@ class TaskManager:
         self._proc_configs: dict[str, dict[str, Any]] = {}
         # job_id -> provider_id whose live model hot-swap we must clear on done.
         self._job_providers: dict[str, Optional[str]] = {}
+        # job_id -> backend that owns its Future, so cleanup/cancel works for
+        # both marker and CPU pools.
+        self._job_backends: dict[str, ExecutorBackend] = {}
 
         self._lock = threading.Lock()
         self._drain_stop = threading.Event()
@@ -413,6 +448,10 @@ class TaskManager:
             self._job_status_text[job_id] = label
         self._job_has_real_progress[job_id] = True
 
+    def _mark_job_started(self, job_id: str) -> None:
+        """Called by thread backends when a queued job begins executing."""
+        self._job_started[job_id] = True
+
     # ------------------------------------------------------------------
     # Submit
     # ------------------------------------------------------------------
@@ -430,9 +469,13 @@ class TaskManager:
         self._job_status_text[job_id] = "Starting conversion..."
         self._job_start_time[job_id] = time.time()
         self._job_has_real_progress[job_id] = False
+        self._job_started[job_id] = False
         self._job_providers[job_id] = config.get("llm_provider")
 
         backend = self._select_backend(filepath, config, marker_service)
+        queued_message = getattr(backend, "queued_message", "Waiting for conversion worker...")
+        self._job_queued_message[job_id] = queued_message
+        self._job_status_text[job_id] = queued_message
         future = backend.submit(
             self._run_conversion,
             job_id,
@@ -444,14 +487,32 @@ class TaskManager:
         if future is not None:
             # Thread backend: track the asyncio future for status + done cleanup.
             self._tasks[job_id] = future
+            self._job_backends[job_id] = backend
 
             def _on_done(fut: asyncio.Future[Any]) -> None:
+                if fut.cancelled():
+                    self._tasks.pop(job_id, None)
+                    self._job_backends.pop(job_id, None)
+                    self._job_started.pop(job_id, None)
+                    self._job_queued_message.pop(job_id, None)
+                    smooth = self._smooth_tasks.pop(job_id, None)
+                    if smooth is not None:
+                        smooth.cancel()
+                    if isinstance(backend, ThreadExecutorBackend):
+                        backend.pop(job_id)
+                    return
                 exc = fut.exception()
                 if exc:
                     logger.error("Job %s failed: %s", job_id, exc)
                 self._tasks.pop(job_id, None)
-
-            future.add_done_callback(_on_done)
+                self._job_backends.pop(job_id, None)
+                self._job_started.pop(job_id, None)
+                self._job_queued_message.pop(job_id, None)
+                smooth = self._smooth_tasks.pop(job_id, None)
+                if smooth is not None:
+                    smooth.cancel()
+                if isinstance(backend, ThreadExecutorBackend):
+                    backend.pop(job_id)
 
             # Synthetic crawl only until real tqdm-derived progress kicks in.
             async def _smooth_progress():
@@ -466,7 +527,10 @@ class TaskManager:
                     if current < 12:
                         self._progress[job_id] = current + 1
 
-            asyncio.get_event_loop().create_task(_smooth_progress())
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                self._smooth_tasks[job_id] = loop.create_task(_smooth_progress())
+            future.add_done_callback(_on_done)
         else:
             # Process backend: no in-process future; record config for the drain
             # thread's finalize/fail path and mark the job as worker-owned.
@@ -477,14 +541,12 @@ class TaskManager:
     def _select_backend(self, filepath: str, config: dict[str, Any], conversion_service: Any) -> ExecutorBackend:
         """Pick the executor for a job based on its ConversionPlan.
 
-        Only the process backend splits routing: cpu_thread plans go to the CPU
-        thread pool, marker_worker plans go to the GPU process workers. When the
-        primary backend is the thread backend, all jobs use it (original behavior).
-        Planning failures fall back to the primary backend so a bad plan never
+        cpu_thread plans go to the CPU pool; marker_worker plans go to the
+        primary marker backend. In the default single-process mode that marker
+        backend is intentionally one-wide, while CPU work can run in parallel.
+        Planning failures fall back to the marker backend so a bad plan never
         blocks a job.
         """
-        if not self._backend.is_process:
-            return self._backend
         try:
             plan = conversion_service.plan(filepath, config)
             if plan.execution_backend == "cpu_thread":
@@ -540,6 +602,22 @@ class TaskManager:
                 "failed" if proc_state == "failed" else "processing"
             )
 
+        if future is not None and not future.done() and not self._job_started.get(job_id, True):
+            message = self._job_queued_message.get(job_id, "Waiting for conversion worker...")
+            progress = max(progress, 10)
+            logs = self._job_logs.get(job_id, [])
+            start_time = self._job_start_time.get(job_id)
+            elapsed = int(time.time() - start_time) if start_time else 0
+            return {
+                "job_id": job_id,
+                "status": "processing",
+                "progress": progress,
+                "message": message,
+                "logs": logs,
+                "elapsed": elapsed,
+                "eta": 0,
+            }
+
         message = self._job_status_text.get(job_id, "Processing document...")
         if message in ("Starting conversion...", "Loading marker converters...") and progress > 10:
             if progress >= 90:
@@ -593,7 +671,15 @@ class TaskManager:
             cancelled = future.cancel()
             self._progress.pop(job_id, None)
             self._tasks.pop(job_id, None)
+            backend = self._job_backends.pop(job_id, None)
+            if isinstance(backend, ThreadExecutorBackend):
+                backend.pop(job_id)
             self._job_has_real_progress.pop(job_id, None)
+            self._job_started.pop(job_id, None)
+            self._job_queued_message.pop(job_id, None)
+            smooth = self._smooth_tasks.pop(job_id, None)
+            if smooth is not None:
+                smooth.cancel()
         elif proc_state is not None:
             cancelled = True
             with self._lock:
@@ -601,6 +687,11 @@ class TaskManager:
                 self._proc_configs.pop(job_id, None)
             self._progress.pop(job_id, None)
             self._job_has_real_progress.pop(job_id, None)
+            self._job_started.pop(job_id, None)
+            self._job_queued_message.pop(job_id, None)
+            smooth = self._smooth_tasks.pop(job_id, None)
+            if smooth is not None:
+                smooth.cancel()
 
         if cancelled:
             pid = self._pids.pop(job_id, None)
@@ -612,6 +703,9 @@ class TaskManager:
     def shutdown(self, wait: bool = False) -> None:
         """Stop the drain thread and release the executor/pool."""
         self._drain_stop.set()
+        for smooth in list(self._smooth_tasks.values()):
+            smooth.cancel()
+        self._smooth_tasks.clear()
         self._cpu_backend.shutdown(wait=wait)
         # Unblock a blocking drain by pushing the stop sentinel.
         transport = getattr(self._backend, "transport", None)
