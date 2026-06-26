@@ -155,7 +155,7 @@ class ScopedStaticTokenVerifier:
 
 class RestAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if not rest_auth_enabled() or request.url.path == "/api/health":
+        if not rest_auth_enabled() or request.url.path in {"/api/health", "/api/healthz", "/api/readyz", "/api/version"}:
             return await call_next(request)
         principal = principal_from_authorization(request.headers.get("Authorization"), surface="rest")
         if principal is None:

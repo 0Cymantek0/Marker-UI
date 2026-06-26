@@ -16,8 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
 from app.database import create_tables
 from app.models.audit import AuditEvent  # noqa: F401 - register table metadata
-from app.routes import convert, settings, models, capabilities
+from app.routes import convert, settings, models, capabilities, diagnostics
 from app.security.auth import RestAuthMiddleware
+from app.services.telemetry import RequestContextMiddleware
 from app.services.marker_service import MarkerService
 from app.services.task_manager import TaskManager
 from app.services.conversion_service import ConversionService
@@ -259,8 +260,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RestAuthMiddleware)
+app.add_middleware(RequestContextMiddleware)
 
 # Routers
+app.include_router(diagnostics.router)
 app.include_router(convert.router)
 app.include_router(settings.router)
 app.include_router(models.router)
