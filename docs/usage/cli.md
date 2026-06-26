@@ -32,6 +32,7 @@ marker self-test --json
 Global flags go before the command:
 
 - `--debug`: print stack traces for unexpected errors.
+- `--version`: print version and commit metadata, then exit.
 - `--quiet`: suppress non-error diagnostics.
 - `--verbose`: emit extra diagnostics.
 - `--no-input`: refuse interactive prompts.

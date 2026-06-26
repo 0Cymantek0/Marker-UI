@@ -9,11 +9,19 @@ import sys
 from pathlib import Path
 
 
-def _run_cli(args: list[str], *, cwd: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+def _run_cli(
+    args: list[str],
+    *,
+    cwd: Path,
+    tmp_path: Path,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["MARKER_DATABASE_URL"] = f"sqlite+aiosqlite:///{tmp_path / 'marker-cli-v1.db'}"
     env.pop("MARKER_WORKSPACE_ROOTS", None)
     env.pop("MARKER_OUTPUT_ROOT", None)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [sys.executable, "-m", "app.cli", *args],
         cwd=cwd,
@@ -36,6 +44,22 @@ def test_cli_v1_help_lists_new_groups_and_global_flags(tmp_path: Path):
     assert "server" in completed.stdout
     assert "--no-input" in completed.stdout
     assert "--dry-run" in completed.stdout
+    assert "--version" in completed.stdout
+
+
+def test_cli_version_flag_uses_environment_version_metadata(tmp_path: Path):
+    backend_root = Path(__file__).resolve().parents[1]
+
+    completed = _run_cli(
+        ["--version"],
+        cwd=backend_root,
+        tmp_path=tmp_path,
+        extra_env={"MARKER_VERSION": "7.6.5-test", "MARKER_COMMIT_SHA": "abc123"},
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == "marker 7.6.5-test (abc123)"
+    assert completed.stderr == ""
 
 
 def test_schema_export_and_mcp_init_config_emit_stable_json(tmp_path: Path):

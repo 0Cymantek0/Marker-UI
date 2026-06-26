@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -184,6 +185,12 @@ def _handle_cli_error(exc: BaseException, args: argparse.Namespace | None) -> in
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = MarkerArgumentParser(prog="marker", description="Marker CLI and MCP server")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=_version_text(),
+        help="Print version and exit",
+    )
     parser.add_argument(
         "--debug",
         dest="cli_debug",
@@ -407,6 +414,13 @@ def _build_parser() -> argparse.ArgumentParser:
     mcp_self.add_argument("--no-conversion", action="store_true", help="Skip real TSV conversion smoke test")
     mcp_self.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     return parser
+
+
+def _version_text() -> str:
+    version = os.getenv("MARKER_VERSION", "0.1.0")
+    commit = os.getenv("MARKER_COMMIT_SHA", "").strip()
+    suffix = f" ({commit})" if commit else ""
+    return f"marker {version}{suffix}"
 
 
 def _handle_settings(args: argparse.Namespace) -> int:

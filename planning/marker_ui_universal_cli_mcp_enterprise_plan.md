@@ -2053,9 +2053,13 @@ Implement:
 - `server` client mode skeleton [Done]
 - `mcp init-config` [Done]
 - `--quiet`, `--verbose`, `--debug`, `--no-input`, `--yes`, `--dry-run` [Done]
+- `--version` [Done]
 - stable JSON errors [Done]
 
 Done: existing flat commands remain compatible while grouped jobs/output/config/schema/server/mcp commands are available; batch converts sequentially, records per-item typed errors, honors `--resume` for explicit output paths, and returns exit 10 on partial failure. Parse-time and runtime JSON errors use stable Marker error payloads.
+
+Final audit note (2026-06-26): added top-level `--version` backed by
+`MARKER_VERSION` and `MARKER_COMMIT_SHA`, with subprocess coverage and CLI docs.
 
 Acceptance:
 
