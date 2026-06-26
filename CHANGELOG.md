@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+### Added
+- Enterprise CLI/MCP documentation split into focused CLI, MCP, security, deployment, schema, error, and output-manifest references.
+- Agent-facing structured error, JSON schema, output manifest, policy, auth, audit, observability, durable queue, mixed-PDF safety, and evaluation-harness documentation.
+
+### Changed
+- `docs/usage/cli-and-mcp.md` is now a concise quickstart linking to the detailed CLI and MCP guides.
+
 ## [0.2.0] - 2026-06-12
 ### Added
 - Real-time model weight download console showing network speeds and stages.

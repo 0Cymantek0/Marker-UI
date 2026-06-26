@@ -1,0 +1,212 @@
+# MCP Guide
+
+Marker exposes a Model Context Protocol server for agents that need document
+conversion, job history, output paging, and masked settings without using the
+browser. MCP tools are thin wrappers over the same `app.agent_api` surface used
+by the CLI.
+
+## Transports
+
+Local stdio:
+
+```powershell
+python -m app.cli mcp
+```
+
+Loopback Streamable HTTP:
+
+```powershell
+python -m app.cli mcp --transport streamable-http --host 127.0.0.1 --port 8000
+```
+
+Non-loopback Streamable HTTP requires a bearer token:
+
+```powershell
+$env:MARKER_MCP_AUTH_TOKEN="change-this-token"
+python -m app.cli mcp --transport streamable-http --host 0.0.0.0 --port 8000
+```
+
+HTTP clients must send:
+
+```text
+Authorization: Bearer change-this-token
+```
+
+Use TLS at a reverse proxy for remote HTTP. Do not expose the backend directly
+on an untrusted network.
+
+## Client Configs
+
+Codex `.codex/config.toml` using source checkout:
+
+```toml
+[mcp_servers.marker]
+command = "python"
+args = ["-m", "app.cli", "mcp"]
+cwd = "C:\\path\\to\\marker\\backend"
+startup_timeout_sec = 20
+tool_timeout_sec = 600
+enabled = true
+```
+
+Codex with installed package:
+
+```toml
+[mcp_servers.marker]
+command = "marker"
+args = ["mcp"]
+startup_timeout_sec = 20
+tool_timeout_sec = 600
+enabled = true
+```
+
+Claude Code:
+
+```powershell
+claude mcp add --transport stdio marker -- python -m app.cli mcp
+```
+
+Run that command from `C:\path\to\marker\backend`, or put equivalent command and
+working directory in `.mcp.json`.
+
+Gemini CLI `settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "marker": {
+      "command": "python",
+      "args": ["-m", "app.cli", "mcp"],
+      "cwd": "C:\\path\\to\\marker\\backend",
+      "timeout": 600000,
+      "trust": false
+    }
+  }
+}
+```
+
+OpenCode `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "marker": {
+      "type": "local",
+      "command": ["python", "-m", "app.cli", "mcp"],
+      "cwd": "C:\\path\\to\\marker\\backend",
+      "enabled": true
+    }
+  }
+}
+```
+
+Antigravity MCP config:
+
+```json
+{
+  "mcpServers": {
+    "marker": {
+      "command": "python",
+      "args": ["-m", "app.cli", "mcp"],
+      "cwd": "C:\\path\\to\\marker\\backend"
+    }
+  }
+}
+```
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `marker_list_capabilities` / `marker_get_capabilities` | Supported formats, engines, tools, resources, prompts, and options. |
+| `marker_get_health` | Lightweight MCP health check. |
+| `marker_get_version` | Version and contract schema version. |
+| `marker_plan_conversion` | Backward-compatible generic planning. |
+| `marker_plan_local_file` | Plan a local file after workspace policy checks. |
+| `marker_plan_url` | Plan a safe public URL after SSRF checks. |
+| `marker_convert_file` | Backward-compatible generic conversion. |
+| `marker_convert_local_file` | Convert a local file and write manifest-backed output. |
+| `marker_convert_url` | Fetch and convert a safe public URL. |
+| `marker_submit_job` | Backward-compatible generic async submission. |
+| `marker_submit_local_job` | Submit a local-file job. |
+| `marker_submit_url_job` | Submit a URL job. |
+| `marker_read_output` / `marker_read_output_chunk` | Page through long generated text. |
+| `marker_get_output_manifest` | Read a `.marker.json` output manifest. |
+| `marker_list_output_assets` | List manifest asset entries. |
+| `marker_list_jobs` | Page through job history. |
+| `marker_get_job_status` | Inspect one job. |
+| `marker_cancel_job` | Request job cancellation. |
+| `marker_delete_job` | Delete job metadata and optionally files. |
+| `marker_list_settings` | Read masked settings by category. |
+| `marker_get_setting` | Read one masked setting. |
+| `marker_set_setting` | Write one encrypted setting. |
+| `marker_delete_setting` | Delete one setting. |
+| `marker_self_test` | Validate tools, resources, prompts, schemas, and a TSV conversion smoke path. |
+
+Tool annotations mark read-only, destructive, idempotent, and closed-world
+behavior for clients that use MCP planning metadata. Destructive tools are still
+policy-gated server side.
+
+## Resources
+
+| Resource | Purpose |
+|----------|---------|
+| `marker://capabilities` | Capabilities plus tool/resource/prompt names. |
+| `marker://health` | Lightweight health. |
+| `marker://version` | Version and contract schema. |
+| `marker://jobs` | First page of job history. |
+| `marker://jobs/{job_id}` | One job status. |
+| `marker://jobs/{job_id}/manifest` | Completed job manifest. |
+| `marker://jobs/{job_id}/output` | First output text chunk. |
+| `marker://jobs/{job_id}/assets` | Manifest asset entries. |
+| `marker://outputs/{output_id}/manifest` | Manifest for a URL-encoded output path. |
+| `marker://docs/agent-guide` | Safe agent workflow guide. |
+| `marker://docs/options` | Agent option metadata. |
+| `marker://settings` | Masked settings. |
+
+## Agent Workflow
+
+1. Read `marker://capabilities`.
+2. Plan with `marker_plan_local_file` or `marker_plan_url` for PDFs and unknown inputs.
+3. Convert small work with `marker_convert_local_file` or `marker_convert_url`.
+4. Submit long work with `marker_submit_local_job` or `marker_submit_url_job`, then poll `marker_get_job_status`.
+5. Read long output with `marker_read_output_chunk`.
+6. Inspect `.marker.json` manifests before summarizing asset-heavy output.
+7. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.
+
+## Security
+
+MCP uses static bearer tokens for HTTP auth. The implemented scope names are:
+
+- `marker:mcp`
+- `capabilities:read`
+- `jobs:read`
+- `jobs:write`
+- `outputs:read`
+- `settings:read`
+- `settings:write`
+
+Configure token scopes:
+
+```powershell
+$env:MARKER_MCP_AUTH_TOKEN="change-this-token"
+$env:MARKER_MCP_AUTH_SCOPES="marker:mcp capabilities:read jobs:read jobs:write outputs:read"
+```
+
+Settings write/delete tools require `settings:write`. Output tools require
+`outputs:read`. Job mutation requires `jobs:write`.
+
+## Verification
+
+Run local CLI self-test:
+
+```powershell
+python -m app.cli self-test --json
+```
+
+From an MCP client, call `marker_self_test`. It verifies the expected tools,
+resources, prompts, schemas, and a real TSV conversion smoke path.
+
+The read-only MCP usability evaluation lives at
+[`marker-mcp-evaluation.xml`](marker-mcp-evaluation.xml).

@@ -18,12 +18,24 @@ Marker UI backend is configured using standard environment variables. You can se
 | `MARKER_DATABASE_URL` | SQLAlchemy connection URL for database persistence. | `sqlite+aiosqlite:///data/marker_ui.db` |
 | `MARKER_PRELOAD_MODELS` | Preload Marker models at worker startup when `true`; keep lazy for lightweight CLI/MCP startup with `false`. | `false` |
 | `MARKER_MCP_AUTH_TOKEN` | Bearer token required when MCP Streamable HTTP binds to any non-loopback host. Localhost stdio and loopback HTTP do not require it. | unset |
+| `MARKER_MCP_AUTH_SCOPES` | Space- or comma-separated scopes granted to `MARKER_MCP_AUTH_TOKEN`. | all MCP scopes |
+| `MARKER_REST_AUTH_TOKEN` | Enables REST bearer auth for `/api/*` except health/version endpoints. | unset |
+| `MARKER_AUTH_TOKEN` | Legacy alias used as a REST token when `MARKER_REST_AUTH_TOKEN` is unset. | unset |
+| `MARKER_REST_AUTH_SCOPES` | Space- or comma-separated scopes granted to the REST token. | REST scopes |
+| `MARKER_AUTH_TOKENS` | Semicolon-separated static token map such as `token-a=jobs:read outputs:read;token-b=*`. | unset |
+| `MARKER_OIDC_ISSUER` | Reserved OIDC issuer setting. Configured OIDC is rejected until verified JWT support lands. | unset |
+| `MARKER_OIDC_AUDIENCE` | Reserved OIDC audience setting. | unset |
+| `MARKER_OIDC_JWKS_URL` | Reserved OIDC JWKS URL setting. | unset |
+| `MARKER_QUEUE_BACKEND` | Set to `sqlite` to enable durable queue recovery primitives. | unset |
+| `MARKER_ENABLE_METRICS` | Enables `/api/metrics`. | `false` |
+| `MARKER_VERSION` | Version string reported by `/api/version` and MCP version resource. | `0.1.0` or `unknown` |
+| `MARKER_COMMIT_SHA` | Optional commit SHA reported by version metadata. | unset |
 
 ---
 
 ## Removed/Legacy Variables
 
-- **`MARKER_ACCESS_TOKEN`**: Some early draft documentation mentioned this variable for API authentication. It is **not** implemented in the core codebase and has been removed to avoid confusion. If API-level authentication is required, it should be set up at the Nginx reverse proxy layer.
+- **`MARKER_ACCESS_TOKEN`**: Some early draft documentation mentioned this variable for API authentication. It is **not** implemented. Use `MARKER_REST_AUTH_TOKEN`, `MARKER_MCP_AUTH_TOKEN`, `MARKER_AUTH_TOKENS`, or reverse-proxy auth.
 
 ---
 

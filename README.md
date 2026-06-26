@@ -65,7 +65,9 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Converting Documents & Formats](docs/usage/convert-documents.md)
 - [Supported Output Formats](docs/usage/output-formats.md)
 - [Using Local Absolute Paths](docs/usage/local-file-paths.md)
-- [CLI and MCP Agent Tools](docs/usage/cli-and-mcp.md)
+- [CLI and MCP Quickstart](docs/usage/cli-and-mcp.md)
+- [CLI Guide](docs/usage/cli.md)
+- [MCP Guide](docs/usage/mcp.md)
 - [LLM Refinement Options](docs/usage/llm-refinement.md)
 - [Image Understanding](docs/usage/image-understanding.md)
 - [Vision Model Provider Configuration](docs/configuration/vlm-providers.md)
@@ -78,7 +80,13 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Task Queue & Executor Backends](docs/development/task-manager.md)
 - [Database Models & Migrations](docs/development/database.md)
 - [Pytest Verification Suite](docs/development/testing.md)
+- [Deterministic Evaluation Harness](docs/development/evaluation.md)
 - [Environment Variables Reference](docs/configuration/environment-variables.md)
+- [Enterprise Security](docs/enterprise/security.md)
+- [Enterprise Deployment](docs/enterprise/deployment.md)
+- [Agent JSON Schemas](docs/reference/json-schemas.md)
+- [Agent Error Codes](docs/reference/errors.md)
+- [Output Manifest Reference](docs/reference/output-manifest.md)
 
 ---
 
