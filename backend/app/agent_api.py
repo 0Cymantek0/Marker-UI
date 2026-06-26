@@ -23,6 +23,7 @@ from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
 from app.database import async_session_factory, create_tables
 from app.errors import (
+    InputNotAllowedError,
     InputNotFoundError,
     MarkerError,
     UnsupportedFormatError,
@@ -38,7 +39,13 @@ from app.routes.convert import (
 )
 from app.services.conversion_service import ConversionService
 from app.services.marker_service import MarkerService, build_marker_options
-from app.services.output_writer import write_conversion_output
+from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION, write_conversion_output
+from app.services.policy import (
+    assert_local_input_allowed,
+    assert_output_read_allowed,
+    assert_output_write_allowed,
+    output_root,
+)
 from app.services.safe_url_fetcher import SafeUrlFetchError, download_source_url
 from app.utils.secrets import decrypt_value, encrypt_value, is_masked, is_sensitive_key, mask_value
 
@@ -243,7 +250,10 @@ async def convert_document(
         raise UsageError("Provide exactly one of local_file_path or source_url")
     options = options or AgentConversionOptions()
     max_chars = max(0, min(max_chars, MAX_READ_CHARS))
-    output_base = Path(output_dir).expanduser() if output_dir else OUTPUT_DIR / "agent"
+    output_base = Path(output_dir).expanduser() if output_dir else (output_root() or OUTPUT_DIR) / "agent"
+    assert_output_write_allowed(output_base)
+    if output_path:
+        assert_output_write_allowed(Path(output_path).expanduser())
     output_base.mkdir(parents=True, exist_ok=True)
 
     if source_url:
@@ -288,6 +298,8 @@ async def submit_conversion_job(
     job_id = str(uuid.uuid4())
     is_local = False
     source_url_safe: str | None = None
+    if output_dir:
+        assert_output_write_allowed(Path(output_dir).expanduser())
 
     if source_url:
         download_path = UPLOAD_DIR / f"{job_id}.download"
@@ -399,6 +411,7 @@ async def _convert_resolved_path(
 
 def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHARS) -> dict[str, Any]:
     output_path = Path(path).expanduser()
+    _assert_output_read_permitted(output_path)
     if not output_path.is_file():
         raise InputNotFoundError(
             f"Output file not found: {path}",
@@ -736,6 +749,49 @@ def _job_cleanup_paths(job: ConversionJob) -> list[Path]:
     return paths
 
 
+def _assert_output_read_permitted(path: Path) -> None:
+    """Allow output reads only from policy roots or Marker-owned output manifests."""
+
+    assert_output_read_allowed(path)
+    if output_root() is not None:
+        return
+    if _has_marker_output_manifest(path):
+        return
+    raise InputNotAllowedError(
+        f"Output path is not a registered Marker output: {path}",
+        hint="Read a path returned by marker_convert_file or configure MARKER_OUTPUT_ROOT.",
+        details={"path": str(path), "policy": "registered_marker_output"},
+    )
+
+
+def _has_marker_output_manifest(path: Path) -> bool:
+    resolved = path.resolve(strict=False)
+    manifest_path = resolved.with_name(f"{resolved.stem}.marker.json")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(manifest, dict):
+        return False
+    if manifest.get("schema_version") != OUTPUT_MANIFEST_SCHEMA_VERSION:
+        return False
+    output = manifest.get("output")
+    if not isinstance(output, dict):
+        return False
+    allowed = [
+        output.get("text_path"),
+        output.get("final_path"),
+    ]
+    return any(_same_resolved_path(resolved, value) for value in allowed if value)
+
+
+def _same_resolved_path(path: Path, raw: Any) -> bool:
+    try:
+        return path == Path(str(raw)).expanduser().resolve(strict=False)
+    except (OSError, ValueError):
+        return False
+
+
 def _remove_paths(paths: list[Path]) -> list[str]:
     removed: list[str] = []
     for path in paths:
@@ -815,6 +871,7 @@ def _validate_supported_path(path: Path) -> None:
             f"Unsupported file type '{path.suffix}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
             details={"suffix": path.suffix, "allowed": sorted(ALLOWED_EXTENSIONS)},
         )
+    assert_local_input_allowed(path)
 
 
 def _validate_page_range_safe(page_range: str, page_count: int) -> None:

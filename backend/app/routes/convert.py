@@ -22,8 +22,10 @@ import aiofiles
 from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
+from app.errors import InputNotAllowedError
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
+from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
 from app.services.safe_url_fetcher import (
     SafeUrlFetchError,
     assert_safe_source_url,
@@ -300,6 +302,10 @@ async def upload_file(
                 status_code=400,
                 detail=f"Local file not found: {local_filepath}",
             )
+        try:
+            assert_local_input_allowed(path)
+        except InputNotAllowedError as exc:
+            raise HTTPException(status_code=400, detail=exc.message) from exc
         original_name = path.name
         suffix = path.suffix.lower()
         stored_path = str(path)
@@ -437,6 +443,10 @@ async def upload_file(
     if source_url_safe:
         config["source_url"] = source_url_safe
     if output_dir:
+        try:
+            assert_output_write_allowed(Path(output_dir))
+        except InputNotAllowedError as exc:
+            raise HTTPException(status_code=400, detail=exc.message) from exc
         config["output_dir"] = output_dir
 
     if suffix == ".pdf":
@@ -500,6 +510,11 @@ async def plan_conversion(
         config["force_ocr"] = True
     if req.local_filepath:
         path = Path(req.local_filepath)
+        if path.is_absolute() and path.is_file():
+            try:
+                assert_local_input_allowed(path)
+            except InputNotAllowedError as exc:
+                raise HTTPException(status_code=400, detail=exc.message) from exc
         if path.is_absolute() and path.is_file() and path.suffix.lower() == ".pdf":
             probe_result = await asyncio.to_thread(probe_pdf, path)
             config["probe_result"] = probe_result.to_dict()

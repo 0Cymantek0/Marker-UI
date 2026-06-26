@@ -7,11 +7,13 @@ available for multi-client local/remote deployments.
 import ipaddress
 import os
 import secrets
+from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import unquote, urlparse
 
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent_api import (
@@ -33,6 +35,7 @@ from app.agent_api import (
     self_test,
     submit_conversion_job,
 )
+from app.services.policy import scoped_client_workspace_roots
 
 
 class StaticTokenVerifier:
@@ -223,6 +226,7 @@ async def marker_list_capabilities() -> CapabilitiesOutput:
     },
 )
 async def marker_plan_conversion(
+    ctx: Context,
     local_file_path: PathParam = "",
     filename: Annotated[str, Field(description="Filename for metadata-only planning.", examples=["document.pdf"])] = "",
     size: SizeParam = 0,
@@ -245,12 +249,14 @@ async def marker_plan_conversion(
         force_ocr=force_ocr,
         extra_options=parse_extra_options_json(extra_options_json),
     )
-    return await plan_conversion(
-        local_file_path=_none_if_blank(local_file_path),
-        filename=_none_if_blank(filename),
-        size=size,
-        options=options,
-    )
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        return await plan_conversion(
+            local_file_path=_none_if_blank(local_file_path),
+            filename=_none_if_blank(filename),
+            size=size,
+            options=options,
+        )
 
 
 @mcp.tool(
@@ -264,6 +270,7 @@ async def marker_plan_conversion(
     },
 )
 async def marker_convert_file(
+    ctx: Context,
     local_file_path: PathParam = "",
     source_url: UrlParam = "",
     output_dir: DirParam = "",
@@ -378,14 +385,16 @@ async def marker_convert_file(
             **parse_extra_options_json(extra_options_json),
         },
     )
-    return await convert_document(
-        local_file_path=_none_if_blank(local_file_path),
-        source_url=_none_if_blank(source_url),
-        output_dir=_none_if_blank(output_dir),
-        output_path=_none_if_blank(output_path),
-        max_chars=max_chars,
-        options=options,
-    )
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        return await convert_document(
+            local_file_path=_none_if_blank(local_file_path),
+            source_url=_none_if_blank(source_url),
+            output_dir=_none_if_blank(output_dir),
+            output_path=_none_if_blank(output_path),
+            max_chars=max_chars,
+            options=options,
+        )
 
 
 @mcp.tool(
@@ -399,6 +408,7 @@ async def marker_convert_file(
     },
 )
 async def marker_submit_job(
+    ctx: Context,
     local_file_path: PathParam = "",
     source_url: UrlParam = "",
     output_dir: DirParam = "",
@@ -483,12 +493,14 @@ async def marker_submit_job(
             **parse_extra_options_json(extra_options_json),
         },
     )
-    return await submit_conversion_job(
-        local_file_path=_none_if_blank(local_file_path),
-        source_url=_none_if_blank(source_url),
-        output_dir=_none_if_blank(output_dir),
-        options=options,
-    )
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        return await submit_conversion_job(
+            local_file_path=_none_if_blank(local_file_path),
+            source_url=_none_if_blank(source_url),
+            output_dir=_none_if_blank(output_dir),
+            options=options,
+        )
 
 
 @mcp.tool(
@@ -702,6 +714,43 @@ def run(
 def _none_if_blank(value: str) -> str | None:
     cleaned = value.strip()
     return cleaned or None
+
+
+async def _client_workspace_roots(ctx: Context | None) -> list[Path] | None:
+    if ctx is None:
+        return None
+    try:
+        result = await ctx.session.list_roots()
+    except Exception:
+        return None
+    roots = getattr(result, "roots", None)
+    if roots is None:
+        return None
+    paths: list[Path] = []
+    for root in roots:
+        path = _path_from_root_uri(getattr(root, "uri", None))
+        if path is not None:
+            paths.append(path)
+    return paths
+
+
+def _path_from_root_uri(uri: Any) -> Path | None:
+    if uri is None:
+        return None
+    parsed = urlparse(str(uri))
+    if parsed.scheme and parsed.scheme != "file":
+        return None
+    if parsed.scheme == "file":
+        raw_path = unquote(parsed.path or "")
+        if parsed.netloc:
+            raw_path = f"//{parsed.netloc}{raw_path}"
+    else:
+        raw_path = unquote(str(uri))
+    if os.name == "nt" and raw_path.startswith("/") and len(raw_path) >= 3 and raw_path[2] == ":":
+        raw_path = raw_path[1:]
+    if not raw_path:
+        return None
+    return Path(raw_path).expanduser()
 
 
 def _is_loopback_host(host: str) -> bool:

@@ -134,6 +134,7 @@ def test_cli_exposes_agent_productivity_knobs_directly(tmp_path: Path):
 def test_read_output_reads_bounded_chunk_without_full_file_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     output = tmp_path / "large.md"
     output.write_text("0123456789" * 100, encoding="utf-8")
+    monkeypatch.setenv("MARKER_OUTPUT_ROOT", str(tmp_path))
 
     def fail_read_text(*args, **kwargs):
         raise AssertionError("read_output must not load full file with Path.read_text")
