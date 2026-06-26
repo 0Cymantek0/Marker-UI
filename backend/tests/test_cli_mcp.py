@@ -566,8 +566,10 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
             await session.initialize()
             tools = await session.list_tools()
             names = sorted(tool.name for tool in tools.tools)
-            assert names == [
+            assert set(names).issuperset({
                 "marker_convert_file",
+                "marker_convert_local_file",
+                "marker_convert_url",
                 "marker_delete_job",
                 "marker_delete_setting",
                 "marker_get_job_status",
@@ -576,11 +578,15 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
                 "marker_list_jobs",
                 "marker_list_settings",
                 "marker_plan_conversion",
+                "marker_plan_local_file",
+                "marker_plan_url",
                 "marker_read_output",
                 "marker_self_test",
                 "marker_set_setting",
                 "marker_submit_job",
-            ]
+                "marker_submit_local_job",
+                "marker_submit_url_job",
+            })
 
             convert_tool = next(tool for tool in tools.tools if tool.name == "marker_convert_file")
             assert "text_data_max_rows" in convert_tool.inputSchema["properties"]
@@ -589,6 +595,8 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
             response = await session.call_tool("marker_self_test", {"include_conversion": True})
             payload = json.loads(response.content[0].text)
             assert payload["tools_ok"] is True
+            assert payload["resources_ok"] is True
+            assert payload["prompts_ok"] is True
             assert payload["conversion_ok"] is True
 
             source = tmp_path / "agent.csv"

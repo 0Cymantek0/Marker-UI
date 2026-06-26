@@ -9,13 +9,14 @@ import os
 import secrets
 from pathlib import Path
 from typing import Annotated, Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.agent_contract import CONTRACT_SCHEMA_VERSION
 from app.agent_api import (
     AgentConversionOptions,
     MAX_READ_CHARS,
@@ -35,7 +36,10 @@ from app.agent_api import (
     self_test,
     submit_conversion_job,
 )
+from app.mcp_prompts import register_mcp_prompts
+from app.mcp_resources import register_mcp_resources
 from app.services.policy import scoped_client_workspace_roots
+from app.services.safe_url_fetcher import assert_safe_source_url
 
 
 class StaticTokenVerifier:
@@ -73,6 +77,17 @@ class PlanOutput(MarkerOutputModel):
     mixed_engine_segments: list[dict[str, Any]] | None = Field(default=None, description="Mixed PDF segment plan when applicable.", examples=[[{"engine": "marker"}]])
 
 
+class HealthOutput(MarkerOutputModel):
+    service: str = Field(description="Service identifier.", examples=[SERVICE_NAME])
+    status: str = Field(description="Health status.", examples=["ok"])
+
+
+class VersionOutput(MarkerOutputModel):
+    service: str = Field(description="Service identifier.", examples=[SERVICE_NAME])
+    version: str = Field(description="Package/build version when available.", examples=["unknown"])
+    contract_schema_version: str = Field(description="Agent contract schema version.", examples=[CONTRACT_SCHEMA_VERSION])
+
+
 class ConvertOutput(MarkerOutputModel):
     ok: bool = Field(description="True when conversion succeeded.", examples=[True])
     source: dict[str, Any] = Field(description="Source path/name or URL.", examples=[{"name": "scores.csv"}])
@@ -102,6 +117,16 @@ class ReadOutputResult(MarkerOutputModel):
     next_offset: int | None = Field(default=None, description="Offset for next page.", examples=[20000])
 
 
+class ManifestToolOutput(MarkerOutputModel):
+    manifest_path: str | None = Field(default=None, description="Resolved manifest path when file-backed.", examples=["C:\\path\\to\\document.marker.json"])
+    manifest: dict[str, Any] = Field(description="Output manifest JSON.", examples=[{"schema_version": "marker.output_manifest.v1"}])
+
+
+class AssetsToolOutput(MarkerOutputModel):
+    manifest_path: str | None = Field(default=None, description="Resolved manifest path when file-backed.", examples=["C:\\path\\to\\document.marker.json"])
+    assets: list[dict[str, Any]] = Field(description="Manifest asset entries.", examples=[[{"name": "image.png"}]])
+
+
 class JobsOutput(MarkerOutputModel):
     page: int = Field(description="Current page.", examples=[1])
     page_size: int = Field(description="Jobs per page.", examples=[20])
@@ -125,6 +150,12 @@ class DeleteJobOutput(MarkerOutputModel):
         description="Resolved paths of files/directories removed during deletion. Empty when none were removed.",
         examples=[["C:\\path\\to\\output.md"]],
     )
+
+
+class CancelJobOutput(MarkerOutputModel):
+    status: str = Field(description="Cancellation status.", examples=["deleted"])
+    job_id: str = Field(description="Cancelled job id.", examples=["11111111-1111-4111-8111-111111111111"])
+    cancelled: bool = Field(description="True when cancel/delete request was accepted.", examples=[True])
 
 
 class SettingsOutput(MarkerOutputModel):
@@ -152,6 +183,12 @@ class SelfTestOutput(MarkerOutputModel):
     notes: list[str] = Field(description="Diagnostic notes.", examples=[[]])
     registered_tools: list[str] | None = Field(default=None, description="Registered MCP tool names.", examples=[["marker_convert_file"]])
     tools_ok: bool | None = Field(default=None, description="Tool registration check result.", examples=[True])
+    expected_resources: list[str] | None = Field(default=None, description="Expected MCP resource/template URIs.", examples=[["marker://capabilities"]])
+    registered_resources: list[str] | None = Field(default=None, description="Registered MCP resource/template URIs.", examples=[["marker://capabilities"]])
+    resources_ok: bool | None = Field(default=None, description="Resource registration check result.", examples=[True])
+    expected_prompts: list[str] | None = Field(default=None, description="Expected MCP prompt names.", examples=[["convert_for_rag"]])
+    registered_prompts: list[str] | None = Field(default=None, description="Registered MCP prompt names.", examples=[["convert_for_rag"]])
+    prompts_ok: bool | None = Field(default=None, description="Prompt registration check result.", examples=[True])
 
 
 PathParam = Annotated[str, Field(description="Local file path. Example: C:\\path\\to\\document.pdf.", examples=["C:\\path\\to\\document.pdf"])]
@@ -198,6 +235,69 @@ mcp = FastMCP(
     stateless_http=True,
 )
 
+MCP_V1_TOOL_NAMES = [
+    "marker_list_capabilities",
+    "marker_get_capabilities",
+    "marker_self_test",
+    "marker_get_health",
+    "marker_get_version",
+    "marker_plan_conversion",
+    "marker_plan_local_file",
+    "marker_plan_url",
+    "marker_convert_file",
+    "marker_convert_local_file",
+    "marker_convert_url",
+    "marker_submit_job",
+    "marker_submit_local_job",
+    "marker_submit_url_job",
+    "marker_read_output",
+    "marker_read_output_chunk",
+    "marker_get_output_manifest",
+    "marker_list_output_assets",
+    "marker_list_jobs",
+    "marker_get_job_status",
+    "marker_cancel_job",
+    "marker_delete_job",
+    "marker_list_settings",
+    "marker_get_setting",
+    "marker_set_setting",
+    "marker_delete_setting",
+]
+
+MCP_RESOURCE_URIS = [
+    "marker://capabilities",
+    "marker://health",
+    "marker://version",
+    "marker://jobs",
+    "marker://jobs/{job_id}",
+    "marker://jobs/{job_id}/manifest",
+    "marker://jobs/{job_id}/output",
+    "marker://jobs/{job_id}/assets",
+    "marker://outputs/{output_id}/manifest",
+    "marker://docs/agent-guide",
+    "marker://docs/options",
+    "marker://settings",
+]
+
+MCP_PROMPT_NAMES = [
+    "convert_for_rag",
+    "extract_tables_from_document",
+    "summarize_converted_document_with_citations",
+    "convert_and_compare_two_documents",
+    "batch_convert_folder",
+    "inspect_conversion_quality",
+    "convert_audio_to_meeting_notes",
+    "extract_figures_and_diagrams",
+]
+
+register_mcp_resources(
+    mcp,
+    tool_names=MCP_V1_TOOL_NAMES,
+    resource_uris=MCP_RESOURCE_URIS,
+    prompt_names=MCP_PROMPT_NAMES,
+)
+register_mcp_prompts(mcp)
+
 
 @mcp.tool(
     name="marker_list_capabilities",
@@ -212,7 +312,63 @@ mcp = FastMCP(
 async def marker_list_capabilities() -> CapabilitiesOutput:
     """Return supported extensions, engines, output modes, and tool names."""
 
-    return capabilities()
+    data = capabilities()
+    data["tools"] = MCP_V1_TOOL_NAMES
+    data["resources"] = MCP_RESOURCE_URIS
+    data["prompts"] = MCP_PROMPT_NAMES
+    return data
+
+
+@mcp.tool(
+    name="marker_get_capabilities",
+    title="Get Marker Capabilities",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_get_capabilities() -> CapabilitiesOutput:
+    """Alias for marker_list_capabilities using v1 naming."""
+
+    return await marker_list_capabilities()
+
+
+@mcp.tool(
+    name="marker_get_health",
+    title="Get Marker Health",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_get_health() -> HealthOutput:
+    """Return lightweight MCP server health."""
+
+    return {"service": SERVICE_NAME, "status": "ok"}
+
+
+@mcp.tool(
+    name="marker_get_version",
+    title="Get Marker Version",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_get_version() -> VersionOutput:
+    """Return package/build and schema version information."""
+
+    return {
+        "service": SERVICE_NAME,
+        "version": os.getenv("MARKER_VERSION", "unknown"),
+        "contract_schema_version": CONTRACT_SCHEMA_VERSION,
+    }
 
 
 @mcp.tool(
@@ -260,13 +416,84 @@ async def marker_plan_conversion(
 
 
 @mcp.tool(
+    name="marker_plan_local_file",
+    title="Plan Local File Conversion",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_plan_local_file(
+    ctx: Context,
+    local_file_path: PathParam,
+    engine_override: EngineParam = "",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    force_ocr: Annotated[bool, Field(description="Force OCR during planning and conversion.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> PlanOutput:
+    """Plan conversion for one local file inside allowed roots."""
+
+    options = AgentConversionOptions(
+        engine_override=_none_if_blank(engine_override),
+        conversion_profile=_none_if_blank(conversion_profile),
+        image_handling_mode=image_handling_mode,
+        force_ocr=force_ocr,
+        extra_options=parse_extra_options_json(extra_options_json),
+    )
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        return await plan_conversion(local_file_path=local_file_path, options=options)
+
+
+@mcp.tool(
+    name="marker_plan_url",
+    title="Plan URL Conversion",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def marker_plan_url(
+    source_url: UrlParam,
+    filename: Annotated[str, Field(description="Optional filename override for metadata planning.", examples=["document.pdf"])] = "",
+    size: SizeParam = 0,
+    engine_override: EngineParam = "",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    force_ocr: Annotated[bool, Field(description="Force OCR during planning and conversion.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> PlanOutput:
+    """Plan conversion for a public URL without downloading it."""
+
+    assert_safe_source_url(source_url)
+    parsed_name = Path(unquote(urlparse(source_url).path)).name or "document"
+    options = AgentConversionOptions(
+        engine_override=_none_if_blank(engine_override),
+        conversion_profile=_none_if_blank(conversion_profile),
+        image_handling_mode=image_handling_mode,
+        force_ocr=force_ocr,
+        extra_options=parse_extra_options_json(extra_options_json),
+    )
+    return await plan_conversion(
+        filename=_none_if_blank(filename) or parsed_name,
+        size=size,
+        options=options,
+    )
+
+
+@mcp.tool(
     name="marker_convert_file",
     title="Convert File With Marker",
     annotations={
         "readOnlyHint": False,
         "destructiveHint": False,
         "idempotentHint": False,
-        "openWorldHint": False,
+        "openWorldHint": True,
     },
 )
 async def marker_convert_file(
@@ -387,7 +614,7 @@ async def marker_convert_file(
     )
     roots = await _client_workspace_roots(ctx)
     with scoped_client_workspace_roots(roots):
-        return await convert_document(
+        result = await convert_document(
             local_file_path=_none_if_blank(local_file_path),
             source_url=_none_if_blank(source_url),
             output_dir=_none_if_blank(output_dir),
@@ -395,6 +622,90 @@ async def marker_convert_file(
             max_chars=max_chars,
             options=options,
         )
+    return _with_output_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_convert_local_file",
+    title="Convert Local File With Marker",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": False,
+    },
+)
+async def marker_convert_local_file(
+    ctx: Context,
+    local_file_path: PathParam,
+    output_dir: DirParam = "",
+    output_path: OutputPathParam = "",
+    output_format: OutputFormatParam = "markdown",
+    max_chars: PreviewCharsParam = 20_000,
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> ConvertOutput:
+    """Convert one local file inside allowed roots."""
+
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        result = await convert_document(
+            local_file_path=local_file_path,
+            output_dir=_none_if_blank(output_dir),
+            output_path=_none_if_blank(output_path),
+            max_chars=max_chars,
+            options=options,
+        )
+    return _with_output_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_convert_url",
+    title="Convert URL With Marker",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    },
+)
+async def marker_convert_url(
+    source_url: UrlParam,
+    output_dir: DirParam = "",
+    output_path: OutputPathParam = "",
+    output_format: OutputFormatParam = "markdown",
+    max_chars: PreviewCharsParam = 20_000,
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> ConvertOutput:
+    """Download a safe public URL and convert it."""
+
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    result = await convert_document(
+        source_url=source_url,
+        output_dir=_none_if_blank(output_dir),
+        output_path=_none_if_blank(output_path),
+        max_chars=max_chars,
+        options=options,
+    )
+    return _with_output_resource_links(result)
 
 
 @mcp.tool(
@@ -404,7 +715,7 @@ async def marker_convert_file(
         "readOnlyHint": False,
         "destructiveHint": False,
         "idempotentHint": False,
-        "openWorldHint": False,
+        "openWorldHint": True,
     },
 )
 async def marker_submit_job(
@@ -495,12 +806,88 @@ async def marker_submit_job(
     )
     roots = await _client_workspace_roots(ctx)
     with scoped_client_workspace_roots(roots):
-        return await submit_conversion_job(
+        result = await submit_conversion_job(
             local_file_path=_none_if_blank(local_file_path),
             source_url=_none_if_blank(source_url),
             output_dir=_none_if_blank(output_dir),
             options=options,
         )
+    return _with_job_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_submit_local_job",
+    title="Submit Local Marker Job",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": False,
+    },
+)
+async def marker_submit_local_job(
+    ctx: Context,
+    local_file_path: PathParam,
+    output_dir: DirParam = "",
+    output_format: OutputFormatParam = "markdown",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> SubmitJobOutput:
+    """Submit an async conversion job for one local file inside allowed roots."""
+
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        result = await submit_conversion_job(
+            local_file_path=local_file_path,
+            output_dir=_none_if_blank(output_dir),
+            options=options,
+        )
+    return _with_job_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_submit_url_job",
+    title="Submit URL Marker Job",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    },
+)
+async def marker_submit_url_job(
+    source_url: UrlParam,
+    output_dir: DirParam = "",
+    output_format: OutputFormatParam = "markdown",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> SubmitJobOutput:
+    """Submit an async conversion job for a safe public URL."""
+
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    result = await submit_conversion_job(
+        source_url=source_url,
+        output_dir=_none_if_blank(output_dir),
+        options=options,
+    )
+    return _with_job_resource_links(result)
 
 
 @mcp.tool(
@@ -521,6 +908,66 @@ async def marker_read_output(
     """Read a bounded slice of a converted Markdown/JSON/HTML output file."""
 
     return read_output(output_path, offset=offset, limit=limit)
+
+
+@mcp.tool(
+    name="marker_read_output_chunk",
+    title="Read Marker Output Chunk",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_read_output_chunk(
+    output_path: Annotated[str, Field(description="Path returned as output.text_path by conversion/job status.", examples=["C:\\path\\to\\document.md"])],
+    offset: OffsetParam = 0,
+    limit: LimitParam = 20_000,
+) -> ReadOutputResult:
+    """Read one bounded chunk from a converted output file."""
+
+    return read_output(output_path, offset=offset, limit=limit)
+
+
+@mcp.tool(
+    name="marker_get_output_manifest",
+    title="Get Marker Output Manifest",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_get_output_manifest(
+    output_path: Annotated[str, Field(description="Output text path or manifest path.", examples=["C:\\path\\to\\document.md"])],
+) -> ManifestToolOutput:
+    """Read the Marker output manifest associated with an output path."""
+
+    manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
+    return {"manifest_path": str(manifest_path.resolve()) if manifest_path else None, "manifest": manifest}
+
+
+@mcp.tool(
+    name="marker_list_output_assets",
+    title="List Marker Output Assets",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_list_output_assets(
+    output_path: Annotated[str, Field(description="Output text path or manifest path.", examples=["C:\\path\\to\\document.md"])],
+) -> AssetsToolOutput:
+    """List sidecar assets recorded in a Marker output manifest."""
+
+    manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
+    output = manifest.get("output") if isinstance(manifest, dict) else {}
+    assets = output.get("assets", []) if isinstance(output, dict) else []
+    return {"manifest_path": str(manifest_path.resolve()) if manifest_path else None, "assets": assets}
 
 
 @mcp.tool(
@@ -559,11 +1006,31 @@ async def marker_get_job_status(
 ) -> JobStatusOutput:
     """Get one job status, metadata, paths, and optional bounded result text."""
 
-    return await get_job_status(
+    result = await get_job_status(
         job_id,
         include_result_text=include_result_text,
         max_chars=max_chars,
     )
+    return _with_job_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_cancel_job",
+    title="Cancel Marker Job",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": False,
+        "openWorldHint": False,
+    },
+)
+async def marker_cancel_job(
+    job_id: JobIdParam,
+) -> CancelJobOutput:
+    """Cancel one job best-effort by removing the job record and keeping files."""
+
+    result = await delete_job(job_id, delete_files=False)
+    return {"status": result["status"], "job_id": job_id, "cancelled": True}
 
 
 @mcp.tool(
@@ -676,8 +1143,21 @@ async def marker_self_test(
 
     data = await self_test(include_conversion=include_conversion)
     registered = await mcp.list_tools()
+    resources = await mcp.list_resources()
+    templates = await mcp.list_resource_templates()
+    prompts = await mcp.list_prompts()
+    data["expected_tools"] = MCP_V1_TOOL_NAMES
     data["registered_tools"] = sorted(tool.name for tool in registered)
-    data["tools_ok"] = sorted(data["expected_tools"]) == data["registered_tools"]
+    data["tools_ok"] = sorted(MCP_V1_TOOL_NAMES) == data["registered_tools"]
+    data["expected_resources"] = MCP_RESOURCE_URIS
+    data["registered_resources"] = sorted(
+        [str(resource.uri) for resource in resources]
+        + [str(template.uriTemplate) for template in templates]
+    )
+    data["resources_ok"] = sorted(MCP_RESOURCE_URIS) == data["registered_resources"]
+    data["expected_prompts"] = MCP_PROMPT_NAMES
+    data["registered_prompts"] = sorted(prompt.name for prompt in prompts)
+    data["prompts_ok"] = sorted(MCP_PROMPT_NAMES) == data["registered_prompts"]
     return data
 
 
@@ -714,6 +1194,80 @@ def run(
 def _none_if_blank(value: str) -> str | None:
     cleaned = value.strip()
     return cleaned or None
+
+
+def _split_conversion_options(
+    *,
+    output_format: str,
+    conversion_profile: str,
+    image_handling_mode: str,
+    allow_cloud_vlm: bool,
+    extra_options_json: str,
+) -> AgentConversionOptions:
+    return AgentConversionOptions(
+        output_format=output_format,
+        conversion_profile=_none_if_blank(conversion_profile),
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options=parse_extra_options_json(extra_options_json),
+    )
+
+
+def _manifest_for_output_path(path: Path) -> tuple[Path | None, dict[str, Any]]:
+    candidates = [path]
+    if path.suffix != ".json":
+        candidates.append(path.with_name(f"{path.stem}.marker.json"))
+    if path.is_dir():
+        candidates.extend(sorted(path.glob("*.marker.json")))
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            manifest = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(manifest, dict) and manifest.get("schema_version") == "marker.output_manifest.v1":
+            return candidate, manifest
+    return None, {}
+
+
+def _output_text_path_from_manifest(manifest: dict[str, Any]) -> str | None:
+    output = manifest.get("output") if isinstance(manifest, dict) else None
+    if not isinstance(output, dict):
+        return None
+    text_path = output.get("text_path")
+    return str(text_path) if text_path else None
+
+
+def _with_output_resource_links(result: dict[str, Any]) -> dict[str, Any]:
+    output = result.get("output")
+    if not isinstance(output, dict):
+        return result
+    text_path = output.get("text_path")
+    manifest_path = output.get("manifest_path")
+    links: dict[str, str] = {}
+    if text_path:
+        output_id = quote(str(text_path), safe="")
+        links["manifest"] = f"marker://outputs/{output_id}/manifest"
+    if manifest_path:
+        output["manifest_uri"] = links.get("manifest")
+    if links:
+        result["resource_links"] = links
+    return result
+
+
+def _with_job_resource_links(result: dict[str, Any]) -> dict[str, Any]:
+    job_id = result.get("job_id")
+    if not job_id:
+        return result
+    links = {
+        "job": f"marker://jobs/{job_id}",
+        "manifest": f"marker://jobs/{job_id}/manifest",
+        "output": f"marker://jobs/{job_id}/output",
+        "assets": f"marker://jobs/{job_id}/assets",
+    }
+    result["resource_links"] = links
+    return result
 
 
 async def _client_workspace_roots(ctx: Context | None) -> list[Path] | None:
