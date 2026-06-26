@@ -57,8 +57,12 @@ async def test_create_tables_adds_missing_column_to_stale_table(tmp_path, monkey
     async with engine.begin() as conn:
         cols = {r[1] for r in (await conn.exec_driver_sql("PRAGMA table_info(conversion_jobs)")).fetchall()}
         assert "result_metadata_json" in cols
+        assert "retry_count" in cols
+        assert "max_retries" in cols
         rows = (await conn.execute(text("SELECT result_metadata_json FROM conversion_jobs"))).fetchall()
         assert rows == [(None,)]  # existing row preserved, new column NULL
+        queue_rows = (await conn.execute(text("SELECT retry_count, max_retries FROM conversion_jobs"))).fetchall()
+        assert queue_rows == [(0, 0)]
 
     await engine.dispose()
 
