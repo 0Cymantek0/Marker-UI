@@ -339,8 +339,19 @@ async def submit_conversion_job(
         output_format=options.output_format,
         config_json=json.dumps(config),
     )
+    app_state = _get_app_state()
     async with _db_session_factory() as session:
         session.add(job)
+        from app.services.task_manager import TaskManager
+
+        if isinstance(app_state.task_manager, TaskManager):
+            await app_state.task_manager.enqueue_durable_job(
+                session,
+                job_id=job_id,
+                filepath=stored_path,
+                config=config,
+                max_retries=int(config.get("max_retries") or 0),
+            )
         await record_audit_event(
             session,
             event_type="job.submitted",
@@ -369,7 +380,6 @@ async def submit_conversion_job(
 
     await _prepare_runtime(config)
     marker_options = build_marker_options(await _load_llm_config_for_options(config), config)
-    app_state = _get_app_state()
     app_state.task_manager.submit_job(
         job_id,
         stored_path,

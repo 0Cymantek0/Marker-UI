@@ -44,6 +44,7 @@ from sse_starlette.event import ServerSentEvent
 from app.database import async_session_factory
 from app.models.job import ConversionJob
 from app.services.output_writer import write_conversion_output
+from app.services.queue_backends import DurableQueueBackend
 from app.services.job_transport import (
     JobEnvelope,
     QueueTransport,
@@ -262,6 +263,7 @@ class TaskManager:
         self,
         max_workers: int = 2,
         backend: ExecutorBackend | None = None,
+        durable_queue: DurableQueueBackend | None = None,
     ) -> None:
         # Pluggable marker executor. Default single-process marker jobs get one
         # worker because marker/surya predictors keep mutable per-job cache state.
@@ -308,6 +310,7 @@ class TaskManager:
         # job_id -> backend that owns its Future, so cleanup/cancel works for
         # both marker and CPU pools.
         self._job_backends: dict[str, ExecutorBackend] = {}
+        self._durable_queue = durable_queue
 
         self._lock = threading.Lock()
         self._drain_stop = threading.Event()
@@ -335,6 +338,36 @@ class TaskManager:
     @property
     def backend_name(self) -> str:
         return self._backend.name
+
+    async def recover_durable_jobs(self) -> list[Any]:
+        """Return queued/expired durable jobs for an external resubmitter."""
+        if self._durable_queue is None:
+            return []
+        async with async_session_factory() as session:
+            return await self._durable_queue.recover_queued(session)
+
+    async def enqueue_durable_job(
+        self,
+        session: Any,
+        *,
+        job_id: str,
+        filepath: str | None,
+        config: dict[str, Any],
+        idempotency_key: str | None = None,
+        max_retries: int = 0,
+    ) -> bool:
+        """Persist durable queue metadata in the caller's transaction."""
+        if self._durable_queue is None:
+            return False
+        await self._durable_queue.enqueue(
+            session,
+            job_id=job_id,
+            filepath=filepath,
+            config=config,
+            idempotency_key=idempotency_key,
+            max_retries=max_retries,
+        )
+        return True
 
     def _start_drain_thread(self) -> None:
         """Background loop that reads worker events into the in-memory dicts."""

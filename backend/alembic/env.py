@@ -15,6 +15,7 @@ from app.database import Base, DATABASE_URL
 from app.models.settings import Setting  # noqa: F401
 from app.models.job import ConversionJob  # noqa: F401
 from app.models.audit import AuditEvent  # noqa: F401
+from app.models.job_event import JobEvent  # noqa: F401
 
 config = context.config
 

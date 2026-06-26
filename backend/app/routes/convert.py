@@ -546,6 +546,17 @@ async def upload_file(
     from app.services.marker_service import build_marker_options
     options = build_marker_options(llm_config, config)
 
+    from app.services.task_manager import TaskManager
+
+    if isinstance(task_manager, TaskManager):
+        await task_manager.enqueue_durable_job(
+            db,
+            job_id=job_id,
+            filepath=stored_path,
+            config=config,
+            max_retries=int(config.get("max_retries") or 0),
+        )
+
     task_manager.submit_job(job_id, stored_path, options, conversion_service)
 
     return ConversionResponse(

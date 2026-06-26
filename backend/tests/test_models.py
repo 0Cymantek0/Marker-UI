@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.models.job import ConversionJob
+from app.models.job_event import JobEvent
 from app.models.settings import Setting
 
 
@@ -24,6 +25,14 @@ class TestConversionJob:
         "input_format",
         "output_format",
         "progress",
+        "queue_backend",
+        "queued_at",
+        "started_at",
+        "lease_owner",
+        "lease_expires_at",
+        "retry_count",
+        "max_retries",
+        "idempotency_key",
         "error_message",
         "result_text",
         "result_metadata_json",
@@ -37,11 +46,10 @@ class TestConversionJob:
     def test_table_name(self):
         assert ConversionJob.__tablename__ == "conversion_jobs"
 
-    def test_has_all_15_columns(self):
+    def test_has_all_columns(self):
         mapper = ConversionJob.__table__
         col_names = {c.name for c in mapper.columns}
         assert col_names == self.EXPECTED_COLUMNS
-        assert len(col_names) == 15
 
     def test_instantiation_with_defaults(self):
         job = ConversionJob(
@@ -64,6 +72,8 @@ class TestConversionJob:
         assert job.result_path is None
         assert job.config_json is None
         assert job.completed_at is None
+        assert job.queue_backend is None
+        assert job.idempotency_key is None
 
     def test_instantiation_with_all_fields(self):
         now = datetime.now(timezone.utc)
@@ -89,6 +99,37 @@ class TestConversionJob:
         assert job.config_json == '{"converter_cls": "PdfConverter"}'
         assert job.created_at == now
         assert job.completed_at == now
+
+
+class TestJobEvent:
+    """Verify durable queue event model shape."""
+
+    EXPECTED_COLUMNS = {
+        "id",
+        "job_id",
+        "event_type",
+        "status",
+        "message",
+        "payload_json",
+        "created_at",
+    }
+
+    def test_table_name(self):
+        assert JobEvent.__tablename__ == "job_events"
+
+    def test_has_all_columns(self):
+        col_names = {c.name for c in JobEvent.__table__.columns}
+        assert col_names == self.EXPECTED_COLUMNS
+
+    def test_instantiation(self):
+        event = JobEvent(
+            job_id="job-1",
+            event_type="queue.enqueued",
+            status="pending",
+            payload_json="{}",
+        )
+        assert event.job_id == "job-1"
+        assert event.event_type == "queue.enqueued"
 
 
 # ---------------------------------------------------------------------------
