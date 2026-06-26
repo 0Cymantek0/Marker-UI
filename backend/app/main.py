@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
 from app.database import create_tables
 from app.routes import convert, settings, models, capabilities
+from app.security.auth import RestAuthMiddleware
 from app.services.marker_service import MarkerService
 from app.services.task_manager import TaskManager
 from app.services.conversion_service import ConversionService
@@ -256,6 +257,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RestAuthMiddleware)
 
 # Routers
 app.include_router(convert.router)

@@ -6,12 +6,10 @@ available for multi-client local/remote deployments.
 
 import ipaddress
 import os
-import secrets
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import quote, unquote, urlparse
 
-from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,18 +36,16 @@ from app.agent_api import (
 )
 from app.mcp_prompts import register_mcp_prompts
 from app.mcp_resources import register_mcp_resources
+from app.security.auth import ScopedStaticTokenVerifier, configured_static_tokens, require_mcp_scopes
+from app.security.scopes import (
+    DEFAULT_MCP_SCOPES,
+    SCOPE_JOBS_WRITE,
+    SCOPE_OUTPUTS_READ,
+    SCOPE_SETTINGS_READ,
+    SCOPE_SETTINGS_WRITE,
+)
 from app.services.policy import scoped_client_workspace_roots
 from app.services.safe_url_fetcher import assert_safe_source_url
-
-
-class StaticTokenVerifier:
-    def __init__(self, token: str) -> None:
-        self._token = token
-
-    async def verify_token(self, token: str) -> AccessToken | None:
-        if secrets.compare_digest(token, self._token):
-            return AccessToken(token=token, client_id="marker-mcp", scopes=["marker:mcp"])
-        return None
 
 
 class MarkerOutputModel(BaseModel):
@@ -907,6 +903,7 @@ async def marker_read_output(
 ) -> ReadOutputResult:
     """Read a bounded slice of a converted Markdown/JSON/HTML output file."""
 
+    require_mcp_scopes(SCOPE_OUTPUTS_READ)
     return read_output(output_path, offset=offset, limit=limit)
 
 
@@ -927,6 +924,7 @@ async def marker_read_output_chunk(
 ) -> ReadOutputResult:
     """Read one bounded chunk from a converted output file."""
 
+    require_mcp_scopes(SCOPE_OUTPUTS_READ)
     return read_output(output_path, offset=offset, limit=limit)
 
 
@@ -945,6 +943,7 @@ async def marker_get_output_manifest(
 ) -> ManifestToolOutput:
     """Read the Marker output manifest associated with an output path."""
 
+    require_mcp_scopes(SCOPE_OUTPUTS_READ)
     manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
     return {"manifest_path": str(manifest_path.resolve()) if manifest_path else None, "manifest": manifest}
 
@@ -964,6 +963,7 @@ async def marker_list_output_assets(
 ) -> AssetsToolOutput:
     """List sidecar assets recorded in a Marker output manifest."""
 
+    require_mcp_scopes(SCOPE_OUTPUTS_READ)
     manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
     output = manifest.get("output") if isinstance(manifest, dict) else {}
     assets = output.get("assets", []) if isinstance(output, dict) else []
@@ -1029,6 +1029,7 @@ async def marker_cancel_job(
 ) -> CancelJobOutput:
     """Cancel one job best-effort by removing the job record and keeping files."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     result = await delete_job(job_id, delete_files=False)
     return {"status": result["status"], "job_id": job_id, "cancelled": True}
 
@@ -1049,6 +1050,7 @@ async def marker_delete_job(
 ) -> DeleteJobOutput:
     """Cancel/delete one job and optionally remove its upload/output files."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     return await delete_job(job_id, delete_files=delete_files)
 
 
@@ -1067,6 +1069,7 @@ async def marker_list_settings(
 ) -> SettingsOutput:
     """List persisted settings grouped by category with sensitive values masked."""
 
+    require_mcp_scopes(SCOPE_SETTINGS_READ)
     return await list_settings(category=_none_if_blank(category))
 
 
@@ -1085,6 +1088,7 @@ async def marker_get_setting(
 ) -> SettingOutput:
     """Read one persisted setting with sensitive values masked."""
 
+    require_mcp_scopes(SCOPE_SETTINGS_READ)
     return await get_setting(key)
 
 
@@ -1105,6 +1109,7 @@ async def marker_set_setting(
 ) -> SettingOutput:
     """Set one setting using the same encryption and masking rules as the GUI."""
 
+    require_mcp_scopes(SCOPE_SETTINGS_WRITE)
     return await set_setting(key, value, category=category)
 
 
@@ -1123,6 +1128,7 @@ async def marker_delete_setting(
 ) -> DeleteSettingOutput:
     """Delete one persisted setting key."""
 
+    require_mcp_scopes(SCOPE_SETTINGS_WRITE)
     return await delete_setting(key)
 
 
@@ -1178,13 +1184,15 @@ def run(
         mcp.settings.host = host
         mcp.settings.port = port
         if token:
+            token_scopes = configured_static_tokens(surface="mcp")
+            token_scopes.setdefault(token, DEFAULT_MCP_SCOPES)
             issuer_url = _auth_base_url(host, port)
             mcp.settings.auth = AuthSettings(
                 issuer_url=issuer_url,
                 resource_server_url=issuer_url,
-                required_scopes=["marker:mcp"],
+                required_scopes=[],
             )
-            mcp._token_verifier = StaticTokenVerifier(token)
+            mcp._token_verifier = ScopedStaticTokenVerifier(token_scopes)
         else:
             mcp.settings.auth = None
             mcp._token_verifier = None

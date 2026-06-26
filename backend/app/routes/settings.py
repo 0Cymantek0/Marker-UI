@@ -31,6 +31,8 @@ from app.models.schemas import (
     GPUWorkersConfigRequest,
     GPUWorkersResolvedResponse,
 )
+from app.security.auth import Principal, require_rest_scopes
+from app.security.scopes import SCOPE_SETTINGS_WRITE
 from app.utils.secrets import (
     decrypt_value,
     encrypt_value,
@@ -150,6 +152,7 @@ async def get_setting(
 @router.put("/", response_model=SettingsResponse)
 async def upsert_setting(
     body: SettingsUpdateRequest,
+    _principal: Principal = Depends(require_rest_scopes(SCOPE_SETTINGS_WRITE)),
     db: AsyncSession = Depends(get_db),
 ) -> SettingsResponse:
     """Insert or update a single setting."""
@@ -185,6 +188,7 @@ async def upsert_setting(
 @router.put("/batch", response_model=list[SettingsResponse])
 async def batch_upsert(
     body: SettingsBatchUpdateRequest,
+    _principal: Principal = Depends(require_rest_scopes(SCOPE_SETTINGS_WRITE)),
     db: AsyncSession = Depends(get_db),
 ) -> list[SettingsResponse]:
     """Upsert multiple settings at once."""
@@ -222,6 +226,7 @@ async def batch_upsert(
 @router.delete("/key/{key}")
 async def delete_setting(
     key: str,
+    _principal: Principal = Depends(require_rest_scopes(SCOPE_SETTINGS_WRITE)),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Delete a single setting."""
