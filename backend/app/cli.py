@@ -33,6 +33,7 @@ from app.agent_api import (
 )
 from app.agent_contract import export_json_schemas
 from app.errors import ERROR_SCHEMA_VERSION, MarkerError, from_exception
+from app.eval.runner import run_eval
 
 
 BATCH_PARTIAL_FAILURE_EXIT = 10
@@ -119,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
             return _handle_doctor(args)
         if args.command == "schema":
             return _handle_schema(args)
+        if args.command == "eval":
+            return _handle_eval(args)
         if args.command == "config":
             return _handle_config(args)
         if args.command == "server":
@@ -321,6 +324,14 @@ def _build_parser() -> argparse.ArgumentParser:
     schema_export.add_argument("--dry-run", action="store_true", help="Print without writing output file")
     schema_export.add_argument("--json", action="store_true", default=True, help="Print JSON")
 
+    eval_cmd = sub.add_parser("eval", help="Run deterministic evaluation manifests")
+    eval_sub = eval_cmd.add_subparsers(dest="eval_command", required=True, parser_class=MarkerArgumentParser)
+    eval_run = eval_sub.add_parser("run", help="Run an eval manifest and write JSON/Markdown reports")
+    eval_run.add_argument("--manifest", required=True, help="Path to eval manifest JSON")
+    eval_run.add_argument("--output-dir", required=True, help="Directory for reports")
+    eval_run.add_argument("--report-name", default="eval_report", help="Report filename stem")
+    eval_run.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+
     settings = sub.add_parser("settings", help="List, get, set, or delete settings")
     settings_sub = settings.add_subparsers(dest="settings_command", required=True, parser_class=MarkerArgumentParser)
     settings_list = settings_sub.add_parser("list", help="List masked settings")
@@ -418,6 +429,13 @@ def _handle_settings(args: argparse.Namespace) -> int:
 
 def _handle_config(args: argparse.Namespace) -> int:
     return _handle_settings(args)
+
+
+def _handle_eval(args: argparse.Namespace) -> int:
+    if args.eval_command == "run":
+        result = run_eval(args.manifest, args.output_dir, report_name=args.report_name)
+        return _print_result(result, args.json)
+    return 2
 
 
 def _handle_jobs(args: argparse.Namespace) -> int:
