@@ -2437,6 +2437,30 @@ The final implementation should be considered complete only when these are true:
 - Deterministic converters produce manifests with assets.
 - Evaluation harness exists, even if small at first.
 
+### 17.6 Final acceptance evidence (2026-06-26)
+
+Status: [Done]
+
+- Backend full suite from repository root passed with root/backend import paths:
+  `PYTHONPATH="$PWD;$PWD/backend" python -m pytest backend/tests -q`
+  -> 868 passed, 3 skipped.
+- Focused enterprise surface suite passed before full run: CLI/MCP/auth/audit/
+  diagnostics/durable queue/database migration/mixed PDF/PDF probe/convert
+  plan/eval/docs/contract/output writer/safe URL/policy/native converter tests
+  -> 158 passed.
+- Frontend verification passed after stabilizing existing dirty frontend work:
+  `CI=true pnpm test` -> 65 passed; `CI=true pnpm build` passed; `CI=true
+  pnpm lint` exited 0 with existing warning-only `no-explicit-any` findings.
+- CLI smoke passed: `python -m app.cli self-test --json` reports
+  `capabilities_ok=true` and `conversion_ok=true`.
+- MCP readiness smoke passed: `python -m app.cli mcp self-test --no-conversion
+  --json` reports `tools_ok=true`, `resources_ok=true`, `prompts_ok=true`,
+  and `schemas_ok=true`.
+- Privacy/secret scan over tracked files passed for local username/path and
+  common token regex patterns.
+- `git diff --check` passed for touched backend, frontend, docs, and plan files
+  before their commits.
+
 ---
 
 ## 18. Concrete code-level notes
