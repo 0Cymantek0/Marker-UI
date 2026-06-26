@@ -195,7 +195,7 @@ class TestUploadSuccess:
         downloaded = tmp_path / "download.pdf"
         downloaded.write_bytes(b"%PDF-1.4")
 
-        async def fake_download(source_url, destination):
+        async def fake_download(source_url, destination, db):
             destination.write_bytes(downloaded.read_bytes())
             return "remote.pdf", ".pdf", "https://example.com/docs/remote.pdf"
 

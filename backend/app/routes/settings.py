@@ -33,6 +33,7 @@ from app.models.schemas import (
 )
 from app.security.auth import Principal, require_rest_scopes
 from app.security.scopes import SCOPE_SETTINGS_WRITE
+from app.services.audit import record_audit_event
 from app.utils.secrets import (
     decrypt_value,
     encrypt_value,
@@ -159,6 +160,7 @@ async def upsert_setting(
     stmt = select(Setting).where(Setting.key == body.key)
     result = await db.execute(stmt)
     row = result.scalar_one_or_none()
+    existed = row is not None
 
     save_value = body.value
     # If the value is masked (user didn't change it), keep existing encrypted value
@@ -177,6 +179,21 @@ async def upsert_setting(
         db.add(row)
 
     await db.flush()
+    await record_audit_event(
+        db,
+        event_type="settings.write",
+        actor=_principal.client_id,
+        surface="rest",
+        resource_type="setting",
+        resource_id=body.key,
+        status="success",
+        payload={
+            "key": body.key,
+            "category": body.category,
+            "operation": "update" if existed else "create",
+            "sensitive": is_sensitive_key(body.key),
+        },
+    )
     return _masked_response(row)
 
 
@@ -193,10 +210,12 @@ async def batch_upsert(
 ) -> list[SettingsResponse]:
     """Upsert multiple settings at once."""
     results: list[SettingsResponse] = []
+    audit_items: list[dict[str, Any]] = []
     for item in body.settings:
         stmt = select(Setting).where(Setting.key == item.key)
         result = await db.execute(stmt)
         row = result.scalar_one_or_none()
+        existed = row is not None
 
         save_value = item.value
         if is_encrypted_field(item.key) and is_masked(item.value) and row:
@@ -214,7 +233,26 @@ async def batch_upsert(
             db.add(row)
 
         results.append(_masked_response(row))
+        audit_items.append(
+            {
+                "key": item.key,
+                "category": item.category,
+                "operation": "update" if existed else "create",
+                "sensitive": is_sensitive_key(item.key),
+            }
+        )
     await db.flush()
+    for item in audit_items:
+        await record_audit_event(
+            db,
+            event_type="settings.write",
+            actor=_principal.client_id,
+            surface="rest",
+            resource_type="setting",
+            resource_id=item["key"],
+            status="success",
+            payload=item,
+        )
     return results
 
 
@@ -232,6 +270,16 @@ async def delete_setting(
     """Delete a single setting."""
     stmt = delete(Setting).where(Setting.key == key)
     await db.execute(stmt)
+    await record_audit_event(
+        db,
+        event_type="settings.delete",
+        actor=_principal.client_id,
+        surface="rest",
+        resource_type="setting",
+        resource_id=key,
+        status="success",
+        payload={"key": key, "sensitive": is_sensitive_key(key)},
+    )
     return {"status": "deleted", "key": key}
 
 

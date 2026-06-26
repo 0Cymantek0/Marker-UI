@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import UPLOAD_DIR, OUTPUT_DIR
 from app.database import create_tables
+from app.models.audit import AuditEvent  # noqa: F401 - register table metadata
 from app.routes import convert, settings, models, capabilities
 from app.security.auth import RestAuthMiddleware
 from app.services.marker_service import MarkerService

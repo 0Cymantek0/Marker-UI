@@ -14,6 +14,7 @@ from app.database import Base, DATABASE_URL
 # Import all models so Alembic can detect them
 from app.models.settings import Setting  # noqa: F401
 from app.models.job import ConversionJob  # noqa: F401
+from app.models.audit import AuditEvent  # noqa: F401
 
 config = context.config
 

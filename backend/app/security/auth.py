@@ -14,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from app.security.scopes import DEFAULT_MCP_SCOPES, DEFAULT_REST_SCOPES, has_scopes
+from app.services.audit import record_audit_event
 
 
 @dataclass(frozen=True)
@@ -158,6 +159,15 @@ class RestAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         principal = principal_from_authorization(request.headers.get("Authorization"), surface="rest")
         if principal is None:
+            await record_audit_event(
+                None,
+                event_type="auth.denied",
+                surface="rest",
+                resource_type="http_request",
+                resource_id=request.url.path,
+                status="denied",
+                payload={"path": request.url.path, "method": request.method},
+            )
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Missing or invalid bearer token"},

@@ -26,6 +26,7 @@ from app.errors import InputNotAllowedError
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
 from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
+from app.services.audit import record_audit_event
 from app.services.safe_url_fetcher import (
     SafeUrlFetchError,
     assert_safe_source_url,
@@ -81,15 +82,37 @@ def _assert_safe_source_url(raw_url: str) -> None:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
-async def _download_source_url(raw_url: str, destination: Path) -> tuple[str, str, str]:
+async def _download_source_url(raw_url: str, destination: Path, db: AsyncSession) -> tuple[str, str, str]:
+    async def audit_hook(event: str, payload: dict[str, Any]) -> None:
+        await record_audit_event(
+            db,
+            event_type=event,
+            surface="rest",
+            resource_type="source_url",
+            resource_id=payload.get("url"),
+            status="success",
+            payload=payload,
+        )
+
     try:
         downloaded = await download_source_url(
             raw_url,
             destination,
             allowed_extensions=ALLOWED_EXTENSIONS,
             max_bytes=MAX_UPLOAD_SIZE,
+            audit_hook=audit_hook,
         )
     except SafeUrlFetchError as exc:
+        await record_audit_event(
+            db,
+            event_type="url_fetch.blocked" if exc.category in {"blocked", "unsafe"} else "url_fetch.failed",
+            surface="rest",
+            resource_type="source_url",
+            resource_id=raw_url,
+            status="denied" if exc.category in {"blocked", "unsafe"} else "failed",
+            payload={"url": raw_url, "category": exc.category, "detail": exc.detail},
+        )
+        await db.commit()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return downloaded.original_name, downloaded.suffix, downloaded.safe_url
 
@@ -305,6 +328,16 @@ async def upload_file(
         try:
             assert_local_input_allowed(path)
         except InputNotAllowedError as exc:
+            await record_audit_event(
+                db,
+                event_type="policy.denied",
+                surface="rest",
+                resource_type="local_input",
+                resource_id=path.name,
+                status="denied",
+                payload={"reason": exc.message, "path": str(path)},
+            )
+            await db.commit()
             raise HTTPException(status_code=400, detail=exc.message) from exc
         original_name = path.name
         suffix = path.suffix.lower()
@@ -312,7 +345,7 @@ async def upload_file(
         is_local = True
     elif source_url:
         stored_path_obj = UPLOAD_DIR / f"{job_id}.download"
-        original_name, suffix, source_url_safe = await _download_source_url(source_url, stored_path_obj)
+        original_name, suffix, source_url_safe = await _download_source_url(source_url, stored_path_obj, db)
         final_path = UPLOAD_DIR / f"{job_id}{suffix}"
         stored_path_obj.replace(final_path)
         stored_path = str(final_path)
@@ -446,6 +479,16 @@ async def upload_file(
         try:
             assert_output_write_allowed(Path(output_dir))
         except InputNotAllowedError as exc:
+            await record_audit_event(
+                db,
+                event_type="policy.denied",
+                surface="rest",
+                resource_type="output_dir",
+                resource_id=Path(output_dir).name,
+                status="denied",
+                payload={"reason": exc.message, "path": output_dir},
+            )
+            await db.commit()
             raise HTTPException(status_code=400, detail=exc.message) from exc
         config["output_dir"] = output_dir
 
@@ -467,6 +510,30 @@ async def upload_file(
     )
     db.add(job)
     await db.flush()
+    await record_audit_event(
+        db,
+        event_type="job.submitted",
+        surface="rest",
+        resource_type="job",
+        resource_id=job_id,
+        status="success",
+        payload={
+            "input_format": input_format,
+            "output_format": output_format,
+            "source": "local_file" if is_local else "source_url" if source_url_safe else "upload",
+            "allow_cloud_vlm": allow_cloud_vlm,
+        },
+    )
+    if allow_cloud_vlm:
+        await record_audit_event(
+            db,
+            event_type="cloud_vlm.requested",
+            surface="rest",
+            resource_type="job",
+            resource_id=job_id,
+            status="success",
+            payload={"provider": llm_provider, "model": llm_model},
+        )
 
     from app.main import _app_state
 

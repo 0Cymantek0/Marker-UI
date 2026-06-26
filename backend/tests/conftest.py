@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 os.environ["ENCRYPTION_KEY"] = "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdHRlc3Q="
 
 from app.database import Base, get_db
+from app.models.audit import AuditEvent  # noqa: F401 - ensure table is registered
 from app.models.job import ConversionJob  # noqa: F401 - ensure table is registered
 from app.models.settings import Setting  # noqa: F401
 

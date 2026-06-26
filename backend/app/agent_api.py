@@ -40,6 +40,7 @@ from app.routes.convert import (
 from app.services.conversion_service import ConversionService
 from app.services.marker_service import MarkerService, build_marker_options
 from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION, write_conversion_output
+from app.services.audit import record_audit_event
 from app.services.policy import (
     assert_local_input_allowed,
     assert_output_read_allowed,
@@ -340,6 +341,30 @@ async def submit_conversion_job(
     )
     async with _db_session_factory() as session:
         session.add(job)
+        await record_audit_event(
+            session,
+            event_type="job.submitted",
+            surface="agent",
+            resource_type="job",
+            resource_id=job_id,
+            status="success",
+            payload={
+                "input_format": input_format,
+                "output_format": options.output_format,
+                "source": "local_file" if is_local else "source_url",
+                "allow_cloud_vlm": options.allow_cloud_vlm,
+            },
+        )
+        if options.allow_cloud_vlm:
+            await record_audit_event(
+                session,
+                event_type="cloud_vlm.requested",
+                surface="agent",
+                resource_type="job",
+                resource_id=job_id,
+                status="success",
+                payload={"provider": options.llm_provider, "model": options.llm_model},
+            )
         await session.commit()
 
     await _prepare_runtime(config)
@@ -560,6 +585,7 @@ async def set_setting(key: str, value: str, *, category: str = "general") -> dic
     await _ensure_db_tables()
     async with _db_session_factory() as session:
         row = await _get_setting_row(session, key)
+        existed = row is not None
         save_value = value
         if is_encrypted_field(key) and row and is_masked(value):
             save_value = row.value
@@ -574,6 +600,20 @@ async def set_setting(key: str, value: str, *, category: str = "general") -> dic
         else:
             row = Setting(key=key, value=save_value, category=category)
             session.add(row)
+        await record_audit_event(
+            session,
+            event_type="settings.write",
+            surface="agent",
+            resource_type="setting",
+            resource_id=key,
+            status="success",
+            payload={
+                "key": key,
+                "category": category,
+                "operation": "update" if existed else "create",
+                "sensitive": is_sensitive_key(key),
+            },
+        )
         await session.commit()
         await session.refresh(row)
         return _setting_to_dict(row)
@@ -583,6 +623,15 @@ async def delete_setting(key: str) -> dict[str, str]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
         await session.execute(delete(Setting).where(Setting.key == key))
+        await record_audit_event(
+            session,
+            event_type="settings.delete",
+            surface="agent",
+            resource_type="setting",
+            resource_id=key,
+            status="success",
+            payload={"key": key, "sensitive": is_sensitive_key(key)},
+        )
         await session.commit()
     return {"status": "deleted", "key": key}
 
@@ -882,15 +931,36 @@ def _validate_page_range_safe(page_range: str, page_count: int) -> None:
 
 
 async def _download_source_url_safe(raw_url: str, destination: Path) -> tuple[str, str, str]:
+    async def audit_hook(event: str, payload: dict[str, Any]) -> None:
+        await record_audit_event(
+            None,
+            event_type=event,
+            surface="agent",
+            resource_type="source_url",
+            resource_id=payload.get("url"),
+            status="success",
+            payload=payload,
+        )
+
     try:
         downloaded = await download_source_url(
             raw_url,
             destination,
             allowed_extensions=ALLOWED_EXTENSIONS,
+            audit_hook=audit_hook,
         )
         return downloaded.original_name, downloaded.suffix, downloaded.safe_url
     except SafeUrlFetchError as exc:
         detail = str(exc.detail)
+        await record_audit_event(
+            None,
+            event_type="url_fetch.blocked" if exc.category in {"blocked", "unsafe"} else "url_fetch.failed",
+            surface="agent",
+            resource_type="source_url",
+            resource_id=raw_url,
+            status="denied" if exc.category in {"blocked", "unsafe"} else "failed",
+            payload={"url": raw_url, "category": exc.category, "detail": detail},
+        )
         if exc.category == "unsafe":
             from app.errors import UrlUnsafeError
 
