@@ -4,11 +4,6 @@ import {
   Loader2,
   Cpu,
   Sparkles,
-  Brain,
-  MessageSquare,
-  Server,
-  Cloud,
-  Database,
   CheckCircle2,
   AlertTriangle,
   Key,
@@ -18,6 +13,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   X,
   Settings,
   ListPlus,
@@ -35,21 +31,6 @@ import { getSettings, getGPUStatus, installGPU, toggleGPU, getGPUWorkersResolved
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TestConnectionButton } from '@/components/features/settings/TestConnectionButton'
-
-// Helper to map provider types to icons
-function ProviderIcon({ type, className }: { type: string; className?: string }) {
-  switch (type) {
-    case 'gemini': return <Sparkles className={className} />
-    case 'claude': return <Brain className={className} />
-    case 'openai':
-    case 'custom_openai':
-      return <MessageSquare className={className} />
-    case 'ollama': return <Server className={className} />
-    case 'azure': return <Cloud className={className} />
-    case 'vertex': return <Database className={className} />
-    default: return <Cpu className={className} />
-  }
-}
 
 export function SettingsPage() {
   const [providers, setProviders] = useState<LLMProvider[]>([])
@@ -610,95 +591,85 @@ export function SettingsPage() {
           {providers.map((p) => {
             const isActive = activeLLM.provider_id === p.id
             const isConfigured = !!p.api_key || p.type === 'ollama'
+
+            const handleCardClick = () => {
+              setFetchedModels([])
+              setModelSearchQuery('')
+              setCustomModelId('')
+              setExpandedModelSettings(null)
+              openDrawer('models', p.id)
+            }
+
             return (
               <div
                 key={p.id}
-                className={cn(
-                  'border rounded-xl p-5 flex flex-col justify-between transition-all bg-card/25 shadow-sm',
-                  isActive ? 'border-primary shadow-sm bg-primary/[0.01]' : 'border-border/60'
-                )}
+                onClick={handleCardClick}
+                className="border border-border/60 rounded-2xl p-4 flex items-center justify-between transition-all bg-card/45 hover:bg-card/75 cursor-pointer shadow-sm"
               >
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-muted border border-border/40 text-muted-foreground">
-                        <ProviderIcon type={p.type} className="w-4.5 h-4.5" />
-                      </div>
-                      <div>
-                        <div className="font-extrabold text-sm text-foreground flex items-center gap-1.5 leading-none">
-                          {p.label === 'Claude' ? 'Anthropic' : p.label}
-                        </div>
-                      </div>
+                {/* Left Side: Checkmark, Icon, and Title */}
+                <div className="flex items-center gap-3">
+                  {isActive && (
+                    <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0 shadow-sm shadow-emerald-500/20">
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
                     </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {isActive && (
-                        <Badge variant="success" className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5">
-                          Active
-                        </Badge>
-                      )}
-                      {isConfigured ? (
-                        <Badge variant="outline" className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 border-emerald-500/30 text-emerald-500 bg-emerald-500/5">
-                          Configured
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 opacity-60">
-                          Inactive
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] text-muted-foreground/90 space-y-1 bg-black/15 p-2.5 rounded-lg border border-border/10 font-medium">
-                    <div className="flex justify-between">
-                      <span>Models:</span>
-                      <span className="font-bold text-foreground">{p.models.length}</span>
-                    </div>
-                    {p.base_url && (
-                      <div className="truncate text-left">
-                        <span className="opacity-60 block text-[9px] uppercase tracking-wider font-bold">Endpoint</span>
-                        <span className="font-mono font-semibold">{p.base_url}</span>
-                      </div>
-                    )}
+                  )}
+                  <div className="flex flex-col">
+                    <span className="font-bold text-[15px] text-foreground leading-tight">
+                      {p.label === 'Claude' ? 'Anthropic' : p.label}
+                    </span>
+                    <span className="text-[12px] text-muted-foreground font-medium mt-0.5 leading-none">
+                      {p.models.length} {p.models.length === 1 ? 'model' : 'models'}
+                    </span>
                   </div>
                 </div>
 
-                 <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/10">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
+                {/* Right Side: Key, Delete, Chevron */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setTestResult(null)
                       openDrawer('keys', p.id)
                     }}
-                    className="flex-1 text-[10px] font-bold uppercase tracking-wider h-8 rounded-lg border-border/50 hover:bg-muted/40"
+                    className={cn(
+                      'p-2 rounded-lg transition-colors',
+                      isConfigured
+                        ? 'text-emerald-500 hover:bg-emerald-500/10'
+                        : 'text-muted-foreground hover:bg-white/5'
+                    )}
+                    title="Credentials"
                   >
-                    <Key className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
-                    Credentials
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setFetchedModels([])
-                      setModelSearchQuery('')
-                      setCustomModelId('')
-                      setExpandedModelSettings(null)
-                      openDrawer('models', p.id)
-                    }}
-                    className="flex-1 text-[10px] font-bold uppercase tracking-wider h-8 rounded-lg border-border/50 hover:bg-muted/40"
-                  >
-                    <Settings className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
-                    Models ({p.models.length})
-                  </Button>
+                    <Key className="w-4.5 h-4.5" />
+                  </button>
+
                   {(p.type === 'custom_openai' || p.type === 'custom_anthropic') && (
-                    <Button
-                      variant="ghost"
-                      onClick={() => handleDeleteProvider(p.id)}
-                      className="w-8 h-8 p-0 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition-colors"
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteProvider(p.id)
+                      }}
+                      className="p-2 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition-colors"
                       title="Delete provider"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                      <Trash2 className="w-4.5 h-4.5" />
+                    </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCardClick()
+                    }}
+                    aria-label={`Models (${p.models.length})`}
+                    className="p-2 rounded-lg text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors"
+                  >
+                    <ChevronRight className="w-4.5 h-4.5" />
+                  </button>
                 </div>
               </div>
             )

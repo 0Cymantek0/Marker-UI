@@ -65,14 +65,21 @@
     border-color: hsl(var(--border));
   }
 
-  /* Disable focus rings, outlines, and border highlights on click/focus globally for form fields */
+  /* Mouse/touch focus stays quiet; keyboard focus gets a visible brand ring. */
   input:focus,
   textarea:focus,
   select:focus,
   [contenteditable="true"]:focus {
-    outline: none !important;
-    box-shadow: none !important;
-    border-color: hsl(var(--border)) !important;
+    outline: none;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [contenteditable="true"]:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
+    border-color: hsl(var(--ring));
   }
 
   body {

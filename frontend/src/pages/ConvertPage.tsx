@@ -77,7 +77,7 @@ function extensionFor(filename: string | undefined) {
 
 function engineOptionsFor(filename: string | undefined, plan: ConverterPlanResponse | null): SelectOption[] {
   const ext = extensionFor(filename)
-  let engines: string[] = []
+  let engines: string[]
   if (ext === '.pdf') engines = ['liteparse_pdf', 'marker_pdf']
   else if (['.wav', '.mp3', '.m4a', '.flac', '.ogg', '.aac'].includes(ext)) engines = ['audio']
   else if (['.mp4', '.mov', '.mkv', '.webm', '.avi'].includes(ext)) engines = ['video']
