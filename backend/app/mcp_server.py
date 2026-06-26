@@ -14,7 +14,7 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agent_contract import CONTRACT_SCHEMA_VERSION
+from app.agent_contract import CONTRACT_SCHEMA_VERSION, export_json_schemas
 from app.agent_api import (
     AgentConversionOptions,
     MAX_READ_CHARS,
@@ -185,6 +185,10 @@ class SelfTestOutput(MarkerOutputModel):
     expected_prompts: list[str] | None = Field(default=None, description="Expected MCP prompt names.", examples=[["convert_for_rag"]])
     registered_prompts: list[str] | None = Field(default=None, description="Registered MCP prompt names.", examples=[["convert_for_rag"]])
     prompts_ok: bool | None = Field(default=None, description="Prompt registration check result.", examples=[True])
+    contract_schema_version: str | None = Field(default=None, description="Agent contract schema version.", examples=[CONTRACT_SCHEMA_VERSION])
+    expected_schemas: list[str] | None = Field(default=None, description="Expected exported JSON schema model names.", examples=[["ConvertRequestModel"]])
+    registered_schemas: list[str] | None = Field(default=None, description="Exported JSON schema model names.", examples=[["ConvertRequestModel"]])
+    schemas_ok: bool | None = Field(default=None, description="JSON schema export check result.", examples=[True])
 
 
 PathParam = Annotated[str, Field(description="Local file path. Example: C:\\path\\to\\document.pdf.", examples=["C:\\path\\to\\document.pdf"])]
@@ -1164,6 +1168,27 @@ async def marker_self_test(
     data["expected_prompts"] = MCP_PROMPT_NAMES
     data["registered_prompts"] = sorted(prompt.name for prompt in prompts)
     data["prompts_ok"] = sorted(MCP_PROMPT_NAMES) == data["registered_prompts"]
+    schemas = export_json_schemas()
+    expected_schema_names = sorted(
+        [
+            "ConversionOptionsModel",
+            "ConvertRequestModel",
+            "ConvertResultModel",
+            "OutputManifestModel",
+            "MarkerErrorModel",
+            "BatchRequestModel",
+            "BatchResultModel",
+        ]
+    )
+    registered_schema_names = sorted(schemas.get("models", {}).keys())
+    data["contract_schema_version"] = schemas.get("schema_version")
+    data["expected_schemas"] = expected_schema_names
+    data["registered_schemas"] = registered_schema_names
+    data["schemas_ok"] = (
+        data["contract_schema_version"] == CONTRACT_SCHEMA_VERSION
+        and set(expected_schema_names).issubset(set(registered_schema_names))
+        and bool(schemas.get("option_metadata"))
+    )
     return data
 
 

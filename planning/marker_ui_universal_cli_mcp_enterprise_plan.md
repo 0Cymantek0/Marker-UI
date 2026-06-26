@@ -2091,11 +2091,17 @@ Implement:
 - Use shared contract schemas. [Done]
 - Return manifest/resource links. [Done]
 
-Done: MCP v1 now exposes split local/URL plan, convert, and submit tools; URL-capable tools carry `openWorldHint=true`, destructive job/settings tools carry `destructiveHint=true`, static and templated resources cover capabilities/health/version/jobs/manifests/output/assets/docs/options/settings, and all planned prompts are registered. MCP self-test validates tools, resources, and prompts.
+Done: MCP v1 now exposes split local/URL plan, convert, and submit tools; URL-capable tools carry `openWorldHint=true`, destructive job/settings tools carry `destructiveHint=true`, static and templated resources cover capabilities/health/version/jobs/manifests/output/assets/docs/options/settings, and all planned prompts are registered. MCP self-test validates tools, resources, prompts, and schemas.
+
+Final audit note (2026-06-26): MCP self-test now also validates the exported
+`marker.agent_contract.v1` schema bundle, required model names, and option
+metadata. The CLI `mcp self-test --json` path now calls the MCP self-test, so
+subprocess checks see the same tools/resources/prompts/schemas validation as MCP
+clients.
 
 Acceptance:
 
-- MCP self-test validates expected tools/resources/prompts. [Done]
+- MCP self-test validates expected tools/resources/prompts/schemas. [Done]
 - URL tools have `openWorldHint=true`. [Done]
 - Delete tools have `destructiveHint=true`. [Done]
 

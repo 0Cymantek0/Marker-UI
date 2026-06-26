@@ -32,6 +32,9 @@ async def test_mcp_self_test_validates_tools_resources_and_prompts():
     assert payload["tools_ok"] is True
     assert payload["resources_ok"] is True
     assert payload["prompts_ok"] is True
+    assert payload["schemas_ok"] is True
+    assert payload["contract_schema_version"] == "marker.agent_contract.v1"
     assert "marker_convert_url" in payload["expected_tools"]
     assert "marker://docs/agent-guide" in payload["expected_resources"]
     assert "convert_for_rag" in payload["expected_prompts"]
+    assert "OutputManifestModel" in payload["registered_schemas"]

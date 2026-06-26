@@ -77,6 +77,20 @@ def test_schema_export_and_mcp_init_config_emit_stable_json(tmp_path: Path):
     assert config_payload["mcpServers"]["marker"]["args"] == ["-m", "app.cli", "mcp", "start"]
 
 
+def test_mcp_self_test_cli_reports_schema_validation(tmp_path: Path):
+    backend_root = Path(__file__).resolve().parents[1]
+
+    completed = _run_cli(["mcp", "self-test", "--no-conversion", "--json"], cwd=backend_root, tmp_path=tmp_path)
+
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+    assert payload["tools_ok"] is True
+    assert payload["resources_ok"] is True
+    assert payload["prompts_ok"] is True
+    assert payload["schemas_ok"] is True
+    assert "OutputManifestModel" in payload["registered_schemas"]
+
+
 def test_grouped_jobs_and_server_status_use_json_contracts(tmp_path: Path):
     backend_root = Path(__file__).resolve().parents[1]
 

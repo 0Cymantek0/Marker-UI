@@ -728,8 +728,10 @@ def _handle_mcp(args: argparse.Namespace) -> int:
         result["mcp"] = {"transport": "stdio", "command": ["python", "-m", "app.cli", "mcp", "start"]}
         return _print_result(result, args.json)
     if command == "self-test":
+        from app.mcp_server import marker_self_test
+
         return _print_result(
-            asyncio.run(self_test(include_conversion=not args.no_conversion)),
+            asyncio.run(marker_self_test(include_conversion=not args.no_conversion)),
             args.json,
         )
     return 2
