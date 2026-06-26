@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 
@@ -48,6 +49,25 @@ def test_markdown_links_point_to_existing_local_files() -> None:
                 failures.append(f"{doc.relative_to(REPO_ROOT)} -> {target}")
 
     assert failures == []
+
+
+def test_cli_guide_batch_json_flag_matches_parser() -> None:
+    from app.cli import _build_parser
+
+    cli_guide = (REPO_ROOT / "docs" / "usage" / "cli.md").read_text(encoding="utf-8")
+    parser = _build_parser()
+    top_subparser = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    batch_parser = top_subparser.choices["batch"]
+    batch_flags = {
+        option
+        for action in batch_parser._actions
+        for option in action.option_strings
+    }
+
+    assert "--request-json" in batch_flags
+    assert "--manifest" not in batch_flags
+    assert "batch --request-json" in cli_guide
+    assert "batch --manifest" not in cli_guide
 
 
 def _is_external_or_in_page(target: str) -> bool:

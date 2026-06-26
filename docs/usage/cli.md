@@ -140,7 +140,7 @@ Batch mode accepts a JSON manifest with local paths or source URLs:
 Run it:
 
 ```powershell
-python -m app.cli batch --manifest "C:\path\to\batch.json" --json
+python -m app.cli batch --request-json "C:\path\to\batch.json" --json
 ```
 
 The result reports totals, skipped items, failures, and paths to machine-readable
