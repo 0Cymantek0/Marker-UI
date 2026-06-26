@@ -80,6 +80,7 @@ class PdfProbeResult:
     sampled_text_chars: int = 0
     sampled_image_count: int = 0
     full_page_image_pages: int = 0
+    full_page_coverage: bool = False
     page_results: list[PageProbeResult] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -103,6 +104,11 @@ class PdfProbeResult:
             sampled_text_chars=int(data.get("sampled_text_chars") or 0),
             sampled_image_count=int(data.get("sampled_image_count") or 0),
             full_page_image_pages=int(data.get("full_page_image_pages") or 0),
+            full_page_coverage=bool(
+                data.get("full_page_coverage")
+                if "full_page_coverage" in data
+                else _mapping_has_full_page_coverage(data)
+            ),
             page_results=[
                 PageProbeResult.from_mapping(item)
                 for item in data.get("page_results") or []
@@ -307,7 +313,12 @@ def _page_probe_result(
     )
 
 
-def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResult:
+def probe_pdf(
+    filepath: str | Path,
+    *,
+    max_deep_pages: int = 4,
+    full_page_probe: bool = False,
+) -> PdfProbeResult:
     path = Path(filepath)
     if PdfReader is None:
         return PdfProbeResult(
@@ -338,7 +349,11 @@ def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResul
             reasons=[f"PDF probe failed ({type(exc).__name__}); using Marker"],
         )
 
-    sampled_pages = _sample_indices(page_count)[:max_deep_pages]
+    sampled_pages = (
+        list(range(page_count))
+        if full_page_probe
+        else _sample_indices(page_count)[:max_deep_pages]
+    )
     page_text_lengths: list[int] = []
     qualities: list[float] = []
     image_counts: list[int] = []
@@ -407,8 +422,46 @@ def probe_pdf(filepath: str | Path, *, max_deep_pages: int = 4) -> PdfProbeResul
         sampled_text_chars=sum(page_text_lengths),
         sampled_image_count=sum(image_counts),
         full_page_image_pages=full_page_image_pages,
+        full_page_coverage=len(page_results) == page_count,
         page_results=page_results,
     )
+
+
+def probe_has_full_page_coverage(probe: PdfProbeResult) -> bool:
+    return _page_numbers_cover_all_pages(
+        page_count=probe.page_count,
+        page_numbers=[item.page_number for item in probe.page_results],
+    )
+
+
+def missing_probe_pages(probe: PdfProbeResult) -> list[int]:
+    present = {item.page_number for item in probe.page_results}
+    return [page for page in range(1, max(0, probe.page_count) + 1) if page not in present]
+
+
+def probe_coverage_label(probe: PdfProbeResult) -> str:
+    if probe_has_full_page_coverage(probe):
+        return f"full-page probe ({probe.page_count}/{probe.page_count} pages)"
+    return f"sampled probe ({len(probe.page_results)}/{probe.page_count} pages)"
+
+
+def _mapping_has_full_page_coverage(data: dict[str, Any]) -> bool:
+    page_results = data.get("page_results") or []
+    page_numbers = [
+        int(item.get("page_number") or 0)
+        for item in page_results
+        if isinstance(item, dict)
+    ]
+    return _page_numbers_cover_all_pages(
+        page_count=int(data.get("page_count") or 0),
+        page_numbers=page_numbers,
+    )
+
+
+def _page_numbers_cover_all_pages(*, page_count: int, page_numbers: list[int]) -> bool:
+    if page_count <= 0:
+        return False
+    return sorted(set(page_numbers)) == list(range(1, page_count + 1))
 
 
 def plan_pdf_routing_segments(probe: PdfProbeResult) -> list[PdfRoutingSegment]:

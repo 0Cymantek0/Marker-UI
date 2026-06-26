@@ -178,7 +178,13 @@ async def test_convert_plan_local_pdf_reports_mixed_segments(
         def to_dict(self):
             return probe_payload
 
-    monkeypatch.setattr("app.routes.convert.probe_pdf", lambda _path: _FakeProbe())
+    probe_kwargs = []
+
+    def _fake_probe(_path, **kwargs):
+        probe_kwargs.append(kwargs)
+        return _FakeProbe()
+
+    monkeypatch.setattr("app.routes.convert.probe_pdf", _fake_probe)
 
     resp = await client.post(
         "/api/convert/plan",
@@ -186,12 +192,14 @@ async def test_convert_plan_local_pdf_reports_mixed_segments(
             "filename": "mixed.pdf",
             "size": pdf.stat().st_size,
             "local_filepath": str(pdf),
+            "enable_mixed_pdf_routing": True,
         },
     )
 
     assert resp.status_code == 200
     plan = resp.json()
     assert plan["engine"] == "mixed_pdf"
+    assert probe_kwargs == [{"full_page_probe": True}]
     assert plan["preliminary"] is False
     assert plan["mixed_engine_segments"] == [
         {

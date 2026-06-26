@@ -321,6 +321,8 @@ class ConvertPlanRequest(BaseModel):
     image_handling_mode: Optional[str] = None
     converter_cls: Optional[str] = None
     force_ocr: bool = False
+    enable_mixed_pdf_routing: bool = False
+    full_page_probe: bool = False
 
 
 class ConverterPlanResponse(BaseModel):

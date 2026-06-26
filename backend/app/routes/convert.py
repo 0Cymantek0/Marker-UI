@@ -294,6 +294,8 @@ async def upload_file(
     vlm_crop_max_px: Optional[int] = Query(None, ge=64, le=4096, description="Longest-side pixel cap applied to a crop before VLM send"),
     vlm_batch_size: Optional[int] = Query(None, ge=1, le=64, description="Images per batched VLM call"),
     max_batch_retries: Optional[int] = Query(None, ge=0, le=5, description="Max extra batch calls to recover missing/garbled indices"),
+    enable_mixed_pdf_routing: bool = Query(False, description="Enable mixed PDF routing; requires a full-page probe"),
+    full_page_probe: bool = Query(False, description="Probe every PDF page before planning/routing"),
     db: AsyncSession = Depends(get_db),
 ) -> ConversionResponse:
     """Accept a document upload or local file path, create a job, and start conversion."""
@@ -471,6 +473,10 @@ async def upload_file(
         config["vlm_batch_size"] = vlm_batch_size
     if max_batch_retries is not None:
         config["max_batch_retries"] = max_batch_retries
+    if enable_mixed_pdf_routing:
+        config["enable_mixed_pdf_routing"] = True
+    if full_page_probe:
+        config["full_page_probe"] = True
     if local_filepath:
         config["local_filepath"] = local_filepath
     if source_url_safe:
@@ -493,7 +499,11 @@ async def upload_file(
         config["output_dir"] = output_dir
 
     if suffix == ".pdf":
-        probe_result = await asyncio.to_thread(probe_pdf, stored_path)
+        probe_result = await asyncio.to_thread(
+            probe_pdf,
+            stored_path,
+            full_page_probe=bool(config.get("enable_mixed_pdf_routing") or config.get("full_page_probe")),
+        )
         config["probe_result"] = probe_result.to_dict()
         if page_range and probe_result.page_count > 0:
             _validate_page_range(page_range, probe_result.page_count)
@@ -586,6 +596,10 @@ async def plan_conversion(
         config["converter_cls"] = req.converter_cls
     if req.force_ocr:
         config["force_ocr"] = True
+    if req.enable_mixed_pdf_routing:
+        config["enable_mixed_pdf_routing"] = True
+    if req.full_page_probe:
+        config["full_page_probe"] = True
     if req.local_filepath:
         path = Path(req.local_filepath)
         if path.is_absolute() and path.is_file():
@@ -594,7 +608,11 @@ async def plan_conversion(
             except InputNotAllowedError as exc:
                 raise HTTPException(status_code=400, detail=exc.message) from exc
         if path.is_absolute() and path.is_file() and path.suffix.lower() == ".pdf":
-            probe_result = await asyncio.to_thread(probe_pdf, path)
+            probe_result = await asyncio.to_thread(
+                probe_pdf,
+                path,
+                full_page_probe=bool(config.get("enable_mixed_pdf_routing") or config.get("full_page_probe")),
+            )
             config["probe_result"] = probe_result.to_dict()
             preliminary = False
 

@@ -210,7 +210,11 @@ async def plan_conversion(
         path = source_path.resolve()
         _validate_supported_path(path)
         if path.suffix.lower() == ".pdf":
-            probe_result = await asyncio.to_thread(probe_pdf, str(path))
+            probe_result = await asyncio.to_thread(
+                probe_pdf,
+                str(path),
+                full_page_probe=bool(config.get("enable_mixed_pdf_routing") or config.get("full_page_probe")),
+            )
             config["probe_result"] = probe_result.to_dict()
             if options.page_range and probe_result.page_count > 0:
                 _validate_page_range_safe(options.page_range, probe_result.page_count)
@@ -325,7 +329,11 @@ async def submit_conversion_job(
     if source_url_safe:
         config["source_url"] = source_url_safe
     if suffix == ".pdf":
-        probe_result = await asyncio.to_thread(probe_pdf, stored_path)
+        probe_result = await asyncio.to_thread(
+            probe_pdf,
+            stored_path,
+            full_page_probe=bool(config.get("enable_mixed_pdf_routing") or config.get("full_page_probe")),
+        )
         config["probe_result"] = probe_result.to_dict()
         if options.page_range and probe_result.page_count > 0:
             _validate_page_range_safe(options.page_range, probe_result.page_count)
@@ -409,7 +417,11 @@ async def _convert_resolved_path(
     if source_url:
         config["source_url"] = source_url
     if path.suffix.lower() == ".pdf":
-        probe_result = await asyncio.to_thread(probe_pdf, str(path))
+        probe_result = await asyncio.to_thread(
+            probe_pdf,
+            str(path),
+            full_page_probe=bool(config.get("enable_mixed_pdf_routing") or config.get("full_page_probe")),
+        )
         config["probe_result"] = probe_result.to_dict()
         if options.page_range and probe_result.page_count > 0:
             _validate_page_range_safe(options.page_range, probe_result.page_count)

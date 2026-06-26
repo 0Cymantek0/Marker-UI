@@ -10,7 +10,9 @@ from reportlab.pdfgen import canvas
 from app.conversion.probe import (
     PageProbeResult,
     PdfProbeResult,
+    missing_probe_pages,
     plan_pdf_routing_segments,
+    probe_has_full_page_coverage,
     probe_pdf,
 )
 
@@ -139,6 +141,22 @@ def test_probe_round_trips_page_results_from_mapping(tmp_path: Path) -> None:
     assert restored.page_results[0].page_number == 1
     assert restored.page_results[0].recommended_engine == "liteparse"
     assert restored.page_results[0].text_chars > 0
+
+
+def test_probe_full_page_option_covers_every_page(tmp_path: Path) -> None:
+    pdf = tmp_path / "five-pages.pdf"
+    make_text_pdf(pdf, pages=5)
+
+    sampled = probe_pdf(pdf)
+    full = probe_pdf(pdf, full_page_probe=True)
+
+    assert sampled.page_count == 5
+    assert [page.page_number for page in sampled.page_results] == [1, 2, 3, 5]
+    assert probe_has_full_page_coverage(sampled) is False
+    assert missing_probe_pages(sampled) == [4]
+    assert [page.page_number for page in full.page_results] == [1, 2, 3, 4, 5]
+    assert full.full_page_coverage is True
+    assert probe_has_full_page_coverage(full) is True
 
 
 def test_plan_pdf_routing_segments_groups_contiguous_same_engine_pages() -> None:

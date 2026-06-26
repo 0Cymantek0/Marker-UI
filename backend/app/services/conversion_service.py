@@ -27,7 +27,14 @@ from app.conversion.converters.spreadsheet import SpreadsheetConverter
 from app.conversion.converters.text_data import TextDataConverter
 from app.conversion.converters.video import VideoConverter
 from app.conversion.converters.xml_rss import XmlRssConverter
-from app.conversion.probe import PdfProbeResult, PdfRoutingSegment, plan_pdf_routing_segments
+from app.conversion.probe import (
+    PdfProbeResult,
+    PdfRoutingSegment,
+    missing_probe_pages,
+    plan_pdf_routing_segments,
+    probe_coverage_label,
+    probe_has_full_page_coverage,
+)
 from app.conversion.registry import ConverterRegistry
 from app.conversion.result import ConverterPlan, UniversalConversionResult
 from app.conversion.router import ConversionRouter
@@ -145,13 +152,14 @@ def _mixed_pdf_routing_blocked_by_config(config: dict[str, Any]) -> list[str]:
     return blockers
 
 
-def _mixed_pdf_plan(segments: list[PdfRoutingSegment], *, explicit: bool) -> ConverterPlan:
+def _mixed_pdf_plan(segments: list[PdfRoutingSegment], *, explicit: bool, probe: PdfProbeResult) -> ConverterPlan:
     page_summary = ", ".join(
         f"{_pages_to_range(segment.pages)}:{_segment_engine_name(segment)}"
         for segment in segments
     )
     reasons = [
         "PDF probe found page-level engine split",
+        f"Full-page probe coverage confirmed ({probe.page_count}/{probe.page_count} pages)",
         f"Planned segments: {page_summary}",
     ]
     if explicit:
@@ -171,6 +179,25 @@ def _mixed_pdf_plan(segments: list[PdfRoutingSegment], *, explicit: bool) -> Con
             "Mixed PDF routing uses per-segment fallback and preserves page order"
         ],
     )
+
+
+def _sampled_mixed_probe_warning(probe: PdfProbeResult) -> str:
+    missing = missing_probe_pages(probe)
+    missing_text = _pages_to_range(missing[:10])
+    if len(missing) > 10:
+        missing_text = f"{missing_text},..."
+    return (
+        "Mixed PDF routing skipped because probe was sampled, not full-page "
+        f"({probe_coverage_label(probe)}; missing pages: {missing_text or 'none'}). "
+        "Run a full-page probe before enabling mixed execution."
+    )
+
+
+def _segments_cover_all_pages(segments: list[PdfRoutingSegment], page_count: int) -> bool:
+    seen: list[int] = []
+    for segment in segments:
+        seen.extend(segment.pages)
+    return page_count > 0 and sorted(seen) == list(range(1, page_count + 1))
 
 
 class ConversionService:
@@ -233,7 +260,9 @@ class ConversionService:
             return mixed_plan
         stream_info = StreamInfo.from_path(filepath)
         plan = self._router.plan(stream_info, config)
-        return self._resolve_fallback(plan)
+        plan = self._resolve_fallback(plan)
+        self._annotate_sampled_mixed_probe_skip(stream_info.extension, config, plan)
+        return plan
 
     def plan_by_metadata(self, filename: str, size: int, config: dict[str, Any]) -> ConverterPlan:
         """Plan a conversion based on filename and size without local filesystem storage."""
@@ -390,7 +419,33 @@ class ConversionService:
         segments = plan_pdf_routing_segments(probe)
         if len(segments) <= 1:
             return None
-        return _mixed_pdf_plan(segments, explicit=explicit)
+        if not probe_has_full_page_coverage(probe):
+            return None
+        if not _segments_cover_all_pages(segments, probe.page_count):
+            return None
+        return _mixed_pdf_plan(segments, explicit=explicit, probe=probe)
+
+    def _annotate_sampled_mixed_probe_skip(
+        self,
+        extension: str,
+        config: dict[str, Any],
+        plan: ConverterPlan,
+    ) -> None:
+        if extension.lower() != ".pdf":
+            return
+        probe_data = config.get("probe_result") if isinstance(config, dict) else None
+        if not isinstance(probe_data, dict) or not probe_data.get("page_results"):
+            return
+        probe = PdfProbeResult.from_mapping(probe_data)
+        segments = plan_pdf_routing_segments(probe)
+        if len(segments) <= 1 or probe_has_full_page_coverage(probe):
+            return
+        warning = _sampled_mixed_probe_warning(probe)
+        if warning not in plan.warnings:
+            plan.warnings.append(warning)
+        reason = "Sampled page-level probe is not eligible for mixed PDF execution"
+        if reason not in plan.reasons:
+            plan.reasons.append(reason)
 
     def _convert_segment(
         self,
@@ -475,6 +530,10 @@ class ConversionService:
         probe_data = config.get("probe_result")
         probe = PdfProbeResult.from_mapping(probe_data)
         segments = plan_pdf_routing_segments(probe)
+        if not probe_has_full_page_coverage(probe):
+            raise RuntimeError(_sampled_mixed_probe_warning(probe))
+        if not _segments_cover_all_pages(segments, probe.page_count):
+            raise RuntimeError("Mixed PDF routing requires segments to cover every page exactly once")
         if len(segments) <= 1:
             return self.convert_file(
                 filepath,
@@ -501,7 +560,7 @@ class ConversionService:
             segment_meta["metadata"] = result.metadata
             segment_metadata.append(segment_meta)
 
-        plan = _mixed_pdf_plan(segments, explicit=bool(config.get("enable_mixed_pdf_routing")))
+        plan = _mixed_pdf_plan(segments, explicit=bool(config.get("enable_mixed_pdf_routing")), probe=probe)
         engine_meta = {
             "engine": plan.engine,
             "label": plan.label,
