@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { FileText, Code, Braces, Layers, HelpCircle, Settings2, X, ChevronDown, FlaskConical } from 'lucide-react'
+import { FileText, Code, Braces, Layers, HelpCircle, Settings2, X, ChevronDown, FlaskConical, Trash2, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,9 @@ import { Select } from '@/components/ui/select'
 import {
   getLLMProviders,
   getActiveLLM,
+  getPresets,
+  savePreset,
+  deletePreset,
   type LLMProvider,
   type ConversionConfig,
   type OutputFormat,
@@ -17,7 +20,8 @@ import {
   type AudioOutputMode,
   type OcrEngine,
   type SmartRouterLevel,
-  type ActiveLLM
+  type ActiveLLM,
+  type ConversionPreset
 } from '@/lib/api'
 
 interface ConversionOptionsProps {
@@ -149,6 +153,76 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
   )
   const tempUsesImageUnderstanding = (tempConfig.image_handling_mode ?? 'extraction') !== 'extraction'
 
+  const [presets, setPresets] = useState<ConversionPreset[]>([])
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('custom')
+  const [isSavingPreset, setIsSavingPreset] = useState(false)
+  const [presetName, setPresetName] = useState('')
+  const [presetDesc, setPresetDesc] = useState('')
+  const [showManage, setShowManage] = useState(false)
+
+  const loadPresets = () => {
+    getPresets()
+      .then((data) => setPresets(data))
+      .catch((err) => console.error('Failed to load presets', err))
+  }
+
+  useEffect(() => {
+    loadPresets()
+  }, [])
+
+  useEffect(() => {
+    const matched = presets.find((p) => {
+      const pConfig = p.config
+      return Object.keys(pConfig).every(
+        (key) => pConfig[key as keyof ConversionConfig] === config[key as keyof ConversionConfig]
+      )
+    })
+    setSelectedPresetId(matched ? matched.id : 'custom')
+  }, [config, presets])
+
+  const handleSelectPreset = (presetId: string) => {
+    if (presetId === 'custom') return
+    const selected = presets.find((p) => p.id === presetId)
+    if (selected) {
+      onChange({ ...config, ...selected.config })
+      setSelectedPresetId(presetId)
+      toast.success(`Preset "${selected.name}" applied!`)
+    }
+  }
+
+  const handleSavePreset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!presetName.trim()) {
+      toast.error('Preset name is required.')
+      return
+    }
+
+    try {
+      const configToSave = { ...config }
+      const newPreset = await savePreset(presetName.trim(), configToSave, presetDesc.trim() || undefined)
+      toast.success(`Preset "${newPreset.name}" saved!`)
+      setPresetName('')
+      setPresetDesc('')
+      setIsSavingPreset(false)
+      loadPresets()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save preset.')
+    }
+  }
+
+  const handleDeletePreset = async (presetId: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete the preset "${name}"?`)) {
+      return
+    }
+    try {
+      await deletePreset(presetId)
+      toast.success(`Preset "${name}" deleted.`)
+      loadPresets()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete preset.')
+    }
+  }
+
   useEffect(() => {
     if (isModalOpen) {
       Promise.all([getLLMProviders(), getActiveLLM()])
@@ -184,6 +258,136 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
 
   return (
     <div className="space-y-6">
+      {/* Presets Selection & Management */}
+      <div className="space-y-3 pb-4 border-b border-border/20">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+            Conversion Preset
+          </label>
+          {presets.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowManage((prev) => !prev)}
+              className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
+            >
+              {showManage ? 'Hide Presets' : `Manage Presets (${presets.length})`}
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Select
+            value={selectedPresetId}
+            onChange={handleSelectPreset}
+            options={[
+              { value: 'custom', label: 'Custom Configuration' },
+              ...presets.map((p) => ({ value: p.id, label: p.name })),
+            ]}
+            className="flex-1"
+            disabled={disabled}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            onClick={() => setIsSavingPreset((prev) => !prev)}
+            className="h-10 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0"
+          >
+            {isSavingPreset ? <X className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5 text-primary" />}
+            {isSavingPreset ? 'Close' : 'Save Current'}
+          </Button>
+        </div>
+
+        {/* Display selected preset description */}
+        {selectedPresetId !== 'custom' && (
+          (() => {
+            const activePreset = presets.find((p) => p.id === selectedPresetId)
+            return activePreset?.description ? (
+              <p className="text-[10px] text-muted-foreground/90 italic leading-normal pl-1">
+                {activePreset.description}
+              </p>
+            ) : null
+          })()
+        )}
+
+        {/* Save Preset Inline Form */}
+        {isSavingPreset && (
+          <form onSubmit={handleSavePreset} className="mt-3 p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-3 animate-fade-in">
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                Preset Name
+              </label>
+              <Input
+                placeholder="e.g. OCR High Accuracy"
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                disabled={disabled}
+                className="h-8 text-xs bg-background/50"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                Description (optional)
+              </label>
+              <Input
+                placeholder="e.g. Max layout/VLM settings for scanned PDFs"
+                value={presetDesc}
+                onChange={(e) => setPresetDesc(e.target.value)}
+                disabled={disabled}
+                className="h-8 text-xs bg-background/50"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsSavingPreset(false)}
+                className="h-7 text-[9px] uppercase tracking-wider"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="h-7 text-[9px] uppercase tracking-wider font-bold"
+              >
+                Save Preset
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Manage Presets Area (Handles the edge case: scroll-contained to prevent UI extension) */}
+        {showManage && presets.length > 0 && (
+          <div className="mt-2 rounded-xl border border-border/50 bg-card/45 p-2.5 space-y-2">
+            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60 px-1 border-b border-border/20 pb-1">
+              Saved Preset Profiles
+            </div>
+            <div className="max-h-36 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+              {presets.map((p) => (
+                <div key={p.id} className="flex items-start justify-between gap-3 p-1.5 rounded-lg hover:bg-muted/40 transition-colors">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="font-semibold text-xs text-foreground truncate">{p.name}</div>
+                    {p.description && (
+                      <div className="text-[10px] text-muted-foreground leading-normal truncate">{p.description}</div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeletePreset(p.id, p.name)}
+                    disabled={disabled}
+                    className="p-1 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       {/* Output Format */}
       <div className="space-y-3">
         <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">

@@ -663,3 +663,36 @@ export async function planConversion(
   })
 }
 
+
+// ─── Conversion Presets ───────────────────────────────────────────────
+
+export interface ConversionPreset {
+  id: string
+  name: string
+  description?: string
+  config: Partial<ConversionConfig>
+  created_at: string
+}
+
+export async function getPresets(): Promise<ConversionPreset[]> {
+  return request<ConversionPreset[]>('/settings/presets')
+}
+
+export async function savePreset(
+  name: string,
+  config: Partial<ConversionConfig>,
+  description?: string
+): Promise<ConversionPreset> {
+  return request<ConversionPreset>('/settings/presets', {
+    method: 'POST',
+    body: JSON.stringify({ name, description, config }),
+  })
+}
+
+export async function deletePreset(presetId: string): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(`/settings/presets/${presetId}`, {
+    method: 'DELETE',
+  })
+}
+
+

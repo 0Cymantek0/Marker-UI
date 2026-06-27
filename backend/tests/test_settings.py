@@ -613,3 +613,64 @@ class TestModelConfigVisionCapable:
         assert resp.status_code == 200
         assert resp.json()["value"] == "gemma4:12b"
 
+
+class TestConversionPresets:
+    @pytest.mark.asyncio
+    async def test_preset_crud_flow(self, settings_client: AsyncClient):
+        # 1. GET initially returns empty list
+        resp = await settings_client.get("/api/settings/presets")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+        # 2. POST to create a preset
+        preset_data = {
+            "name": "Standard Speed",
+            "description": "Fast processing configuration",
+            "config": {
+                "use_llm": True,
+                "conversion_profile": "fast",
+                "image_handling_mode": "extraction"
+            }
+        }
+        resp = await settings_client.post("/api/settings/presets", json=preset_data)
+        assert resp.status_code == 200
+        res_data = resp.json()
+        assert res_data["name"] == "Standard Speed"
+        assert res_data["description"] == "Fast processing configuration"
+        assert res_data["config"]["conversion_profile"] == "fast"
+        assert "id" in res_data
+        preset_id = res_data["id"]
+
+        # 3. GET now contains the created preset
+        resp = await settings_client.get("/api/settings/presets")
+        assert resp.status_code == 200
+        presets = resp.json()
+        assert len(presets) == 1
+        assert presets[0]["id"] == preset_id
+
+        # 4. POST to overwrite the same preset (same name)
+        updated_data = {
+            "name": "Standard Speed",
+            "description": "Updated configuration",
+            "config": {
+                "use_llm": False,
+                "conversion_profile": "auto"
+            }
+        }
+        resp = await settings_client.post("/api/settings/presets", json=updated_data)
+        assert resp.status_code == 200
+        res_data = resp.json()
+        assert res_data["id"] == preset_id
+        assert res_data["description"] == "Updated configuration"
+        assert res_data["config"]["use_llm"] is False
+
+        # 5. DELETE the preset
+        resp = await settings_client.delete(f"/api/settings/presets/{preset_id}")
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+        # 6. GET is empty again
+        resp = await settings_client.get("/api/settings/presets")
+        assert resp.status_code == 200
+        assert resp.json() == []
+

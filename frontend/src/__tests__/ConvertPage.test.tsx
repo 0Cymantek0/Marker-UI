@@ -160,6 +160,9 @@ vi.mock('@/lib/api', async (importOriginal) => {
     applyLiveOverride: (body: unknown) => mockApplyLiveOverride(body),
     getCapabilities: () => mockGetCapabilities(),
     planConversion: (filename: string, size: number, local_filepath?: string) => mockPlanConversion(filename, size, local_filepath),
+    getPresets: () => Promise.resolve([]),
+    savePreset: () => Promise.resolve({ id: 'preset_123', name: 'SavedPreset', config: {}, created_at: '' }),
+    deletePreset: () => Promise.resolve({ success: true, message: '' }),
   }
 })
 

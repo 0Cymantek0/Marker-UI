@@ -30,6 +30,8 @@ from app.models.schemas import (
     GPUWorkerMode,
     GPUWorkersConfigRequest,
     GPUWorkersResolvedResponse,
+    ConversionPreset,
+    ConversionPresetIn,
 )
 from app.security.auth import Principal, require_rest_scopes
 from app.security.scopes import SCOPE_SETTINGS_WRITE
@@ -1353,6 +1355,106 @@ async def fetch_provider_models(
     except Exception as e:
         logger.error("Error fetching models from provider: %s", e, exc_info=True)
         raise HTTPException(status_code=400, detail=f"Failed to fetch models: {str(e)}")
+
+
+@router.get("/presets", response_model=list[ConversionPreset])
+async def get_presets(
+    db: AsyncSession = Depends(get_db),
+) -> list[ConversionPreset]:
+    """Retrieve all saved custom conversion presets."""
+    stmt = select(Setting).where(Setting.key == "conversion_presets")
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+    if not row:
+        return []
+    try:
+        presets = json.loads(row.value)
+        return [ConversionPreset(**p) for p in presets]
+    except Exception:
+        return []
+
+
+@router.post("/presets", response_model=ConversionPreset)
+async def save_preset(
+    body: ConversionPresetIn,
+    db: AsyncSession = Depends(get_db),
+) -> ConversionPreset:
+    """Create a new custom conversion preset or overwrite an existing one by name."""
+    import uuid
+    from datetime import datetime, timezone
+
+    stmt = select(Setting).where(Setting.key == "conversion_presets")
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+
+    presets = []
+    if row:
+        try:
+            presets = json.loads(row.value)
+        except Exception:
+            pass
+
+    # Look for existing preset by name (case-insensitive)
+    existing = next((p for p in presets if p.get("name", "").lower() == body.name.lower()), None)
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    if existing:
+        existing["description"] = body.description
+        existing["config"] = body.config
+        existing["created_at"] = now_str
+        preset_obj = ConversionPreset(**existing)
+    else:
+        new_id = f"preset_{uuid.uuid4().hex[:12]}"
+        preset_data = {
+            "id": new_id,
+            "name": body.name,
+            "description": body.description,
+            "config": body.config,
+            "created_at": now_str
+        }
+        presets.append(preset_data)
+        preset_obj = ConversionPreset(**preset_data)
+
+    serialized = json.dumps(presets)
+    if row:
+        row.value = serialized
+    else:
+        db.add(Setting(key="conversion_presets", value=serialized, category="conversion"))
+
+    await db.flush()
+    await db.commit()
+    return preset_obj
+
+
+@router.delete("/presets/{preset_id}")
+async def delete_preset(
+    preset_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Delete a custom conversion preset by ID."""
+    stmt = select(Setting).where(Setting.key == "conversion_presets")
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Preset not found")
+
+    try:
+        presets = json.loads(row.value)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Preset not found")
+
+    initial_len = len(presets)
+    presets = [p for p in presets if p.get("id") != preset_id]
+
+    if len(presets) == initial_len:
+        raise HTTPException(status_code=404, detail="Preset not found")
+
+    row.value = json.dumps(presets)
+    await db.flush()
+    await db.commit()
+    return {"success": True, "message": "Preset deleted successfully"}
+
 
 
 

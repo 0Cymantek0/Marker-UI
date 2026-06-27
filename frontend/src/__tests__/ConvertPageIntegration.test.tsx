@@ -14,6 +14,9 @@ const mockGetJobStatus = vi.fn()
 const mockGetHistory = vi.fn()
 const mockGetCapabilities = vi.fn()
 const mockPlanConversion = vi.fn()
+const mockGetPresets = vi.fn()
+const mockSavePreset = vi.fn()
+const mockDeletePreset = vi.fn()
 
 vi.mock('@/lib/api', () => ({
   uploadFile: (...args: any[]) => mockUploadFile(...args),
@@ -26,6 +29,11 @@ vi.mock('@/lib/api', () => ({
   browseFolder: vi.fn(),
   getCapabilities: () => mockGetCapabilities(),
   planConversion: (...args: any[]) => mockPlanConversion(...args),
+  getLLMProviders: vi.fn().mockResolvedValue([]),
+  getActiveLLM: vi.fn().mockResolvedValue(null),
+  getPresets: (...args: any[]) => mockGetPresets(...args),
+  savePreset: (...args: any[]) => mockSavePreset(...args),
+  deletePreset: (...args: any[]) => mockDeletePreset(...args),
 }))
 
 // Mock EventSource helper
@@ -73,6 +81,9 @@ describe('ConvertPage Integration with real hook', () => {
       warnings: [],
       preliminary: true,
     })
+    mockGetPresets.mockResolvedValue([])
+    mockSavePreset.mockResolvedValue({ id: 'preset_123', name: 'Saved', config: {}, created_at: '' })
+    mockDeletePreset.mockResolvedValue({ success: true, message: '' })
   })
 
   it('submits conversion and renders queue item without crashing', async () => {

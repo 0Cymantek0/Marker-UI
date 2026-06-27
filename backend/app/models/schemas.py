@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
@@ -342,6 +342,20 @@ class ConverterPlanResponse(BaseModel):
     preliminary: bool = False
     probe_result: Optional[dict] = None
     mixed_engine_segments: Optional[list[dict]] = None
+
+
+class ConversionPreset(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    config: dict[str, Any]
+    created_at: str
+
+
+class ConversionPresetIn(BaseModel):
+    name: str
+    description: Optional[str] = None
+    config: dict[str, Any]
 
 
 

@@ -6,10 +6,16 @@ import '@testing-library/jest-dom'
 
 const mockGetLLMProviders = vi.fn()
 const mockGetActiveLLM = vi.fn()
+const mockGetPresets = vi.fn().mockResolvedValue([])
+const mockSavePreset = vi.fn().mockResolvedValue({ id: 'preset_123', name: 'Saved', config: {}, created_at: '' })
+const mockDeletePreset = vi.fn().mockResolvedValue({ success: true, message: '' })
 
 vi.mock('@/lib/api', () => ({
   getLLMProviders: (...args: any[]) => mockGetLLMProviders(...args),
   getActiveLLM: (...args: any[]) => mockGetActiveLLM(...args),
+  getPresets: (...args: any[]) => mockGetPresets(...args),
+  savePreset: (...args: any[]) => mockSavePreset(...args),
+  deletePreset: (...args: any[]) => mockDeletePreset(...args),
 }))
 
 vi.mock('sonner', () => ({
@@ -34,6 +40,9 @@ const active: ActiveLLM = {
 describe('ConversionOptions image understanding controls', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    mockGetPresets.mockResolvedValue([])
+    mockSavePreset.mockResolvedValue({ id: 'preset_123', name: 'SavedPreset', config: {}, created_at: '' })
+    mockDeletePreset.mockResolvedValue({ success: true, message: '' })
   })
 
   it('requires explicit cloud image analysis opt-in', async () => {
@@ -240,5 +249,59 @@ describe('ConversionOptions image understanding controls', () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ conversion_profile: 'high_accuracy' })
     )
+  })
+
+  describe('Conversion Presets UI flow', () => {
+    it('loads and lists presets on mount', async () => {
+      const mockPresets = [
+        {
+          id: 'preset_1',
+          name: 'Fast OCR',
+          description: 'Fast mode with OCR enabled',
+          config: { conversion_profile: 'fast', force_ocr: true },
+          created_at: new Date().toISOString()
+        }
+      ]
+      mockGetPresets.mockResolvedValueOnce(mockPresets)
+      mockGetLLMProviders.mockResolvedValue([])
+      mockGetActiveLLM.mockResolvedValue(null)
+
+      render(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
+
+      // The select element should display custom by default since baseConfig doesn't match preset_1
+      expect(await screen.findByRole('button', { name: /custom configuration/i })).toBeInTheDocument()
+    })
+
+    it('allows opening the save preset inline form and saving the configuration', async () => {
+      mockGetPresets.mockResolvedValue([])
+      mockGetLLMProviders.mockResolvedValue([])
+      mockGetActiveLLM.mockResolvedValue(null)
+      mockSavePreset.mockResolvedValueOnce({
+        id: 'preset_2',
+        name: 'Super High Quality',
+        config: baseConfig,
+        created_at: new Date().toISOString()
+      })
+
+      render(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
+
+      const saveCurrentBtn = screen.getByRole('button', { name: /save current/i })
+      fireEvent.click(saveCurrentBtn)
+
+      // Form should be visible
+      const nameInput = screen.getByPlaceholderText(/e.g. OCR High Accuracy/i)
+      const descInput = screen.getByPlaceholderText(/e.g. Max layout\/VLM settings/i)
+      expect(nameInput).toBeInTheDocument()
+
+      fireEvent.change(nameInput, { target: { value: 'Super High Quality' } })
+      fireEvent.change(descInput, { target: { value: 'Awesome config' } })
+
+      const savePresetSubmitBtn = screen.getByRole('button', { name: /save preset/i })
+      fireEvent.click(savePresetSubmitBtn)
+
+      await waitFor(() => {
+        expect(mockSavePreset).toHaveBeenCalledWith('Super High Quality', expect.any(Object), 'Awesome config')
+      })
+    })
   })
 })
