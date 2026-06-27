@@ -61,6 +61,7 @@ _PROVIDER_BASE_URLS: dict[str, str] = {
     "custom_openai": "https://api.openai.com/v1",
     "claude": "https://api.anthropic.com/v1/",
     "ollama": "http://localhost:11434/v1/",
+    "vertex": "",
 }
 
 # ImageType values that carry a Mermaid field and therefore require
@@ -128,6 +129,7 @@ class _OpenAICompatClient:
         base_url: str,
         api_key: str,
         timeout: float = 60.0,
+        credentials: Any = None,
     ) -> None:
         # Import inside __init__ so tests that inject a mock never require httpx.
         import httpx
@@ -135,6 +137,7 @@ class _OpenAICompatClient:
         self._http = httpx.Client(timeout=timeout)
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
+        self._credentials = credentials
         self.chat = _Chat(self)
 
     def _post_chat(
@@ -145,6 +148,14 @@ class _OpenAICompatClient:
         response_format: dict[str, Any] | None,
         extra: dict[str, Any],
     ) -> Any:
+        if self._credentials:
+            try:
+                import google.auth.transport.requests
+                self._credentials.refresh(google.auth.transport.requests.Request())
+                self._api_key = self._credentials.token
+            except Exception as exc:
+                logger.warning("Failed to refresh Google Auth credentials: %r", exc)
+
         url = f"{self._base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -286,15 +297,6 @@ class VLMService:
             raise RuntimeError(
                 "VLMService requires an LLMProvider — none configured."
             )
-        if provider.type == "vertex":
-            # Vertex VLM is out of scope for Phase 1 (decision documented in
-            # the plan). Fail fast at construction rather than silently
-            # returning degraded results.
-            raise NotImplementedError(
-                "Vertex VLM is not supported in Phase 1. "
-                "Use gemini / openai / claude / ollama / azure instead."
-            )
-
         # ---- Model resolution -----------------------------------------
         self._provider: LLMProvider = provider
         self._model_id: str = model_id or self._resolve_model_id(provider)
@@ -926,10 +928,52 @@ class VLMService:
     @staticmethod
     def _build_default_client(provider: LLMProvider) -> _OpenAICompatClient:
         """Build the production httpx-backed OpenAI-compat client."""
-        base_url = provider.base_url or _PROVIDER_BASE_URLS.get(
-            provider.type, _PROVIDER_BASE_URLS["openai"]
-        )
-        if provider.type == "azure":
+        credentials = None
+        if provider.type == "vertex":
+            location = provider.base_url or "us-central1"
+            project_id = provider.api_key or ""
+            if project_id:
+                try:
+                    project_id = decrypt_value(project_id)
+                except Exception:
+                    pass
+
+            token = ""
+            try:
+                from google.auth import default
+                import google.auth.transport.requests
+                credentials, resolved_project = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+                if not project_id:
+                    project_id = resolved_project
+                credentials.refresh(google.auth.transport.requests.Request())
+                token = credentials.token
+            except Exception as exc:
+                logger.warning("Failed to load Google Auth default credentials for Vertex: %r", exc)
+                # Try parsing api_key as service account JSON key
+                if project_id and project_id.strip().startswith("{"):
+                    try:
+                        import json
+                        from google.oauth2 import service_account
+                        info = json.loads(project_id)
+                        credentials = service_account.Credentials.from_service_account_info(
+                            info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                        )
+                        credentials.refresh(google.auth.transport.requests.Request())
+                        token = credentials.token
+                        project_id = info.get("project_id", project_id)
+                    except Exception as sa_exc:
+                        logger.warning("Failed to load Vertex service account from api_key: %r", sa_exc)
+
+            if not project_id:
+                raise RuntimeError(
+                    "Vertex AI requires a Google Cloud project_id. "
+                    "Configure it as the API Key in Provider Settings or set GOOGLE_CLOUD_PROJECT."
+                )
+
+            base_url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi"
+            api_key = token
+
+        elif provider.type == "azure":
             # Azure uses deployment-prefixed URLs; caller must supply base_url.
             if not provider.base_url:
                 raise RuntimeError(
@@ -939,15 +983,22 @@ class VLMService:
             base_url = provider.base_url.rstrip("/")
             base_url = f"{base_url}/openai/deployments/{{deployment}}"
 
-        api_key = provider.api_key or ""
-        # Decrypt if it looks like a Fernet token (no-op on plaintext).
-        if api_key:
-            try:
-                api_key = decrypt_value(api_key)
-            except Exception:  # noqa: BLE001 — already plaintext
-                pass
+            api_key = provider.api_key or ""
+            # Decrypt if it looks like a Fernet token (no-op on plaintext).
+            if api_key:
+                try:
+                    api_key = decrypt_value(api_key)
+                except Exception:  # noqa: BLE001 — already plaintext
+                    pass
+        else:
+            api_key = provider.api_key or ""
+            if api_key:
+                try:
+                    api_key = decrypt_value(api_key)
+                except Exception:
+                    pass
 
-        return _OpenAICompatClient(base_url=base_url, api_key=api_key)
+        return _OpenAICompatClient(base_url=base_url, api_key=api_key, credentials=credentials)
 
 
 # ---------------------------------------------------------------------------

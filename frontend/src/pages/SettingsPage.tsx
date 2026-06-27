@@ -890,30 +890,6 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {/* Hardware Tuning Section — coming soon (ISSUE-8). Disabled placeholder:
-          the VRAM-tier auto-tuner was removed in favour of a future opt-in
-          benchmark with manual override + reset. Rendered greyed out so the
-          surface is discoverable without exposing a half-built control. */}
-      <div
-        className="space-y-4 pt-6 border-t border-border/20 opacity-50 pointer-events-none select-none"
-        aria-disabled="true"
-      >
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-primary" />
-              Hardware Tuning
-            </h3>
-            <p className="text-xs text-muted-foreground leading-relaxed max-w-3xl">
-              Benchmark your GPU to find the fastest non-OOM batch sizes, with manual override and reset to defaults. Until then, conversions run at safe defaults with automatic out-of-memory recovery.
-            </p>
-          </div>
-          <Badge variant="secondary" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
-            Coming Soon
-          </Badge>
-        </div>
-      </div>
-
       {/* Image Understanding Defaults Section */}
       <div className="space-y-4 pt-6 border-t border-border/20">
         <div className="space-y-1">

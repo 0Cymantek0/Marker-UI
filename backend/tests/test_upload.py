@@ -110,23 +110,34 @@ class TestUploadSizeLimit:
     async def test_max_upload_size_env_override_takes_effect(self, monkeypatch: pytest.MonkeyPatch):
         """UCM-004.3: MARKER_MAX_UPLOAD_SIZE_MB must drive the enforced limit at import time."""
         import importlib
+        import sys
 
         import app.core.config as cfg_mod
 
         monkeypatch.setenv("MARKER_MAX_UPLOAD_SIZE_MB", "1")
-        importlib.reload(cfg_mod)
+        for name, mod in list(sys.modules.items()):
+            if name in ("app.core.config", "backend.app.core.config"):
+                importlib.reload(mod)
         try:
             # 1 MB expressed in bytes
             assert cfg_mod.MAX_UPLOAD_SIZE == 1 * 1024 * 1024
 
             # convert.py must read this value from config (single source of truth).
             import app.routes.convert as convert_mod
-            importlib.reload(convert_mod)
+            for name, mod in list(sys.modules.items()):
+                if name in ("app.routes.convert", "backend.app.routes.convert"):
+                    importlib.reload(mod)
             assert convert_mod.MAX_UPLOAD_SIZE == cfg_mod.MAX_UPLOAD_SIZE
         finally:
             monkeypatch.delenv("MARKER_MAX_UPLOAD_SIZE_MB", raising=False)
-            importlib.reload(cfg_mod)
-            importlib.reload(convert_mod)
+            for name, mod in list(sys.modules.items()):
+                if name in (
+                    "app.core.config",
+                    "backend.app.core.config",
+                    "app.routes.convert",
+                    "backend.app.routes.convert",
+                ):
+                    importlib.reload(mod)
 
 
 # ---------------------------------------------------------------------------

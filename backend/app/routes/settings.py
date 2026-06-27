@@ -56,7 +56,7 @@ ALLOWED_LLM_HOSTS = {
     "api.openai.com",
     "api.anthropic.com",
     "generativelanguage.googleapis.com",
-    "us-central1-aiplatform.googleapis.com",
+    "*-aiplatform.googleapis.com",
     "localhost",
     "127.0.0.1",
     "::1",
@@ -73,6 +73,10 @@ def validate_llm_url(url: str) -> str:
     for pattern in ALLOWED_LLM_HOSTS:
         if pattern.startswith("*."):
             if hostname.endswith(pattern[1:]) or hostname == pattern[2:]:
+                allowed = True
+                break
+        elif pattern.startswith("*-"):
+            if hostname.endswith(pattern[1:]):
                 allowed = True
                 break
         elif hostname == pattern:
@@ -566,18 +570,74 @@ async def test_llm_connection(
                 raise HTTPException(status_code=400, detail="Vertex Project ID is required")
 
             if is_masked(project_id):
-                project_id = "secret:vertex_project_id"
+                from app.core.api_manager import get_secret
+                project_id = get_secret("vertex_project_id")
             else:
                 from app.core.api_manager import update_secret_cache
                 update_secret_cache("vertex_project_id", project_id)
-                project_id = "secret:vertex_project_id"
 
-            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_id}/locations/us-central1/publishers/google/models"
+            # Resolve authentication credentials and fetch a token
+            token = ""
+            actual_project_id = project_id
+            try:
+                from google.auth import default
+                import google.auth.transport.requests
+                credentials, resolved_project = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+                if not actual_project_id or actual_project_id.startswith("secret:"):
+                    actual_project_id = resolved_project
+                credentials.refresh(google.auth.transport.requests.Request())
+                token = credentials.token
+            except Exception:
+                # Fallback: check if project_id is service account JSON
+                if project_id and project_id.strip().startswith("{"):
+                    try:
+                        import json
+                        from google.oauth2 import service_account
+                        info = json.loads(project_id)
+                        credentials = service_account.Credentials.from_service_account_info(
+                            info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                        )
+                        credentials.refresh(google.auth.transport.requests.Request())
+                        token = credentials.token
+                        actual_project_id = info.get("project_id", actual_project_id)
+                    except Exception as sa_exc:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Failed to load Vertex credentials: {sa_exc}"
+                        )
+
+            if not actual_project_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Vertex Project ID could not be resolved from settings or environment default."
+                )
+
+            # Perform authenticated API check to list models
+            url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{actual_project_id}/locations/us-central1/publishers/google/models"
+            headers = {}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+
             async with httpx.AsyncClient(timeout=timeout) as client:
-                res = await client.get(url)
+                res = await client.get(url, headers=headers)
+
+            if res.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Vertex AI authentication failed ({res.status_code}): {res.text}"
+                )
             if res.status_code == 404:
-                raise HTTPException(status_code=400, detail="Vertex project not found or invalid URL path")
-            return {"success": True, "message": "Vertex AI settings structured correctly (Authentication handled via environment credentials)."}
+                raise HTTPException(
+                    status_code=400,
+                    detail="Vertex project not found or invalid location/region path."
+                )
+            if res.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Vertex AI API returned error code {res.status_code}: {res.text}"
+                )
+
+            return {"success": True, "message": "Successfully connected to Vertex AI!"}
 
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported service '{service}'")

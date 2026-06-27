@@ -37,6 +37,50 @@ def _import_marker() -> None:
     }
     logger.info("marker-pdf converters imported: %s", list(_CONVERTERS.keys()))
 
+    try:
+        from marker.services.vertex import GoogleVertexService
+
+        def patched_get_google_client(self, timeout: int):
+            from google import genai
+            from google.oauth2 import service_account
+            import json
+
+            http_options = {"timeout": timeout * 1000}
+            if self.vertex_dedicated:
+                http_options["headers"] = {"x-vertex-ai-llm-request-type": "dedicated"}
+
+            project_id = self.vertex_project_id
+            credentials = None
+
+            # Resolve secret placeholder if present
+            if project_id and project_id.startswith("secret:"):
+                from app.core.api_manager import get_secret
+                project_id = get_secret(project_id.replace("secret:", ""))
+
+            # Handle JSON service account key
+            if project_id and project_id.strip().startswith("{"):
+                try:
+                    info = json.loads(project_id)
+                    credentials = service_account.Credentials.from_service_account_info(
+                        info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    project_id = info.get("project_id", project_id)
+                except Exception as exc:
+                    logger.warning("Failed to parse Vertex service account JSON: %r", exc)
+
+            return genai.Client(
+                vertexai=True,
+                project=project_id,
+                location=self.vertex_location,
+                credentials=credentials,
+                http_options=http_options,
+            )
+
+        GoogleVertexService.get_google_client = patched_get_google_client
+        logger.info("Successfully patched GoogleVertexService.get_google_client")
+    except Exception as e:
+        logger.warning("Failed to monkeypatch GoogleVertexService: %r", e)
+
 
 LLM_SERVICE_MAP: dict[str, str] = {
     "gemini": "marker.services.gemini.GoogleGeminiService",
@@ -286,9 +330,8 @@ def build_marker_options(
 # ---------------------------------------------------------------------------
 # OOM safety net (ISSUE-5)
 #
-# We removed the VRAM-tier batch tuner, so surya now runs at its built-in CUDA
-# defaults (e.g. RECOGNITION_BATCH_SIZE=256). On a small card (6 GB) a dense
-# page can blow past VRAM and raise ``torch.cuda.OutOfMemoryError``, which would
+# Surya runs at its built-in CUDA defaults (e.g. RECOGNITION_BATCH_SIZE=256).
+# On a small card (6 GB) a dense page can blow past VRAM and raise ``torch.cuda.OutOfMemoryError``, which would
 # otherwise crash the whole job. Instead we catch it, free the cache, halve the
 # batch sizes on the shared surya predictors, and retry. The lowered batch sizes
 # persist on the predictor singletons, so once a card has shown its ceiling the

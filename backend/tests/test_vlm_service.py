@@ -599,3 +599,81 @@ class TestProviderResolution:
         )
 
         assert provider is None
+
+
+class TestVertexVLMClientBuilder:
+    def test_vertex_build_client_with_project_id_and_adc(self, monkeypatch):
+        """Build Vertex client using project_id in api_key and Google default credentials."""
+        from google.auth import default
+        import google.auth.transport.requests
+
+        # Mock google auth default credentials
+        mock_creds = MagicMock()
+        mock_creds.token = "fake-gcp-oauth-token"
+
+        monkeypatch.setattr(
+            "google.auth.default",
+            lambda scopes=None: (mock_creds, "test-project-123")
+        )
+        monkeypatch.setattr(
+            "google.auth.transport.requests.Request",
+            MagicMock()
+        )
+
+        prov = LLMProvider(
+            id="vertex-test",
+            type="vertex",
+            label="Vertex Test",
+            api_key="test-project-123",
+            base_url="us-east4",
+            models=[
+                ModelConfig(model_id="google/gemini-2.0-flash", vision_capable=True),
+            ]
+        )
+
+        client = VLMService._build_default_client(prov)
+        assert client._base_url == "https://us-east4-aiplatform.googleapis.com/v1/projects/test-project-123/locations/us-east4/endpoints/openapi"
+        assert client._api_key == "fake-gcp-oauth-token"
+
+    def test_vertex_build_client_with_service_account_json(self, monkeypatch):
+        """Build Vertex client using a JSON service account key string in api_key."""
+        from google.oauth2 import service_account
+
+        # Mock service_account.Credentials.from_service_account_info
+        mock_creds = MagicMock()
+        mock_creds.token = "fake-sa-token"
+
+        monkeypatch.setattr(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            lambda info, scopes=None: mock_creds
+        )
+        monkeypatch.setattr(
+            "google.auth.transport.requests.Request",
+            MagicMock()
+        )
+
+        # Mock default credentials to raise, forcing fallback to service account JSON
+        def mock_default(scopes=None):
+            raise Exception("No default credentials")
+        monkeypatch.setattr("google.auth.default", mock_default)
+
+        sa_json = json.dumps({
+            "type": "service_account",
+            "project_id": "json-project-789",
+            "private_key": "some-key"
+        })
+
+        prov = LLMProvider(
+            id="vertex-test-sa",
+            type="vertex",
+            label="Vertex SA Test",
+            api_key=sa_json,
+            base_url="europe-west1",
+            models=[
+                ModelConfig(model_id="google/gemini-1.5-flash", vision_capable=True),
+            ]
+        )
+
+        client = VLMService._build_default_client(prov)
+        assert client._base_url == "https://europe-west1-aiplatform.googleapis.com/v1/projects/json-project-789/locations/europe-west1/endpoints/openapi"
+        assert client._api_key == "fake-sa-token"

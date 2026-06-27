@@ -316,18 +316,4 @@ describe('SettingsPage component', () => {
 
     expect(api.updateSetting).toHaveBeenCalledWith('max_images_per_doc', '100', 'image')
   })
-
-  it('renders the Hardware Tuning section as a disabled "Coming Soon" placeholder', async () => {
-    render(<SettingsPage />)
-    await screen.findByText('Configured Service Providers')
-
-    const heading = screen.getByText('Hardware Tuning')
-    expect(heading).toBeInTheDocument()
-    expect(screen.getByText('Coming Soon')).toBeInTheDocument()
-
-    // The whole section is greyed out and non-interactive (aria-disabled).
-    const section = heading.closest('[aria-disabled="true"]')
-    expect(section).not.toBeNull()
-    expect(section).toHaveClass('opacity-50', 'pointer-events-none')
-  })
 })
