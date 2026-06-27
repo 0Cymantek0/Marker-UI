@@ -88,3 +88,6 @@ lab/
 # Reference clones (read-only, developer use only)
 references/markitdown/
 backend/tests/fixtures/
+DESIGN.md
+.impeccable/
+PRODUCT.md
