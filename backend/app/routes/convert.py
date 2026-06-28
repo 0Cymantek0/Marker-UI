@@ -157,6 +157,24 @@ def _parse_image_understanding(metadata_json: str | None) -> list[dict] | None:
     return entries or None
 
 
+def _parse_formats(formats_json: str | None) -> dict[str, str] | None:
+    """Read the cached ``{format: text}`` map for a job.
+
+    Returns None when the job has no cached formats (legacy single-format jobs,
+    or jobs that never completed), so the response omits the field and the UI
+    falls back to the single-format preview.
+    """
+    if not formats_json:
+        return None
+    try:
+        parsed = json.loads(formats_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(parsed, dict) or not parsed:
+        return None
+    return {str(k): str(v) for k, v in parsed.items() if v is not None}
+
+
 def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | None:
     if not metadata_json:
         return None
@@ -172,6 +190,37 @@ def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | No
         if key in parsed and parsed[key]
     }
     return metadata or None
+
+
+def _parse_available_formats(job: ConversionJob) -> list[str]:
+    """The list of output formats currently viewable for a completed job.
+
+    Derived from the cached ``formats_json`` (written at finalize / regenerate).
+    For legacy single-format jobs the cached list is absent, so we fall back to
+    the job's ``output_format`` column so older jobs still expose one tab.
+    """
+    cached = _parse_formats_json(job.formats_json)
+    if cached is not None:
+        return list(cached.keys())
+    fmt = (job.output_format or "markdown").strip()
+    return [fmt] if fmt else ["markdown"]
+
+
+def _parse_formats_json(formats_json: str | None) -> dict[str, str] | None:
+    """Parse the ``{format: text}`` cache written at finalize/regenerate."""
+    if not formats_json:
+        return None
+    try:
+        parsed = json.loads(formats_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(parsed, dict) or not parsed:
+        return None
+    return {
+        str(fmt): str(text)
+        for fmt, text in parsed.items()
+        if fmt and text is not None
+    }
 
 
 def _planned_mixed_segments(probe_data: Any) -> list[dict[str, Any]] | None:
@@ -249,6 +298,7 @@ async def upload_file(
     source_url: Optional[str] = Query(None, description="Optional public http(s) document URL"),
     output_dir: Optional[str] = Query(None, description="Optional custom output directory path"),
     output_format: str = Query("markdown", description="Output format: markdown, json, html, chunks"),
+    output_formats: Optional[str] = Query(None, description="Comma-separated output formats for multi-format rendering (e.g. markdown,json)"),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
     engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
     conversion_profile: Optional[str] = Query(None, description="Conversion profile: auto, fast, high_accuracy"),
@@ -294,6 +344,10 @@ async def upload_file(
     vlm_crop_max_px: Optional[int] = Query(None, ge=64, le=4096, description="Longest-side pixel cap applied to a crop before VLM send"),
     vlm_batch_size: Optional[int] = Query(None, ge=1, le=64, description="Images per batched VLM call"),
     max_batch_retries: Optional[int] = Query(None, ge=0, le=5, description="Max extra batch calls to recover missing/garbled indices"),
+    archive_recursive: Optional[bool] = Query(None, description="Recursively convert safe deterministic children inside archives"),
+    archive_max_files: Optional[int] = Query(None, ge=1, le=1000, description="Max files to scan inside the archive"),
+    archive_max_converted_children: Optional[int] = Query(None, ge=1, le=100, description="Max child files to convert inside the archive"),
+    archive_max_child_bytes: Optional[int] = Query(None, ge=1, description="Max file size limit per child to parse (bytes)"),
     enable_mixed_pdf_routing: bool = Query(False, description="Enable mixed PDF routing; requires a full-page probe"),
     full_page_probe: bool = Query(False, description="Probe every PDF page before planning/routing"),
     db: AsyncSession = Depends(get_db),
@@ -399,6 +453,13 @@ async def upload_file(
         "output_format": output_format,
         "original_name": original_name,
     }
+    if output_formats:
+        fmt_list = [f.strip().lower() for f in output_formats.split(",") if f.strip()]
+        supported = {"markdown", "json", "html", "chunks"}
+        fmt_list = [f for f in fmt_list if f in supported]
+        if fmt_list:
+            config["output_formats"] = fmt_list
+            config["output_format"] = fmt_list[0]
     if converter:
         config["converter_cls"] = converter
     if engine_override:
@@ -457,6 +518,14 @@ async def upload_file(
         config["downscale_vlm_crops"] = downscale_vlm_crops
     if batch_enabled is not None:
         config["batch_enabled"] = batch_enabled
+    if archive_recursive is not None:
+        config["archive_recursive"] = archive_recursive
+    if archive_max_files is not None:
+        config["archive_max_files"] = archive_max_files
+    if archive_max_converted_children is not None:
+        config["archive_max_converted_children"] = archive_max_converted_children
+    if archive_max_child_bytes is not None:
+        config["archive_max_child_bytes"] = archive_max_child_bytes
     if ocr_engine in ("surya", "glm_ocr", "paddleocr_vl", "mistral_ocr"):
         config["ocr_engine"] = ocr_engine
     if decorative_max_text_density is not None:
@@ -699,6 +768,8 @@ async def get_status(
         result_text=job.result_text,
         image_understanding=_parse_image_understanding(job.result_metadata_json),
         conversion_metadata=_parse_conversion_metadata(job.result_metadata_json),
+        available_formats=_parse_available_formats(job),
+        formats=_parse_formats(job.formats_json),
         created_at=job.created_at,
         completed_at=job.completed_at,
         filename=job.original_name,
@@ -883,6 +954,129 @@ async def delete_job(
     await db.delete(job)
 
     return {"status": "deleted", "job_id": job_id}
+
+
+# ------------------------------------------------------------------
+# Regenerate one output format for an existing job
+# ------------------------------------------------------------------
+
+
+def _read_stored_config(job: ConversionJob) -> dict[str, Any]:
+    """Parse a job's stored config_json, tolerating empty/corrupt values."""
+    if not job.config_json:
+        return {}
+    try:
+        parsed = json.loads(job.config_json)
+        return parsed if isinstance(parsed, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _job_source_path(job: ConversionJob) -> Path | None:
+    """Resolve the stored source file for a job (local path or upload dir copy).
+
+    Upload copies live in UPLOAD_DIR under ``job.filename`` and are only removed
+    when the job is deleted, so a completed job's source is still available for a
+    format regeneration. Local-path jobs keep their original absolute path.
+    """
+    cfg = _read_stored_config(job)
+    local = cfg.get("local_filepath")
+    if local and Path(local).is_file():
+        return Path(local)
+    upload_path = UPLOAD_DIR / job.filename
+    if upload_path.is_file():
+        return upload_path
+    return None
+
+
+@router.post("/{job_id}/regenerate")
+async def regenerate_format(
+    job_id: str,
+    format: str = Query(..., description="Output format to regenerate: markdown|json|html|chunks"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Render one additional output format for an existing completed job.
+
+    Reuses the job's stored source file and config, so it does NOT create a new
+    queue entry or card. The rendered text is merged into the job's
+    ``formats_json`` cache and the format becomes instantly viewable in the
+    preview tabs without re-running the primary conversion.
+    """
+    if format not in ("markdown", "json", "html", "chunks"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format '{format}'. Allowed: markdown, json, html, chunks.",
+        )
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail="Job must be completed before regenerating a format.",
+        )
+
+    source_path = _job_source_path(job)
+    if source_path is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Source file is no longer available for this job.",
+        )
+
+    from app.main import _app_state
+
+    conversion_service = _app_state.conversion_service
+
+    # The stored config carries the resolved engine + image-understanding knobs;
+    # we only override the target output format for this single render.
+    config = _read_stored_config(job)
+    config["output_format"] = format
+
+    if not conversion_service.supports_multiple_formats(str(source_path), config):
+        raise HTTPException(
+            status_code=409,
+            detail="This job's engine cannot render additional formats.",
+        )
+
+    try:
+        envelopes = conversion_service.convert_file_formats(
+            str(source_path), config, [format]
+        )
+    except Exception as exc:  # noqa: BLE001 - surface a typed error to the UI
+        logger.exception("Format regeneration failed for job %s", job_id)
+        raise HTTPException(status_code=500, detail=f"Regeneration failed: {exc}") from exc
+
+    rendered = envelopes.get(format)
+    if not rendered:
+        raise HTTPException(status_code=500, detail="Renderer produced no output for the format.")
+
+    # Merge into the existing formats cache via the injected session so the
+    # write is visible to tests and respects the same dependency override as
+    # every other endpoint (no separate production session).
+    from app.services.format_store import merge_formats
+    existing = {}
+    try:
+        existing = json.loads(job.formats_json) if job.formats_json else {}
+        if not isinstance(existing, dict):
+            existing = {}
+    except (json.JSONDecodeError, TypeError):
+        existing = {}
+
+    # Store FLAT text ({format: text}) so the status endpoint's cache and the
+    # finalize-time write share one shape — never a nested {"text": ...} dict.
+    merged = merge_formats(existing, {format: rendered.get("text", "")})
+    job.formats_json = json.dumps(merged) if merged else None
+    await db.commit()
+
+    return {
+        "status": "regenerated",
+        "job_id": job_id,
+        "format": format,
+        "available_formats": sorted(merged.keys()),
+    }
 
 
 @router.get("/browse-folder")

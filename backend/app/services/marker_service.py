@@ -108,6 +108,36 @@ IMAGE_UNDERSTANDING_RENDERER = (
     "app.renderers.image_understanding_renderer.ImageUnderstandingRenderer"
 )
 _MARKER_MARKDOWN_RENDERER = "marker.renderers.markdown.MarkdownRenderer"
+_MARKER_JSON_RENDERER = "marker.renderers.json.JSONRenderer"
+_MARKER_HTML_RENDERER = "marker.renderers.html.HTMLRenderer"
+_MARKER_CHUNK_RENDERER = "marker.renderers.chunk.ChunkRenderer"
+
+# Canonical output formats the UI can request. Order is stable for display.
+# These are the only formats the multi-format render path knows how to render
+# from one parsed marker Document — anything else falls back to markdown.
+_SUPPORTED_FORMATS: tuple[str, ...] = ("markdown", "json", "html", "chunks")
+
+
+def _renderer_string_for_format(fmt: str, options: dict[str, Any]) -> str:
+    """Resolve the marker renderer dotted-path for one output format.
+
+    The image-understanding renderer is swapped in ONLY for the markdown
+    format when understanding/both mode is active — every other format keeps
+    marker's stock renderer, matching the single-format ``_select_renderer``
+    contract so behaviour never silently changes for an existing format.
+    """
+    mode = options.get("image_handling_mode")
+    if fmt == "markdown":
+        if mode in ("understanding", "both"):
+            return IMAGE_UNDERSTANDING_RENDERER
+        return _MARKER_MARKDOWN_RENDERER
+    if fmt == "json":
+        return _MARKER_JSON_RENDERER
+    if fmt == "html":
+        return _MARKER_HTML_RENDERER
+    if fmt == "chunks":
+        return _MARKER_CHUNK_RENDERER
+    return _MARKER_MARKDOWN_RENDERER
 
 
 def _select_renderer(options: dict[str, Any], default_renderer: str) -> str:
@@ -531,14 +561,25 @@ class MarkerService:
             if _k in options:
                 config_dict[_k] = options[_k]
 
+        chosen_renderer = _select_renderer(options, config_parser.get_renderer())
+
         with self._conversion_lock:
             converter = converter_cls(
                 config=config_dict,
                 artifact_dict=self._model_dict,
                 processor_list=config_parser.get_processors(),
-                renderer=_select_renderer(options, config_parser.get_renderer()),
+                renderer=chosen_renderer,
                 llm_service=config_parser.get_llm_service(),
             )
+
+            # OCRConverter.__init__ hard-forces `self.renderer = OCRJSONRenderer`
+            # after construction, which silently discards the user's output_format.
+            # Restore the user's chosen renderer CLASS (not resolved instance —
+            # __call__ resolves it itself via resolve_dependencies).
+            output_format = options.get("output_format", "markdown")
+            if converter_cls_name == "OCRConverter" and output_format not in ("json", "chunks"):
+                from marker.util import strings_to_classes
+                converter.renderer = strings_to_classes([chosen_renderer])[0]
 
             rendered = run_with_oom_retry(
                 lambda: converter(str(filepath)),
@@ -558,6 +599,93 @@ class MarkerService:
             "images": images,
             "metadata": metadata,
         }
+
+    def convert_file_formats(
+        self,
+        filepath: str | Path,
+        options: dict[str, Any],
+        formats: list[str],
+        device: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """Render MULTIPLE output formats from a single document parse.
+
+        marker builds a ``Document`` once (the expensive layout + OCR pass) and
+        each renderer (markdown/json/html/chunks) consumes that same parsed
+        document, so asking for N formats costs one parse — not N. This is the
+        "no reconverting" path for multi-format output.
+
+        Returns ``{format: {"text", "extension", "images", "metadata"}}``.
+        """
+        self.initialize(device=device)
+
+        from marker.config.parser import ConfigParser
+        from marker.output import text_from_rendered
+        from marker.util import strings_to_classes
+
+        # Dedupe + drop unknowns so a bad client request never crashes a render.
+        formats = [f for f in dict.fromkeys(formats) if f in _SUPPORTED_FORMATS]
+        if not formats:
+            formats = ["markdown"]
+
+        converter_cls_name = options.pop("converter_cls", "PdfConverter")
+        converter_cls = (_CONVERTERS or {}).get(
+            converter_cls_name,
+            (_CONVERTERS or {})["PdfConverter"],
+        )
+
+        # ConfigParser.get_renderer() reads cli_options["output_format"], so it
+        # must exist even though we render many formats below. The value here
+        # only seeds the converter's stock renderer, which the per-format loop
+        # overrides for each requested format — markdown is a safe placeholder.
+        options.setdefault("output_format", "markdown")
+
+        config_parser = ConfigParser(options)
+        config_dict = config_parser.generate_config_dict()
+
+        # Re-inject custom keys that ConfigParser strips (see
+        # IMAGE_UNDERSTANDING_CONFIG_KEYS). They flow unchanged through
+        # BaseConverter.config -> resolve_dependencies -> processor __init__.
+        for _k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
+            if _k in options:
+                config_dict[_k] = options[_k]
+
+        with self._conversion_lock:
+            converter = converter_cls(
+                config=config_dict,
+                artifact_dict=self._model_dict,
+                processor_list=config_parser.get_processors(),
+                renderer=_select_renderer(options, config_parser.get_renderer()),
+                llm_service=config_parser.get_llm_service(),
+            )
+
+            # The document is parsed ONCE here; every format renders from it.
+            document = run_with_oom_retry(
+                lambda: converter.build_document(str(filepath)),
+                self._model_dict,
+            )
+
+            image_understanding_meta = _collect_image_understanding_meta(converter)
+            formats_out: dict[str, dict[str, Any]] = {}
+            for fmt in formats:
+                renderer_str = _renderer_string_for_format(fmt, options)
+                renderer_cls = strings_to_classes([renderer_str])[0]
+                renderer = converter.resolve_dependencies(renderer_cls)
+                rendered = renderer(document)
+                text, ext, images = text_from_rendered(rendered)
+
+                metadata = getattr(rendered, "metadata", None) or {}
+                if image_understanding_meta:
+                    metadata = dict(metadata)
+                    metadata["image_understanding"] = image_understanding_meta
+
+                formats_out[fmt] = {
+                    "text": text,
+                    "extension": ext,
+                    "images": images,
+                    "metadata": metadata,
+                }
+
+        return formats_out
 
     def convert_bytes(
         self,

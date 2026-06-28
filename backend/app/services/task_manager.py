@@ -56,6 +56,51 @@ logger = logging.getLogger(__name__)
 
 SSE_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 
+
+def _resolve_requested_formats(config: dict[str, Any]) -> list[str]:
+    """Return the deduped list of output formats requested for a job.
+
+    Newer jobs send ``output_formats`` (a list) when the UI multi-selects more
+    than one format; ``output_format`` is the single-format legacy field. Both
+    are honoured so the legacy single-format path keeps working unchanged.
+    Unknown formats are dropped so a malformed request never crashes a render.
+    """
+    supported = {"markdown", "json", "html", "chunks"}
+    raw = config.get("output_formats")
+    if isinstance(raw, list) and raw:
+        cleaned = [str(f) for f in dict.fromkeys(raw) if str(f) in supported]
+        if cleaned:
+            return cleaned
+    single = str(config.get("output_format", "markdown") or "markdown")
+    return [single] if single in supported else ["markdown"]
+
+
+def _formats_payload_for_finalize(
+    primary_result: dict[str, Any],
+    primary_format: str,
+    formats_payload: dict[str, dict[str, Any]] | None,
+) -> str | None:
+    """Build the JSON cache of per-format output text for a job.
+
+    The cache maps ``{format: text}`` for every format available on the card so
+    the preview tabs can switch instantly without reconverting. It stores text
+    only (images/assets live on disk in the primary output) to stay small. When
+    multi-format rendering did not run, the cache still records the single
+    primary format so the UI knows exactly which formats exist for this file.
+    """
+    payload: dict[str, str] = {}
+    if formats_payload:
+        for fmt, envelope in formats_payload.items():
+            text = (envelope or {}).get("text") if isinstance(envelope, dict) else None
+            if isinstance(text, str):
+                payload[str(fmt)] = text
+    # Always guarantee the primary format is present even if the multi-format
+    # path collapsed to a single markdown envelope.
+    if primary_format not in payload:
+        payload[primary_format] = str(primary_result.get("text") or "")
+    return json.dumps(payload) if payload else None
+
+
 # Registry of thread ID to job ID (ThreadExecutorBackend only).
 active_conversion_threads: dict[int, str] = {}
 
@@ -842,21 +887,41 @@ class TaskManager:
         try:
             self._progress[job_id] = 10
             self._job_status_text[job_id] = "Starting conversion..."
-            result = conversion_service.convert_file(filepath, dict(config))
+
+            # Multi-format output: when the user selected more than one format
+            # and the resolved engine can render them from one parse, render all
+            # requested formats now (single document parse -> N renders). The
+            # primary format drives the persisted file/images; every requested
+            # format is cached in formats_json so preview tabs never reconvert.
+            formats_requested = _resolve_requested_formats(config)
+            formats_envelopes: dict[str, dict[str, Any]] | None = None
+            if (
+                len(formats_requested) > 1
+                and conversion_service.supports_multiple_formats(filepath, dict(config))
+            ):
+                formats_envelopes = conversion_service.convert_file_formats(
+                    filepath, dict(config), formats_requested
+                )
+                result = formats_envelopes.get(formats_requested[0]) or next(
+                    iter(formats_envelopes.values())
+                )
+            else:
+                result = conversion_service.convert_file(filepath, dict(config))
+
             self._progress[job_id] = 90
             self._job_status_text[job_id] = "Finalizing results..."
 
             # Persist result synchronously via a new async loop
             try:
                 asyncio.run(
-                    self._finalize_job(job_id, result, config)
+                    self._finalize_job(job_id, result, config, formats_envelopes)
                 )
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
                     loop.run_until_complete(
-                        self._finalize_job(job_id, result, config)
+                        self._finalize_job(job_id, result, config, formats_envelopes)
                     )
                 finally:
                     loop.close()
@@ -913,6 +978,7 @@ class TaskManager:
         job_id: str,
         result: dict[str, Any],
         config: dict[str, Any],
+        formats_payload: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         # Check if job still exists and is not cancelled
         async with async_session_factory() as session:
@@ -967,6 +1033,12 @@ class TaskManager:
         result_metadata["manifest_path"] = str(written.manifest_path.resolve())
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
 
+        # Cache every generated format's text in formats_json so the preview
+        # tabs (markdown/html/json/chunks) can switch instantly with no
+        # reconversion. The persisted primary file above already carries images
+        # for its format; the cache stores text only to stay small and portable.
+        formats_json = _formats_payload_for_finalize(result, output_format, formats_payload)
+
         async with async_session_factory() as session:
             from sqlalchemy import update
 
@@ -978,6 +1050,7 @@ class TaskManager:
                     status="completed",
                     result_text=result_text,
                     result_metadata_json=result_metadata_json,
+                    formats_json=formats_json,
                     result_path=str(written.final_path),
                     progress=100,
                     completed_at=datetime.now(timezone.utc),

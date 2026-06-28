@@ -395,12 +395,20 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
         </label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {OUTPUT_FORMATS.map((fmt) => {
-            const isActive = config.output_format === fmt.value
+            const selected = config.output_formats ?? ['markdown']
+            const isActive = selected.includes(fmt.value)
             return (
               <button
                 key={fmt.value}
                 type="button"
-                onClick={() => update('output_format', fmt.value)}
+                onClick={() => {
+                  if (isActive) {
+                    if (selected.length <= 1) return
+                    update('output_formats', selected.filter((f) => f !== fmt.value))
+                  } else {
+                    update('output_formats', [...selected, fmt.value])
+                  }
+                }}
                 disabled={disabled}
                 className={cn(
                   'flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition-all duration-200 hover:scale-[1.01]',
@@ -618,6 +626,63 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
                     placeholder="optional batch context"
                     disabled={disabled}
                     className="bg-background/50 h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              <hr className="border-border/20" />
+
+              {/* Archive Extraction */}
+              <div className="space-y-2.5">
+                <div>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                    Archive Extraction
+                  </label>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+                    Configure extraction options when submitting ZIP archives.
+                  </p>
+                </div>
+
+                <ToggleOption
+                  label="Recursive Conversion"
+                  description="Recursively convert safe children files inside the ZIP archive."
+                  checked={tempConfig.archive_recursive ?? true}
+                  onChange={(v) => updateTemp('archive_recursive', v)}
+                  disabled={disabled}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <NumberField
+                    label="Max Archive Files"
+                    help="Maximum number of files to scan inside the ZIP archive."
+                    value={tempConfig.archive_max_files ?? 100}
+                    min={1}
+                    max={1000}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_files', v)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Max Converted Children"
+                    help="Maximum number of children files to convert."
+                    value={tempConfig.archive_max_converted_children ?? 25}
+                    min={1}
+                    max={100}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_converted_children', v)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Max Child Size (MB)"
+                    help="Skip child files larger than this size (MB)."
+                    value={(tempConfig.archive_max_child_bytes ?? 2 * 1024 * 1024) / (1024 * 1024)}
+                    min={1}
+                    max={50}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_child_bytes', v * 1024 * 1024)}
+                    disabled={disabled}
                   />
                 </div>
               </div>

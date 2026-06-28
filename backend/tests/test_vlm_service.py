@@ -677,3 +677,42 @@ class TestVertexVLMClientBuilder:
         client = VLMService._build_default_client(prov)
         assert client._base_url == "https://europe-west1-aiplatform.googleapis.com/v1/projects/json-project-789/locations/europe-west1/endpoints/openapi"
         assert client._api_key == "fake-sa-token"
+
+
+class TestDefaultVLMClientBuilder:
+    def test_build_client_openai_default(self):
+        prov = LLMProvider(
+            id="openai",
+            type="openai",
+            label="OpenAI",
+            api_key="sk-testkey",
+            models=[]
+        )
+        client = VLMService._build_default_client(prov)
+        assert client._base_url == "https://api.openai.com/v1"
+        assert client._api_key == "sk-testkey"
+
+    def test_build_client_with_custom_base_url(self):
+        prov = LLMProvider(
+            id="custom-provider",
+            type="custom_openai",
+            label="Custom",
+            api_key="sk-testkey",
+            base_url="https://custom.endpoint.com/v1",
+            models=[]
+        )
+        client = VLMService._build_default_client(prov)
+        assert client._base_url == "https://custom.endpoint.com/v1"
+        assert client._api_key == "sk-testkey"
+
+    def test_build_client_gemini_default(self):
+        prov = LLMProvider(
+            id="gemini",
+            type="gemini",
+            label="Gemini",
+            api_key="gemini-key",
+            models=[]
+        )
+        client = VLMService._build_default_client(prov)
+        assert client._base_url == "https://generativelanguage.googleapis.com/v1beta/openai"
+        assert client._api_key == "gemini-key"

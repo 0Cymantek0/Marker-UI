@@ -836,3 +836,190 @@ async def test_history_route_serializes_timestamps_with_utc_offset(
         assert val.endswith("Z") or "+00:00" in val, (
             f"{key}='{val}' missing UTC offset"
         )
+
+
+# ---------------------------------------------------------------------------
+# Multi-format output: status exposes available_formats + formats cache
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_status_surfaces_available_formats_and_cached_formats(
+    client: AsyncClient, db_session
+):
+    """A completed job with formats_json exposes its available formats + cached text."""
+    import json as _json
+    from app.models.job import ConversionJob
+
+    job = ConversionJob(
+        id="job-multi-fmt",
+        filename="doc.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        formats_json=_json.dumps({
+            "markdown": "# hi",
+            "json": '{"blocks": []}',
+        }),
+        progress=100,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get("/api/convert/status/job-multi-fmt")
+    assert resp.status_code == 200
+    body = resp.json()
+    import sys as _sys
+    print("DEBUG BODY:", _json.dumps(body), file=_sys.stderr)
+
+    # Available formats come from the cache keys, in insertion order so the
+    # primary format (markdown) stays first and tab order is stable.
+    assert body["available_formats"] == ["markdown", "json"]
+    # The cached text is returned per format so preview tabs never reconvert.
+    assert body["formats"]["markdown"] == "# hi"
+    assert body["formats"]["json"] == '{"blocks": []}'
+
+
+@pytest.mark.asyncio
+async def test_status_formats_omitted_when_no_cache(client: AsyncClient, db_session):
+    """A legacy job (no formats_json) reports a single available format, no cache."""
+    from app.models.job import ConversionJob
+
+    job = ConversionJob(
+        id="job-single-fmt",
+        filename="doc.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        progress=100,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get("/api/convert/status/job-single-fmt")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["available_formats"] == ["markdown"]
+    assert body["formats"] is None
+
+
+# ---------------------------------------------------------------------------
+# Regenerate: append one format to an existing completed job
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_regenerate_appends_format_to_existing_job(client: AsyncClient, db_session, tmp_path, monkeypatch):
+    """POST /regenerate?format=json renders one new format and merges it into formats_json.
+
+    The source file is reused from the original upload (it is only cleaned up on
+    job deletion), so regeneration never re-uploads. We stub the conversion layer
+    so this test stays marker-model-free.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-regen"
+    from app.core.config import UPLOAD_DIR
+    uploads = Path(UPLOAD_DIR)
+    uploads.mkdir(parents=True, exist_ok=True)
+    src = uploads / f"{job_id}.pdf"
+    src.write_bytes(b"%PDF-1.4 regen source")
+
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        config_json=_json.dumps({
+            "output_format": "markdown",
+            "converter_cls": "PdfConverter",
+        }),
+        formats_json=_json.dumps({"markdown": "# hi"}),
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    # Stub the conversion service used by the regenerate endpoint.
+    # convert_file_formats returns {format: legacy_envelope_dict}.
+    from app.main import _app_state
+
+    fake_service = _app_state.conversion_service
+    monkeypatch.setattr(
+        fake_service,
+        "convert_file_formats",
+        lambda filepath, config, formats, device=None: {
+            fmt: {"text": '{"blocks": ["regen"]}', "extension": "json", "images": {}, "metadata": {}}
+            for fmt in formats
+        },
+    )
+    monkeypatch.setattr(fake_service, "supports_multiple_formats", lambda filepath, config: True)
+
+    resp = await client.post(f"/api/convert/{job_id}/regenerate", params={"format": "json"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["job_id"] == job_id
+    assert body["status"] == "regenerated"
+    assert body["format"] == "json"
+    # The new format was merged alongside the existing markdown cache.
+    assert set(body["available_formats"]) == {"markdown", "json"}
+
+    # And it persisted to the DB. expire_all() drops the test session's cached
+    # row so we see the regenerate endpoint's committed write.
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    db_session.expire_all()
+    refreshed = (await db_session.execute(stmt)).scalar_one()
+    cached = _json.loads(refreshed.formats_json)
+    assert cached["json"] == '{"blocks": ["regen"]}'
+    assert cached["markdown"] == "# hi"
+
+    src.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Multi-format upload (output_formats query param)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_upload_accepts_output_formats_param(client: AsyncClient, db_session):
+    """Upload with output_formats=markdown,json stores both in the config."""
+    resp = await _upload_file(
+        client,
+        extra_params={"output_formats": "markdown,json"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    job_id = body["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+    assert config["output_formats"] == ["markdown", "json"]
+    assert config["output_format"] == "markdown"
+
+
+@pytest.mark.asyncio
+async def test_upload_output_formats_drops_invalid(client: AsyncClient, db_session):
+    """Invalid format names in output_formats are silently dropped."""
+    resp = await _upload_file(
+        client,
+        extra_params={"output_formats": "markdown,nonsense,html"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    job_id = body["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+    assert config["output_formats"] == ["markdown", "html"]

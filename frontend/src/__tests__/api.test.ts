@@ -67,7 +67,7 @@ describe('uploadFile', () => {
     mockFetchOnce(200, { job_id: 'job-1', status: 'pending', filename: 'voice.wav' }, true)
 
     await uploadFile(new File(['wav'], 'voice.wav', { type: 'audio/wav' }), {
-      output_format: 'markdown',
+      output_formats: ['markdown'],
       converter: 'PdfConverter',
       audio_output_mode: 'meeting_notes',
       audio_model: 'base.en',

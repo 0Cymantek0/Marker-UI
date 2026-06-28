@@ -14,7 +14,7 @@ export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
 export type AudioOutputMode = 'transcript' | 'enhanced' | 'notes' | 'meeting_notes' | 'lecture_notes'
 
 export interface ConversionConfig {
-  output_format: OutputFormat
+  output_formats: OutputFormat[]
   converter: ConverterType
   engine_override?: string
   use_llm?: boolean
@@ -50,6 +50,10 @@ export interface ConversionConfig {
   vlm_crop_max_px?: number
   vlm_batch_size?: number
   max_batch_retries?: number
+  archive_recursive?: boolean
+  archive_max_files?: number
+  archive_max_converted_children?: number
+  archive_max_child_bytes?: number
 }
 
 export interface ConversionResponse {
@@ -79,6 +83,8 @@ export interface JobStatus {
   completed_at: string | null
   error_message: string | null
   result_text: string | null
+  formats?: Record<string, string> | null
+  available_formats?: string[] | null
   image_understanding?: ImageUnderstandingMeta[] | null
   conversion_metadata?: Record<string, any> | null
 }
@@ -306,7 +312,11 @@ export async function uploadFile(
   }
 
   const params = new URLSearchParams()
-  params.append('output_format', config.output_format)
+  const primaryFormat = config.output_formats[0] ?? 'markdown'
+  params.append('output_format', primaryFormat)
+  if (config.output_formats.length > 1) {
+    params.append('output_formats', config.output_formats.join(','))
+  }
   if (config.conversion_profile) params.append('conversion_profile', config.conversion_profile)
   if (config.converter) params.append('converter', config.converter)
   if (config.engine_override) params.append('engine_override', config.engine_override)
@@ -342,6 +352,10 @@ export async function uploadFile(
   if (config.vlm_crop_max_px !== undefined) params.append('vlm_crop_max_px', String(config.vlm_crop_max_px))
   if (config.vlm_batch_size !== undefined) params.append('vlm_batch_size', String(config.vlm_batch_size))
   if (config.max_batch_retries !== undefined) params.append('max_batch_retries', String(config.max_batch_retries))
+  if (config.archive_recursive !== undefined) params.append('archive_recursive', String(config.archive_recursive))
+  if (config.archive_max_files !== undefined) params.append('archive_max_files', String(config.archive_max_files))
+  if (config.archive_max_converted_children !== undefined) params.append('archive_max_converted_children', String(config.archive_max_converted_children))
+  if (config.archive_max_child_bytes !== undefined) params.append('archive_max_child_bytes', String(config.archive_max_child_bytes))
   if (localFilepath) params.append('local_filepath', localFilepath)
   if (sourceUrl) params.append('source_url', sourceUrl)
   if (outputDir) params.append('output_dir', outputDir)
@@ -386,6 +400,19 @@ export async function downloadResult(jobId: string): Promise<{ blob: Blob; filen
 
   const blob = await res.blob()
   return { blob, filename }
+}
+
+export interface RegenerateResult {
+  status: string
+  job_id: string
+  format: string
+  available_formats: string[]
+}
+
+export async function regenerateFormat(jobId: string, format: string): Promise<RegenerateResult> {
+  return request<RegenerateResult>(`/convert/${jobId}/regenerate?format=${format}`, {
+    method: 'POST',
+  })
 }
 
 export async function getHistory(page = 1, limit = 20): Promise<{ jobs: JobStatus[]; total: number }> {

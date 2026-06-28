@@ -991,6 +991,7 @@ class VLMService:
                 except Exception:  # noqa: BLE001 — already plaintext
                     pass
         else:
+            base_url = provider.base_url or _PROVIDER_BASE_URLS.get(provider.type) or ""
             api_key = provider.api_key or ""
             if api_key:
                 try:

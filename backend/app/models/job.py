@@ -36,6 +36,11 @@ class ConversionJob(Base):
     result_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # JSON-serialized conversion metadata (e.g. per-image understanding info).
     result_metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON-serialized cache of every output format rendered for this job:
+    # ``{format: text}``. The primary ``output_format``/``result_text`` stays the
+    # canonical entry; this holds the additional formats so preview tabs can
+    # switch formats without reconverting. Self-heals on startup (additive col).
+    formats_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     result_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

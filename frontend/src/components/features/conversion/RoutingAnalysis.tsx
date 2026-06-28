@@ -96,12 +96,12 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
 
       {/* Engine & Execution Meta */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1">
-          <ShieldCheck className="w-4.5 h-4.5 text-primary shrink-0" />
-          <div>
-            <span className="text-xs font-bold text-foreground block leading-tight">{routingPlan.label}</span>
+        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-xl px-3.5 py-2 shadow-sm">
+          <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
+          <div className="flex flex-col justify-center gap-0.5">
+            <span className="text-xs font-bold text-foreground leading-snug">{routingPlan.label}</span>
             {routingPlan.confidence > 0 && (
-              <span className="text-[10px] text-muted-foreground font-mono">
+              <span className="text-[10px] text-muted-foreground font-mono leading-none">
                 Confidence: {(routingPlan.confidence * 100).toFixed(0)}%
               </span>
             )}

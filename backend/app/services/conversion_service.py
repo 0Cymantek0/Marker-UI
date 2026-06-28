@@ -398,6 +398,68 @@ class ConversionService:
 
         return result.to_legacy_envelope()
 
+    # ------------------------------------------------------------------
+    # Multi-format output
+    # ------------------------------------------------------------------
+
+    def supports_multiple_formats(self, filepath: str, config: dict[str, Any]) -> bool:
+        """True when the resolved engine can render several formats from one parse.
+
+        Only marker-backed engines (marker_pdf via PdfConverter/OCR/etc.) parse a
+        Document and render N formats from it. Office/text/audio engines produce a
+        single markdown output natively, so multi-format is honestly unavailable
+        there rather than faked (no silent re-parsing, no wrong-format tabs).
+        Mixed-PDF routing also returns False: it stitches per-segment markdown and
+        does not expose a single shared Document across formats.
+        """
+        if self._should_use_mixed_pdf_routing(filepath, config):
+            return False
+        plan = self.plan(filepath, config)
+        converter = self._registry.get(plan.engine)
+        if converter is None:
+            return False
+        return bool(getattr(converter, "supports_multiple_formats", lambda: False)())
+
+    def convert_file_formats(
+        self,
+        filepath: str,
+        config: dict[str, Any],
+        formats: list[str],
+        device: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        """Render multiple output formats and return ``{format: legacy_envelope}``.
+
+        For marker-backed engines this is the single-parse / N-render path: marker
+        builds the document once and each renderer consumes it. The primary format
+        (``formats[0]``) drives the persisted file extension + images; the others
+        are carried as text payloads in the returned envelopes and cached in the
+        job's ``formats_json`` so preview tabs never reconvert.
+        """
+        if self._should_use_mixed_pdf_routing(filepath, config):
+            # Mixed routing is markdown-only; return a single markdown envelope.
+            envelope = self._convert_mixed_pdf_segments(filepath, config, device=device)
+            return {"markdown": envelope}
+
+        plan = self.plan(filepath, config)
+        converter = self._registry.get(plan.engine)
+        if converter is None or not getattr(converter, "supports_multiple_formats", lambda: False)():
+            # Engine cannot multi-render: produce one markdown envelope only.
+            envelope = self.convert_file(filepath, config, device=device)
+            return {"markdown": envelope}
+
+        results = converter.convert_formats(filepath, config, formats, device=device)
+
+        # Stamp the engine plan + probe into each format's metadata so the routing
+        # analysis card renders identically regardless of which format a tab shows.
+        probe_data = config.get("probe_result") if isinstance(config, dict) else None
+        envelopes: dict[str, dict[str, Any]] = {}
+        for fmt, result in results.items():
+            result.metadata.setdefault("engine", plan.to_dict())
+            if isinstance(probe_data, dict):
+                result.metadata.setdefault("probe_result", probe_data)
+            envelopes[fmt] = result.to_legacy_envelope()
+        return envelopes
+
     def _should_use_mixed_pdf_routing(self, filepath: str, config: dict[str, Any]) -> bool:
         return self._mixed_pdf_plan_for_config(filepath, config) is not None
 

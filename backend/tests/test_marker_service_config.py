@@ -224,6 +224,324 @@ def test_collect_image_understanding_meta_empty_when_no_processor():
 
 
 # ---------------------------------------------------------------------------
+# OCRConverter renderer-restore (markdown + OCR engine bug)
+# ---------------------------------------------------------------------------
+
+def test_ocr_converter_restores_markdown_renderer(monkeypatch):
+    """Regression: Markdown + OCR engine must NOT silently emit JSON.
+
+    marker's ``OCRConverter.__init__`` hard-forces
+    ``self.renderer = OCRJSONRenderer`` after construction, clobbering the
+    markdown renderer we pass in. ``convert_file`` must resolve the
+    user-chosen renderer as a class (not a string) and restore it.
+    """
+    import app.services.marker_service as marker_service_mod
+    import marker.output as marker_output
+    from marker.renderers.markdown import MarkdownRenderer
+
+    OCR_JSON = "marker.renderers.ocr_json.OCRJSONRenderer"
+    FORCED_RENDERER = {}
+
+    class _FakeRendered:
+        metadata = {}
+
+    class _FakeOCRConverter:
+        """Mimics marker's OCRConverter forcing OCRJSONRenderer in __init__."""
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            # This is the exact line that caused the bug.
+            self.renderer = OCR_JSON
+
+        def resolve_dependencies(self, cls):
+            return cls
+
+        def __call__(self, filepath):
+            FORCED_RENDERER["renderer"] = self.renderer
+            return _FakeRendered()
+
+    def fake_text_from_rendered(rendered):
+        return "ok", "md", {}
+
+    monkeypatch.setattr(
+        marker_service_mod,
+        "_CONVERTERS",
+        {"OCRConverter": _FakeOCRConverter, "PdfConverter": _FakeOCRConverter},
+    )
+    monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
+
+    service = MarkerService()
+    service._initialized = True
+    service._model_dict = {"recognition": object()}
+
+    service.convert_file(
+        "scan.pdf",
+        {"converter_cls": "OCRConverter", "output_format": "markdown"},
+    )
+
+    # The converter must have its renderer restored to the MarkdownRenderer
+    # CLASS, not the OCRJSONRenderer string that OCRConverter.__init__ forced.
+    assert FORCED_RENDERER["renderer"] is MarkdownRenderer
+
+
+def test_ocr_converter_keeps_json_renderer(monkeypatch):
+    """When the user genuinely asks for JSON + OCR, leave OCRJSONRenderer alone."""
+    import app.services.marker_service as marker_service_mod
+    import marker.output as marker_output
+
+    OCR_JSON = "marker.renderers.ocr_json.OCRJSONRenderer"
+    FORCED_RENDERER = {}
+
+    class _FakeRendered:
+        metadata = {}
+
+    class _FakeOCRConverter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.renderer = OCR_JSON
+
+        def resolve_dependencies(self, cls):
+            return cls
+
+        def __call__(self, filepath):
+            FORCED_RENDERER["renderer"] = self.renderer
+            return _FakeRendered()
+
+    def fake_text_from_rendered(rendered):
+        return "ok", "json", {}
+
+    monkeypatch.setattr(
+        marker_service_mod,
+        "_CONVERTERS",
+        {"PdfConverter": _FakeOCRConverter, "OCRConverter": _FakeOCRConverter},
+    )
+    monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
+
+    service = MarkerService()
+    service._initialized = True
+    service._model_dict = {"recognition": object()}
+
+    service.convert_file(
+        "scan.pdf",
+        {"converter_cls": "OCRConverter", "output_format": "json"},
+    )
+
+    assert FORCED_RENDERER["renderer"] == OCR_JSON
+
+
+def test_ocr_converter_renderer_survives_double_resolve(monkeypatch):
+    """Regression: renderer must be a CLASS so __call__'s resolve_dependencies works.
+
+    marker's OCRConverter.__call__ calls resolve_dependencies(self.renderer)
+    which inspects cls.__init__ then does cls(**kwargs). If self.renderer is
+    already an instance (not a class), cls(**kwargs) hits __call__ instead of
+    __init__, causing TypeError on unexpected 'config' kwarg.
+    """
+    import inspect
+
+    import app.services.marker_service as marker_service_mod
+    import marker.output as marker_output
+    from marker.renderers.markdown import MarkdownRenderer
+
+    OCR_JSON = "marker.renderers.ocr_json.OCRJSONRenderer"
+
+    class _FakeRendered:
+        metadata = {}
+
+    class _FakeOCRConverter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.config = kwargs.get("config", {})
+            self.artifact_dict = kwargs.get("artifact_dict", {})
+            self.renderer = OCR_JSON
+
+        def resolve_dependencies(self, cls):
+            init_sig = inspect.signature(cls.__init__)
+            params = init_sig.parameters
+            resolved = {}
+            for name, param in params.items():
+                if name == "self":
+                    continue
+                elif name == "config":
+                    resolved[name] = self.config
+                elif name in self.artifact_dict:
+                    resolved[name] = self.artifact_dict[name]
+                elif param.default != inspect.Parameter.empty:
+                    resolved[name] = param.default
+                else:
+                    raise ValueError(f"Cannot resolve: {name}")
+            return cls(**resolved)
+
+        def __call__(self, filepath):
+            self.resolve_dependencies(self.renderer)
+            return _FakeRendered()
+
+    def fake_text_from_rendered(rendered):
+        return "ok", "md", {}
+
+    monkeypatch.setattr(
+        marker_service_mod,
+        "_CONVERTERS",
+        {"OCRConverter": _FakeOCRConverter, "PdfConverter": _FakeOCRConverter},
+    )
+    monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
+
+    service = MarkerService()
+    service._initialized = True
+    service._model_dict = {"recognition": object()}
+
+    service.convert_file(
+        "scan.pdf",
+        {"converter_cls": "OCRConverter", "output_format": "markdown"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Multi-format render (convert_file_formats): one document parse -> N renders
+# ---------------------------------------------------------------------------
+
+
+def test_renderer_string_for_format():
+    """Each canonical format maps to its stock marker renderer.
+
+    Markdown swaps to the image-understanding renderer only in understanding/
+    both mode; every other format is stock so behaviour never silently shifts.
+    """
+    from app.services.marker_service import _renderer_string_for_format
+
+    assert _renderer_string_for_format("markdown", {}) == "marker.renderers.markdown.MarkdownRenderer"
+    assert _renderer_string_for_format("markdown", {"image_handling_mode": "extraction"}).endswith("MarkdownRenderer")
+    assert _renderer_string_for_format("markdown", {"image_handling_mode": "both"}).endswith("ImageUnderstandingRenderer")
+    assert _renderer_string_for_format("json", {}) == "marker.renderers.json.JSONRenderer"
+    assert _renderer_string_for_format("html", {}) == "marker.renderers.html.HTMLRenderer"
+    assert _renderer_string_for_format("chunks", {}) == "marker.renderers.chunk.ChunkRenderer"
+    # Unknown format falls back to markdown, never crashes.
+    assert _renderer_string_for_format("bogus", {}).endswith("MarkdownRenderer")
+
+
+def test_convert_file_formats_parses_once_renders_each(monkeypatch):
+    """The document is built ONCE; each requested format renders from it.
+
+    This is the no-reconversion contract: N formats cost one layout/OCR pass.
+    We assert build_document ran exactly once and one render per format ran.
+    """
+    import app.services.marker_service as marker_service_mod
+    import marker.output as marker_output
+    import marker.util as marker_util
+
+    build_calls = {"n": 0}
+    render_calls: list[str] = []
+
+    class _FakeDocument:
+        pass
+
+    class _FakeRendered:
+        def __init__(self, fmt):
+            self.metadata = {"format": fmt}
+
+    class _FakeRenderer:
+        def __init__(self, name):
+            self.name = name
+
+        def __call__(self, document):
+            render_calls.append(self.name)
+            return _FakeRendered(self.name)
+
+    def fake_resolve(cls):
+        return _FakeRenderer(cls.__name__)
+
+    def fake_strings_to_classes(paths):
+        class _Stub:
+            def __init__(self, p):
+                self._p = p
+        return [_Stub(p) for p in paths]
+
+    class _FakeConverter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.renderer = None
+
+        def build_document(self, filepath):
+            build_calls["n"] += 1
+            return _FakeDocument()
+
+        def resolve_dependencies(self, cls):
+            return _FakeRenderer(cls.__name__)
+
+    def fake_text_from_rendered(rendered):
+        return rendered.metadata["format"], rendered.metadata["format"], {}
+
+    monkeypatch.setattr(
+        marker_service_mod,
+        "_CONVERTERS",
+        {"PdfConverter": _FakeConverter},
+    )
+    monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
+
+    service = MarkerService()
+    service._initialized = True
+    service._model_dict = {"recognition": object()}
+
+    out = service.convert_file_formats(
+        "doc.pdf",
+        {"converter_cls": "PdfConverter", "output_format": "markdown"},
+        ["markdown", "json", "html"],
+    )
+
+    # One parse, three renders.
+    assert build_calls["n"] == 1
+    assert len(render_calls) == 3
+    # Every requested format is present with text derived from its renderer.
+    assert set(out.keys()) == {"markdown", "json", "html"}
+    assert out["markdown"]["text"] == "MarkdownRenderer"
+    assert out["json"]["text"] == "JSONRenderer"
+    assert out["html"]["text"] == "HTMLRenderer"
+
+
+def test_convert_file_formats_dedupes_and_drops_unknown(monkeypatch):
+    """Duplicates collapse and unknown formats are filtered to markdown only."""
+    import app.services.marker_service as marker_service_mod
+    import marker.output as marker_output
+
+    class _FakeDocument:
+        pass
+
+    class _FakeRendered:
+        metadata = {}
+
+    class _FakeConverter:
+        def __init__(self, **kwargs):
+            pass
+
+        def build_document(self, filepath):
+            return _FakeDocument()
+
+        def resolve_dependencies(self, cls):
+            class _R:
+                def __call__(self, doc):
+                    return _FakeRendered()
+            return _R()
+
+    def fake_text_from_rendered(rendered):
+        return "ok", "md", {}
+
+    monkeypatch.setattr(marker_service_mod, "_CONVERTERS", {"PdfConverter": _FakeConverter})
+    monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
+
+    service = MarkerService()
+    service._initialized = True
+    service._model_dict = {"recognition": object()}
+
+    out = service.convert_file_formats(
+        "doc.pdf",
+        {"converter_cls": "PdfConverter"},
+        ["markdown", "markdown", "bogus", ""],
+    )
+    # Deduped markdown survives; bogus/empty dropped.
+    assert list(out.keys()) == ["markdown"]
+
+
+# ---------------------------------------------------------------------------
 # OOM safety net (ISSUE-5): catch CUDA OOM -> empty_cache -> halve batch -> retry
 # ---------------------------------------------------------------------------
 

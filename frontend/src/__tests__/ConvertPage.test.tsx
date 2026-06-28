@@ -92,7 +92,7 @@ vi.mock('@/components/features/FileUpload', () => ({
 vi.mock('@/components/features/ConversionOptions', () => ({
   ConversionOptions: ({ config, onChange }: { config: any; onChange: (cfg: any) => void }) => (
     <div data-testid="conversion-options">
-      <span data-testid="config-format">{config.output_format}</span>
+      <span data-testid="config-format">{config.output_formats?.join(',')}</span>
       <span data-testid="config-ocr">{config.force_ocr ? 'ocr-enabled' : 'ocr-disabled'}</span>
       <button data-testid="trigger-config-change" onClick={() => onChange({ ...config, force_ocr: true })}>
         Trigger Change
@@ -175,6 +175,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -214,6 +215,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -236,6 +238,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -278,6 +281,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -311,6 +315,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -344,6 +349,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -377,6 +383,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -410,6 +417,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -444,6 +452,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -495,6 +504,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -533,6 +543,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -552,6 +563,7 @@ describe('ConvertPage component', () => {
       download: vi.fn(),
       clearLogs: vi.fn(),
       removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
       dismissSwapPrompt: vi.fn(),
       clearRateLimited: vi.fn(),
     })
@@ -589,12 +601,13 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
-        dismissSwapPrompt: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 
       const customConfig = {
-        output_format: 'json',
+        output_formats: ['json'],
         converter: 'TableConverter',
         use_llm: true,
         force_ocr: true,
@@ -615,7 +628,8 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
-        dismissSwapPrompt: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 
@@ -662,7 +676,8 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
-        dismissSwapPrompt: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 
@@ -678,7 +693,8 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
-        dismissSwapPrompt: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 
@@ -699,7 +715,8 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
-        dismissSwapPrompt: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 
@@ -716,7 +733,8 @@ describe('ConvertPage component', () => {
         download: vi.fn(),
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
-        dismissSwapPrompt: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 

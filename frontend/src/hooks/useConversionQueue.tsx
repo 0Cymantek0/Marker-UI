@@ -6,6 +6,7 @@ import {
   getHistory,
   downloadResult,
   deleteJob,
+  regenerateFormat,
   type ConversionConfig,
   type JobStatus,
   type ImageUnderstandingMeta,
@@ -36,6 +37,8 @@ export interface JobState {
   resultText: string | null
   logs: string[]
   outputFormat: string
+  formats: Record<string, string> | null
+  availableFormats: string[]
   outputDir?: string
   elapsed?: number
   eta?: number
@@ -73,6 +76,7 @@ interface ConversionContextType {
   download: (id: string) => Promise<void>
   clearLogs: (id: string) => void
   removeJob: (id: string) => void
+  regenerateJobFormat: (id: string, format: string) => Promise<void>
   // Model-swap prompt controls.
   dismissSwapPrompt: (id: string) => void
   clearRateLimited: (id: string) => void
@@ -114,11 +118,15 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         let imageUnderstanding: ImageUnderstandingMeta[] | null = null
         let resultText: string | null = null
         let conversionMetadata: Record<string, any> | null = null
+        let formats: Record<string, string> | null = null
+        let availableFormats: string[] | undefined
         try {
           const status = await getJobStatus(jobId)
           imageUnderstanding = status.image_understanding ?? null
           resultText = status.result_text ?? null
           conversionMetadata = status.conversion_metadata ?? null
+          formats = status.formats ?? null
+          availableFormats = status.available_formats ?? undefined
         } catch {
           // Non-fatal: badges just won't render for this job.
         }
@@ -133,6 +141,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           resultText,
           imageUnderstanding,
           conversionMetadata,
+          formats,
+          availableFormats: availableFormats ?? prev.availableFormats,
           logs: [...prev.logs, '[SUCCESS] Result package successfully fetched and ready.'],
         }))
       })
@@ -175,6 +185,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           const imageUnderstanding = status.image_understanding ?? null
           const resultText = status.result_text ?? null
           const conversionMetadata = status.conversion_metadata ?? null
+          const formats = status.formats ?? null
+          const availFmts = status.available_formats
           downloadResult(jobId)
             .then(({ blob, filename }) => {
               updateJob(id, (prev) => ({
@@ -188,6 +200,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
                 resultText,
                 imageUnderstanding,
                 conversionMetadata,
+                formats,
+                availableFormats: availFmts ?? prev.availableFormats,
                 logs: [...prev.logs, '[SUCCESS] SSE disconnected, recovered via polling.'],
               }))
             })
@@ -361,6 +375,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
             `[SYSTEM] Re-attaching SSE channel for job: ${job.id}`,
           ],
           outputFormat: job.output_format || 'markdown',
+          formats: job.formats ?? null,
+          availableFormats: job.available_formats ?? [job.output_format || 'markdown'],
         }))
 
         const existingBackendIds = new Set(
@@ -481,7 +497,9 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         resultBlob: null,
         resultText: null,
         logs: [],
-        outputFormat: config.output_format,
+        outputFormat: config.output_formats[0] ?? 'markdown',
+        formats: null,
+        availableFormats: [...config.output_formats],
         outputDir,
         isBunch,
         llmProvider: config.use_llm ? config.llm_provider : undefined,
@@ -508,7 +526,9 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         resultBlob: null,
         resultText: null,
         logs: [],
-        outputFormat: config.output_format,
+        outputFormat: config.output_formats[0] ?? 'markdown',
+        formats: null,
+        availableFormats: [...config.output_formats],
         outputDir,
         isBunch,
         llmProvider: config.use_llm ? config.llm_provider : undefined,
@@ -635,8 +655,21 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }))
   }, [updateJob])
 
+  const regenerateJobFormat = useCallback(async (id: string, format: string) => {
+    const job = jobsRef.current.find((j) => j.id === id)
+    if (!job?.jobId) return
+    const result = await regenerateFormat(job.jobId, format)
+    const status = await getJobStatus(job.jobId)
+    updateJob(id, (prev) => ({
+      ...prev,
+      formats: status.formats ?? prev.formats,
+      availableFormats: result.available_formats ?? prev.availableFormats,
+      resultText: status.result_text ?? prev.resultText,
+    }))
+  }, [updateJob])
+
   return (
-    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob, dismissSwapPrompt, clearRateLimited }}>
+    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited }}>
       {children}
     </ConversionContext.Provider>
   )

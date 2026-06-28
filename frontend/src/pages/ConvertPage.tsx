@@ -19,7 +19,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { RoutingAnalysis } from '@/components/features/conversion/RoutingAnalysis'
 
 const DEFAULT_CONFIG: ConversionConfig = {
-  output_format: 'markdown',
+  output_formats: ['markdown'],
   converter: 'PdfConverter',
   use_llm: false,
   image_handling_mode: 'extraction',
@@ -38,6 +38,10 @@ const DEFAULT_CONFIG: ConversionConfig = {
   disable_multiprocessing: false,
   debug: false,
   conversion_profile: 'auto',
+  archive_recursive: true,
+  archive_max_files: 100,
+  archive_max_converted_children: 25,
+  archive_max_child_bytes: 2 * 1024 * 1024,
 }
 
 const AUTO_ENGINE = 'auto'
@@ -123,7 +127,12 @@ export function ConvertPage() {
     const saved = localStorage.getItem('marker-conversion-config')
     if (saved) {
       try {
-        return { ...DEFAULT_CONFIG, ...JSON.parse(saved) }
+        const parsed = JSON.parse(saved)
+        if (parsed.output_format && !parsed.output_formats) {
+          parsed.output_formats = [parsed.output_format]
+          delete parsed.output_format
+        }
+        return { ...DEFAULT_CONFIG, ...parsed }
       } catch (e) {
         console.error('Failed to parse saved conversion config', e)
       }
@@ -292,7 +301,7 @@ export function ConvertPage() {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
   }, [config])
 
-  const { jobs, start, cancel, download, clearLogs, removeJob, dismissSwapPrompt, clearRateLimited } = useConversionQueue()
+  const { jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited } = useConversionQueue()
 
   // Auto-surface the swap dialog when a running job reports it's stuck on rate
   // limits (key rotation exhausted) and the user hasn't dismissed it yet.
@@ -728,6 +737,9 @@ export function ConvertPage() {
                 <div className="p-4">
                   <OutputViewer
                     content={previewText}
+                    formats={selectedJob.formats}
+                    availableFormats={selectedJob.availableFormats}
+                    onRegenerate={(fmt) => regenerateJobFormat(selectedJob.id, fmt)}
                     onDownload={() => download(selectedJob.id)}
                     imageUnderstanding={selectedJob.imageUnderstanding}
                   />

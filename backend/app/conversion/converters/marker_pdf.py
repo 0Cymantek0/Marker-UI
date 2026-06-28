@@ -63,3 +63,34 @@ class MarkerPdfConverter(BaseConverter):
             images=result.get("images", {}),
             metadata=attach_table_evidence(result.get("metadata", {}), text),
         )
+
+    def supports_multiple_formats(self) -> bool:
+        """Marker parses once and renders N formats from one Document."""
+        return True
+
+    def convert_formats(
+        self,
+        filepath: str,
+        config: dict[str, Any],
+        formats: list[str],
+        device: str | None = None,
+    ) -> dict[str, UniversalConversionResult]:
+        """Render several output formats from a single marker document parse.
+
+        ``MarkerService.convert_file_formats`` builds the document once and
+        renders each requested format from it, so multi-format output costs one
+        parse rather than one per format (the "no reconverting" guarantee).
+        """
+        formats_out = self._marker_service.convert_file_formats(
+            filepath, dict(config), list(formats), device=device
+        )
+        results: dict[str, UniversalConversionResult] = {}
+        for fmt, payload in formats_out.items():
+            text = payload.get("text", "")
+            results[fmt] = UniversalConversionResult(
+                text=text,
+                extension=payload.get("extension", "md"),
+                images=payload.get("images", {}),
+                metadata=attach_table_evidence(payload.get("metadata", {}), text),
+            )
+        return results

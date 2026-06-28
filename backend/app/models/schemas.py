@@ -135,6 +135,15 @@ class JobStatusResponse(BaseModel):
     progress: int = 0
     error_message: Optional[str] = None
     result_text: Optional[str] = None
+    # Per-format cached output text. Keys are the available output formats
+    # (markdown/json/html/chunks); values are the rendered text for each. When
+    # present, the preview can switch tabs without reconverting.
+    formats: Optional[dict[str, str]] = None
+    # Every format the user can currently view for this job (the keys of
+    # ``formats``, plus any format that is queued for regeneration but not yet
+    # rendered). Exposed separately so the UI can render all tabs immediately
+    # and show a skeleton for not-yet-ready formats.
+    available_formats: Optional[list[str]] = None
     # Conversion metadata (e.g. per-image understanding info for the badge UI).
     image_understanding: Optional[list[dict]] = None
     conversion_metadata: Optional[dict] = None

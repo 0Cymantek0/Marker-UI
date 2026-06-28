@@ -25,7 +25,7 @@ vi.mock('sonner', () => ({
 }))
 
 const baseConfig: ConversionConfig = {
-  output_format: 'markdown',
+  output_formats: ['markdown'],
   converter: 'PdfConverter',
   use_llm: false,
   image_handling_mode: 'extraction',
