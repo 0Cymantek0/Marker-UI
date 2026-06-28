@@ -804,9 +804,10 @@ async def job_events(request: Request, job_id: str):
 @router.get("/download/{job_id}")
 async def download_result(
     job_id: str,
+    format: Optional[str] = Query(None, description="Specific format to download: markdown, html, json, chunks, or all"),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    """Download the converted output file."""
+    """Download the converted output file(s)."""
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     result = await db.execute(stmt)
     job = result.scalar_one_or_none()
@@ -815,41 +816,101 @@ async def download_result(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Job not yet completed")
-    if not job.result_path:
-        text_path = UPLOAD_DIR / f"{job_id}_output.md"
-        text_path.write_text(job.result_text or "", encoding="utf-8")
-        return FileResponse(
-            path=text_path,
-            filename=f"{Path(job.original_name).stem}.md",
-            media_type="text/markdown",
-        )
 
-    result_path = Path(job.result_path)
-    if result_path.is_dir():
+    from app.services.format_store import parse_formats
+    formats_map = parse_formats(job.formats_json) or {}
+    if "markdown" not in formats_map and job.result_text:
+        formats_map["markdown"] = job.result_text
+
+    stem = Path(job.original_name).stem
+
+    # Determine which formats to include
+    requested_format = (format or "all").strip().lower()
+    if requested_format == "all":
+        target_formats = list(formats_map.keys())
+    else:
+        if requested_format not in formats_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Format '{requested_format}' has not been generated for this job."
+            )
+        target_formats = [requested_format]
+
+    ext_map = {
+        "markdown": "md",
+        "html": "html",
+        "json": "json",
+        "chunks": "txt",
+    }
+
+    # If the job has a directory result_path (meaning assets exist) or we are downloading multiple formats,
+    # we return a ZIP archive.
+    has_assets = False
+    result_path = Path(job.result_path) if job.result_path else None
+    if result_path and result_path.is_dir():
+        has_assets = True
+
+    should_zip = has_assets or len(target_formats) > 1
+
+    if should_zip:
         tmp_file = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
         tmp_zip = Path(tmp_file.name)
         tmp_file.close()
         try:
             with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-                for file_in_dir in sorted(result_path.rglob("*")):
-                    if file_in_dir.is_file():
-                        zf.write(file_in_dir, file_in_dir.relative_to(result_path))
+                # 1. Write the format text files
+                for fmt in target_formats:
+                    text_content = formats_map[fmt]
+                    ext = ext_map.get(fmt, fmt)
+                    zf.writestr(f"{stem}.{ext}", text_content)
+
+                # 2. Write the manifest file if it exists
+                if result_path and result_path.is_dir():
+                    manifest_file = result_path / f"{result_path.name}.marker.json"
+                    if manifest_file.exists():
+                        zf.write(manifest_file, manifest_file.name)
+                    else:
+                        for f in result_path.glob("*.marker.json"):
+                            zf.write(f, f.name)
+
+                    # 3. Write all assets (images/diagrams/etc.)
+                    for file_in_dir in sorted(result_path.rglob("*")):
+                        if file_in_dir.is_file() and not file_in_dir.name.endswith(".marker.json") and file_in_dir.suffix.lower() not in [".md", ".html", ".json", ".txt"]:
+                            zf.write(file_in_dir, file_in_dir.relative_to(result_path))
+
             return FileResponse(
                 path=str(tmp_zip),
-                filename=f"{Path(job.original_name).stem}.zip",
+                filename=f"{stem}.zip",
                 media_type="application/zip",
                 background=BackgroundTask(tmp_zip.unlink, missing_ok=True),
             )
         except Exception:
             tmp_zip.unlink(missing_ok=True)
             raise
-
-    ext = Path(job.result_path).suffix.lstrip(".") or "md"
-    filename = f"{Path(job.original_name).stem}.{ext}"
-    return FileResponse(
-        path=job.result_path,
-        filename=filename,
-    )
+    else:
+        # Single format with no assets: return the file directly
+        fmt = target_formats[0]
+        ext = ext_map.get(fmt, fmt)
+        text_content = formats_map[fmt]
+        
+        tmp_file = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False, mode="w", encoding="utf-8")
+        tmp_path = Path(tmp_file.name)
+        tmp_file.write(text_content)
+        tmp_file.close()
+        
+        media_types = {
+            "md": "text/markdown",
+            "html": "text/html",
+            "json": "application/json",
+            "txt": "text/plain",
+        }
+        
+        return FileResponse(
+            path=str(tmp_path),
+            filename=f"{stem}.{ext}",
+            media_type=media_types.get(ext, "text/plain"),
+            background=BackgroundTask(tmp_path.unlink, missing_ok=True),
+        )
 
 
 # ------------------------------------------------------------------
@@ -1036,14 +1097,26 @@ async def regenerate_format(
     config["output_format"] = format
 
     if not conversion_service.supports_multiple_formats(str(source_path), config):
+        suffix = Path(source_path).suffix.lower()
+        from app.conversion.converters.marker_pdf import MarkerPdfConverter
+        if suffix in MarkerPdfConverter._EXTENSIONS:
+            config["engine_override"] = "marker_pdf"
+            config["output_formats"] = [format]
+
+    if not conversion_service.supports_multiple_formats(str(source_path), config):
         raise HTTPException(
             status_code=409,
             detail="This job's engine cannot render additional formats.",
         )
 
+    llm_config = await _load_llm_config(db)
+    from app.services.marker_service import build_marker_options
+    options = build_marker_options(llm_config, config)
+
     try:
-        envelopes = conversion_service.convert_file_formats(
-            str(source_path), config, [format]
+        envelopes = await asyncio.to_thread(
+            conversion_service.convert_file_formats,
+            str(source_path), options, [format]
         )
     except Exception as exc:  # noqa: BLE001 - surface a typed error to the UI
         logger.exception("Format regeneration failed for job %s", job_id)

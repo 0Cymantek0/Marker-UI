@@ -73,7 +73,7 @@ interface ConversionContextType {
     sourceEngineOverrides?: SourceEngineOverrides
   ) => Promise<void>
   cancel: (id: string) => Promise<void>
-  download: (id: string) => Promise<void>
+  download: (id: string, format?: string) => Promise<void>
   clearLogs: (id: string) => void
   removeJob: (id: string) => void
   regenerateJobFormat: (id: string, format: string) => Promise<void>
@@ -571,16 +571,16 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     })
   }, [])
 
-  const download = useCallback(async (id: string) => {
+  const download = useCallback(async (id: string, format?: string) => {
     const job = jobs.find((j) => j.id === id)
     if (!job || !job.jobId) return
 
-    let blob = job.resultBlob
-    let headerFilename = job.resultFilename
+    let blob = format ? null : job.resultBlob
+    let headerFilename = format ? null : job.resultFilename
 
     if (!blob) {
       try {
-        const result = await downloadResult(job.jobId)
+        const result = await downloadResult(job.jobId, format)
         blob = result.blob
         headerFilename = result.filename
       } catch (err) {

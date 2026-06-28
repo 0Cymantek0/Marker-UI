@@ -1023,3 +1023,104 @@ async def test_upload_output_formats_drops_invalid(client: AsyncClient, db_sessi
     job = (await db_session.execute(stmt)).scalar_one()
     config = json.loads(job.config_json)
     assert config["output_formats"] == ["markdown", "html"]
+
+
+@pytest.mark.asyncio
+async def test_regenerate_fallback_to_marker_pdf_on_unsupported_engine(client: AsyncClient, db_session, monkeypatch):
+    """POST /regenerate?format=html falls back to marker_pdf if the engine is unsupported but the file is a PDF."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-regen-fallback"
+    from app.core.config import UPLOAD_DIR
+    uploads = Path(UPLOAD_DIR)
+    uploads.mkdir(parents=True, exist_ok=True)
+    src = uploads / f"{job_id}.pdf"
+    src.write_bytes(b"%PDF-1.4 fallback source")
+
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# hi",
+        config_json=_json.dumps({
+            "output_format": "markdown",
+            "conversion_profile": "fast",
+        }),
+        formats_json=_json.dumps({"markdown": "# hi"}),
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    from app.main import _app_state
+
+    fake_service = _app_state.conversion_service
+    
+    called_with_config = {}
+    
+    def mock_convert_file_formats(filepath, config, formats, device=None):
+        nonlocal called_with_config
+        called_with_config = config
+        return {
+            fmt: {"text": "<html>fallback</html>", "extension": "html", "images": {}, "metadata": {}}
+            for fmt in formats
+        }
+        
+    monkeypatch.setattr(fake_service, "convert_file_formats", mock_convert_file_formats)
+
+    resp = await client.post(f"/api/convert/{job_id}/regenerate", params={"format": "html"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "regenerated"
+    assert body["format"] == "html"
+    assert "html" in body["available_formats"]
+    
+    assert called_with_config.get("engine_override") == "marker_pdf"
+
+    src.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_download_supports_format_param(client: AsyncClient, db_session):
+    """GET /download/{job_id}?format={format} returns the requested format."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-download-format"
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# md content",
+        config_json=_json.dumps({"output_format": "markdown"}),
+        formats_json=_json.dumps({
+            "markdown": "# md content",
+            "html": "<html>html content</html>"
+        }),
+        result_path=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    # 1. Download specific HTML format (should be returned as raw html file)
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "html"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert resp.text == "<html>html content</html>"
+
+    # 2. Download all formats (should be a ZIP)
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/zip"

@@ -107,4 +107,39 @@ describe('OutputViewer component', () => {
     // Confidence shows in the modal (the tooltip also renders it, so use getAll).
     expect(screen.getAllByText('80%').length).toBeGreaterThanOrEqual(1)
   })
+
+  it('hides html and json tabs when filename is not multi-format supported', () => {
+    render(
+      <OutputViewer
+        content="# Hello"
+        onDownload={vi.fn()}
+        filename="document.docx"
+      />
+    )
+
+    // Markdown and Raw Text should be visible
+    expect(screen.getByRole('button', { name: /markdown/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /raw text/i })).toBeInTheDocument()
+
+    // HTML and JSON tabs should NOT be in the document
+    expect(screen.queryByRole('button', { name: /html/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
+  })
+
+  it('calls onRegenerate when a non-cached format tab is clicked', () => {
+    const onRegenerate = vi.fn()
+    render(
+      <OutputViewer
+        content="# Hello"
+        onDownload={vi.fn()}
+        onRegenerate={onRegenerate}
+        filename="document.pdf"
+        formats={{ markdown: '# Hello' }}
+      />
+    )
+
+    // Click HTML tab
+    fireEvent.click(screen.getByRole('button', { name: /html/i }))
+    expect(onRegenerate).toHaveBeenCalledWith('html')
+  })
 })

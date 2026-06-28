@@ -385,8 +385,11 @@ export function getJobEvents(jobId: string): EventSource {
   return new EventSource(`${API_BASE}/convert/events/${jobId}`)
 }
 
-export async function downloadResult(jobId: string): Promise<{ blob: Blob; filename?: string }> {
-  const res = await fetch(`${API_BASE}/convert/download/${jobId}`)
+export async function downloadResult(jobId: string, format?: string): Promise<{ blob: Blob; filename?: string }> {
+  const url = format
+    ? `${API_BASE}/convert/download/${jobId}?format=${format}`
+    : `${API_BASE}/convert/download/${jobId}`
+  const res = await fetch(url)
   if (!res.ok) throw new Error(`Download failed (${res.status})`)
 
   let filename: string | undefined

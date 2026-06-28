@@ -18,14 +18,23 @@ const ALL_TABS: { value: OutputTab; label: string; icon: any; formatKey?: string
 
 interface OutputViewerProps {
   content: string | null
-  formats: Record<string, string> | null
-  availableFormats: string[]
-  onRegenerate: (format: string) => Promise<void>
-  onDownload: () => void
+  formats?: Record<string, string> | null
+  availableFormats?: string[]
+  onRegenerate?: (format: string) => Promise<void>
+  onDownload: (format: string) => void
   imageUnderstanding?: ImageUnderstandingMeta[] | null
+  filename?: string
 }
 
-export function OutputViewer({ content, formats, availableFormats, onRegenerate, onDownload, imageUnderstanding }: OutputViewerProps) {
+export function OutputViewer({
+  content,
+  formats = null,
+  availableFormats = [],
+  onRegenerate,
+  onDownload,
+  imageUnderstanding,
+  filename
+}: OutputViewerProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>('markdown')
   const [copied, setCopied] = useState(false)
   const [regenerating, setRegenerating] = useState<string | null>(null)
@@ -39,12 +48,23 @@ export function OutputViewer({ content, formats, availableFormats, onRegenerate,
   }, [imageUnderstanding])
   const metaTotal = metaByFilename.size
 
+  const isMultiSupported = useMemo(() => {
+    if (!filename) return true
+    const ext = filename.split(/[?#]/)[0].split('.').pop()?.toLowerCase()
+    return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
+  }, [filename])
+
+  const visibleTabs = useMemo(() => {
+    if (isMultiSupported) return ALL_TABS
+    return ALL_TABS.filter((t) => t.value === 'markdown' || t.value === 'raw')
+  }, [isMultiSupported])
+
   const activeContent = useMemo(() => {
     if (activeTab === 'raw') return content
-    const fmtKey = ALL_TABS.find((t) => t.value === activeTab)?.formatKey
+    const fmtKey = visibleTabs.find((t) => t.value === activeTab)?.formatKey
     if (fmtKey && formats?.[fmtKey]) return formats[fmtKey]
     return content
-  }, [activeTab, formats, content])
+  }, [activeTab, formats, content, visibleTabs])
 
   const copyToClipboard = useCallback(async () => {
     if (!activeContent) return
@@ -55,11 +75,11 @@ export function OutputViewer({ content, formats, availableFormats, onRegenerate,
 
   const handleTabClick = useCallback(async (tab: OutputTab) => {
     setActiveTab(tab)
-    const fmtKey = ALL_TABS.find((t) => t.value === tab)?.formatKey
+    const fmtKey = visibleTabs.find((t) => t.value === tab)?.formatKey
     if (!fmtKey) return
     if (formats?.[fmtKey]) return
-    if (availableFormats.includes(fmtKey)) return
     if (regenerating) return
+    if (!onRegenerate) return
 
     setRegenerating(fmtKey)
     try {
@@ -67,7 +87,7 @@ export function OutputViewer({ content, formats, availableFormats, onRegenerate,
     } finally {
       setRegenerating(null)
     }
-  }, [formats, availableFormats, regenerating, onRegenerate])
+  }, [formats, regenerating, onRegenerate, visibleTabs])
 
   if (!content && !formats) {
     return (
@@ -98,7 +118,7 @@ export function OutputViewer({ content, formats, availableFormats, onRegenerate,
       {/* Tab bar header */}
       <div className="flex items-center justify-between border-b border-border/30 px-2 bg-muted/20">
         <div className="flex gap-1 py-1">
-          {ALL_TABS.map((tab) => {
+          {visibleTabs.map((tab) => {
             const isActive = activeTab === tab.value
             const available = isTabAvailable(tab)
             const loading = isTabRegenerating(tab)
@@ -146,7 +166,7 @@ export function OutputViewer({ content, formats, availableFormats, onRegenerate,
           <Button
             variant="ghost"
             size="sm"
-            onClick={onDownload}
+            onClick={() => onDownload(activeTab)}
             className="h-8 px-2.5 rounded-lg text-xs font-semibold hover:bg-muted/50 transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-muted-foreground mr-1.5" />

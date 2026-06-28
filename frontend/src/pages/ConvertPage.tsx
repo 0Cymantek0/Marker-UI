@@ -184,6 +184,30 @@ export function ConvertPage() {
     [selectedFiles, parsedLocalPaths]
   )
 
+  const supportsMultiFormat = useMemo(() => {
+    if (selectedFiles.length === 0 && parsedLocalPaths.length === 0) return true
+    
+    const checkExt = (filename: string) => {
+      const ext = filename.split(/[?#]/)[0].split('.').pop()?.toLowerCase()
+      return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
+    }
+
+    const hasFileMulti = selectedFiles.some(f => checkExt(f.file.name))
+    const hasPathMulti = parsedLocalPaths.some(p => checkExt(p))
+    return hasFileMulti || hasPathMulti
+  }, [selectedFiles, parsedLocalPaths])
+
+  useEffect(() => {
+    if (!supportsMultiFormat) {
+      setConfig((prev) => {
+        if (prev.output_formats.length > 1 || prev.output_formats[0] !== 'markdown') {
+          return { ...prev, output_formats: ['markdown'] }
+        }
+        return prev
+      })
+    }
+  }, [supportsMultiFormat])
+
   // Plan conversion for each source independently. Uploaded PDFs only get a
   // filename-level preview here; backend upload still probes bytes before queueing.
   useEffect(() => {
@@ -488,6 +512,7 @@ export function ConvertPage() {
             <ConversionOptions
               config={config}
               onChange={setConfig}
+              supportsMultiFormat={supportsMultiFormat}
             />
           </div>
 
@@ -610,9 +635,11 @@ export function ConvertPage() {
                             <span className="text-xs font-bold truncate text-foreground" title={job.filename}>
                               {job.filename}
                             </span>
-                            <span className="text-[9px] text-muted-foreground font-mono bg-muted/65 px-1 py-0.5 rounded">
-                              {job.outputFormat}
-                            </span>
+                            {(job.availableFormats ?? [job.outputFormat || 'markdown']).map((fmt) => (
+                              <span key={fmt} className="text-[9px] text-muted-foreground font-mono bg-muted/65 px-1 py-0.5 rounded uppercase">
+                                {fmt}
+                              </span>
+                            ))}
                             {engineMeta?.label && (
                               <span
                                 className="text-[9px] text-primary font-mono bg-primary/10 px-1 py-0.5 rounded truncate max-w-[170px]"
@@ -740,8 +767,9 @@ export function ConvertPage() {
                     formats={selectedJob.formats}
                     availableFormats={selectedJob.availableFormats}
                     onRegenerate={(fmt) => regenerateJobFormat(selectedJob.id, fmt)}
-                    onDownload={() => download(selectedJob.id)}
+                    onDownload={(fmt) => download(selectedJob.id, fmt)}
                     imageUnderstanding={selectedJob.imageUnderstanding}
+                    filename={selectedJob.filename}
                   />
                 </div>
               </div>

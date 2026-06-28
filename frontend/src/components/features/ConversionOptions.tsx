@@ -28,6 +28,7 @@ interface ConversionOptionsProps {
   config: ConversionConfig
   onChange: (config: ConversionConfig) => void
   disabled?: boolean
+  supportsMultiFormat?: boolean
 }
 
 const OUTPUT_FORMATS: { value: OutputFormat; label: string; desc: string; icon: typeof FileText }[] = [
@@ -142,7 +143,7 @@ const IU_DEFAULTS = {
   max_batch_retries: 2,
 } as const
 
-export function ConversionOptions({ config, onChange, disabled }: ConversionOptionsProps) {
+export function ConversionOptions({ config, onChange, disabled, supportsMultiFormat = true }: ConversionOptionsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showTuning, setShowTuning] = useState(false)
   const [tempConfig, setTempConfig] = useState<ConversionConfig>(config)
@@ -397,6 +398,7 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
           {OUTPUT_FORMATS.map((fmt) => {
             const selected = config.output_formats ?? ['markdown']
             const isActive = selected.includes(fmt.value)
+            const isFormatDisabled = disabled || (!supportsMultiFormat && fmt.value !== 'markdown')
             return (
               <button
                 key={fmt.value}
@@ -409,12 +411,13 @@ export function ConversionOptions({ config, onChange, disabled }: ConversionOpti
                     update('output_formats', [...selected, fmt.value])
                   }
                 }}
-                disabled={disabled}
+                disabled={isFormatDisabled}
                 className={cn(
                   'flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition-all duration-200 hover:scale-[1.01]',
                   isActive
                     ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                    : 'border-border/60 bg-card/45 text-muted-foreground hover:bg-muted/30 hover:text-foreground'
+                    : 'border-border/60 bg-card/45 text-muted-foreground hover:bg-muted/30 hover:text-foreground',
+                  isFormatDisabled && 'opacity-50 cursor-not-allowed'
                 )}
               >
                 <fmt.icon className={cn('w-5 h-5 mb-1.5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
