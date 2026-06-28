@@ -188,7 +188,8 @@ export function ConvertPage() {
     if (selectedFiles.length === 0 && parsedLocalPaths.length === 0) return true
     
     const checkExt = (filename: string) => {
-      const ext = filename.split(/[?#]/)[0].split('.').pop()?.toLowerCase()
+      const baseName = filename.split(/[?#]/)[0] ?? ''
+      const ext = baseName.split('.').pop()?.toLowerCase()
       return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
     }
 

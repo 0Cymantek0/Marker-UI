@@ -532,7 +532,9 @@ async def marker_convert_file(
     dedup_enabled: OptionalBoolParam = None,
     downscale_vlm_crops: OptionalBoolParam = None,
     batch_enabled: OptionalBoolParam = None,
-    ocr_engine: Annotated[str, Field(description="OCR engine: surya, glm_ocr, paddleocr_vl, or mistral_ocr.", examples=["surya"])] = "",
+    ocr_engine: Annotated[str, Field(description="Local OCR engine: surya or hybrid_ocr.", examples=["surya"])] = "",
+    hybrid_ocr_profile: Annotated[str, Field(description="Hybrid OCR profile: balanced, max_accuracy, or low_vram.", examples=["balanced"])] = "",
+    hybrid_ocr_require_specialists: OptionalBoolParam = None,
     decorative_max_text_density: DensityParam = -1.0,
     ocr_min_text_density: DensityParam = -1.0,
     ocr_min_lines: PositiveRowsParam = 0,
@@ -592,6 +594,8 @@ async def marker_convert_file(
                 downscale_vlm_crops=downscale_vlm_crops,
                 batch_enabled=batch_enabled,
                 ocr_engine=ocr_engine,
+                hybrid_ocr_profile=hybrid_ocr_profile,
+                hybrid_ocr_require_specialists=hybrid_ocr_require_specialists,
                 decorative_max_text_density=decorative_max_text_density,
                 ocr_min_text_density=ocr_min_text_density,
                 ocr_min_lines=ocr_min_lines,
@@ -1371,6 +1375,8 @@ def _image_understanding_extra_options(
     vlm_crop_max_px: int,
     vlm_batch_size: int,
     max_batch_retries: int,
+    hybrid_ocr_profile: str = "",
+    hybrid_ocr_require_specialists: bool | None = None,
 ) -> dict[str, Any]:
     options: dict[str, Any] = {}
     if router_enabled is not None:
@@ -1383,8 +1389,12 @@ def _image_understanding_extra_options(
         options["batch_enabled"] = batch_enabled
     if smart_router_level in {"disabled", "smart", "beeg_brain"}:
         options["smart_router_level"] = smart_router_level
-    if ocr_engine in {"surya", "glm_ocr", "paddleocr_vl", "mistral_ocr"}:
+    if ocr_engine in {"surya", "hybrid_ocr"}:
         options["ocr_engine"] = ocr_engine
+    if hybrid_ocr_profile in {"balanced", "max_accuracy", "low_vram"}:
+        options["hybrid_ocr_profile"] = hybrid_ocr_profile
+    if hybrid_ocr_require_specialists is not None:
+        options["hybrid_ocr_require_specialists"] = hybrid_ocr_require_specialists
     if decorative_max_text_density >= 0:
         options["decorative_max_text_density"] = decorative_max_text_density
     if ocr_min_text_density >= 0:

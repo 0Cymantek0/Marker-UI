@@ -186,6 +186,8 @@ IMAGE_UNDERSTANDING_CONFIG_KEYS: tuple[str, ...] = (
     "vlm_batch_size",
     "max_batch_retries",
     "ocr_engine",
+    "hybrid_ocr_profile",
+    "hybrid_ocr_require_specialists",
 )
 
 
@@ -492,6 +494,7 @@ class MarkerService:
         self._initialized = False
         self._lock = threading.Lock()
         self._conversion_lock = threading.Lock()
+        self._hybrid_ocr_orchestrator: Any | None = None
 
     def initialize(self, device: str | None = None) -> None:
         from app.services.gpu_service import gpu_service
@@ -534,6 +537,14 @@ class MarkerService:
             self._initialized = True
             tracker.set_initialized(True)
 
+    def release_models(self) -> None:
+        """Release Marker model references for low-VRAM specialist phases."""
+        with self._lock:
+            self._model_dict = None
+            self._initialized = False
+            tracker.set_initialized(False)
+        _empty_cuda_cache()
+
     def convert_file(
         self,
         filepath: str | Path,
@@ -542,56 +553,28 @@ class MarkerService:
     ) -> dict[str, Any]:
         self.initialize(device=device)
 
-        from marker.config.parser import ConfigParser
         from marker.output import text_from_rendered
 
-        converter_cls_name = options.pop("converter_cls", "PdfConverter")
-        converter_cls = (_CONVERTERS or {}).get(
-            converter_cls_name,
-            (_CONVERTERS or {})["PdfConverter"],
-        )
-
-        config_parser = ConfigParser(options)
-        config_dict = config_parser.generate_config_dict()
-
-        # Re-inject custom keys that ConfigParser strips (see
-        # IMAGE_UNDERSTANDING_CONFIG_KEYS). They flow unchanged through
-        # BaseConverter.config -> resolve_dependencies -> processor __init__.
-        for _k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
-            if _k in options:
-                config_dict[_k] = options[_k]
-
-        chosen_renderer = _select_renderer(options, config_parser.get_renderer())
-
         with self._conversion_lock:
-            converter = converter_cls(
-                config=config_dict,
-                artifact_dict=self._model_dict,
-                processor_list=config_parser.get_processors(),
-                renderer=chosen_renderer,
-                llm_service=config_parser.get_llm_service(),
+            converter, converter_cls_name, chosen_renderer = self._build_converter(options)
+
+            document = self._build_marker_document(converter, filepath)
+            document, hybrid_ocr_meta = self._maybe_run_hybrid_ocr(
+                document=document,
+                filepath=filepath,
+                options=options,
+                converter=converter,
             )
-
-            # OCRConverter.__init__ hard-forces `self.renderer = OCRJSONRenderer`
-            # after construction, which silently discards the user's output_format.
-            # Restore the user's chosen renderer CLASS (not resolved instance —
-            # __call__ resolves it itself via resolve_dependencies).
-            output_format = options.get("output_format", "markdown")
-            if converter_cls_name == "OCRConverter" and output_format not in ("json", "chunks"):
-                from marker.util import strings_to_classes
-                converter.renderer = strings_to_classes([chosen_renderer])[0]
-
-            rendered = run_with_oom_retry(
-                lambda: converter(str(filepath)),
-                self._model_dict,
+            rendered = self._render_document_format(
+                converter=converter,
+                document=document,
+                fmt=options.get("output_format", "markdown"),
+                renderer_str=chosen_renderer,
+                converter_cls_name=converter_cls_name,
             )
             text, ext, images = text_from_rendered(rendered)
 
-            metadata = getattr(rendered, "metadata", None) or {}
-            image_understanding_meta = _collect_image_understanding_meta(converter)
-            if image_understanding_meta:
-                metadata = dict(metadata)
-                metadata["image_understanding"] = image_understanding_meta
+            metadata = self._collect_render_metadata(rendered, converter, hybrid_ocr_meta)
 
         return {
             "text": text,
@@ -618,20 +601,12 @@ class MarkerService:
         """
         self.initialize(device=device)
 
-        from marker.config.parser import ConfigParser
         from marker.output import text_from_rendered
-        from marker.util import strings_to_classes
 
         # Dedupe + drop unknowns so a bad client request never crashes a render.
         formats = [f for f in dict.fromkeys(formats) if f in _SUPPORTED_FORMATS]
         if not formats:
             formats = ["markdown"]
-
-        converter_cls_name = options.pop("converter_cls", "PdfConverter")
-        converter_cls = (_CONVERTERS or {}).get(
-            converter_cls_name,
-            (_CONVERTERS or {})["PdfConverter"],
-        )
 
         # ConfigParser.get_renderer() reads cli_options["output_format"], so it
         # must exist even though we render many formats below. The value here
@@ -639,44 +614,31 @@ class MarkerService:
         # overrides for each requested format — markdown is a safe placeholder.
         options.setdefault("output_format", "markdown")
 
-        config_parser = ConfigParser(options)
-        config_dict = config_parser.generate_config_dict()
-
-        # Re-inject custom keys that ConfigParser strips (see
-        # IMAGE_UNDERSTANDING_CONFIG_KEYS). They flow unchanged through
-        # BaseConverter.config -> resolve_dependencies -> processor __init__.
-        for _k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
-            if _k in options:
-                config_dict[_k] = options[_k]
-
         with self._conversion_lock:
-            converter = converter_cls(
-                config=config_dict,
-                artifact_dict=self._model_dict,
-                processor_list=config_parser.get_processors(),
-                renderer=_select_renderer(options, config_parser.get_renderer()),
-                llm_service=config_parser.get_llm_service(),
-            )
+            converter, _converter_cls_name, _chosen_renderer = self._build_converter(options)
 
             # The document is parsed ONCE here; every format renders from it.
-            document = run_with_oom_retry(
-                lambda: converter.build_document(str(filepath)),
-                self._model_dict,
+            document = self._build_marker_document(converter, filepath)
+            document, hybrid_ocr_meta = self._maybe_run_hybrid_ocr(
+                document=document,
+                filepath=filepath,
+                options=options,
+                converter=converter,
             )
 
-            image_understanding_meta = _collect_image_understanding_meta(converter)
             formats_out: dict[str, dict[str, Any]] = {}
             for fmt in formats:
                 renderer_str = _renderer_string_for_format(fmt, options)
-                renderer_cls = strings_to_classes([renderer_str])[0]
-                renderer = converter.resolve_dependencies(renderer_cls)
-                rendered = renderer(document)
+                rendered = self._render_document_format(
+                    converter=converter,
+                    document=document,
+                    fmt=fmt,
+                    renderer_str=renderer_str,
+                    converter_cls_name=None,
+                )
                 text, ext, images = text_from_rendered(rendered)
 
-                metadata = getattr(rendered, "metadata", None) or {}
-                if image_understanding_meta:
-                    metadata = dict(metadata)
-                    metadata["image_understanding"] = image_understanding_meta
+                metadata = self._collect_render_metadata(rendered, converter, hybrid_ocr_meta)
 
                 formats_out[fmt] = {
                     "text": text,
@@ -712,6 +674,93 @@ class MarkerService:
             return {k: v for k, v in cp.dict_config.items()}
         except Exception:
             return {}
+
+    def _build_converter(self, options: dict[str, Any]) -> tuple[Any, str, str]:
+        from marker.config.parser import ConfigParser
+
+        converter_cls_name = options.pop("converter_cls", "PdfConverter")
+        converter_cls = (_CONVERTERS or {}).get(
+            converter_cls_name,
+            (_CONVERTERS or {})["PdfConverter"],
+        )
+        config_parser = ConfigParser(options)
+        config_dict = config_parser.generate_config_dict()
+        for _k in IMAGE_UNDERSTANDING_CONFIG_KEYS:
+            if _k in options:
+                config_dict[_k] = options[_k]
+        chosen_renderer = _select_renderer(options, config_parser.get_renderer())
+        converter = converter_cls(
+            config=config_dict,
+            artifact_dict=self._model_dict,
+            processor_list=config_parser.get_processors(),
+            renderer=chosen_renderer,
+            llm_service=config_parser.get_llm_service(),
+        )
+        return converter, converter_cls_name, chosen_renderer
+
+    def _build_marker_document(self, converter: Any, filepath: str | Path) -> Any:
+        build_document = getattr(converter, "build_document", None)
+        if not callable(build_document):
+            raise RuntimeError("Marker converter does not expose build_document; Hybrid OCR seam requires it.")
+        return run_with_oom_retry(
+            lambda: build_document(str(filepath)),
+            self._model_dict,
+        )
+
+    def _render_document_format(
+        self,
+        *,
+        converter: Any,
+        document: Any,
+        fmt: str,
+        renderer_str: str,
+        converter_cls_name: str | None,
+    ) -> Any:
+        from marker.util import strings_to_classes
+
+        renderer_cls = strings_to_classes([renderer_str])[0]
+        if converter_cls_name == "OCRConverter" and fmt not in ("json", "chunks"):
+            converter.renderer = renderer_cls
+        renderer = converter.resolve_dependencies(renderer_cls)
+        return renderer(document)
+
+    def _maybe_run_hybrid_ocr(
+        self,
+        *,
+        document: Any,
+        filepath: str | Path,
+        options: dict[str, Any],
+        converter: Any,
+    ) -> tuple[Any, dict[str, Any]]:
+        if options.get("ocr_engine") != "hybrid_ocr":
+            return document, {}
+        if self._hybrid_ocr_orchestrator is None:
+            from app.hybrid_ocr import HybridOcrOrchestrator
+
+            self._hybrid_ocr_orchestrator = HybridOcrOrchestrator()
+        return self._hybrid_ocr_orchestrator.refine(
+            document=document,
+            filepath=str(filepath),
+            options=options,
+            marker_service=self,
+            converter=converter,
+        )
+
+    def _collect_render_metadata(
+        self,
+        rendered: Any,
+        converter: Any,
+        hybrid_ocr_meta: dict[str, Any],
+    ) -> dict[str, Any]:
+        metadata = getattr(rendered, "metadata", None) or {}
+        if hybrid_ocr_meta:
+            metadata = dict(metadata)
+            metadata["hybrid_ocr"] = hybrid_ocr_meta
+        image_understanding_meta = _collect_image_understanding_meta(converter)
+        if image_understanding_meta:
+            metadata = dict(metadata)
+            metadata["image_understanding"] = image_understanding_meta
+        return metadata
 
 
 def _collect_image_understanding_meta(converter: Any) -> list[dict[str, Any]]:

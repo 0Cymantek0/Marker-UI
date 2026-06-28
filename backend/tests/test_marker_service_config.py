@@ -101,7 +101,7 @@ def test_marker_service_serializes_shared_model_conversions(monkeypatch):
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-        def __call__(self, filepath):
+        def build_document(self, filepath):
             nonlocal active, max_active
             with active_lock:
                 active += 1
@@ -109,7 +109,13 @@ def test_marker_service_serializes_shared_model_conversions(monkeypatch):
             time.sleep(0.1)
             with active_lock:
                 active -= 1
-            return _FakeRendered()
+            return object()
+
+        def resolve_dependencies(self, cls):
+            class _Renderer:
+                def __call__(self, document):
+                    return _FakeRendered()
+            return _Renderer()
 
     def fake_text_from_rendered(rendered):
         return "ok", "md", {}
@@ -253,12 +259,15 @@ def test_ocr_converter_restores_markdown_renderer(monkeypatch):
             # This is the exact line that caused the bug.
             self.renderer = OCR_JSON
 
-        def resolve_dependencies(self, cls):
-            return cls
+        def build_document(self, filepath):
+            return object()
 
-        def __call__(self, filepath):
+        def resolve_dependencies(self, cls):
             FORCED_RENDERER["renderer"] = self.renderer
-            return _FakeRendered()
+            class _Renderer:
+                def __call__(self, document):
+                    return _FakeRendered()
+            return _Renderer()
 
     def fake_text_from_rendered(rendered):
         return "ok", "md", {}
@@ -300,12 +309,15 @@ def test_ocr_converter_keeps_json_renderer(monkeypatch):
             self.kwargs = kwargs
             self.renderer = OCR_JSON
 
-        def resolve_dependencies(self, cls):
-            return cls
+        def build_document(self, filepath):
+            return object()
 
-        def __call__(self, filepath):
+        def resolve_dependencies(self, cls):
             FORCED_RENDERER["renderer"] = self.renderer
-            return _FakeRendered()
+            class _Renderer:
+                def __call__(self, document):
+                    return _FakeRendered()
+            return _Renderer()
 
     def fake_text_from_rendered(rendered):
         return "ok", "json", {}
@@ -355,6 +367,9 @@ def test_ocr_converter_renderer_survives_double_resolve(monkeypatch):
             self.artifact_dict = kwargs.get("artifact_dict", {})
             self.renderer = OCR_JSON
 
+        def build_document(self, filepath):
+            return object()
+
         def resolve_dependencies(self, cls):
             init_sig = inspect.signature(cls.__init__)
             params = init_sig.parameters
@@ -370,11 +385,13 @@ def test_ocr_converter_renderer_survives_double_resolve(monkeypatch):
                     resolved[name] = param.default
                 else:
                     raise ValueError(f"Cannot resolve: {name}")
-            return cls(**resolved)
+            cls(**resolved)
 
-        def __call__(self, filepath):
-            self.resolve_dependencies(self.renderer)
-            return _FakeRendered()
+            class _Renderer:
+                def __call__(self, document):
+                    return _FakeRendered()
+
+            return _Renderer()
 
     def fake_text_from_rendered(rendered):
         return "ok", "md", {}
@@ -539,6 +556,75 @@ def test_convert_file_formats_dedupes_and_drops_unknown(monkeypatch):
     )
     # Deduped markdown survives; bogus/empty dropped.
     assert list(out.keys()) == ["markdown"]
+
+
+def test_convert_file_uses_build_refine_render_seam(monkeypatch):
+    """Single-format conversion must use the same build -> hybrid -> render seam."""
+    import app.services.marker_service as marker_service_mod
+    import marker.output as marker_output
+
+    build_calls = {"n": 0}
+
+    class _Block:
+        block_type = "Table"
+
+        def __init__(self):
+            self.text = "| old | value |"
+
+    class _Document:
+        def __init__(self):
+            self.pages = [type("_Page", (), {"children": [_Block()]})()]
+
+    class _FakeRendered:
+        def __init__(self, document):
+            self.document = document
+            self.metadata = {"format": "markdown"}
+
+    class _FakeConverter:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def build_document(self, filepath):
+            build_calls["n"] += 1
+            return _Document()
+
+        def resolve_dependencies(self, cls):
+            class _Renderer:
+                def __call__(self, document):
+                    return _FakeRendered(document)
+            return _Renderer()
+
+    def fake_text_from_rendered(rendered):
+        block = rendered.document.pages[0].children[0]
+        return block.text, "md", {}
+
+    monkeypatch.setenv("MARKER_GLM_PYTHON", "python")
+    monkeypatch.setattr(marker_service_mod, "_CONVERTERS", {"PdfConverter": _FakeConverter})
+    monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
+
+    service = MarkerService()
+    service._initialized = True
+    service._model_dict = {"recognition": object()}
+
+    out = service.convert_file(
+        "doc.pdf",
+        {
+            "converter_cls": "PdfConverter",
+            "output_format": "markdown",
+            "ocr_engine": "hybrid_ocr",
+            "hybrid_ocr_mock_results": {
+                "p1_table_01": {
+                    "engine": "glm_ocr",
+                    "markdown": "| new | value |\n|---|---|\n| 1 | 2 |",
+                    "replacement_policy": "replace_block",
+                }
+            },
+        },
+    )
+
+    assert build_calls["n"] == 1
+    assert out["text"] == "| new | value |\n|---|---|\n| 1 | 2 |"
+    assert out["metadata"]["hybrid_ocr"]["specialist_results"]["accepted"] == 1
 
 
 # ---------------------------------------------------------------------------

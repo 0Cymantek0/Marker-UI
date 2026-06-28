@@ -186,7 +186,7 @@ def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | No
         return None
     metadata = {
         key: parsed[key]
-        for key in ("engine", "probe_result", "mixed_engine_segments", "assets", "manifest_path")
+        for key in ("engine", "probe_result", "mixed_engine_segments", "hybrid_ocr", "assets", "manifest_path")
         if key in parsed and parsed[key]
     }
     return metadata or None
@@ -336,7 +336,9 @@ async def upload_file(
     dedup_enabled: Optional[bool] = Query(None, description="Collapse repeated identical images to one extraction"),
     downscale_vlm_crops: Optional[bool] = Query(None, description="Downscale crops before VLM send (cost lever)"),
     batch_enabled: Optional[bool] = Query(None, description="Batch route+extract calls instead of serial per-image"),
-    ocr_engine: Optional[str] = Query(None, description="Local OCR engine (only 'surya' ships; others fall back)"),
+    ocr_engine: Optional[str] = Query(None, description="Local OCR engine: surya | hybrid_ocr"),
+    hybrid_ocr_profile: Optional[str] = Query(None, description="Hybrid OCR routing/resource profile: balanced | max_accuracy | low_vram"),
+    hybrid_ocr_require_specialists: bool = Query(False, description="Fail conversion if Hybrid OCR specialists are unavailable instead of falling back to Surya"),
     decorative_max_text_density: Optional[float] = Query(None, ge=0.0, le=1.0, description="Text-density at/below which an image is decorative"),
     ocr_min_text_density: Optional[float] = Query(None, ge=0.0, le=1.0, description="Text-density at/above which an image routes to local OCR"),
     ocr_min_lines: Optional[int] = Query(None, ge=1, description="Min detected text lines to consider the OCR route"),
@@ -526,8 +528,32 @@ async def upload_file(
         config["archive_max_converted_children"] = archive_max_converted_children
     if archive_max_child_bytes is not None:
         config["archive_max_child_bytes"] = archive_max_child_bytes
-    if ocr_engine in ("surya", "glm_ocr", "paddleocr_vl", "mistral_ocr"):
+    if ocr_engine in ("surya", "hybrid_ocr"):
         config["ocr_engine"] = ocr_engine
+    elif ocr_engine in ("glm_ocr", "paddleocr_vl"):
+        raise HTTPException(
+            status_code=400,
+            detail="Use ocr_engine=hybrid_ocr instead of individual specialist engines.",
+        )
+    elif ocr_engine == "mistral_ocr":
+        raise HTTPException(
+            status_code=400,
+            detail="mistral_ocr is not supported as a local OCR engine.",
+        )
+    elif ocr_engine is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid ocr_engine; expected surya or hybrid_ocr.",
+        )
+    if hybrid_ocr_profile is not None:
+        if hybrid_ocr_profile not in ("balanced", "max_accuracy", "low_vram"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid hybrid_ocr_profile; expected balanced, max_accuracy, or low_vram.",
+            )
+        config["hybrid_ocr_profile"] = hybrid_ocr_profile
+    if hybrid_ocr_require_specialists:
+        config["hybrid_ocr_require_specialists"] = True
     if decorative_max_text_density is not None:
         config["decorative_max_text_density"] = decorative_max_text_density
     if ocr_min_text_density is not None:

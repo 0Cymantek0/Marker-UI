@@ -9,9 +9,24 @@ export type ConverterType =
   | 'OCRConverter'
   | 'ExtractionConverter'
 export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
-export type OcrEngine = 'surya' | 'glm_ocr' | 'paddleocr_vl' | 'mistral_ocr'
+export type OcrEngine = 'surya' | 'hybrid_ocr'
+export type HybridOcrProfile = 'balanced' | 'max_accuracy' | 'low_vram'
 export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
 export type AudioOutputMode = 'transcript' | 'enhanced' | 'notes' | 'meeting_notes' | 'lecture_notes'
+
+/**
+ * Migrate any stored/legacy ocr_engine value to a currently-valid one.
+ *
+ * The specialist engines (glm_ocr, paddleocr_vl) are no longer user-facing —
+ * they live behind hybrid_ocr — and mistral_ocr was removed from the local OCR
+ * path entirely (cloud-based, conflicts with local-first). Presets saved under
+ * the old four-value union are normalised here on load.
+ */
+export function normalizeOcrEngine(value: unknown): OcrEngine {
+  if (value === 'surya' || value === 'hybrid_ocr') return value
+  if (value === 'glm_ocr' || value === 'paddleocr_vl') return 'hybrid_ocr'
+  return 'surya'
+}
 
 export interface ConversionConfig {
   output_formats: OutputFormat[]
@@ -43,6 +58,8 @@ export interface ConversionConfig {
   downscale_vlm_crops?: boolean
   batch_enabled?: boolean
   ocr_engine?: OcrEngine
+  hybrid_ocr_profile?: HybridOcrProfile
+  hybrid_ocr_require_specialists?: boolean
   decorative_max_text_density?: number
   ocr_min_text_density?: number
   ocr_min_lines?: number
@@ -344,7 +361,9 @@ export async function uploadFile(
   if (config.dedup_enabled !== undefined) params.append('dedup_enabled', String(config.dedup_enabled))
   if (config.downscale_vlm_crops !== undefined) params.append('downscale_vlm_crops', String(config.downscale_vlm_crops))
   if (config.batch_enabled !== undefined) params.append('batch_enabled', String(config.batch_enabled))
-  if (config.ocr_engine) params.append('ocr_engine', config.ocr_engine)
+  if (config.ocr_engine !== undefined) params.append('ocr_engine', config.ocr_engine)
+  if (config.hybrid_ocr_profile !== undefined) params.append('hybrid_ocr_profile', config.hybrid_ocr_profile)
+  if (config.hybrid_ocr_require_specialists !== undefined) params.append('hybrid_ocr_require_specialists', String(config.hybrid_ocr_require_specialists))
   if (config.decorative_max_text_density !== undefined) params.append('decorative_max_text_density', String(config.decorative_max_text_density))
   if (config.ocr_min_text_density !== undefined) params.append('ocr_min_text_density', String(config.ocr_min_text_density))
   if (config.ocr_min_lines !== undefined) params.append('ocr_min_lines', String(config.ocr_min_lines))

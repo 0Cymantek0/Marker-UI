@@ -816,7 +816,9 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Batch image-understanding route/extract calls",
     )
-    parser.add_argument("--ocr-engine", choices=["surya", "glm_ocr", "paddleocr_vl", "mistral_ocr"])
+    parser.add_argument("--ocr-engine", default="surya", choices=["surya", "hybrid_ocr"])
+    parser.add_argument("--hybrid-ocr-profile", default="balanced", choices=["balanced", "max_accuracy", "low_vram"])
+    parser.add_argument("--hybrid-ocr-require-specialists", action="store_true")
     parser.add_argument("--decorative-max-text-density", type=float)
     parser.add_argument("--ocr-min-text-density", type=float)
     parser.add_argument("--ocr-min-lines", type=int)
@@ -862,6 +864,9 @@ def _options_from_args(args: argparse.Namespace) -> AgentConversionOptions:
         disable_multiprocessing=args.disable_multiprocessing,
         strip_existing_ocr=args.strip_existing_ocr,
         redo_inline_math=args.redo_inline_math,
+        ocr_engine=args.ocr_engine,
+        hybrid_ocr_profile=args.hybrid_ocr_profile,
+        hybrid_ocr_require_specialists=args.hybrid_ocr_require_specialists,
         debug=args.debug,
         extra_options={
             **_direct_extra_options(args),
@@ -885,7 +890,6 @@ def _direct_extra_options(args: argparse.Namespace) -> dict[str, Any]:
         "dedup_enabled",
         "downscale_vlm_crops",
         "batch_enabled",
-        "ocr_engine",
         "decorative_max_text_density",
         "ocr_min_text_density",
         "ocr_min_lines",

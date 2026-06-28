@@ -348,8 +348,8 @@ class ImageUnderstandingConfig(BaseModel):
     ocr_engine: str = Field(
         default="surya",
         description=(
-            "Local OCR engine behind the pluggable OCREngine seam (plan §5). "
-            "Only 'surya' ships today; glm_ocr / paddleocr_vl / mistral_ocr are "
-            "gated behind the §9.4 benchmark."
+            "Local OCR engine: 'surya' (default) or 'hybrid_ocr'. Specialist "
+            "engines (glm_ocr / paddleocr_vl) are internal only and run behind "
+            "hybrid_ocr; they are not user-facing ocr_engine values."
         ),
     )

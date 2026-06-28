@@ -36,6 +36,7 @@ class TestConversionJob:
         "error_message",
         "result_text",
         "result_metadata_json",
+        "formats_json",
         "result_path",
         "config_json",
         "created_at",
@@ -69,6 +70,7 @@ class TestConversionJob:
         assert job.progress in (0, None)
         assert job.error_message is None
         assert job.result_text is None
+        assert job.formats_json is None
         assert job.result_path is None
         assert job.config_json is None
         assert job.completed_at is None

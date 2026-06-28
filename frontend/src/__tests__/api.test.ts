@@ -3,6 +3,7 @@ import {
   getJobEvents,
   downloadResult,
   uploadFile,
+  normalizeOcrEngine,
 } from '@/lib/api'
 
 const eventSourceUrls: string[] = []
@@ -86,5 +87,36 @@ describe('uploadFile', () => {
     expect(url.searchParams.get('audio_context')).toBe('project call')
     expect(url.searchParams.get('audio_low_confidence_threshold')).toBe('0.7')
     expect(url.searchParams.get('audio_word_timestamps')).toBe('true')
+  })
+
+  it('sends hybrid OCR controls even when image understanding is off', async () => {
+    mockFetchOnce(200, { job_id: 'job-ocr', status: 'pending', filename: 'scan.pdf' }, true)
+
+    await uploadFile(new File(['pdf'], 'scan.pdf', { type: 'application/pdf' }), {
+      output_formats: ['markdown'],
+      converter: 'PdfConverter',
+      image_handling_mode: 'extraction',
+      ocr_engine: 'hybrid_ocr',
+      hybrid_ocr_profile: 'low_vram',
+      hybrid_ocr_require_specialists: true,
+    })
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.get('image_handling_mode')).toBe('extraction')
+    expect(url.searchParams.get('ocr_engine')).toBe('hybrid_ocr')
+    expect(url.searchParams.get('hybrid_ocr_profile')).toBe('low_vram')
+    expect(url.searchParams.get('hybrid_ocr_require_specialists')).toBe('true')
+  })
+})
+
+describe('normalizeOcrEngine', () => {
+  it('maps legacy specialist values without preserving cloud Mistral', () => {
+    expect(normalizeOcrEngine('surya')).toBe('surya')
+    expect(normalizeOcrEngine('hybrid_ocr')).toBe('hybrid_ocr')
+    expect(normalizeOcrEngine('glm_ocr')).toBe('hybrid_ocr')
+    expect(normalizeOcrEngine('paddleocr_vl')).toBe('hybrid_ocr')
+    expect(normalizeOcrEngine('mistral_ocr')).toBe('surya')
+    expect(normalizeOcrEngine(undefined)).toBe('surya')
   })
 })

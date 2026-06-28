@@ -16,6 +16,13 @@ vi.mock('@/lib/api', () => ({
   getPresets: (...args: any[]) => mockGetPresets(...args),
   savePreset: (...args: any[]) => mockSavePreset(...args),
   deletePreset: (...args: any[]) => mockDeletePreset(...args),
+  normalizeOcrEngine: (value: unknown) => (
+    value === 'glm_ocr' || value === 'paddleocr_vl'
+      ? 'hybrid_ocr'
+      : value === 'hybrid_ocr'
+        ? 'hybrid_ocr'
+        : 'surya'
+  ),
 }))
 
 vi.mock('sonner', () => ({

@@ -12,6 +12,7 @@ import {
   getPresets,
   savePreset,
   deletePreset,
+  normalizeOcrEngine,
   type LLMProvider,
   type ConversionConfig,
   type OutputFormat,
@@ -92,13 +93,13 @@ const AUDIO_OUTPUT_OPTIONS: { value: AudioOutputMode; label: string }[] = [
   { value: 'enhanced', label: 'Evidence-first enhanced document' },
 ]
 
-// Only 'surya' ships today. The other engines are wired behind a benchmark gate;
-// the backend degrades them to the VLM, so we render them but label them honestly.
+// Two local engine choices only. Surya is the default baseline; Hybrid OCR runs
+// a local multi-engine refinement pipeline on top of Surya. The specialist
+// engines (GLM-OCR, PaddleOCR-VL) are internal — never user-facing dropdown
+// values. Mistral OCR is removed entirely (cloud/API conflicts with local-first).
 const OCR_ENGINE_OPTIONS: { value: OcrEngine; label: string }[] = [
   { value: 'surya', label: 'Surya (local, default)' },
-  { value: 'glm_ocr', label: 'GLM-OCR (experimental — falls back to cloud)' },
-  { value: 'paddleocr_vl', label: 'PaddleOCR-VL (experimental — falls back to cloud)' },
-  { value: 'mistral_ocr', label: 'Mistral OCR (experimental — falls back to cloud)' },
+  { value: 'hybrid_ocr', label: 'Hybrid OCR (local, experimental)' },
 ]
 
 // Smart Image Router intelligence levels. Each option carries a pros/cons line
@@ -163,7 +164,13 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
 
   const loadPresets = () => {
     getPresets()
-      .then((data) => setPresets(data))
+      .then((data) => setPresets(data.map((preset) => ({
+        ...preset,
+        config: {
+          ...preset.config,
+          ocr_engine: normalizeOcrEngine(preset.config.ocr_engine),
+        },
+      }))))
       .catch((err) => console.error('Failed to load presets', err))
   }
 
@@ -185,7 +192,11 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
     if (presetId === 'custom') return
     const selected = presets.find((p) => p.id === presetId)
     if (selected) {
-      onChange({ ...config, ...selected.config })
+      onChange({
+        ...config,
+        ...selected.config,
+        ocr_engine: normalizeOcrEngine(selected.config.ocr_engine),
+      })
       setSelectedPresetId(presetId)
       toast.success(`Preset "${selected.name}" applied!`)
     }
@@ -242,7 +253,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
   }
 
   const openModal = () => {
-    setTempConfig({ ...config })
+    setTempConfig({ ...config, ocr_engine: normalizeOcrEngine(config.ocr_engine) })
     setShowTuning(false)
     setIsModalOpen(true)
   }
@@ -693,6 +704,36 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
               <hr className="border-border/20" />
 
               <div className="space-y-2.5">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                    PDF / OCR Engine
+                  </label>
+                  <HelpIcon text="Engine used to OCR and refine PDF/image text. Surya is the local default. Hybrid OCR adds local specialist engines for tables, formulas, and difficult scans when installed — it never sends crops to the cloud." />
+                </div>
+                <Select
+                  value={tempConfig.ocr_engine ?? IU_DEFAULTS.ocr_engine}
+                  onChange={(val) => updateTemp('ocr_engine', val as OcrEngine)}
+                  disabled={disabled}
+                  options={OCR_ENGINE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  className="w-full md:w-full"
+                />
+                {(tempConfig.ocr_engine ?? IU_DEFAULTS.ocr_engine) === 'hybrid_ocr' && (
+                  <div
+                    className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2"
+                    data-testid="hybrid-ocr-warning"
+                  >
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-normal">
+                      Hybrid OCR runs a local multi-engine refinement pipeline. Surya builds the baseline document, then local
+                      specialist engines improve selected tables, formulas, and difficult scanned regions when installed. It is
+                      slower and may require extra local model setup, but no OCR crop is sent to cloud services by this engine.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <hr className="border-border/20" />
+
+              <div className="space-y-2.5">
                 <div>
                   <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
                     Image Understanding
@@ -788,27 +829,6 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                       onChange={(v) => updateTemp('batch_enabled', v)}
                       disabled={disabled}
                     />
-
-                    <div className="space-y-1.5 px-2.5 pt-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
-                          Local OCR Engine
-                        </label>
-                        <HelpIcon text="Engine used for text-as-image OCR. Only Surya ships today; the others fall back to the cloud VLM until benchmarked." />
-                      </div>
-                      <Select
-                        value={tempConfig.ocr_engine ?? IU_DEFAULTS.ocr_engine}
-                        onChange={(val) => updateTemp('ocr_engine', val as OcrEngine)}
-                        disabled={disabled}
-                        options={OCR_ENGINE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                        className="w-full md:w-full"
-                      />
-                      {(tempConfig.ocr_engine ?? IU_DEFAULTS.ocr_engine) !== 'surya' && (
-                        <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-normal">
-                          Not yet available — this engine falls back to the cloud VLM until it ships. Surya stays the active local engine.
-                        </p>
-                      )}
-                    </div>
 
                     {/* Experimental / tuning disclosure */}
                     <div className="pt-2">

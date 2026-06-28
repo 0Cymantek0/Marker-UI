@@ -131,6 +131,8 @@ def capabilities() -> dict[str, Any]:
         "output_formats": ["markdown", "json", "html", "chunks"],
         "conversion_profiles": ["auto", "fast", "high_accuracy"],
         "image_handling_modes": ["extraction", "understanding", "both"],
+        "ocr_engines": ["surya", "hybrid_ocr"],
+        "hybrid_ocr_profiles": ["balanced", "max_accuracy", "low_vram"],
         "audio_output_modes": ["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"],
         "converters": converters,
         "agent_guidance": (
@@ -177,6 +179,9 @@ def build_conversion_config(
     _put_true(config, "disable_multiprocessing", options.disable_multiprocessing)
     _put_true(config, "strip_existing_ocr", options.strip_existing_ocr)
     _put_true(config, "redo_inline_math", options.redo_inline_math)
+    config["ocr_engine"] = options.ocr_engine
+    config["hybrid_ocr_profile"] = options.hybrid_ocr_profile
+    _put_true(config, "hybrid_ocr_require_specialists", options.hybrid_ocr_require_specialists)
     _put_true(config, "debug", options.debug)
     if output_dir:
         config["output_dir"] = output_dir
@@ -720,6 +725,7 @@ def _job_to_dict(
                 "engine",
                 "probe_result",
                 "mixed_engine_segments",
+                "hybrid_ocr",
                 "image_understanding",
                 "assets",
                 "manifest_path",

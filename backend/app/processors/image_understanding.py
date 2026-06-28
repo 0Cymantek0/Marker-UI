@@ -134,6 +134,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
         self.vlm_batch_size = int(cfg.get("vlm_batch_size", 8))
         self.max_batch_retries = int(cfg.get("max_batch_retries", 2))
         self.ocr_engine = str(cfg.get("ocr_engine", "surya"))
+        self._local_ocr_engine = "surya" if self.ocr_engine == "hybrid_ocr" else self.ocr_engine
         self._vlm_service = vlm_service
         # Surya models injected by marker's resolve_dependencies (param name ==
         # artifact_dict key). Used by the Tier-0 router (detection) and Tier-2
@@ -702,14 +703,14 @@ class ImageUnderstandingProcessor(BaseProcessor):
 
                 try:
                     self._local_ocr = build_ocr_engine(
-                        self.ocr_engine,
+                        self._local_ocr_engine,
                         recognition_model=self._recognition_model,
                         detection_model=self._detection_model,
                     )
                 except (NotImplementedError, ValueError) as exc:
                     logger.warning(
                         "OCR engine %r unavailable (%s); local OCR disabled",
-                        self.ocr_engine,
+                        self._local_ocr_engine,
                         exc,
                     )
                     self._local_ocr = None

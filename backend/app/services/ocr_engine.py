@@ -112,10 +112,14 @@ class SuryaOCREngine:
 # Engines that are planned but deliberately NOT shipped in this phase. Listed so
 # the factory can raise an explicit, actionable error instead of a generic one
 # (plan §12 deferred work — gated behind the §9.4 benchmark).
+# Specialist engines that live BEHIND the hybrid_ocr orchestrator, never as a
+# user-facing ``ocr_engine`` value. Listed so this image-OCR seam raises a
+# clear error if some caller still asks for one directly. ``mistral_ocr`` is
+# gone entirely: it is cloud/API-based and conflicts with the local-first
+# Hybrid OCR contract (blueprint §0).
 _DEFERRED_ENGINES = {
-    "glm_ocr": "GLM-OCR (torch-first local doc parser)",
-    "paddleocr_vl": "PaddleOCR-VL (PaddlePaddle dependency)",
-    "mistral_ocr": "Mistral OCR 3 (cloud hard-page fallback)",
+    "glm_ocr": "GLM-OCR (internal hybrid_ocr specialist)",
+    "paddleocr_vl": "PaddleOCR-VL (internal hybrid_ocr specialist)",
 }
 
 

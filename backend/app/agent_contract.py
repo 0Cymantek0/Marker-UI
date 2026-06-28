@@ -21,6 +21,8 @@ OutputFormat = Literal["markdown", "json", "html", "chunks"]
 ImageHandlingMode = Literal["extraction", "understanding", "both"]
 ConversionProfile = Literal["auto", "fast", "high_accuracy"]
 AudioOutputMode = Literal["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"]
+OcrEngine = Literal["surya", "hybrid_ocr"]
+HybridOcrProfile = Literal["balanced", "max_accuracy", "low_vram"]
 
 
 class ContractModel(BaseModel):
@@ -55,6 +57,9 @@ class ConversionOptionsModel(ContractModel):
     disable_multiprocessing: bool = False
     strip_existing_ocr: bool = False
     redo_inline_math: bool = False
+    ocr_engine: OcrEngine = "surya"
+    hybrid_ocr_profile: HybridOcrProfile = "balanced"
+    hybrid_ocr_require_specialists: bool = False
     debug: bool = False
     extra_options: dict[str, Any] = Field(default_factory=dict)
 
@@ -213,6 +218,9 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="disable_image_extraction", cli_flag="--disable-image-extraction", type="boolean", default=False, category="images", description="Skip extracted image sidecars."),
     OptionMetadataModel(name="page_range", cli_flag="--page-range", type="string", category="pdf", description="PDF page range such as 1-3,5."),
     OptionMetadataModel(name="lang", cli_flag="--lang", type="string", category="ocr", description="OCR language hint."),
+    OptionMetadataModel(name="ocr_engine", cli_flag="--ocr-engine", type="enum", default="surya", category="ocr", description="Local OCR engine: surya or hybrid_ocr."),
+    OptionMetadataModel(name="hybrid_ocr_profile", cli_flag="--hybrid-ocr-profile", type="enum", default="balanced", category="ocr", description="Hybrid OCR profile: balanced, max_accuracy, or low_vram."),
+    OptionMetadataModel(name="hybrid_ocr_require_specialists", cli_flag="--hybrid-ocr-require-specialists", type="boolean", default=False, category="ocr", description="Fail if Hybrid OCR specialists are unavailable."),
     OptionMetadataModel(name="audio_output_mode", cli_flag="--audio-output-mode", type="enum", category="audio", description="Audio transcript or note mode."),
     OptionMetadataModel(name="audio_model", cli_flag="--audio-model", type="string", category="audio", description="Local audio transcription model."),
     OptionMetadataModel(name="audio_vocabulary", cli_flag="--audio-vocabulary", type="string", category="audio", description="Vocabulary hints for audio transcription."),

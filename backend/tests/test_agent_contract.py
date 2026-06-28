@@ -41,7 +41,13 @@ def test_export_json_schemas_contains_core_models_and_metadata():
         assert models[name]["type"] == "object"
 
     option_names = {item["name"] for item in schemas["option_metadata"]}
-    assert {"output_format", "allow_cloud_vlm", "extra_options"}.issubset(option_names)
+    assert {
+        "output_format",
+        "allow_cloud_vlm",
+        "ocr_engine",
+        "hybrid_ocr_profile",
+        "extra_options",
+    }.issubset(option_names)
 
 
 def test_conversion_options_validate_known_enums_and_extra_options():
@@ -49,14 +55,20 @@ def test_conversion_options_validate_known_enums_and_extra_options():
         output_format="markdown",
         image_handling_mode="both",
         conversion_profile="high_accuracy",
+        ocr_engine="hybrid_ocr",
+        hybrid_ocr_profile="low_vram",
         extra_options={"text_data_max_rows": 10},
     )
 
     assert opts.output_format == "markdown"
+    assert opts.ocr_engine == "hybrid_ocr"
+    assert opts.hybrid_ocr_profile == "low_vram"
     assert opts.extra_options == {"text_data_max_rows": 10}
 
     with pytest.raises(ValueError):
         ConversionOptionsModel(output_format="docx")
+    with pytest.raises(ValueError):
+        ConversionOptionsModel(ocr_engine="glm_ocr")
 
 
 def test_convert_result_and_manifest_models_accept_current_output_shape(tmp_path: Path):

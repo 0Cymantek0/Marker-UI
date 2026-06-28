@@ -50,7 +50,8 @@ export function OutputViewer({
 
   const isMultiSupported = useMemo(() => {
     if (!filename) return true
-    const ext = filename.split(/[?#]/)[0].split('.').pop()?.toLowerCase()
+    const baseName = filename.split(/[?#]/)[0] ?? ''
+    const ext = baseName.split('.').pop()?.toLowerCase()
     return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
   }, [filename])
 
@@ -105,6 +106,7 @@ export function OutputViewer({
 
   const isTabAvailable = (tab: typeof ALL_TABS[number]) => {
     if (!tab.formatKey) return true
+    if (availableFormats.includes(tab.formatKey)) return true
     return !!formats?.[tab.formatKey]
   }
 
