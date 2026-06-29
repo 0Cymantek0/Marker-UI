@@ -119,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_handle_batch(args))
         if args.command == "doctor":
             return _handle_doctor(args)
+        if args.command == "hybrid-ocr":
+            return _handle_hybrid_ocr(args)
         if args.command == "schema":
             return _handle_schema(args)
         if args.command == "eval":
@@ -324,6 +326,15 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--no-conversion", action="store_true", help="Skip real TSV conversion smoke test")
     doctor.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
+    hybrid = sub.add_parser("hybrid-ocr", help="Inspect or set up Hybrid OCR specialist models")
+    hybrid_sub = hybrid.add_subparsers(dest="hybrid_ocr_command", required=True, parser_class=MarkerArgumentParser)
+    hybrid_status = hybrid_sub.add_parser("status", help="Show Hybrid OCR model/runtime readiness")
+    hybrid_status.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+    hybrid_setup = hybrid_sub.add_parser("setup", help="Download Hybrid OCR model snapshots")
+    hybrid_setup.add_argument("--engine", choices=["glm_ocr", "paddleocr_vl", "all"], default="all")
+    hybrid_setup.add_argument("--force", action="store_true", help="Re-download even if snapshot directory exists")
+    hybrid_setup.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+
     schema = sub.add_parser("schema", help="Inspect/export stable JSON schemas")
     schema_sub = schema.add_subparsers(dest="schema_command", required=True, parser_class=MarkerArgumentParser)
     schema_export = schema_sub.add_parser("export", help="Export agent contract JSON schemas")
@@ -519,16 +530,62 @@ def _handle_output(args: argparse.Namespace) -> int:
 
 def _handle_doctor(args: argparse.Namespace) -> int:
     result = asyncio.run(self_test(include_conversion=not args.no_conversion))
+    from app.hybrid_ocr.capability import detect_capabilities
+    from app.hybrid_ocr.setup import hybrid_setup_status
+
+    caps = detect_capabilities()
     result["doctor"] = {
         "schema_version": "marker.doctor.v1",
         "checks": {
             "capabilities": bool(result.get("capabilities_ok")),
             "conversion": result.get("conversion_ok"),
+            "hybrid_ocr": "glm_ocr" in {engine.value for engine in caps.available}
+            or "paddleocr_vl" in {engine.value for engine in caps.available},
+        },
+        "hybrid_ocr": {
+            **hybrid_setup_status(),
+            "engines_available": sorted(engine.value for engine in caps.available),
+            "warnings": caps.warnings,
         },
     }
     exit_code = 0 if result.get("capabilities_ok") and result.get("conversion_ok") is not False else 1
     _print_result(result, args.json)
     return exit_code
+
+
+def _handle_hybrid_ocr(args: argparse.Namespace) -> int:
+    from app.hybrid_ocr.capability import detect_capabilities
+    from app.hybrid_ocr.setup import download_model_snapshot, hybrid_setup_status
+
+    if args.hybrid_ocr_command == "status":
+        caps = detect_capabilities()
+        return _print_result(
+            {
+                "schema_version": "marker.hybrid_ocr_status.v1",
+                **hybrid_setup_status(),
+                "engines_available": sorted(engine.value for engine in caps.available),
+                "warnings": caps.warnings,
+                "runtime_env": {
+                    "glm_endpoint": bool(os.environ.get("MARKER_GLM_OCR_ENDPOINT")),
+                    "glm_command": bool(os.environ.get("MARKER_GLM_OCR_COMMAND")),
+                    "paddle_endpoint": bool(os.environ.get("MARKER_PADDLE_OCR_VL_ENDPOINT")),
+                    "paddle_command": bool(os.environ.get("MARKER_PADDLE_OCR_VL_COMMAND")),
+                },
+            },
+            args.json,
+        )
+    if args.hybrid_ocr_command == "setup":
+        engines = ["glm_ocr", "paddleocr_vl"] if args.engine == "all" else [args.engine]
+        results = [download_model_snapshot(engine, force=args.force) for engine in engines]
+        return _print_result(
+            {
+                "schema_version": "marker.hybrid_ocr_setup.v1",
+                "results": results,
+                "status": hybrid_setup_status(),
+            },
+            args.json,
+        )
+    return 2
 
 
 def _handle_schema(args: argparse.Namespace) -> int:

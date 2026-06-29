@@ -851,7 +851,7 @@ async def download_result(
     stem = Path(job.original_name).stem
 
     # Determine which formats to include
-    requested_format = (format or "all").strip().lower()
+    requested_format = (format or job.output_format or "markdown").strip().lower()
     if requested_format == "all":
         target_formats = list(formats_map.keys())
     else:
@@ -869,14 +869,14 @@ async def download_result(
         "chunks": "txt",
     }
 
-    # If the job has a directory result_path (meaning assets exist) or we are downloading multiple formats,
-    # we return a ZIP archive.
+    # Only an explicit all-format download returns an asset package. A specific
+    # format must stay as the requested file even when conversion saved assets.
     has_assets = False
     result_path = Path(job.result_path) if job.result_path else None
     if result_path and result_path.is_dir():
         has_assets = True
 
-    should_zip = has_assets or len(target_formats) > 1
+    should_zip = requested_format == "all" and (has_assets or len(target_formats) > 1)
 
     if should_zip:
         tmp_file = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)

@@ -21,7 +21,9 @@ error for not-yet-shipped engines rather than silently degrading.
 from __future__ import annotations
 
 import logging
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
@@ -109,6 +111,92 @@ class SuryaOCREngine:
         )
 
 
+class HybridImageOCREngine:
+    """Hybrid OCR adapter for OCR-routed image crops."""
+
+    name = "hybrid_ocr"
+
+    def __init__(
+        self,
+        recognition_model: Any | None = None,
+        detection_model: Any | None = None,
+        math_mode: bool = True,
+    ) -> None:
+        self._fallback = SuryaOCREngine(
+            recognition_model=recognition_model,
+            detection_model=detection_model,
+            math_mode=math_mode,
+        )
+
+    @property
+    def available(self) -> bool:
+        from app.hybrid_ocr.capability import detect_capabilities
+        from app.hybrid_ocr.contracts import HybridEngine
+
+        caps = detect_capabilities()
+        return self._fallback.available or caps.is_available(HybridEngine.PADDLEOCR_VL)
+
+    def recognize(self, image: Any) -> OCRResult:
+        from app.hybrid_ocr.adapters import run_specialist_worker
+        from app.hybrid_ocr.capability import detect_capabilities
+        from app.hybrid_ocr.contracts import HybridEngine, HybridTarget, TargetKind
+        from app.hybrid_ocr.router import route_target
+
+        with tempfile.TemporaryDirectory(prefix="marker-hybrid-image-ocr-") as temp_dir:
+            crop_path = Path(temp_dir) / "image.png"
+            image.save(crop_path, format="PNG")
+            target = HybridTarget(
+                target_id="image_ocr_01",
+                document_id="image",
+                page_index=0,
+                page_number=1,
+                block_id=None,
+                block_type="Picture",
+                target_kind=TargetKind.FULL_PAGE_SCAN,
+                bbox=None,
+                polygon=None,
+                crop_path=str(crop_path),
+                crop_width=getattr(image, "width", 0) or 0,
+                crop_height=getattr(image, "height", 0) or 0,
+                baseline_text="",
+                baseline_html="",
+                baseline_confidence=None,
+                baseline_source="image_understanding",
+            )
+            caps = detect_capabilities()
+            engine = next(
+                (
+                    candidate
+                    for candidate in route_target(target)
+                    if candidate != HybridEngine.SURYA and caps.is_available(candidate)
+                ),
+                None,
+            )
+            if engine is not None:
+                results = run_specialist_worker(engine, [target], timeout_s=120.0)
+                result = results[0] if results else None
+                if result and result.status == "ok" and (result.markdown or result.text):
+                    text = result.markdown or result.text
+                    return OCRResult(
+                        text=text,
+                        html=_html_from_text(text),
+                        line_count=max(1, len(text.splitlines())),
+                        mean_confidence=float(result.confidence or 1.0),
+                        duration_ms=result.duration_ms,
+                        details={"engine": engine.value},
+                    )
+                if result and result.error:
+                    logger.warning("Hybrid image OCR %s failed: %s", engine.value, result.error)
+
+        return self._fallback.recognize(image)
+
+
+def _html_from_text(text: str) -> str:
+    import html
+
+    return "<br>".join(html.escape(line) for line in text.splitlines())
+
+
 # Engines that are planned but deliberately NOT shipped in this phase. Listed so
 # the factory can raise an explicit, actionable error instead of a generic one
 # (plan §12 deferred work — gated behind the §9.4 benchmark).
@@ -143,10 +231,16 @@ def build_ocr_engine(
             detection_model=detection_model,
             math_mode=math_mode,
         )
+    if key == "hybrid_ocr":
+        return HybridImageOCREngine(
+            recognition_model=recognition_model,
+            detection_model=detection_model,
+            math_mode=math_mode,
+        )
     if key in _DEFERRED_ENGINES:
         raise NotImplementedError(
             f"OCR engine {key!r} ({_DEFERRED_ENGINES[key]}) is not shipped yet. "
             "It is gated behind the §9.4 benchmark — run the benchmark harness "
             "and only enable it if the data justifies the added dependency/VRAM."
         )
-    raise ValueError(f"Unknown ocr_engine {engine!r}; known: surya")
+    raise ValueError(f"Unknown ocr_engine {engine!r}; known: surya, hybrid_ocr")

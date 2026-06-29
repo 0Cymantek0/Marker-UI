@@ -134,7 +134,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
         self.vlm_batch_size = int(cfg.get("vlm_batch_size", 8))
         self.max_batch_retries = int(cfg.get("max_batch_retries", 2))
         self.ocr_engine = str(cfg.get("ocr_engine", "surya"))
-        self._local_ocr_engine = "surya" if self.ocr_engine == "hybrid_ocr" else self.ocr_engine
+        self._local_ocr_engine = self.ocr_engine
         self._vlm_service = vlm_service
         # Surya models injected by marker's resolve_dependencies (param name ==
         # artifact_dict key). Used by the Tier-0 router (detection) and Tier-2
@@ -670,7 +670,7 @@ class ImageUnderstandingProcessor(BaseProcessor):
             # table_image-free "other" text result. The badge shows model=local.
             "image_type": ImageType.other.value,
             "confidence": 1.0,
-            "model": "local-ocr",
+            "model": result.details.get("engine", "local-ocr"),
             "omitted": False,
             "duration_ms": result.duration_ms,
         }
