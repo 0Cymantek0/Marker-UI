@@ -14,6 +14,7 @@ class HybridOcrConfig:
     profile: HybridOcrProfile = "balanced"
     require_specialists: bool = False
     debug: bool = False
+    worker_timeout_s: float = 120.0
 
 
 def parse_hybrid_ocr_config(options: dict[str, Any]) -> HybridOcrConfig:
@@ -25,5 +26,6 @@ def parse_hybrid_ocr_config(options: dict[str, Any]) -> HybridOcrConfig:
         profile=profile,
         require_specialists=bool(options.get("hybrid_ocr_require_specialists")),
         debug=bool(options.get("debug")),
+        worker_timeout_s=float(options.get("hybrid_ocr_worker_timeout_s") or 120.0),
     )
 

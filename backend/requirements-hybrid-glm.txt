@@ -1,0 +1,6 @@
+# Optional Hybrid OCR GLM setup helpers.
+# Install GLM-OCR runtime in a separate environment, then expose it through
+# MARKER_GLM_OCR_ENDPOINT or MARKER_GLM_OCR_COMMAND.
+huggingface_hub>=0.30.0
+requests>=2.32.0
+glmocr==0.1.5

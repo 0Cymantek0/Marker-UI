@@ -4,21 +4,22 @@ from __future__ import annotations
 
 import time
 import tempfile
+import logging
 from pathlib import Path
 from typing import Any
 
+from app.hybrid_ocr.adapters import run_specialist_worker
 from app.hybrid_ocr.capability import detect_capabilities
 from app.hybrid_ocr.collector import collect_targets
 from app.hybrid_ocr.config import parse_hybrid_ocr_config
 from app.hybrid_ocr.contracts import (
     HybridEngine,
-    HybridResult,
-    ReplacementPolicy,
-    TargetKind,
 )
+from app.hybrid_ocr.cropper import materialize_target_crops
 from app.hybrid_ocr.merger import merge_results
 from app.hybrid_ocr.router import route_target
-from app.hybrid_ocr.validators import validate_for_kind
+
+logger = logging.getLogger(__name__)
 
 
 class HybridOcrOrchestrator:
@@ -41,35 +42,54 @@ class HybridOcrOrchestrator:
         capabilities = detect_capabilities()
         with tempfile.TemporaryDirectory(prefix="marker-hybrid-ocr-") as temp_dir:
             targets = collect_targets(document, filepath=filepath, job_dir=Path(temp_dir))
+            materialize_target_crops(filepath, targets)
+            logger.info(
+                "Hybrid OCR start: targets=%d kinds=%s profile=%s",
+                len(targets),
+                _targets_by_kind(targets),
+                config.profile,
+            )
             if config.profile == "low_vram" and marker_service is not None:
                 release = getattr(marker_service, "release_models", None)
                 if callable(release):
                     release()
 
-            mock_results = _coerce_mock_results(options.get("hybrid_ocr_mock_results") or {}, targets)
-            results: list[HybridResult] = []
+            results = []
             skipped_missing_engine = 0
             engines_requested: set[HybridEngine] = {HybridEngine.SURYA}
-            engines_used: set[HybridEngine] = set()
+            targets_by_engine: dict[HybridEngine, list[Any]] = {}
 
             for target in targets:
                 route = route_target(target)
                 engines_requested.update(route)
-                engine = next((candidate for candidate in route if capabilities.is_available(candidate)), HybridEngine.SURYA)
-                if engine == HybridEngine.SURYA and route[0] != HybridEngine.SURYA:
+                engine = next(
+                    (
+                        candidate
+                        for candidate in route
+                        if candidate != HybridEngine.SURYA and capabilities.is_available(candidate)
+                    ),
+                    None,
+                )
+                if engine is None:
                     skipped_missing_engine += 1
-                if target.target_id in mock_results:
-                    result = mock_results[target.target_id]
-                    engines_used.add(result.engine)
-                    results.append(result)
-                elif engine != HybridEngine.SURYA:
-                    engines_used.add(engine)
-                    results.append(_no_change_result(target.target_id, engine, target.target_kind))
+                    continue
+                targets_by_engine.setdefault(engine, []).append(target)
+
+            for engine, engine_targets in targets_by_engine.items():
+                logger.info("Hybrid OCR worker: engine=%s targets=%d", engine.value, len(engine_targets))
+                results.extend(
+                    run_specialist_worker(
+                        engine,
+                        engine_targets,
+                        timeout_s=config.worker_timeout_s,
+                    )
+                )
 
             replacements = merge_results(document, targets, results)
             accepted = sum(1 for result in results if result.validation.accepted and result.status == "ok")
             failed = sum(1 for result in results if result.status in {"failed", "timeout"})
             rejected = sum(1 for result in results if result.status == "ok" and not result.validation.accepted)
+            engines_used = {result.engine for result in results}
             warnings = list(capabilities.warnings)
             if not targets:
                 warnings.append("Hybrid OCR found no specialist targets; Surya baseline kept")
@@ -77,6 +97,16 @@ class HybridOcrOrchestrator:
                 warnings.append("Hybrid OCR specialists unavailable for one or more targets; Surya baseline kept")
             if config.require_specialists and skipped_missing_engine:
                 raise RuntimeError("Hybrid OCR specialists are required but unavailable.")
+            logger.info(
+                "Hybrid OCR done: targets=%d used=%s accepted=%d rejected=%d failed=%d replacements=%d skipped_missing=%d",
+                len(targets),
+                sorted(engine.value for engine in engines_used),
+                accepted,
+                rejected,
+                failed,
+                replacements,
+                skipped_missing_engine,
+            )
 
             meta = {
                 "enabled": True,
@@ -100,10 +130,13 @@ class HybridOcrOrchestrator:
                 "target_summaries": [
                     {
                         "target_id": result.target_id,
+                        "page": next((target.page_number for target in targets if target.target_id == result.target_id), None),
                         "engine": result.engine.value,
+                        "status": result.status,
                         "accepted": result.validation.accepted,
                         "validation_score": result.validation.score,
                         "replacement_policy": result.replacement_policy.value,
+                        "error": result.error,
                     }
                     for result in results
                 ],
@@ -116,55 +149,4 @@ def _targets_by_kind(targets: list[Any]) -> dict[str, int]:
     for target in targets:
         counts[target.target_kind.value] = counts.get(target.target_kind.value, 0) + 1
     return counts
-
-
-def _no_change_result(target_id: str, engine: HybridEngine, kind: TargetKind) -> HybridResult:
-    validation = validate_for_kind(kind, "", "", baseline_text="")
-    return HybridResult(
-        target_id=target_id,
-        engine=engine,
-        status="skipped",
-        output_kind=kind,
-        text="",
-        markdown="",
-        html="",
-        json_payload={},
-        confidence=None,
-        duration_ms=0,
-        validation=validation,
-        replacement_policy=ReplacementPolicy.NO_CHANGE,
-        warnings=["Specialist worker not implemented in this build; Surya baseline kept"],
-    )
-
-
-def _coerce_mock_results(raw: dict[str, Any], targets: list[Any]) -> dict[str, HybridResult]:
-    target_by_id = {target.target_id: target for target in targets}
-    out: dict[str, HybridResult] = {}
-    if not isinstance(raw, dict):
-        return out
-    for target_id, payload in raw.items():
-        target = target_by_id.get(str(target_id))
-        if target is None or not isinstance(payload, dict):
-            continue
-        engine = HybridEngine(payload.get("engine") or HybridEngine.GLM_OCR)
-        text = str(payload.get("text") or "")
-        markdown = str(payload.get("markdown") or text)
-        validation = validate_for_kind(target.target_kind, text, markdown, baseline_text=target.baseline_text)
-        out[target.target_id] = HybridResult(
-            target_id=target.target_id,
-            engine=engine,
-            status=str(payload.get("status") or "ok"),
-            output_kind=target.target_kind,
-            text=text,
-            markdown=markdown,
-            html=str(payload.get("html") or ""),
-            json_payload=payload.get("json_payload") if isinstance(payload.get("json_payload"), dict) else {},
-            confidence=payload.get("confidence") if isinstance(payload.get("confidence"), (int, float)) else None,
-            duration_ms=int(payload.get("duration_ms") or 0),
-            validation=validation,
-            replacement_policy=ReplacementPolicy(payload.get("replacement_policy") or ReplacementPolicy.REPLACE_BLOCK),
-            warnings=list(payload.get("warnings") or []),
-            error=payload.get("error"),
-        )
-    return out
 

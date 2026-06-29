@@ -1,0 +1,7 @@
+# Optional Hybrid OCR Paddle setup helpers.
+# Install PaddleOCR/PaddlePaddle per hardware-specific Paddle docs in a
+# separate environment, then expose it through MARKER_PADDLE_OCR_VL_ENDPOINT
+# or MARKER_PADDLE_OCR_VL_COMMAND.
+huggingface_hub>=0.30.0
+requests>=2.32.0
+paddleocr[doc-parser]>=3.4.0
