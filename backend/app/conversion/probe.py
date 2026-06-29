@@ -121,6 +121,52 @@ def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
+def _analyze_metadata(reader: PdfReader) -> tuple[float, list[str]]:
+    """Analyze PDF metadata to detect physical scans vs digital origins.
+
+    Returns (metadata_scan_likelihood_adjustment, reasons).
+    """
+    try:
+        meta = reader.metadata
+        if not meta:
+            return 0.0, []
+    except Exception:
+        return 0.0, []
+
+    # Document metadata values tend to be string-like but can be custom types
+    creator = str(meta.get("/Creator") or "").lower()
+    producer = str(meta.get("/Producer") or "").lower()
+
+    scanner_keywords = [
+        "scan", "twain", "wia", "scanner", "fujitsu", "ricoh", "canon", "hp",
+        "xerox", "brother", "epson", "lexmark", "adobe scan", "camscanner",
+        "genius scan", "office lens", "scanbot", "paperport", "abbyy",
+        "omnipage", "readiris", "kofax"
+    ]
+
+    digital_keywords = [
+        "pdftex", "latex", "microsoft word", "google docs", "acrobat distiller",
+        "adobe pdf library", "openoffice", "libreoffice", "indesign",
+        "quartz pdfcontext", "itext", "pdfbox", "openpdf", "reportlab",
+        "fpdf", "wkhtmltopdf", "dompdf", "tcpdf", "hpdf", "spire.pdf"
+    ]
+
+    reasons = []
+    # 1. Scanner check is higher priority (scans are a physical constraint)
+    for kw in scanner_keywords:
+        if kw in creator or kw in producer:
+            reasons.append(f"metadata matches scanner keyword '{kw}'")
+            return 0.40, reasons
+
+    # 2. Digital generator check
+    for kw in digital_keywords:
+        if kw in creator or kw in producer:
+            reasons.append(f"metadata matches digital generator '{kw}'")
+            return -0.30, reasons
+
+    return 0.0, []
+
+
 def _sample_indices(page_count: int) -> list[int]:
     if page_count <= 0:
         return []
@@ -160,39 +206,152 @@ def _text_quality(text: str) -> float:
     return _clamp((printable_score * 0.65) + (word_score * 0.35) - control_penalty - repeated_penalty - whitespace_penalty)
 
 
-def _page_images(page: Any) -> tuple[int, int]:
-    """Return (image_count, full_page_like_image_count)."""
-    count = 0
-    full_page_like = 0
-    try:
-        media_box = page.mediabox
-        page_area = max(1.0, float(media_box.width) * float(media_box.height))
-    except Exception:
-        page_area = 1.0
+def multiply_matrices(m1: list[float], m2: list[float]) -> list[float]:
+    a1, b1, c1, d1, e1, f1 = m1
+    a2, b2, c2, d2, e2, f2 = m2
+    return [
+        a1 * a2 + b1 * c2,
+        a1 * b2 + b1 * d2,
+        c1 * a2 + d1 * c2,
+        c1 * b2 + d1 * d2,
+        e1 * a2 + f1 * c2 + e2,
+        e1 * b2 + f1 * d2 + f2
+    ]
 
+
+def _page_dimensions(page: Any) -> tuple[float, float]:
+    try:
+        box = page.mediabox
+        return float(box.width), float(box.height)
+    except Exception:
+        return 612.0, 792.0 # letter default
+
+
+def _analyze_page_images_and_sandwich(
+    page: Any,
+    text_positions: list[tuple[float, float, int]]
+) -> tuple[int, int, float]:
+    """Return (image_count, full_page_like_count, sandwich_ratio)."""
+    width, height = _page_dimensions(page)
+    page_area = max(1.0, width * height)
+
+    bboxes = []
+    content = page.get_contents()
+
+    fallback_image_count = 0
+    try:
+        fallback_image_count = len(page.images)
+    except Exception:
+        pass
+
+    if content is None:
+        return fallback_image_count, (1 if fallback_image_count > 0 else 0), -1.0
+
+    xobjects = {}
     try:
         xobjects = (page.get("/Resources") or {}).get("/XObject") or {}
-        for xobj in xobjects.values():
-            obj = xobj.get_object()
-            if obj.get("/Subtype") != "/Image":
-                continue
-            count += 1
-            width = float(obj.get("/Width") or 0)
-            height = float(obj.get("/Height") or 0)
-            pixel_area = width * height
-            # Pixel dimensions are not PDF user units, but this catches common
-            # scan pages where one large raster dominates and text is absent.
-            if pixel_area >= page_area * 0.75:
-                full_page_like += 1
     except Exception:
-        # pypdf also exposes page.images in newer versions.
-        try:
-            images = list(page.images)
-            count += len(images)
-            full_page_like += len(images)
-        except Exception:
-            pass
-    return count, full_page_like
+        pass
+
+    ctm = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    stack = []
+
+    try:
+        from pypdf.generic import ContentStream
+        cs = ContentStream(content, page.pdf)
+        for operands, operator in cs.operations:
+            operator_str = operator.decode("ascii") if isinstance(operator, bytes) else str(operator)
+            
+            if operator_str == "q":
+                stack.append(list(ctm))
+            elif operator_str == "Q":
+                if stack:
+                    ctm = stack.pop()
+            elif operator_str == "cm":
+                if len(operands) == 6:
+                    m_new = [float(x) for x in operands]
+                    ctm = multiply_matrices(m_new, ctm)
+            elif operator_str == "Do":
+                if len(operands) == 1:
+                    name = operands[0]
+                    name_str = name.decode("ascii") if isinstance(name, bytes) else str(name)
+                    is_image = False
+                    if name_str in xobjects:
+                        obj = xobjects[name_str].get_object()
+                        if obj.get("/Subtype") == "/Image":
+                            is_image = True
+                    
+                    if is_image:
+                        a, b, c, d, e, f = ctm
+                        pts = [
+                            (e, f),
+                            (a + e, b + f),
+                            (c + e, d + f),
+                            (a + c + e, b + d + f)
+                        ]
+                        xs = [pt[0] for pt in pts]
+                        ys = [pt[1] for pt in pts]
+                        bbox = (min(xs), min(ys), max(xs), max(ys))
+                        bboxes.append(bbox)
+    except Exception:
+        return fallback_image_count, (1 if fallback_image_count > 0 else 0), -1.0
+
+    image_count = len(bboxes)
+    if image_count == 0 and fallback_image_count > 0:
+        return fallback_image_count, 1, -1.0
+
+    full_page_like_count = 0
+    large_images = []
+    for bbox in bboxes:
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        area = w * h
+        if area >= page_area * 0.70:
+            full_page_like_count += 1
+        if area >= page_area * 0.40:
+            large_images.append(bbox)
+
+    if not large_images or not text_positions:
+        return image_count, full_page_like_count, 0.0
+
+    total_chars = sum(chars for x, y, chars in text_positions)
+    if total_chars == 0:
+        return image_count, full_page_like_count, 0.0
+
+    overlap_chars = 0
+    for x, y, chars in text_positions:
+        in_image = False
+        for bbox in large_images:
+            if bbox[0] - 5 <= x <= bbox[2] + 5 and bbox[1] - 5 <= y <= bbox[3] + 5:
+                in_image = True
+                break
+        if in_image:
+            overlap_chars += chars
+
+    sandwich_ratio = overlap_chars / total_chars
+    return image_count, full_page_like_count, sandwich_ratio
+
+
+def _page_images(page: Any) -> tuple[int, int]:
+    """Compatibility wrapper: returns (image_count, full_page_like_count)."""
+    img_count, full_like, _ = _analyze_page_images_and_sandwich(page, [])
+    return img_count, full_like
+
+
+def _compute_layout_complexity(positions: list[tuple[float, float, str]]) -> float:
+    if len(positions) < 12:
+        return 0.0
+
+    xs = sorted(x for x, _y, text in positions if len(text) > 2)
+    if not xs:
+        return 0.0
+    clusters = [xs[0]]
+    for x in xs[1:]:
+        if abs(x - clusters[-1]) > 90:
+            clusters.append(x)
+    column_score = _clamp((len(clusters) - 1) / 5)
+    short_line_ratio = sum(1 for _x, _y, text in positions if len(text) < 12) / len(positions)
+    return _clamp(column_score * 0.65 + short_line_ratio * 0.35)
 
 
 def _layout_complexity(page: Any) -> float:
@@ -211,19 +370,7 @@ def _layout_complexity(page: Any) -> float:
         page.extract_text(visitor_text=visitor_text)
     except Exception:
         return 0.0
-    if len(positions) < 12:
-        return 0.0
-
-    xs = sorted(x for x, _y, text in positions if len(text) > 2)
-    if not xs:
-        return 0.0
-    clusters = [xs[0]]
-    for x in xs[1:]:
-        if abs(x - clusters[-1]) > 90:
-            clusters.append(x)
-    column_score = _clamp((len(clusters) - 1) / 5)
-    short_line_ratio = sum(1 for _x, _y, text in positions if len(text) < 12) / len(positions)
-    return _clamp(column_score * 0.65 + short_line_ratio * 0.35)
+    return _compute_layout_complexity(positions)
 
 
 def _routing_reasons(
@@ -275,6 +422,9 @@ def _page_probe_result(
     image_count: int,
     full_page_like: int,
     layout_complexity_score: float,
+    metadata_adjustment: float = 0.0,
+    meta_reasons: list[str] | None = None,
+    sandwich_ratio: float = 0.0,
 ) -> PageProbeResult:
     text_chars = len(text.strip())
     text_layer_score = _clamp(min(text_chars / 900, 1.0))
@@ -283,12 +433,19 @@ def _page_probe_result(
     visual_complexity_score = _clamp(
         (image_count / 3.0) * 0.45 + (0.55 if full_page_image else 0.0)
     )
-    scan_likelihood = _clamp((1.0 - text_layer_score) * 0.65 + (0.35 if full_page_image else 0.0))
-    sandwich_likelihood = _clamp(
-        visual_complexity_score * 0.55
-        + text_layer_score * 0.25
-        + (1.0 - text_quality_score) * 0.20
-    )
+    # Only apply negative metadata adjustment if there is some text layer
+    effective_meta_adj = metadata_adjustment if (metadata_adjustment >= 0.0 or text_layer_score >= 0.10) else 0.0
+    scan_likelihood = _clamp((1.0 - text_layer_score) * 0.65 + (0.35 if full_page_image else 0.0) + effective_meta_adj)
+    
+    if sandwich_ratio >= 0.0:
+        sandwich_likelihood = sandwich_ratio
+    else:
+        sandwich_likelihood = _clamp(
+            visual_complexity_score * 0.55
+            + text_layer_score * 0.25
+            + (1.0 - text_quality_score) * 0.20
+        )
+
     recommended_engine, reasons = _routing_reasons(
         text_layer_score=text_layer_score,
         text_quality_score=text_quality_score,
@@ -297,6 +454,8 @@ def _page_probe_result(
         visual_complexity_score=visual_complexity_score,
         layout_complexity_score=layout_complexity_score,
     )
+    if meta_reasons and effective_meta_adj != 0.0:
+        reasons.extend(meta_reasons)
     return PageProbeResult(
         page_number=page_number,
         text_layer_score=round(text_layer_score, 3),
@@ -349,39 +508,102 @@ def probe_pdf(
             reasons=[f"PDF probe failed ({type(exc).__name__}); using Marker"],
         )
 
-    sampled_pages = (
+    meta_adjustment, meta_reasons = _analyze_metadata(reader)
+
+    # Phase 1: Determine base sample pages
+    base_pages = (
         list(range(page_count))
         if full_page_probe
         else _sample_indices(page_count)[:max_deep_pages]
     )
+    
     page_text_lengths: list[int] = []
     qualities: list[float] = []
     image_counts: list[int] = []
     full_page_image_pages = 0
     layout_scores: list[float] = []
     page_results: list[PageProbeResult] = []
+    
+    probed_set = set()
+    sampled_pages = []
 
-    for idx in sampled_pages:
+    def probe_single_page(idx: int) -> None:
+        if idx in probed_set:
+            return
+        probed_set.add(idx)
+        sampled_pages.append(idx)
+        
         page = reader.pages[idx]
+        positions: list[tuple[float, float, str]] = []
+        text_positions: list[tuple[float, float, int]] = []
+
+        def visitor_text(text: str, cm: Any, tm: Any, *_args: Any) -> None:
+            stripped = text.strip()
+            if not stripped:
+                return
+            try:
+                e1, f1 = float(tm[4]), float(tm[5])
+                a2, b2, c2, d2, e2, f2 = [float(x) for x in cm]
+                x_abs = e1 * a2 + f1 * c2 + e2
+                y_abs = e1 * b2 + f1 * d2 + f2
+                positions.append((x_abs, y_abs, stripped))
+                text_positions.append((x_abs, y_abs, len(stripped)))
+            except Exception:
+                pass
+
         try:
-            text = page.extract_text() or ""
+            text = page.extract_text(visitor_text=visitor_text) or ""
         except Exception:
             text = ""
+
         page_text_lengths.append(len(text.strip()))
         qualities.append(_text_quality(text))
-        image_count, full_page_like = _page_images(page)
+        
+        image_count, full_page_like, sandwich_ratio = _analyze_page_images_and_sandwich(page, text_positions)
         image_counts.append(image_count)
-        if full_page_like:
+        
+        nonlocal full_page_image_pages
+        if full_page_like > 0:
             full_page_image_pages += 1
-        layout_complexity_score = _layout_complexity(page)
+            
+        layout_complexity_score = _compute_layout_complexity(positions)
         layout_scores.append(layout_complexity_score)
+        
         page_results.append(_page_probe_result(
             page_number=idx + 1,
             text=text,
             image_count=image_count,
             full_page_like=full_page_like,
             layout_complexity_score=layout_complexity_score,
+            metadata_adjustment=meta_adjustment,
+            meta_reasons=meta_reasons,
+            sandwich_ratio=sandwich_ratio,
         ))
+
+    # Probe Phase 1 pages
+    for p in base_pages:
+        probe_single_page(p)
+
+    # Phase 2: Dynamic expansion if borderline or mixed
+    if not full_page_probe and page_count > len(base_pages):
+        recommended_engines = {p.recommended_engine for p in page_results}
+        text_layers = [p.text_layer_score for p in page_results]
+        mean_text_layer = mean(text_layers) if text_layers else 0.0
+        sandwich_likes = [p.sandwich_likelihood for p in page_results]
+        mean_sandwich = mean(sandwich_likes) if sandwich_likes else 0.0
+
+        mixed_engines = len(recommended_engines) > 1
+        borderline_text = 0.55 <= mean_text_layer <= 0.85
+        borderline_sandwich = 0.30 <= mean_sandwich <= 0.55
+
+        if mixed_engines or borderline_text or borderline_sandwich:
+            max_limit = min(page_count, max_deep_pages * 2)
+            k = max_limit - len(page_results)
+            if k > 0:
+                unsampled = [i for i in range(page_count) if i not in probed_set]
+                additional_pages = [unsampled[int(i * len(unsampled) / k)] for i in range(k)]
+                for p in additional_pages:
+                    probe_single_page(p)
 
     sampled = max(1, len(sampled_pages))
     avg_chars = mean(page_text_lengths) if page_text_lengths else 0.0
@@ -392,11 +614,15 @@ def probe_pdf(
     full_page_ratio = full_page_image_pages / sampled
     visual_complexity_score = _clamp((avg_images / 3.0) * 0.45 + full_page_ratio * 0.55)
     layout_complexity_score = _clamp(mean(layout_scores) if layout_scores else 0.0)
-    scan_likelihood = _clamp((1.0 - text_layer_score) * 0.65 + full_page_ratio * 0.35)
+    
+    # Only apply negative metadata adjustment if there is some text layer
+    effective_meta_adj = meta_adjustment if (meta_adjustment >= 0.0 or text_layer_score >= 0.10) else 0.0
+    scan_likelihood = _clamp((1.0 - text_layer_score) * 0.65 + full_page_ratio * 0.35 + effective_meta_adj)
+    
     sandwich_likelihood = _clamp(
-        visual_complexity_score * 0.55
-        + text_layer_score * 0.25
-        + (1.0 - text_quality_score) * 0.20
+        mean([p.sandwich_likelihood for p in page_results])
+        if page_results
+        else 0.0
     )
 
     recommended_engine, reasons = _routing_reasons(
@@ -407,6 +633,8 @@ def probe_pdf(
         visual_complexity_score=visual_complexity_score,
         layout_complexity_score=layout_complexity_score,
     )
+    if meta_reasons and effective_meta_adj != 0.0:
+        reasons.extend(meta_reasons)
 
     return PdfProbeResult(
         page_count=page_count,

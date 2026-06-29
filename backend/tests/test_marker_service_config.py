@@ -7,6 +7,7 @@ after the parser runs. These tests pin that behaviour.
 """
 
 import threading
+import sys
 import time
 
 from marker.config.parser import ConfigParser
@@ -558,8 +559,8 @@ def test_convert_file_formats_dedupes_and_drops_unknown(monkeypatch):
     assert list(out.keys()) == ["markdown"]
 
 
-def test_convert_file_uses_build_refine_render_seam(monkeypatch):
-    """Single-format conversion must use the same build -> hybrid -> render seam."""
+def test_convert_file_uses_build_refine_render_seam(monkeypatch, tmp_path):
+    """Single-format conversion must use the same build -> worker -> render seam."""
     import app.services.marker_service as marker_service_mod
     import marker.output as marker_output
 
@@ -598,7 +599,35 @@ def test_convert_file_uses_build_refine_render_seam(monkeypatch):
         block = rendered.document.pages[0].children[0]
         return block.text, "md", {}
 
-    monkeypatch.setenv("MARKER_GLM_PYTHON", "python")
+    model_dir = tmp_path / "glm-model"
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text("{}", encoding="utf-8")
+    worker = tmp_path / "glm_worker.py"
+    worker.write_text(
+        """
+import json
+import sys
+from pathlib import Path
+
+request_path = Path(sys.argv[sys.argv.index('--request') + 1])
+response_path = Path(sys.argv[sys.argv.index('--response') + 1])
+request = json.loads(request_path.read_text(encoding='utf-8'))
+response = {
+    'results': [
+        {
+            'target_id': request['targets'][0]['target_id'],
+            'status': 'ok',
+            'markdown': '| new | value |\\n|---|---|\\n| 1 | 2 |',
+            'replacement_policy': 'replace_block',
+        }
+    ]
+}
+response_path.write_text(json.dumps(response), encoding='utf-8')
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MARKER_GLM_OCR_MODEL_DIR", str(model_dir))
+    monkeypatch.setenv("MARKER_GLM_OCR_COMMAND", f"{sys.executable} {worker}")
     monkeypatch.setattr(marker_service_mod, "_CONVERTERS", {"PdfConverter": _FakeConverter})
     monkeypatch.setattr(marker_output, "text_from_rendered", fake_text_from_rendered)
 
@@ -612,13 +641,6 @@ def test_convert_file_uses_build_refine_render_seam(monkeypatch):
             "converter_cls": "PdfConverter",
             "output_format": "markdown",
             "ocr_engine": "hybrid_ocr",
-            "hybrid_ocr_mock_results": {
-                "p1_table_01": {
-                    "engine": "glm_ocr",
-                    "markdown": "| new | value |\n|---|---|\n| 1 | 2 |",
-                    "replacement_policy": "replace_block",
-                }
-            },
         },
     )
 

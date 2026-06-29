@@ -1138,3 +1138,50 @@ async def test_download_supports_format_param(client: AsyncClient, db_session):
     resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/zip"
+
+
+@pytest.mark.asyncio
+async def test_download_specific_format_does_not_zip_assets(client: AsyncClient, db_session, tmp_path: Path):
+    """Description-only Markdown download must stay a .md file even if assets exist."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    result_dir = tmp_path / "job-assets"
+    result_dir.mkdir()
+    (result_dir / "image.png").write_bytes(b"fake image bytes")
+    (result_dir / "job-assets.marker.json").write_text("{}", encoding="utf-8")
+
+    job_id = "job-download-md-assets"
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# md content",
+        config_json=_json.dumps({"output_format": "markdown"}),
+        formats_json=_json.dumps({"markdown": "# md content"}),
+        result_path=str(result_dir),
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "markdown"})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/markdown")
+    assert resp.text == "# md content"
+    assert resp.headers["content-disposition"].endswith('filename="doc.md"')
+
+    default_resp = await client.get(f"/api/convert/download/{job_id}")
+    assert default_resp.status_code == 200
+    assert default_resp.headers["content-type"].startswith("text/markdown")
+    assert default_resp.text == "# md content"
+
+    package_resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
+    assert package_resp.status_code == 200
+    assert package_resp.headers["content-type"] == "application/zip"
