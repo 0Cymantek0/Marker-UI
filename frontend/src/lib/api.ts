@@ -344,7 +344,10 @@ export async function uploadFile(
   if (config.allow_cloud_vlm !== undefined) params.append('allow_cloud_vlm', String(config.allow_cloud_vlm))
   if (config.force_ocr !== undefined) params.append('force_ocr', String(config.force_ocr))
   if (config.paginate !== undefined) params.append('paginate_output', String(config.paginate))
-  if (config.disable_image_extraction !== undefined) params.append('disable_image_extraction', String(config.disable_image_extraction))
+  const disableImageExtraction = config.image_handling_mode === 'understanding'
+    ? true
+    : config.disable_image_extraction
+  if (disableImageExtraction !== undefined) params.append('disable_image_extraction', String(disableImageExtraction))
   if (config.page_range) params.append('page_range', config.page_range)
   if (config.language) params.append('lang', config.language)
   if (config.audio_output_mode) params.append('audio_output_mode', config.audio_output_mode)
@@ -599,6 +602,31 @@ export async function cancelModelsDownload(): Promise<{ status: string }> {
 
 export async function retryModelsDownload(): Promise<{ status: string }> {
   return request<{ status: string }>('/models/retry', { method: 'POST' })
+}
+
+export interface HybridOcrEngineStatus {
+  model_id: string
+  model_dir: string
+  model_present: boolean
+}
+
+export interface HybridOcrStatus {
+  schema_version: string
+  model_root: string
+  engines: Record<'glm_ocr' | 'paddleocr_vl', HybridOcrEngineStatus>
+  engines_available: string[]
+  warnings: string[]
+}
+
+export async function getHybridOcrStatus(): Promise<HybridOcrStatus> {
+  return request<HybridOcrStatus>('/models/hybrid-ocr/status')
+}
+
+export async function setupHybridOcrModels(engine = 'all', force = false): Promise<{ status: HybridOcrStatus }> {
+  const params = new URLSearchParams({ engine, force: String(force) })
+  return request<{ status: HybridOcrStatus }>(`/models/hybrid-ocr/setup?${params.toString()}`, {
+    method: 'POST',
+  })
 }
 
 // ─── GPU Acceleration ──────────────────────────────────────────────────

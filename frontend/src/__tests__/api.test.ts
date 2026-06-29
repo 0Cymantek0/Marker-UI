@@ -108,6 +108,22 @@ describe('uploadFile', () => {
     expect(url.searchParams.get('hybrid_ocr_profile')).toBe('low_vram')
     expect(url.searchParams.get('hybrid_ocr_require_specialists')).toBe('true')
   })
+
+  it('forces image extraction off for understanding-only mode', async () => {
+    mockFetchOnce(200, { job_id: 'job-description', status: 'pending', filename: 'scan.png' }, true)
+
+    await uploadFile(new File(['png'], 'scan.png', { type: 'image/png' }), {
+      output_formats: ['markdown'],
+      converter: 'OCRConverter',
+      image_handling_mode: 'understanding',
+      disable_image_extraction: false,
+    })
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.get('image_handling_mode')).toBe('understanding')
+    expect(url.searchParams.get('disable_image_extraction')).toBe('true')
+  })
 })
 
 describe('normalizeOcrEngine', () => {

@@ -755,7 +755,10 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                         description={option.desc}
                         selected={isSelected}
                         disabled={optionDisabled}
-                        onClick={() => updateTemp('image_handling_mode', option.value)}
+                        onClick={() => {
+                          updateTemp('image_handling_mode', option.value)
+                          updateTemp('disable_image_extraction', option.value === 'understanding')
+                        }}
                       />
                     )
                   })}

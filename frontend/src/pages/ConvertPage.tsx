@@ -689,7 +689,7 @@ export function ConvertPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => download(job.id)}
+                            onClick={() => download(job.id, job.outputFormat || (job.availableFormats ?? ['markdown'])[0] || 'markdown')}
                             className="h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border shadow-sm"
                           >
                             <Download className="w-3.5 h-3.5" />

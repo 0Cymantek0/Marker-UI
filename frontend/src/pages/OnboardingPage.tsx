@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import {
   getModelsStatus,
+  getHybridOcrStatus,
+  setupHybridOcrModels,
   cancelModelsDownload,
   retryModelsDownload,
   ModelTrackerStatus,
+  HybridOcrStatus,
 } from '@/lib/api'
 import { CanvasConfetti } from '@/components/ui/CanvasConfetti'
 import { EngineConsole } from '@/components/features/onboarding/EngineConsole'
@@ -22,6 +25,25 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
   const [isRetrying, setIsRetrying] = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [firstLoadCheck, setFirstLoadCheck] = useState(true)
+  const [hybridStatus, setHybridStatus] = useState<HybridOcrStatus | null>(null)
+  const [isSettingUpHybrid, setIsSettingUpHybrid] = useState(false)
+
+  const ensureHybridOcrModels = async () => {
+    const current = await getHybridOcrStatus()
+    setHybridStatus(current)
+    const missing = Object.values(current.engines).some((engine) => !engine.model_present)
+    if (!missing) return true
+
+    setIsSettingUpHybrid(true)
+    try {
+      const result = await setupHybridOcrModels('all')
+      setHybridStatus(result.status)
+      const stillMissing = Object.values(result.status.engines).some((engine) => !engine.model_present)
+      return !stillMissing
+    } finally {
+      setIsSettingUpHybrid(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -38,11 +60,15 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
         if (firstLoadCheck) {
           setFirstLoadCheck(false)
           if (data.initialized || data.overall.status === 'completed') {
+            const hybridReady = await ensureHybridOcrModels()
+            if (!hybridReady) return
             onComplete()
             return
           }
         } else {
           if (data.initialized) {
+            const hybridReady = await ensureHybridOcrModels()
+            if (!hybridReady) return
             setShowConfetti(true)
             redirectTimer = setTimeout(() => {
               if (active) onComplete()
@@ -138,6 +164,8 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
               handleCancel={handleCancel}
               handleRetry={handleRetry}
               onComplete={onComplete}
+              hybridStatus={hybridStatus}
+              isSettingUpHybrid={isSettingUpHybrid}
             />
             
             <DeveloperConsole status={status} />
