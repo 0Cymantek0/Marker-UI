@@ -11,8 +11,8 @@ from typing import Any
 
 from PIL import Image, ImageStat
 
-from app.audio.pipeline import format_timestamp_ms, normalize_transcript
-from app.conversion.converters.audio import _transcribe_audio
+from app.audio.pipeline import format_timestamp_ms
+from app.audio.transcribe import transcribe_audio_file
 from app.conversion.registry import BaseConverter
 from app.conversion.result import UniversalConversionResult
 from app.conversion.stream_info import StreamInfo
@@ -56,12 +56,12 @@ class VideoConverter(BaseConverter):
             if probe.get("has_audio"):
                 audio_path = temp / "audio.wav"
                 if _extract_audio(path, audio_path):
-                    raw = _transcribe_audio(str(audio_path), config, device=device)
-                    transcript = normalize_transcript(
-                        raw,
+                    transcript = transcribe_audio_file(
+                        str(audio_path),
+                        config,
+                        device=device,
                         source_label=path.name,
                         source_id=f"{_safe_stem(path)}_audio",
-                        config=config,
                     )
                     transcript_data = transcript.to_dict()
                 else:

@@ -1,4 +1,15 @@
-"""Local audio transcription converter."""
+"""Local audio transcription converter.
+
+The converter stays thin: it resolves the STT provider, transcribes through the
+adapter seam, normalizes the result, then renders. Provider-specific wiring lives
+in :mod:`app.audio.providers`; auditable segment/notes assembly lives in
+:mod:`app.audio.pipeline`; vocabulary pack handling in
+:mod:`app.audio.vocabulary`. This file wires them together for one file.
+
+Local-first by default (plan §3.1). A cloud provider is only used when the user
+explicitly opts in via ``audio_allow_cloud_stt`` — otherwise a cloud provider id
+is rejected before any audio leaves the machine.
+"""
 
 from __future__ import annotations
 
@@ -7,10 +18,22 @@ from typing import Any
 
 from app.audio.ingest import probe_audio
 from app.audio.pipeline import (
+    AudioTranscript,
     normalize_transcript,
     render_enhanced_markdown,
     render_transcript_markdown,
     slug_source_id,
+)
+from app.audio.providers import build_provider, get_capability
+from app.audio.speakers import (
+    apply_speaker_aliases,
+    speaker_timeline,
+    summarize_speakers,
+)
+from app.audio.vocabulary import (
+    compile_vocabulary_prompt,
+    resolve_vocabulary_terms,
+    vocabulary_report,
 )
 from app.conversion.registry import BaseConverter
 from app.conversion.result import UniversalConversionResult
@@ -21,7 +44,7 @@ _AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac"})
 
 
 class AudioConverter(BaseConverter):
-    """Transcribe audio files locally with faster-whisper."""
+    """Transcribe audio files through the provider-adapter seam."""
 
     engine_name = "audio"
     priority = 10
@@ -41,30 +64,64 @@ class AudioConverter(BaseConverter):
         config: dict[str, Any],
         device: str | None = None,
     ) -> UniversalConversionResult:
+        provider_id = _resolve_provider(config)
+        capability = get_capability(provider_id)
         media_info = probe_audio(filepath)
-        raw_transcript = _transcribe_audio(filepath, config, device=device)
-        raw_transcript["media_info"] = media_info
+
+        vocabulary_terms = resolve_vocabulary_terms(config)
+        vocabulary_prompt = compile_vocabulary_prompt(
+            terms=vocabulary_terms, capability=capability
+        )
+        provider = build_provider(provider_id)
+        raw = provider.transcribe(
+            filepath,
+            config,
+            device=device,
+            vocabulary_prompt=vocabulary_prompt if capability.supports_prompt_context else None,
+        )
+        raw_payload = raw.to_dict()
+        raw_payload["media_info"] = media_info
+        # Diarization is provider-specific (plan §10). A provider that can't
+        # diarize surfaces an explicit warning instead of silently faking a single
+        # speaker when the user asked for diarization.
+        if config.get("audio_diarization") and not capability.supports_diarization:
+            raw_payload.setdefault("warnings", []).append(
+                "diarization_requested_but_unsupported_by_provider"
+            )
+
         title = Path(filepath).stem
         source_label = str(config.get("audio_source_label") or Path(filepath).name)
         source_id = str(config.get("audio_source_id") or slug_source_id(source_label))
         transcript = normalize_transcript(
-            raw_transcript,
+            raw_payload,
             source_label=source_label,
             source_id=source_id,
             config=config,
         )
-        output_mode = str(config.get("audio_output_mode") or "transcript").lower()
-        if output_mode in {"enhanced", "notes", "meeting_notes", "lecture_notes"}:
+        # Speaker identity is user-controlled (plan §10): only labels the user
+        # explicitly mapped are renamed; everything else stays anonymous. Diarization
+        # itself is provider-specific — faster-whisper can't, so the warning surfaced
+        # above propagates through normalize into the transcript.
+        transcript = apply_speaker_aliases(transcript, config.get("audio_speaker_aliases"))
+
+        output_mode = _resolve_output_mode(config)
+        if output_mode == "transcript":
+            text = render_transcript_markdown(transcript, title=title)
+        else:
             text = render_enhanced_markdown(
                 transcript,
                 title=title,
                 template=output_mode,
                 context=config.get("audio_context"),
             )
-        else:
-            output_mode = "transcript"
-            text = render_transcript_markdown(transcript, title=title)
 
+        transcript_text = " ".join(segment.text for segment in transcript.segments)
+        vocab_report = vocabulary_report(
+            terms=vocabulary_terms,
+            transcript_text=transcript_text,
+            truncated=_vocabulary_was_truncated(vocabulary_terms, vocabulary_prompt),
+            provider_prompted=bool(vocabulary_prompt and capability.supports_prompt_context),
+        )
         return UniversalConversionResult(
             text=text,
             extension="md",
@@ -83,105 +140,94 @@ class AudioConverter(BaseConverter):
                 },
                 "audio": {
                     "transcript": transcript.to_dict(),
+                    "provider_capability": {
+                        "provider_id": capability.provider_id,
+                        "cloud": capability.cloud,
+                        "privacy_level": capability.privacy_level,
+                        "supports_diarization": capability.supports_diarization,
+                        "supports_word_timestamps": capability.supports_word_timestamps,
+                        "supports_confidence": capability.supports_confidence,
+                    },
+                    "vocabulary": vocab_report,
+                    "quality": _audio_quality(transcript),
+                    "speakers": _speaker_metadata(transcript, config),
                     "enhancement": {
                         "mode": output_mode,
                         "provider": "local_deterministic" if output_mode != "transcript" else None,
                         "provenance_required": output_mode != "transcript",
                     },
+                    "raw_provider_metadata": dict(raw.provider_metadata),
                 },
             },
         )
 
 
-def _transcribe_audio(filepath: str, config: dict[str, Any], device: str | None = None) -> dict[str, Any]:
-    from faster_whisper import WhisperModel
+def _resolve_provider(config: dict[str, Any]) -> str:
+    """Resolve the audio provider id, enforcing cloud opt-in (plan §3.1).
 
-    model_name = str(config.get("audio_model") or "tiny.en")
-    model_device = str(config.get("audio_device") or device or "cpu")
-    compute_type = str(config.get("audio_compute_type") or "int8")
-    language = config.get("audio_language") or config.get("lang")
-    model = WhisperModel(model_name, device=model_device, compute_type=compute_type)
-    segments_iter, info = model.transcribe(
-        filepath,
-        language=language or None,
-        beam_size=int(config.get("audio_beam_size", 5)),
-        vad_filter=bool(config.get("audio_vad_filter", True)),
-        initial_prompt=_audio_initial_prompt(config),
-        word_timestamps=bool(config.get("audio_word_timestamps", False)),
-    )
-    segments = [
-        {
-            "start": float(segment.start),
-            "end": float(segment.end),
-            "text": str(segment.text).strip(),
-            "confidence": _segment_confidence(segment),
-            "words": _segment_words(segment),
-        }
-        for segment in segments_iter
-    ]
-    return {
-        "language": getattr(info, "language", language),
-        "duration": float(getattr(info, "duration", 0.0) or 0.0),
-        "segments": segments,
-        "model": model_name,
-        "provider": "local_faster_whisper",
-    }
+    Cloud STT is never used unless ``audio_allow_cloud_stt`` is explicitly true.
+    A cloud provider chosen without opt-in is rejected before transcription so no
+    audio leaves the machine unexpectedly.
+    """
 
-
-def _audio_initial_prompt(config: dict[str, Any]) -> str | None:
-    raw = config.get("audio_vocabulary") or config.get("audio_vocabulary_terms")
-    if not raw:
-        return None
-    if isinstance(raw, str):
-        terms = [part.strip() for part in raw.replace("\n", ",").split(",")]
-    elif isinstance(raw, (list, tuple)):
-        terms = [str(part).strip() for part in raw]
-    else:
-        terms = []
-    terms = [term for term in terms if term]
-    if not terms:
-        return None
-    return "Vocabulary terms: " + ", ".join(terms[:100])
-
-
-def _segment_confidence(segment: Any) -> float | None:
-    no_speech_prob = getattr(segment, "no_speech_prob", None)
-    if no_speech_prob is not None:
-        try:
-            return max(0.0, min(1.0, 1.0 - float(no_speech_prob)))
-        except (TypeError, ValueError):
-            return None
-    avg_logprob = getattr(segment, "avg_logprob", None)
-    if avg_logprob is not None:
-        try:
-            return max(0.0, min(1.0, (float(avg_logprob) + 2.0) / 2.0))
-        except (TypeError, ValueError):
-            return None
-    return None
-
-
-def _segment_words(segment: Any) -> list[dict[str, Any]]:
-    words = getattr(segment, "words", None) or []
-    normalized: list[dict[str, Any]] = []
-    for word in words:
-        raw_word = str(getattr(word, "word", "") or "").strip()
-        if not raw_word:
-            continue
-        normalized.append(
-            {
-                "word": raw_word,
-                "start": float(getattr(word, "start", 0.0) or 0.0),
-                "end": float(getattr(word, "end", 0.0) or 0.0),
-                "confidence": _coerce_float(getattr(word, "probability", None)),
-            }
+    provider_id = str(config.get("audio_provider") or "local_faster_whisper").strip().lower()
+    capability = get_capability(provider_id)
+    if capability.cloud and not _truthy(config.get("audio_allow_cloud_stt")):
+        raise PermissionError(
+            f"Audio provider {provider_id!r} is cloud-based but cloud STT is not enabled. "
+            "Enable 'allow cloud STT' in Advanced Audio settings to send audio to this provider."
         )
-    return normalized
+    return provider_id
 
 
-def _coerce_float(value: Any) -> float | None:
+def _resolve_output_mode(config: dict[str, Any]) -> str:
+    mode = str(config.get("audio_output_mode") or "transcript").lower()
+    if mode in {"enhanced", "notes", "meeting_notes", "lecture_notes", "interview_qna", "action_decision_log"}:
+        return mode
+    return "transcript"
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
     if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _vocabulary_was_truncated(terms: list[str], prompt: str | None) -> bool:
+    """True only when the vocabulary prompt was actually trimmed.
+
+    Re-derived from the term list rather than threaded through the provider: if
+    the full "Vocabulary terms: a, b, …" rendering would exceed the cap and the
+    emitted prompt is shorter than that full rendering, the prompt was cut. Keeps
+    the diagnostics truthful without changing the prompt compiler's signature.
+    """
+
+    if not prompt or not terms:
+        return False
+    full = "Vocabulary terms: " + ", ".join(terms)
+    return len(prompt) < len(full)
+
+
+def _audio_quality(transcript: AudioTranscript) -> dict[str, Any]:
+    """Expose the enriched risk summary as the canonical audio-quality block.
+
+    The heatmap (plan §8) reads this: mean confidence, low/unknown confidence
+    counts, overlaps, long gaps, and a single ``review_required`` verdict so the
+    UI can flag weak evidence without re-deriving it from segment warnings.
+    """
+
+    summary = dict(transcript.risk_summary)
+    summary["warnings"] = list(transcript.warnings)
+    return summary
+
+
+def _speaker_metadata(transcript: AudioTranscript, config: dict[str, Any]) -> dict[str, Any]:
+    summary = summarize_speakers(transcript)
+    aliases = config.get("audio_speaker_aliases")
+    if aliases and isinstance(aliases, dict):
+        summary["user_confirmed"] = True
+        summary["aliases"] = dict(aliases)
+    summary["timeline"] = speaker_timeline(transcript)
+    return summary
