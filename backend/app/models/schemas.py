@@ -367,4 +367,53 @@ class ConversionPresetIn(BaseModel):
     config: dict[str, Any]
 
 
+# ---------------------------------------------------------------------------
+# Advanced Audio & Voice Notes (plan §5.4, §9, §10)
+# ---------------------------------------------------------------------------
+
+class AudioProviderModel(BaseModel):
+    """A configured speech-to-text provider record (plan §5.4).
+
+    Mirrors :class:`LLMProvider`: an opaque id, a provider ``type`` (matching the
+    capability matrix), a masked api key, optional base_url/region/deployment for
+    cloud adapters, and a concurrency cap. Stored encrypted at rest exactly like
+    LLM providers.
+    """
+
+    id: str
+    type: str  # local_faster_whisper | local_whisperx | openai | groq | deepgram | assemblyai | azure | custom_openai_compatible
+    label: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    region: Optional[str] = None
+    deployment: Optional[str] = None
+    concurrency: Optional[int] = Field(default=None, ge=1)
+    timeout: Optional[int] = Field(default=None, ge=1)
+    max_retries: Optional[int] = Field(default=None, ge=0)
+    default_model: Optional[str] = None
+    models: list[str] = Field(default_factory=list)
+    enabled: bool = True
+    cloud: bool = False
+
+
+class ActiveAudioProvider(BaseModel):
+    provider_id: str = "local_faster_whisper"
+    model_id: str = ""
+
+
+class VocabularyPackIn(BaseModel):
+    """Request body for creating/updating a vocabulary pack (plan §9.2)."""
+
+    name: str
+    terms: list[str] = Field(default_factory=list)
+    category: str = "general"
+    description: Optional[str] = None
+
+
+class VocabularyPackModel(VocabularyPackIn):
+    id: str
+    created_at: str
+
+
+
 

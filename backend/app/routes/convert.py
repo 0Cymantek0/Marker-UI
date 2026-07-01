@@ -324,6 +324,16 @@ async def upload_file(
     audio_context: Optional[str] = Query(None, description="Context used only to organize audio batch output"),
     audio_low_confidence_threshold: Optional[float] = Query(None, ge=0.0, le=1.0, description="Segment confidence threshold for audio warnings"),
     audio_word_timestamps: bool = Query(False, description="Request word-level timestamps from the STT engine when supported"),
+    audio_config: Optional[str] = Query(
+        None,
+        description=(
+            "JSON object of advanced audio controls (plan §5.5): audio_provider, "
+            "audio_diarization, audio_vocabulary_pack_ids, audio_confidence_heatmap, "
+            "audio_text_enhancement_strength, audio_structural_enhancement_mode, "
+            "audio_fusion_mode, audio_allow_cloud_stt, etc. Flat audio_* params above "
+            "take precedence on conflict."
+        ),
+    ),
     disable_multiprocessing: bool = Query(False, description="Run single-threaded"),
     strip_existing_ocr: bool = Query(False, description="Strip existing OCR text"),
     redo_inline_math: bool = Query(False, description="Re-render inline math"),
@@ -499,6 +509,29 @@ async def upload_file(
         config["audio_low_confidence_threshold"] = audio_low_confidence_threshold
     if audio_word_timestamps:
         config["audio_word_timestamps"] = True
+    # Advanced audio controls arrive as one typed JSON blob (plan §5.5) so the
+    # route layer isn't choked with ~30 provider/diarization/enhancement/fusion
+    # params. Flat audio_* params above take precedence on key conflict — a
+    # caller using the legacy contract never has its explicit choice overridden
+    # by a stale value sitting inside the blob.
+    if audio_config:
+        try:
+            blob = json.loads(audio_config)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail="audio_config must be a JSON object of audio controls.",
+            )
+        if not isinstance(blob, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="audio_config must be a JSON object of audio controls.",
+            )
+        for key, value in blob.items():
+            if not isinstance(key, str) or not key.startswith("audio_"):
+                continue
+            # Flat params already won; never let the blob clobber them.
+            config.setdefault(key, value)
     if disable_multiprocessing:
         config["disable_multiprocessing"] = True
     if strip_existing_ocr:

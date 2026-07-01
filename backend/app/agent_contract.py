@@ -54,6 +54,71 @@ class ConversionOptionsModel(ContractModel):
     audio_context: str | None = None
     audio_low_confidence_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     audio_word_timestamps: bool = False
+
+    # --- Advanced Audio & Voice Notes (plan §5.5 + §23.12).
+    # Local-first by default. Every field below defaults to the current
+    # behavior, so a job that sends none of them is indistinguishable from a
+    # pre-enhancement-layer job.
+    audio_provider: str = "local_faster_whisper"
+    audio_language: str | None = None
+    audio_device: str | None = None
+    audio_compute_type: str | None = None
+    audio_beam_size: int | None = Field(default=None, ge=1)
+    audio_vad_filter: bool | None = None
+    audio_gap_warning_ms: int | None = Field(default=None, ge=0)
+
+    # Speaker / diarization (plan §10). Diarization is opt-in; without it the
+    # transcript falls back to anonymous ``speaker_0`` labels.
+    audio_diarization: bool = False
+    audio_min_speakers: int | None = Field(default=None, ge=1)
+    audio_max_speakers: int | None = Field(default=None, ge=1)
+    audio_speaker_aliases: dict[str, str] = Field(default_factory=dict)
+    audio_speaker_memory: bool = False
+    audio_speaker_memory_scope: str = "machine"
+
+    # Vocabulary packs (plan §9). Packs are resolved server-side from their ids
+    # into terms, then merged with the free-text ``audio_vocabulary`` field.
+    audio_vocabulary_pack_ids: list[str] = Field(default_factory=list)
+
+    # Quality / confidence (plan §8).
+    audio_confidence_heatmap: bool = True
+    audio_quality_diagnostics: bool = True
+    audio_review_required_on_low_confidence: bool = False
+
+    # Enhancement layer (plan §23). Textual strength 0-5 controls how much the
+    # transcript wording may be altered; structural enhancement reorganizes the
+    # transcript into a document shape. The two are independent — structural-only
+    # mode must preserve the original transcript words exactly.
+    audio_text_enhancement_enabled: bool = False
+    audio_text_enhancement_strength: int = Field(default=0, ge=0, le=5)
+    audio_text_enhancement_provider: str = "local_rule_based"
+    audio_text_enhancement_model: str | None = None
+    audio_structural_enhancement_enabled: bool = False
+    audio_structural_enhancement_mode: str = "auto"
+    audio_structural_preserve_words: bool = True
+    audio_enhancement_require_source_refs: bool = True
+    audio_enhancement_show_diff: bool = True
+    audio_enhancement_include_audit: bool = True
+    audio_enhancement_fallback_on_validation_failure: bool = True
+    audio_enhancement_allow_cloud: bool = False
+    audio_enhancement_custom_instructions: str | None = None
+
+    # Fusion (plan §12). Context documents are converted server-side and given
+    # distinct source ids; the transcript stays authoritative for what was said.
+    audio_fusion_mode: str | None = None
+    audio_contradiction_detection: bool = False
+    audio_context_trust_policy: str = "transcript_wins"
+
+    # Privacy / providers (plan §3.1). Cloud STT and cloud enhancement each
+    # require explicit opt-in before any audio leaves the machine.
+    audio_allow_cloud_stt: bool = False
+
+    # Benchmark (plan §13). When enabled, the configured provider and each
+    # comparison provider transcribe the same audio and a comparison report is
+    # attached to job metadata.
+    audio_benchmark_compare: bool = False
+    audio_compare_providers: list[str] = Field(default_factory=list)
+    audio_compare_metrics: list[str] = Field(default_factory=list)
     disable_multiprocessing: bool = False
     strip_existing_ocr: bool = False
     redo_inline_math: bool = False
@@ -227,6 +292,28 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="audio_context", cli_flag="--audio-context", type="string", category="audio", description="Context used to organize audio output."),
     OptionMetadataModel(name="audio_low_confidence_threshold", cli_flag="--audio-low-confidence-threshold", type="number", category="audio", description="Audio low-confidence threshold."),
     OptionMetadataModel(name="audio_word_timestamps", cli_flag="--audio-word-timestamps", type="boolean", default=False, category="audio", description="Request word-level timestamps."),
+    OptionMetadataModel(name="audio_provider", cli_flag="--audio-provider", type="enum", default="local_faster_whisper", category="audio", description="STT provider: local_faster_whisper, local_whisperx, openai, groq, deepgram, assemblyai, azure."),
+    OptionMetadataModel(name="audio_language", cli_flag="--audio-language", type="string", category="audio", description="Spoken language hint for transcription."),
+    OptionMetadataModel(name="audio_device", cli_flag="--audio-device", type="string", category="audio", description="Local inference device (cpu/cuda) for faster-whisper."),
+    OptionMetadataModel(name="audio_compute_type", cli_flag="--audio-compute-type", type="string", category="audio", description="CTranslate2 compute type (int8/float16/...)."),
+    OptionMetadataModel(name="audio_beam_size", cli_flag="--audio-beam-size", type="integer", category="audio", description="Beam size for decoding."),
+    OptionMetadataModel(name="audio_vad_filter", cli_flag="--audio-vad-filter", type="boolean", category="audio", description="Apply Silero VAD silence filtering."),
+    OptionMetadataModel(name="audio_diarization", cli_flag="--audio-diarization", type="boolean", default=False, category="audio", description="Separate speakers when the provider supports it."),
+    OptionMetadataModel(name="audio_min_speakers", cli_flag="--audio-min-speakers", type="integer", category="audio", description="Minimum expected speaker count."),
+    OptionMetadataModel(name="audio_max_speakers", cli_flag="--audio-max-speakers", type="integer", category="audio", description="Maximum expected speaker count."),
+    OptionMetadataModel(name="audio_speaker_aliases", cli_flag="--audio-speaker-aliases", type="object", category="audio", description="Map of speaker labels to confirmed names."),
+    OptionMetadataModel(name="audio_vocabulary_pack_ids", cli_flag="--audio-vocabulary-pack-ids", type="array", category="audio", description="Saved vocabulary pack ids to compile."),
+    OptionMetadataModel(name="audio_confidence_heatmap", cli_flag="--audio-confidence-heatmap", type="boolean", default=True, category="audio", description="Emit per-segment confidence for the heatmap view."),
+    OptionMetadataModel(name="audio_quality_diagnostics", cli_flag="--audio-quality-diagnostics", type="boolean", default=True, category="audio", description="Emit the audio quality diagnostics block."),
+    OptionMetadataModel(name="audio_text_enhancement_enabled", cli_flag="--audio-text-enhancement", type="boolean", default=False, category="audio", description="Allow textual enhancement of the transcript."),
+    OptionMetadataModel(name="audio_text_enhancement_strength", cli_flag="--audio-text-enhancement-strength", type="integer", default=0, category="audio", description="Textual enhancement strength 0-5."),
+    OptionMetadataModel(name="audio_structural_enhancement_enabled", cli_flag="--audio-structural-enhancement", type="boolean", default=False, category="audio", description="Restructure the transcript into a document."),
+    OptionMetadataModel(name="audio_structural_enhancement_mode", cli_flag="--audio-structural-enhancement-mode", type="enum", default="auto", category="audio", description="Document structure: auto, meeting_notes, lecture_notes, interview_qna, action_decision_log, timeline."),
+    OptionMetadataModel(name="audio_fusion_mode", cli_flag="--audio-fusion-mode", type="enum", category="audio", description="Fuse transcript with context documents: audio_first, meeting_followup, lecture_study, research_memo, contradiction_audit, qna_extraction."),
+    OptionMetadataModel(name="audio_contradiction_detection", cli_flag="--audio-contradiction-detection", type="boolean", default=False, category="audio", description="Detect contradictory claims across the transcript."),
+    OptionMetadataModel(name="audio_allow_cloud_stt", cli_flag="--audio-allow-cloud-stt", type="boolean", default=False, category="audio", description="Explicit opt-in to send audio to a cloud STT provider."),
+    OptionMetadataModel(name="audio_benchmark_compare", cli_flag="--audio-benchmark-compare", type="boolean", default=False, category="audio", description="Compare providers/models on the same audio."),
+    OptionMetadataModel(name="audio_config", cli_flag="--audio-config", type="object", category="audio", description="JSON blob of advanced audio controls; flat audio_* flags take precedence on conflict."),
     OptionMetadataModel(name="disable_multiprocessing", cli_flag="--disable-multiprocessing", type="boolean", default=False, category="runtime", description="Run conversion single-threaded where supported."),
     OptionMetadataModel(name="strip_existing_ocr", cli_flag="--strip-existing-ocr", type="boolean", default=False, category="pdf", description="Strip existing OCR text before re-OCR."),
     OptionMetadataModel(name="redo_inline_math", cli_flag="--redo-inline-math", type="boolean", default=False, category="pdf", description="Reprocess inline math."),

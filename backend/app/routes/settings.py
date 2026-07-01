@@ -32,6 +32,10 @@ from app.models.schemas import (
     GPUWorkersResolvedResponse,
     ConversionPreset,
     ConversionPresetIn,
+    AudioProviderModel,
+    ActiveAudioProvider,
+    VocabularyPackIn,
+    VocabularyPackModel,
 )
 from app.security.auth import Principal, require_rest_scopes
 from app.security.scopes import SCOPE_SETTINGS_WRITE
@@ -1454,6 +1458,312 @@ async def delete_preset(
     await db.flush()
     await db.commit()
     return {"success": True, "message": "Preset deleted successfully"}
+
+
+# ==================================================================
+# Advanced Audio & Voice Notes (plan §5.4, §9, §10)
+# ==================================================================
+#
+# Cloud STT provider records, vocabulary packs, speaker memory, and the active
+# audio provider selection are persisted in the same key/value Setting store as
+# LLM providers, with api keys encrypted at rest through the same secrets
+# helpers. Capabilities are served read-only from the static capability matrix.
+
+
+@router.get("/audio/capabilities")
+async def get_audio_capabilities() -> dict[str, Any]:
+    """Return the STT provider capability matrix (plan §5.3).
+
+    The frontend reads this once to decide which audio controls to render and
+    which to disable — diarization, word timestamps, confidence, vocabulary — so
+    the UI never advertises a feature a provider cannot honour.
+    """
+
+    from app.audio.providers import capabilities_payload
+
+    return {"providers": capabilities_payload()}
+
+
+@router.get("/audio/providers", response_model=list[AudioProviderModel])
+async def get_audio_providers(
+    db: AsyncSession = Depends(get_db),
+) -> list[AudioProviderModel]:
+    """List configured audio providers (api keys masked)."""
+
+    providers = await _load_audio_providers(db)
+    return [_mask_audio_provider(p) for p in providers]
+
+
+@router.put("/audio/providers", response_model=list[AudioProviderModel])
+async def save_audio_providers(
+    body: list[AudioProviderModel],
+    db: AsyncSession = Depends(get_db),
+) -> list[AudioProviderModel]:
+    """Save the audio provider list, encrypting freshly-entered api keys.
+
+    Reuses the same masked-key reuse rule as the LLM provider save: a masked
+    (unchanged) key keeps its stored ciphertext verbatim rather than being
+    decrypted-then-re-encrypted, which would corrupt keys on a key/secret
+    mismatch.
+    """
+
+    existing = await _load_audio_providers(db)
+    existing_map = {p["id"]: p for p in existing if p.get("id")}
+
+    updated: list[dict[str, Any]] = []
+    for provider in body:
+        pid = provider.id
+        stored = existing_map.get(pid, {})
+        incoming_key = provider.api_key
+        if incoming_key and is_masked(incoming_key):
+            encrypted_key = stored.get("api_key")
+        elif incoming_key:
+            encrypted_key = encrypt_value(incoming_key)
+        else:
+            encrypted_key = None
+        updated.append(
+            {
+                "id": pid,
+                "type": provider.type,
+                "label": provider.label,
+                "api_key": encrypted_key,
+                "base_url": provider.base_url,
+                "region": provider.region,
+                "deployment": provider.deployment,
+                "concurrency": provider.concurrency,
+                "timeout": provider.timeout,
+                "max_retries": provider.max_retries,
+                "default_model": provider.default_model,
+                "models": list(provider.models),
+                "enabled": provider.enabled,
+                "cloud": provider.cloud,
+            }
+        )
+
+    await _store_audio_providers(db, updated)
+    return [_mask_audio_provider(p) for p in updated]
+
+
+@router.get("/audio/active", response_model=ActiveAudioProvider)
+async def get_active_audio_provider(
+    db: AsyncSession = Depends(get_db),
+) -> ActiveAudioProvider:
+    """Return the active audio provider + model selection."""
+
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_active_provider"))
+    ).scalar_one_or_none()
+    if row:
+        return ActiveAudioProvider(**json.loads(row.value))
+    return ActiveAudioProvider()
+
+
+@router.put("/audio/active", response_model=ActiveAudioProvider)
+async def save_active_audio_provider(
+    body: ActiveAudioProvider,
+    db: AsyncSession = Depends(get_db),
+) -> ActiveAudioProvider:
+    """Persist the active audio provider + model selection."""
+
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_active_provider"))
+    ).scalar_one_or_none()
+    serialized = body.model_dump_json()
+    if row:
+        row.value = serialized
+    else:
+        db.add(Setting(key="audio_active_provider", value=serialized, category="audio"))
+    await db.flush()
+    await db.commit()
+    return body
+
+
+@router.get("/audio/vocabulary", response_model=list[VocabularyPackModel])
+async def list_vocabulary_packs(
+    db: AsyncSession = Depends(get_db),
+) -> list[VocabularyPackModel]:
+    """List saved vocabulary packs (plan §9.2)."""
+
+    packs = await _load_vocabulary_packs(db)
+    return [VocabularyPackModel(**pack) for pack in packs]
+
+
+@router.post("/audio/vocabulary", response_model=VocabularyPackModel)
+async def create_vocabulary_pack(
+    body: VocabularyPackIn,
+    db: AsyncSession = Depends(get_db),
+) -> VocabularyPackModel:
+    """Create a vocabulary pack with a stable slug id."""
+
+    packs = await _load_vocabulary_packs(db)
+    import re as _re
+    from datetime import datetime, timezone as _tz
+
+    slug = _re.sub(r"[^a-z0-9]+", "-", body.name.lower()).strip("-") or "pack"
+    pack_id = slug
+    counter = 2
+    while any(p["id"] == pack_id for p in packs):
+        pack_id = f"{slug}-{counter}"
+        counter += 1
+    created_at = datetime.now(_tz.utc).isoformat()
+    pack = {
+        "id": pack_id,
+        "name": body.name,
+        "terms": list(body.terms),
+        "category": body.category,
+        "description": body.description,
+        "created_at": created_at,
+    }
+    packs.append(pack)
+    await _store_vocabulary_packs(db, packs)
+    return VocabularyPackModel(**pack)
+
+
+@router.put("/audio/vocabulary/{pack_id}", response_model=VocabularyPackModel)
+async def update_vocabulary_pack(
+    pack_id: str,
+    body: VocabularyPackIn,
+    db: AsyncSession = Depends(get_db),
+) -> VocabularyPackModel:
+    """Update an existing vocabulary pack by id."""
+
+    packs = await _load_vocabulary_packs(db)
+    for pack in packs:
+        if pack["id"] == pack_id:
+            pack.update(
+                {
+                    "name": body.name,
+                    "terms": list(body.terms),
+                    "category": body.category,
+                    "description": body.description,
+                }
+            )
+            await _store_vocabulary_packs(db, packs)
+            return VocabularyPackModel(**pack)
+    raise HTTPException(status_code=404, detail="Vocabulary pack not found")
+
+
+@router.delete("/audio/vocabulary/{pack_id}")
+async def delete_vocabulary_pack(
+    pack_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Delete a vocabulary pack by id."""
+
+    packs = await _load_vocabulary_packs(db)
+    filtered = [p for p in packs if p["id"] != pack_id]
+    if len(filtered) == len(packs):
+        raise HTTPException(status_code=404, detail="Vocabulary pack not found")
+    await _store_vocabulary_packs(db, filtered)
+    return {"success": "true", "message": "Vocabulary pack deleted"}
+
+
+@router.get("/audio/speaker-memory")
+async def get_speaker_memory(
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Return the local speaker-alias memory (plan §10.2).
+
+    Speaker identity is user-confirmed and local-only by default; this returns
+    the saved voice-profile -> alias map so the UI can show and revoke it.
+    """
+
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_speaker_memory"))
+    ).scalar_one_or_none()
+    if row:
+        return json.loads(row.value)
+    return {"scope": "machine", "profiles": {}}
+
+
+@router.delete("/audio/speaker-memory")
+async def clear_speaker_memory(
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Revoke all stored speaker-alias mappings (plan §10.2 — revocable)."""
+
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_speaker_memory"))
+    ).scalar_one_or_none()
+    if row:
+        await db.execute(delete(Setting).where(Setting.key == "audio_speaker_memory"))
+        await db.commit()
+    return {"success": "true", "message": "Speaker memory cleared"}
+
+
+# --- audio provider/pack storage helpers ------------------------------------
+
+
+async def _load_audio_providers(db: AsyncSession) -> list[dict[str, Any]]:
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_providers"))
+    ).scalar_one_or_none()
+    if not row:
+        return []
+    try:
+        return json.loads(row.value)
+    except (TypeError, ValueError):
+        return []
+
+
+async def _store_audio_providers(db: AsyncSession, providers: list[dict[str, Any]]) -> None:
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_providers"))
+    ).scalar_one_or_none()
+    serialized = json.dumps(providers)
+    if row:
+        row.value = serialized
+    else:
+        db.add(Setting(key="audio_providers", value=serialized, category="audio"))
+    await db.flush()
+    await db.commit()
+
+
+async def _load_vocabulary_packs(db: AsyncSession) -> list[dict[str, Any]]:
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_vocabulary_packs"))
+    ).scalar_one_or_none()
+    if not row:
+        return []
+    try:
+        return json.loads(row.value)
+    except (TypeError, ValueError):
+        return []
+
+
+async def _store_vocabulary_packs(db: AsyncSession, packs: list[dict[str, Any]]) -> None:
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_vocabulary_packs"))
+    ).scalar_one_or_none()
+    serialized = json.dumps(packs)
+    if row:
+        row.value = serialized
+    else:
+        db.add(Setting(key="audio_vocabulary_packs", value=serialized, category="audio"))
+    await db.flush()
+    await db.commit()
+
+
+def _mask_audio_provider(provider: dict[str, Any]) -> AudioProviderModel:
+    """Build a response model with any stored api key masked for display."""
+
+    api_key = provider.get("api_key")
+    return AudioProviderModel(
+        id=provider["id"],
+        type=provider["type"],
+        label=provider["label"],
+        api_key=mask_value(decrypt_value(api_key)) if api_key else None,
+        base_url=provider.get("base_url"),
+        region=provider.get("region"),
+        deployment=provider.get("deployment"),
+        concurrency=provider.get("concurrency"),
+        timeout=provider.get("timeout"),
+        max_retries=provider.get("max_retries"),
+        default_model=provider.get("default_model"),
+        models=list(provider.get("models", [])),
+        enabled=bool(provider.get("enabled", True)),
+        cloud=bool(provider.get("cloud", False)),
+    )
 
 
 
