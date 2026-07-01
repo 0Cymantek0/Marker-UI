@@ -423,6 +423,8 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
     segment_warning_count = sum(1 for segment in segments if segment.warnings)
     low_confidence_count = sum(1 for segment in segments if "low_confidence" in segment.warnings)
     empty_count = sum(1 for segment in segments if "empty_text" in segment.warnings)
+    overlap_count = sum(1 for segment in segments if "overlaps_previous" in segment.warnings)
+    long_gap_count = sum(1 for segment in segments if "long_gap_before_segment" in segment.warnings)
     if not segments:
         level = "no_speech"
     elif warnings or low_confidence_count or empty_count:
@@ -430,6 +432,7 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
     else:
         level = "clean"
     confidence_values = [segment.confidence for segment in segments if segment.confidence is not None]
+    unknown_confidence_count = sum(1 for segment in segments if segment.confidence is None)
     word_count = sum(len(_WORDS_RE.findall(segment.text)) for segment in segments)
     speech_ms = sum(max(0, segment.end_ms - segment.start_ms) for segment in segments)
     duration_ms = max((segment.end_ms for segment in segments), default=0)
@@ -438,16 +441,31 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
         if confidence_values
         else None
     )
+    # Review verdict (plan §8.2): a transcript needs eyes on it when any segment
+    # is low-confidence, overlaps, has a long preceding gap, or carries unknown
+    # confidence. Surfaced separately from ``level`` so the heatmap can flag weak
+    # evidence even on a "clean" run that happens to have no low_confidence spans.
+    review_required = bool(
+        low_confidence_count
+        or overlap_count
+        or long_gap_count
+        or empty_count
+        or (unknown_confidence_count and unknown_confidence_count > len(segments) // 2)
+    )
     return {
         "level": level,
         "segment_warning_count": segment_warning_count,
         "low_confidence_count": low_confidence_count,
+        "unknown_confidence_count": unknown_confidence_count,
         "empty_segment_count": empty_count,
+        "overlap_count": overlap_count,
+        "long_gap_count": long_gap_count,
         "mean_confidence": mean_confidence,
         "word_count": word_count,
         "speech_seconds": round(speech_ms / 1000.0, 3),
         "words_per_minute": round(word_count / (speech_ms / 60000.0), 3) if speech_ms else None,
         "speech_coverage": round(speech_ms / duration_ms, 6) if duration_ms else None,
+        "review_required": review_required,
     }
 
 
