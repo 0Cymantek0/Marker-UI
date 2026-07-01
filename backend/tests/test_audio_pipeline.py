@@ -96,3 +96,105 @@ def test_multi_audio_builder_reports_relationship_evidence_and_batch_risk() -> N
     assert metadata["risk_summary"]["source_count"] == 2
     assert metadata["risk_summary"]["total_words"] == 7
 
+
+def test_risk_summary_reports_overlap_long_gap_unknown_confidence_and_review_verdict() -> None:
+    """Plan §8.3 quality block: overlap/gap/unknown-confidence counts + review_required.
+
+    A segment that overlaps the previous one, a long gap before another, and a
+    segment with no confidence must each be counted, and the transcript must be
+    flagged for review even though none is individually low-confidence.
+    """
+
+    transcript = normalize_transcript(
+        {
+            "duration": 45.0,
+            "segments": [
+                # 0.0–1.0, confident — baseline.
+                {"start": 0.0, "end": 1.0, "text": "first segment here", "confidence": 0.9},
+                # 0.5–1.5 overlaps the previous segment → overlaps_previous warning.
+                {"start": 0.5, "end": 1.5, "text": "overlapping talk", "confidence": 0.85},
+                # 40.0–41.0, jump from 1.5→40.0 (>30s default) → long_gap_before_segment.
+                {"start": 40.0, "end": 41.0, "text": "after a long silence", "confidence": 0.8},
+                # 41.0–42.0, no confidence → unknown_confidence_count.
+                {"start": 41.0, "end": 42.0, "text": "unsure here", "confidence": None},
+            ],
+        },
+        source_label="quality.wav",
+    )
+
+    risk = transcript.risk_summary
+    assert risk["overlap_count"] == 1
+    assert risk["long_gap_count"] == 1
+    assert risk["unknown_confidence_count"] == 1
+    assert risk["low_confidence_count"] == 0
+    assert risk["review_required"] is True
+
+
+def test_risk_summary_clean_transcript_needs_no_review() -> None:
+    """A confident, gap-free, single-speaker transcript is not flagged for review."""
+
+    transcript = normalize_transcript(
+        {
+            "duration": 2.0,
+            "segments": [
+                {"start": 0.0, "end": 1.0, "text": "clear speech one", "confidence": 0.95},
+                {"start": 1.0, "end": 2.0, "text": "clear speech two", "confidence": 0.93},
+            ],
+        },
+        source_label="clean.wav",
+    )
+
+    risk = transcript.risk_summary
+    assert risk["overlap_count"] == 0
+    assert risk["long_gap_count"] == 0
+    assert risk["unknown_confidence_count"] == 0
+    assert risk["review_required"] is False
+
+
+def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
+    """The shared video/audio transcription seam returns a normalized transcript.
+
+    Video demuxes audio then calls this helper; it must resolve the provider,
+    transcribe through the adapter, normalize, and fold in speaker aliases —
+    without the caller touching the converter or provider registry directly.
+    """
+
+    from app.audio.transcribe import transcribe_audio_file
+
+    raw_payload = {
+        "language": "en",
+        "duration": 2.0,
+        "model": "tiny.en",
+        "segments": [
+            {"start": 0.0, "end": 1.0, "text": "hello world", "confidence": 0.9, "speaker": "speaker_0"},
+            {"start": 1.0, "end": 2.0, "text": "second segment", "confidence": 0.85, "speaker": "speaker_1"},
+        ],
+    }
+
+    class _StubProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            from app.audio.providers.base import RawTranscript
+
+            return RawTranscript.from_provider_dict(raw_payload)
+
+    import app.audio.transcribe as transcribe_mod
+
+    original_build = transcribe_mod.build_provider
+    transcribe_mod.build_provider = lambda _pid: _StubProvider()
+    try:
+        transcript = transcribe_audio_file(
+            "/tmp/fake.wav",
+            {"audio_speaker_aliases": {"speaker_0": "Alice"}},
+            source_label="video.mp4",
+            source_id="video_audio",
+        )
+    finally:
+        transcribe_mod.build_provider = original_build
+
+    assert transcript.segments[0].speaker == "Alice"
+    assert transcript.segments[1].speaker == "speaker_1"
+    assert transcript.source_id == "video_audio"
+    assert transcript.segments[0].confidence == 0.9
+

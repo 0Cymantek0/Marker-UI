@@ -1185,3 +1185,98 @@ async def test_download_specific_format_does_not_zip_assets(client: AsyncClient,
     package_resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
     assert package_resp.status_code == 200
     assert package_resp.headers["content-type"] == "application/zip"
+
+
+# ---------------------------------------------------------------------------
+# Advanced audio controls (plan §5.5) — audio_config JSON blob
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_accepts_audio_config_blob(client: AsyncClient, db_session):
+    """The audio_config JSON blob is parsed and merged into the stored config."""
+    blob = {
+        "audio_provider": "local_faster_whisper",
+        "audio_diarization": True,
+        "audio_vocabulary_pack_ids": ["medical", "team"],
+        "audio_text_enhancement_strength": 3,
+    }
+    resp = await _upload_file(
+        client,
+        extra_params={"audio_config": json.dumps(blob)},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    cfg = json.loads(job.config_json)
+    assert cfg["audio_provider"] == "local_faster_whisper"
+    assert cfg["audio_diarization"] is True
+    assert cfg["audio_vocabulary_pack_ids"] == ["medical", "team"]
+    assert cfg["audio_text_enhancement_strength"] == 3
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_invalid_audio_config_json(client: AsyncClient):
+    """Malformed audio_config JSON is rejected with a 400, not silently ignored."""
+    resp = await _upload_file(
+        client,
+        extra_params={"audio_config": "{not valid json"},
+    )
+    assert resp.status_code == 400
+    assert "audio_config" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_audio_config_non_object(client: AsyncClient):
+    """A JSON array as audio_config is rejected — must be an object."""
+    resp = await _upload_file(
+        client,
+        extra_params={"audio_config": "[1, 2, 3]"},
+    )
+    assert resp.status_code == 400
+    assert "audio_config" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_flat_audio_param_beats_blob_on_conflict(
+    client: AsyncClient, db_session
+):
+    """Flat audio_* query params take precedence over the blob (plan §5.5).
+
+    A caller using the legacy flat contract must never have its explicit choice
+    silently overridden by a stale value inside the blob.
+    """
+    blob = {"audio_model": "blob-model"}
+    resp = await _upload_file(
+        client,
+        extra_params={"audio_config": json.dumps(blob), "audio_model": "flat-model"},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    cfg = json.loads(job.config_json)
+    assert cfg["audio_model"] == "flat-model"
+
+
+@pytest.mark.asyncio
+async def test_upload_audio_config_ignores_non_audio_keys(client: AsyncClient, db_session):
+    """Only keys prefixed with audio_ from the blob are accepted."""
+    blob = {"audio_language": "es", "page_range": "1-5", "rogue_key": "evil"}
+    resp = await _upload_file(
+        client,
+        extra_params={"audio_config": json.dumps(blob)},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    cfg = json.loads(job.config_json)
+    assert cfg.get("audio_language") == "es"
+    # Non-audio keys from the blob must NOT leak through.
+    assert "page_range" not in cfg or cfg.get("page_range") != "1-5"
+    assert "rogue_key" not in cfg

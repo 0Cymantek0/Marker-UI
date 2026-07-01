@@ -9,21 +9,26 @@ const mockGetActiveLLM = vi.fn()
 const mockGetPresets = vi.fn().mockResolvedValue([])
 const mockSavePreset = vi.fn().mockResolvedValue({ id: 'preset_123', name: 'Saved', config: {}, created_at: '' })
 const mockDeletePreset = vi.fn().mockResolvedValue({ success: true, message: '' })
+const mockGetAudioCapabilities = vi.fn().mockResolvedValue([])
+const mockGetVocabularyPacks = vi.fn().mockResolvedValue([])
+const mockSaveVocabularyPack = vi.fn().mockResolvedValue({ id: 'v1', name: 'Test', terms: [], category: '', created_at: '' })
+const mockDeleteVocabularyPack = vi.fn().mockResolvedValue(undefined)
 
-vi.mock('@/lib/api', () => ({
-  getLLMProviders: (...args: any[]) => mockGetLLMProviders(...args),
-  getActiveLLM: (...args: any[]) => mockGetActiveLLM(...args),
-  getPresets: (...args: any[]) => mockGetPresets(...args),
-  savePreset: (...args: any[]) => mockSavePreset(...args),
-  deletePreset: (...args: any[]) => mockDeletePreset(...args),
-  normalizeOcrEngine: (value: unknown) => (
-    value === 'glm_ocr' || value === 'paddleocr_vl'
-      ? 'hybrid_ocr'
-      : value === 'hybrid_ocr'
-        ? 'hybrid_ocr'
-        : 'surya'
-  ),
-}))
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return {
+    ...actual,
+    getLLMProviders: (...args: any[]) => mockGetLLMProviders(...args),
+    getActiveLLM: (...args: any[]) => mockGetActiveLLM(...args),
+    getPresets: (...args: any[]) => mockGetPresets(...args),
+    savePreset: (...args: any[]) => mockSavePreset(...args),
+    deletePreset: (...args: any[]) => mockDeletePreset(...args),
+    getAudioCapabilities: (...args: any[]) => mockGetAudioCapabilities(...args),
+    getVocabularyPacks: (...args: any[]) => mockGetVocabularyPacks(...args),
+    saveVocabularyPack: (...args: any[]) => mockSaveVocabularyPack(...args),
+    deleteVocabularyPack: (...args: any[]) => mockDeleteVocabularyPack(...args),
+  }
+})
 
 vi.mock('sonner', () => ({
   toast: {
@@ -50,6 +55,10 @@ describe('ConversionOptions image understanding controls', () => {
     mockGetPresets.mockResolvedValue([])
     mockSavePreset.mockResolvedValue({ id: 'preset_123', name: 'SavedPreset', config: {}, created_at: '' })
     mockDeletePreset.mockResolvedValue({ success: true, message: '' })
+    mockGetAudioCapabilities.mockResolvedValue([])
+    mockGetVocabularyPacks.mockResolvedValue([])
+    mockSaveVocabularyPack.mockResolvedValue({ id: 'v1', name: 'Test', terms: [], category: '', created_at: '' })
+    mockDeleteVocabularyPack.mockResolvedValue(undefined)
   })
 
   it('requires explicit cloud image analysis opt-in', async () => {

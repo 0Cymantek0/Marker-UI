@@ -14,7 +14,26 @@ import pytest
 from openpyxl import Workbook
 
 from app.conversion.converters.archive import ArchiveConverter
-from app.conversion.converters.audio import AudioConverter, _transcribe_audio
+from app.conversion.converters.audio import AudioConverter
+from app.audio.providers.base import RawTranscript
+
+
+def _fake_provider(transcribe_fn):
+    """Wrap a legacy dict-returning fake into a provider returning a RawTranscript.
+
+    The old tests stubbed ``_transcribe_audio`` to return a flat dict; the new
+    provider-adapter seam expects a :class:`RawTranscript`. This adapter keeps
+    the existing fakes working unchanged by routing their dict through
+    :meth:`RawTranscript.from_provider_dict`.
+    """
+
+    class _FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(transcribe_fn(filepath, config, device=device))
+
+    return _FakeProvider()
 from app.conversion.converters.html import HtmlConverter
 from app.conversion.converters.notebook import NotebookConverter
 from app.conversion.converters.outlook_msg import OutlookMsgConverter
@@ -220,22 +239,31 @@ def test_outlook_msg_converter_renders_body_headers_and_safe_attachments(monkeyp
 
 
 def test_audio_converter_renders_timestamped_local_transcript(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
     path = tmp_path / "voice.wav"
     path.write_bytes(b"RIFF fake wav")
 
-    def fake_transcribe(filepath, config, device=None):
-        assert filepath == str(path)
-        return {
-            "language": "en",
-            "duration": 2.5,
-            "model": "tiny.en",
-            "segments": [
-                {"start": 0.0, "end": 1.25, "text": "hello world", "confidence": 0.92},
-                {"start": 1.25, "end": 2.5, "text": "second line", "confidence": 0.4},
-            ],
-        }
+    class FakeProvider:
+        id = "local_faster_whisper"
 
-    monkeypatch.setattr("app.conversion.converters.audio._transcribe_audio", fake_transcribe)
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            assert filepath == str(path)
+            return RawTranscript.from_provider_dict(
+                {
+                    "language": "en",
+                    "duration": 2.5,
+                    "model": "tiny.en",
+                    "segments": [
+                        {"start": 0.0, "end": 1.25, "text": "hello world", "confidence": 0.92},
+                        {"start": 1.25, "end": 2.5, "text": "second line", "confidence": 0.4},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.build_provider", lambda pid: FakeProvider()
+    )
     monkeypatch.setattr(
         "app.conversion.converters.audio.probe_audio",
         lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
@@ -265,21 +293,35 @@ def test_audio_converter_renders_timestamped_local_transcript(monkeypatch, tmp_p
 
 
 def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
     path = tmp_path / "meeting.wav"
     path.write_bytes(b"RIFF fake wav")
 
-    def fake_transcribe(filepath, config, device=None):
-        return {
-            "language": "en",
-            "duration": 1.0,
-            "model": "tiny.en",
-            "segments": [
-                {"start": 0.0, "end": 1.0, "text": "ship the table parser fix", "confidence": 0.88},
-            ],
-        }
+    class FakeProvider:
+        id = "local_faster_whisper"
 
-    monkeypatch.setattr("app.conversion.converters.audio._transcribe_audio", fake_transcribe)
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "language": "en",
+                    "duration": 1.0,
+                    "model": "tiny.en",
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "ship the table parser fix", "confidence": 0.88},
+                    ],
+                }
+            )
 
+    fake = FakeProvider()
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.build_provider",
+        lambda provider_id: fake,
+    )
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.probe_audio",
+        lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
+    )
     result = AudioConverter().convert(str(path), {"audio_output_mode": "meeting_notes"})
 
     assert "# Audio Document: meeting" in result.text
@@ -332,23 +374,24 @@ def test_audio_transcribe_passes_vocabulary_and_word_timestamp_options(monkeypat
     path = tmp_path / "voice.wav"
     path.write_bytes(b"RIFF fake")
 
-    result = _transcribe_audio(
+    from app.audio.providers.faster_whisper import FasterWhisperProvider
+
+    raw = FasterWhisperProvider().transcribe(
         str(path),
         {
             "audio_model": "base.en",
             "audio_device": "cpu",
             "audio_compute_type": "int8",
-            "audio_vocabulary": "Marker, LiteParse",
             "audio_word_timestamps": True,
         },
+        vocabulary_prompt="Vocabulary terms: Marker, LiteParse",
     )
 
     assert seen["model_name"] == "base.en"
     assert seen["kwargs"]["initial_prompt"] == "Vocabulary terms: Marker, LiteParse"
     assert seen["kwargs"]["word_timestamps"] is True
-    assert result["segments"][0]["words"] == [
-        {"word": "Marker", "start": 0.1, "end": 0.4, "confidence": 0.8}
-    ]
+    assert raw.segments[0].words[0].word == "Marker"
+    assert raw.segments[0].words[0].confidence == 0.8
 
 
 def test_archive_converter_lists_zip_without_extracting(tmp_path: Path) -> None:
@@ -381,20 +424,27 @@ def test_archive_converter_lists_zip_without_extracting(tmp_path: Path) -> None:
 
 
 def test_archive_converter_builds_multi_audio_document(monkeypatch, tmp_path: Path) -> None:
-    def fake_transcribe(filepath, config, device=None):
-        label = config["audio_source_label"]
-        if label.endswith("part1.wav"):
-            text = "project alpha kickoff today"
-        else:
-            text = "project alpha follow up tomorrow"
-        return {
-            "language": "en",
-            "duration": 1.2,
-            "model": "tiny.en",
-            "segments": [{"start": 0.0, "end": 1.2, "text": text, "confidence": 0.9}],
-        }
+    from app.audio.providers.base import RawTranscript
 
-    monkeypatch.setattr("app.conversion.converters.audio._transcribe_audio", fake_transcribe)
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            label = config["audio_source_label"]
+            if label.endswith("part1.wav"):
+                text = "project alpha kickoff today"
+            else:
+                text = "project alpha follow up tomorrow"
+            return RawTranscript.from_provider_dict(
+                {
+                    "language": "en",
+                    "duration": 1.2,
+                    "model": "tiny.en",
+                    "segments": [{"start": 0.0, "end": 1.2, "text": text, "confidence": 0.9}],
+                }
+            )
+
+    monkeypatch.setattr("app.conversion.converters.audio.build_provider", lambda pid: FakeProvider())
     path = tmp_path / "audio_batch.zip"
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("calls/part1.wav", b"RIFF fake one")
