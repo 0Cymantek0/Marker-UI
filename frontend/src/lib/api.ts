@@ -12,7 +12,73 @@ export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
 export type OcrEngine = 'surya' | 'hybrid_ocr'
 export type HybridOcrProfile = 'balanced' | 'max_accuracy' | 'low_vram'
 export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
-export type AudioOutputMode = 'transcript' | 'enhanced' | 'notes' | 'meeting_notes' | 'lecture_notes'
+export type AudioOutputMode =
+  | 'transcript'
+  | 'enhanced'
+  | 'notes'
+  | 'meeting_notes'
+  | 'lecture_notes'
+  | 'interview_qna'
+  | 'action_decision_log'
+
+export type AudioProviderType =
+  | 'local_faster_whisper'
+  | 'local_whisperx'
+  | 'openai'
+  | 'groq'
+  | 'deepgram'
+  | 'assemblyai'
+  | 'azure'
+  | 'custom_openai_compatible'
+
+export type AudioStructuralMode =
+  | 'auto'
+  | 'paragraphs'
+  | 'speaker_sections'
+  | 'meeting_notes'
+  | 'lecture_notes'
+  | 'interview_qna'
+  | 'action_decision_log'
+  | 'timeline'
+
+export type AudioEnhancementPreset =
+  | 'raw_transcript'
+  | 'clean_transcript'
+  | 'corrected_transcript'
+  | 'readable_notes'
+  | 'evidence_meeting_notes'
+  | 'polished_minutes'
+  | 'strict_structural'
+
+export interface AudioProviderCapability {
+  provider_id: AudioProviderType
+  provider_label: string
+  runtime_type: 'local' | 'cloud' | 'local_optional'
+  cloud: boolean
+  requires_api_key: boolean
+  requires_model_license_acceptance: boolean
+  privacy_level: 'local' | 'cloud' | 'hybrid'
+  supports_word_timestamps: boolean
+  supports_segment_timestamps: boolean
+  supports_confidence: boolean
+  supports_diarization: boolean
+  supports_speaker_confidence: boolean
+  supports_custom_vocabulary: boolean
+  supports_prompt_context: boolean
+  supports_translation: boolean
+  supports_batch_compare: boolean
+  max_file_size_hint_mb: number | null
+  default_model: string | null
+}
+
+export interface VocabularyPack {
+  id: string
+  name: string
+  terms: string[]
+  category: string
+  description?: string
+  created_at: string
+}
 
 /**
  * Migrate any stored/legacy ocr_engine value to a currently-valid one.
@@ -48,6 +114,38 @@ export interface ConversionConfig {
   audio_context?: string
   audio_low_confidence_threshold?: number
   audio_word_timestamps?: boolean
+  // Advanced audio (plan §5.5)
+  audio_provider?: AudioProviderType
+  audio_language?: string
+  audio_device?: string
+  audio_compute_type?: string
+  audio_beam_size?: number
+  audio_vad_filter?: boolean
+  // Speaker / diarization
+  audio_diarization?: boolean
+  audio_min_speakers?: number
+  audio_max_speakers?: number
+  audio_speaker_aliases?: Record<string, string>
+  // Vocabulary packs
+  audio_vocabulary_pack_ids?: string[]
+  // Quality / confidence
+  audio_confidence_heatmap?: boolean
+  audio_quality_diagnostics?: boolean
+  audio_review_required_on_low_confidence?: boolean
+  // Enhancement layer
+  audio_text_enhancement_enabled?: boolean
+  audio_text_enhancement_strength?: number
+  audio_structural_enhancement_enabled?: boolean
+  audio_structural_enhancement_mode?: AudioStructuralMode
+  audio_enhancement_allow_cloud?: boolean
+  // Fusion / contradiction
+  audio_fusion_mode?: string
+  audio_contradiction_detection?: boolean
+  // Privacy
+  audio_allow_cloud_stt?: boolean
+  // Benchmark
+  audio_benchmark_compare?: boolean
+  audio_compare_providers?: string[]
   disable_multiprocessing?: boolean
   debug?: boolean
   conversion_profile?: 'auto' | 'fast' | 'high_accuracy'
@@ -356,6 +454,33 @@ export async function uploadFile(
   if (config.audio_context) params.append('audio_context', config.audio_context)
   if (config.audio_low_confidence_threshold !== undefined) params.append('audio_low_confidence_threshold', String(config.audio_low_confidence_threshold))
   if (config.audio_word_timestamps !== undefined) params.append('audio_word_timestamps', String(config.audio_word_timestamps))
+  // Advanced audio controls (sent as audio_config JSON blob, plan §5.5)
+  const audioAdvanced: Record<string, unknown> = {}
+  if (config.audio_provider) audioAdvanced.audio_provider = config.audio_provider
+  if (config.audio_language) audioAdvanced.audio_language = config.audio_language
+  if (config.audio_device) audioAdvanced.audio_device = config.audio_device
+  if (config.audio_compute_type) audioAdvanced.audio_compute_type = config.audio_compute_type
+  if (config.audio_beam_size !== undefined) audioAdvanced.audio_beam_size = config.audio_beam_size
+  if (config.audio_vad_filter !== undefined) audioAdvanced.audio_vad_filter = config.audio_vad_filter
+  if (config.audio_diarization !== undefined) audioAdvanced.audio_diarization = config.audio_diarization
+  if (config.audio_min_speakers !== undefined) audioAdvanced.audio_min_speakers = config.audio_min_speakers
+  if (config.audio_max_speakers !== undefined) audioAdvanced.audio_max_speakers = config.audio_max_speakers
+  if (config.audio_speaker_aliases && Object.keys(config.audio_speaker_aliases).length > 0) audioAdvanced.audio_speaker_aliases = config.audio_speaker_aliases
+  if (config.audio_vocabulary_pack_ids && config.audio_vocabulary_pack_ids.length > 0) audioAdvanced.audio_vocabulary_pack_ids = config.audio_vocabulary_pack_ids
+  if (config.audio_confidence_heatmap !== undefined) audioAdvanced.audio_confidence_heatmap = config.audio_confidence_heatmap
+  if (config.audio_quality_diagnostics !== undefined) audioAdvanced.audio_quality_diagnostics = config.audio_quality_diagnostics
+  if (config.audio_review_required_on_low_confidence !== undefined) audioAdvanced.audio_review_required_on_low_confidence = config.audio_review_required_on_low_confidence
+  if (config.audio_text_enhancement_enabled !== undefined) audioAdvanced.audio_text_enhancement_enabled = config.audio_text_enhancement_enabled
+  if (config.audio_text_enhancement_strength !== undefined) audioAdvanced.audio_text_enhancement_strength = config.audio_text_enhancement_strength
+  if (config.audio_structural_enhancement_enabled !== undefined) audioAdvanced.audio_structural_enhancement_enabled = config.audio_structural_enhancement_enabled
+  if (config.audio_structural_enhancement_mode) audioAdvanced.audio_structural_enhancement_mode = config.audio_structural_enhancement_mode
+  if (config.audio_enhancement_allow_cloud !== undefined) audioAdvanced.audio_enhancement_allow_cloud = config.audio_enhancement_allow_cloud
+  if (config.audio_fusion_mode) audioAdvanced.audio_fusion_mode = config.audio_fusion_mode
+  if (config.audio_contradiction_detection !== undefined) audioAdvanced.audio_contradiction_detection = config.audio_contradiction_detection
+  if (config.audio_allow_cloud_stt !== undefined) audioAdvanced.audio_allow_cloud_stt = config.audio_allow_cloud_stt
+  if (config.audio_benchmark_compare !== undefined) audioAdvanced.audio_benchmark_compare = config.audio_benchmark_compare
+  if (config.audio_compare_providers && config.audio_compare_providers.length > 0) audioAdvanced.audio_compare_providers = config.audio_compare_providers
+  if (Object.keys(audioAdvanced).length > 0) params.append('audio_config', JSON.stringify(audioAdvanced))
   if (config.disable_multiprocessing !== undefined) params.append('disable_multiprocessing', String(config.disable_multiprocessing))
   if (config.debug !== undefined) params.append('debug', String(config.debug))
   // --- Image-understanding pipeline knobs (1:1 query-param names) ---
@@ -773,3 +898,28 @@ export async function deletePreset(presetId: string): Promise<{ success: boolean
 }
 
 
+// ─── Audio Provider & Vocabulary Pack APIs ──────────────────────────
+
+export async function getAudioCapabilities(): Promise<AudioProviderCapability[]> {
+  const res = await request<{ providers: AudioProviderCapability[] }>('/settings/audio/capabilities')
+  return res.providers
+}
+
+export async function getVocabularyPacks(): Promise<VocabularyPack[]> {
+  return request<VocabularyPack[]>('/settings/audio/vocabulary')
+}
+
+export async function saveVocabularyPack(
+  pack: { name: string; terms: string[]; category?: string; description?: string }
+): Promise<VocabularyPack> {
+  return request<VocabularyPack>('/settings/audio/vocabulary', {
+    method: 'POST',
+    body: JSON.stringify(pack),
+  })
+}
+
+export async function deleteVocabularyPack(packId: string): Promise<void> {
+  return request<void>(`/settings/audio/vocabulary/${packId}`, {
+    method: 'DELETE',
+  })
+}

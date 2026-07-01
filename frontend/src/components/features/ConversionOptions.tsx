@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { AudioAdvancedSettings } from '@/components/features/audio/AudioAdvancedSettings'
 import {
   getLLMProviders,
   getActiveLLM,
@@ -18,7 +19,6 @@ import {
   type OutputFormat,
   type ConverterType,
   type ImageHandlingMode,
-  type AudioOutputMode,
   type OcrEngine,
   type SmartRouterLevel,
   type ActiveLLM,
@@ -84,13 +84,6 @@ const IMAGE_HANDLING_OPTIONS: {
     label: 'Both',
     desc: 'Add VLM text and keep the original image reference for audit.',
   },
-]
-
-const AUDIO_OUTPUT_OPTIONS: { value: AudioOutputMode; label: string }[] = [
-  { value: 'transcript', label: 'Transcript only' },
-  { value: 'meeting_notes', label: 'Meeting notes with source refs' },
-  { value: 'lecture_notes', label: 'Lecture notes with source refs' },
-  { value: 'enhanced', label: 'Evidence-first enhanced document' },
 ]
 
 // Two local engine choices only. Surya is the default baseline; Hybrid OCR runs
@@ -547,101 +540,11 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div className="space-y-2.5">
-                <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
-                    Audio Transcription
-                  </label>
-                  <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
-                    Local STT plus evidence-first transcript or notes output.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
-                        Audio Output
-                      </label>
-                      <HelpIcon text="Transcript mode keeps raw timestamped speech. Notes modes copy transcript text into structured bullets with source references." />
-                    </div>
-                    <Select
-                      value={tempConfig.audio_output_mode ?? 'transcript'}
-                      onChange={(val) => updateTemp('audio_output_mode', val as AudioOutputMode)}
-                      disabled={disabled}
-                      options={AUDIO_OUTPUT_OPTIONS}
-                      className="w-full md:w-full"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
-                        Local STT Model
-                      </label>
-                      <HelpIcon text="Passed to faster-whisper. Examples: tiny.en, base.en, small, medium, large-v3." />
-                    </div>
-                    <Input
-                      value={tempConfig.audio_model ?? 'tiny.en'}
-                      onChange={(e) => updateTemp('audio_model', e.target.value)}
-                      placeholder="tiny.en"
-                      disabled={disabled}
-                      className="bg-background/50 h-9 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
-                        Vocabulary
-                      </label>
-                      <HelpIcon text="Comma-separated names, acronyms, and domain terms. Used as STT prompt hints and never as invented facts." />
-                    </div>
-                    <Input
-                      value={tempConfig.audio_vocabulary ?? ''}
-                      onChange={(e) => updateTemp('audio_vocabulary', e.target.value)}
-                      placeholder="names, acronyms, terms"
-                      disabled={disabled}
-                      className="bg-background/50 h-9 text-xs"
-                    />
-                  </div>
-
-                  <NumberField
-                    label="Low Confidence Threshold"
-                    help="Segments below this confidence get review warnings in transcript metadata and Markdown."
-                    value={tempConfig.audio_low_confidence_threshold ?? 0.65}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(v) => updateTemp('audio_low_confidence_threshold', v)}
-                    disabled={disabled}
-                  />
-                </div>
-
-                <ToggleOption
-                  label="Word Timestamps"
-                  description="Ask the local STT engine for word-level timing when supported. Slower, but improves audit metadata."
-                  checked={tempConfig.audio_word_timestamps ?? false}
-                  onChange={(v) => updateTemp('audio_word_timestamps', v)}
+              <AudioAdvancedSettings
+                  config={tempConfig}
+                  onChange={updateTemp}
                   disabled={disabled}
                 />
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
-                      Batch Context
-                    </label>
-                    <HelpIcon text="Used only to organize multi-audio ZIP output. Transcript evidence remains authoritative." />
-                  </div>
-                  <Input
-                    value={tempConfig.audio_context ?? ''}
-                    onChange={(e) => updateTemp('audio_context', e.target.value)}
-                    placeholder="optional batch context"
-                    disabled={disabled}
-                    className="bg-background/50 h-9 text-xs"
-                  />
-                </div>
               </div>
 
               <hr className="border-border/20" />
