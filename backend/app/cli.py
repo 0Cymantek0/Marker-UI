@@ -33,7 +33,7 @@ from app.agent_api import (
     self_test,
     submit_conversion_job,
 )
-from app.agent_contract import export_json_schemas
+from app.agent_contract import AUDIO_OUTPUT_MODES, export_json_schemas
 from app.errors import ERROR_SCHEMA_VERSION, MarkerError, from_exception
 from app.eval.runner import run_eval
 
@@ -825,7 +825,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--disable-image-extraction", action="store_true")
     parser.add_argument("--page-range")
     parser.add_argument("--lang")
-    parser.add_argument("--audio-output-mode", choices=["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"])
+    parser.add_argument("--audio-output-mode", choices=list(AUDIO_OUTPUT_MODES))
     parser.add_argument("--audio-model")
     parser.add_argument("--audio-vocabulary")
     parser.add_argument("--audio-context")

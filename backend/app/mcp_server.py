@@ -14,7 +14,7 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agent_contract import CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.agent_contract import AUDIO_OUTPUT_MODES, CONTRACT_SCHEMA_VERSION, export_json_schemas
 from app.agent_api import (
     AgentConversionOptions,
     MAX_READ_CHARS,
@@ -518,7 +518,7 @@ async def marker_convert_file(
     disable_image_extraction: Annotated[bool, Field(description="Disable image extraction from documents.", examples=[False])] = False,
     page_range: Annotated[str, Field(description="Page range for PDF conversion. Example: 1-3,5.", examples=["1-3"])] = "",
     lang: Annotated[str, Field(description="OCR language hint.", examples=["eng"])] = "",
-    audio_output_mode: Annotated[str, Field(description="Audio output mode: transcript, enhanced, notes, meeting_notes, or lecture_notes.", examples=["transcript"])] = "",
+    audio_output_mode: Annotated[str, Field(description=f"Audio output mode: {', '.join(AUDIO_OUTPUT_MODES)}.", examples=["transcript"])] = "",
     audio_model: Annotated[str, Field(description="Audio transcription model id.", examples=["base"])] = "",
     audio_vocabulary: TextParam = "",
     audio_context: TextParam = "",
@@ -742,7 +742,7 @@ async def marker_submit_job(
     disable_image_extraction: Annotated[bool, Field(description="Disable image extraction from documents.", examples=[False])] = False,
     page_range: Annotated[str, Field(description="Page range for PDF conversion. Example: 1-3,5.", examples=["1-3"])] = "",
     lang: Annotated[str, Field(description="OCR language hint.", examples=["eng"])] = "",
-    audio_output_mode: Annotated[str, Field(description="Audio output mode: transcript, enhanced, notes, meeting_notes, or lecture_notes.", examples=["transcript"])] = "",
+    audio_output_mode: Annotated[str, Field(description=f"Audio output mode: {', '.join(AUDIO_OUTPUT_MODES)}.", examples=["transcript"])] = "",
     audio_model: Annotated[str, Field(description="Audio transcription model id.", examples=["base"])] = "",
     audio_vocabulary: TextParam = "",
     audio_context: TextParam = "",

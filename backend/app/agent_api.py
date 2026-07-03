@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
-from app.agent_contract import ConversionOptionsModel as AgentConversionOptions
+from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -133,7 +133,7 @@ def capabilities() -> dict[str, Any]:
         "image_handling_modes": ["extraction", "understanding", "both"],
         "ocr_engines": ["surya", "hybrid_ocr"],
         "hybrid_ocr_profiles": ["balanced", "max_accuracy", "low_vram"],
-        "audio_output_modes": ["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"],
+        "audio_output_modes": list(AUDIO_OUTPUT_MODES),
         "converters": converters,
         "agent_guidance": (
             "Use marker_plan_conversion before large PDFs. Use marker_convert_file "
@@ -168,7 +168,7 @@ def build_conversion_config(
     _put_true(config, "disable_image_extraction", options.disable_image_extraction)
     _put(config, "page_range", options.page_range)
     _put(config, "lang", options.lang)
-    if options.audio_output_mode in {"transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"}:
+    if options.audio_output_mode in AUDIO_OUTPUT_MODES:
         config["audio_output_mode"] = options.audio_output_mode
     _put(config, "audio_model", options.audio_model)
     _put(config, "audio_vocabulary", options.audio_vocabulary)

@@ -20,9 +20,27 @@ CONTRACT_SCHEMA_VERSION = "marker.agent_contract.v1"
 OutputFormat = Literal["markdown", "json", "html", "chunks"]
 ImageHandlingMode = Literal["extraction", "understanding", "both"]
 ConversionProfile = Literal["auto", "fast", "high_accuracy"]
-AudioOutputMode = Literal["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"]
+AudioOutputMode = Literal[
+    "transcript",
+    "enhanced",
+    "notes",
+    "meeting_notes",
+    "lecture_notes",
+    "interview_qna",
+    "action_decision_log",
+]
 OcrEngine = Literal["surya", "hybrid_ocr"]
 HybridOcrProfile = Literal["balanced", "max_accuracy", "low_vram"]
+
+AUDIO_OUTPUT_MODES: tuple[AudioOutputMode, ...] = (
+    "transcript",
+    "enhanced",
+    "notes",
+    "meeting_notes",
+    "lecture_notes",
+    "interview_qna",
+    "action_decision_log",
+)
 
 
 class ContractModel(BaseModel):

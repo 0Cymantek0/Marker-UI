@@ -45,6 +45,15 @@ async def test_agent_api_converts_tsv_through_real_service(tmp_path: Path):
     assert Path(result["output"]["text_path"]).read_text(encoding="utf-8") == result["text_preview"]
 
 
+def test_agent_capabilities_and_config_include_frontend_audio_modes():
+    caps = agent_api.capabilities()
+
+    for mode in ("interview_qna", "action_decision_log"):
+        assert mode in caps["audio_output_modes"]
+        config = agent_api.build_conversion_config(AgentConversionOptions(audio_output_mode=mode))
+        assert config["audio_output_mode"] == mode
+
+
 @pytest.mark.asyncio
 async def test_agent_api_plans_text_without_loading_marker(tmp_path: Path):
     source = tmp_path / "notes.txt"

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from app.agent_contract import (
+    AUDIO_OUTPUT_MODES,
     CONTRACT_SCHEMA_VERSION,
     ConversionOptionsModel,
     ConvertResultModel,
@@ -64,6 +65,11 @@ def test_conversion_options_validate_known_enums_and_extra_options():
     assert opts.ocr_engine == "hybrid_ocr"
     assert opts.hybrid_ocr_profile == "low_vram"
     assert opts.extra_options == {"text_data_max_rows": 10}
+
+    for mode in ("interview_qna", "action_decision_log"):
+        audio_opts = ConversionOptionsModel(audio_output_mode=mode)
+        assert audio_opts.audio_output_mode == mode
+        assert mode in AUDIO_OUTPUT_MODES
 
     with pytest.raises(ValueError):
         ConversionOptionsModel(output_format="docx")

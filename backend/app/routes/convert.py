@@ -20,6 +20,7 @@ from starlette.background import BackgroundTask
 import aiofiles
 
 from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
+from app.agent_contract import AUDIO_OUTPUT_MODES
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
 from app.errors import InputNotAllowedError
@@ -392,7 +393,7 @@ async def upload_file(
     disable_image_extraction: bool = Query(False, description="Skip extracting images"),
     page_range: Optional[str] = Query(None, description="Page range e.g. '1-5,8,10-12'"),
     lang: Optional[str] = Query(None, description="Document language hint"),
-    audio_output_mode: Optional[str] = Query(None, description="Audio output: transcript, meeting_notes, lecture_notes, or enhanced"),
+    audio_output_mode: Optional[str] = Query(None, description="Audio output mode."),
     audio_model: Optional[str] = Query(None, description="Local STT model name for faster-whisper"),
     audio_vocabulary: Optional[str] = Query(None, description="Comma/newline-separated vocabulary hints for audio transcription"),
     audio_context: Optional[str] = Query(None, description="Context used only to organize audio batch output"),
@@ -571,15 +572,7 @@ async def upload_file(
         config["page_range"] = page_range
     if lang:
         config["lang"] = lang
-    if audio_output_mode in {
-        "transcript",
-        "enhanced",
-        "notes",
-        "meeting_notes",
-        "lecture_notes",
-        "interview_qna",
-        "action_decision_log",
-    }:
+    if audio_output_mode in AUDIO_OUTPUT_MODES:
         config["audio_output_mode"] = audio_output_mode
     if audio_model:
         config["audio_model"] = audio_model
