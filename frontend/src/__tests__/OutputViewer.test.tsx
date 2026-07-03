@@ -85,6 +85,25 @@ describe('OutputViewer component', () => {
     expect(screen.getByRole('img')).toHaveAttribute('src', '_page_2_Figure_0.jpeg')
   })
 
+  it('blocks external markdown images by default', () => {
+    const md = '![tracker](https://tracker.example/pixel.png)'
+
+    render(<OutputViewer content={md} onDownload={vi.fn()} />)
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByRole('note', { name: /external image blocked for privacy/i })).toBeInTheDocument()
+    expect(screen.getByText('External image blocked')).toBeInTheDocument()
+  })
+
+  it('blocks dangerous markdown image protocols', () => {
+    const md = '![bad](javascript:alert(1))'
+
+    render(<OutputViewer content={md} onDownload={vi.fn()} />)
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByRole('note', { name: /external image blocked for privacy/i })).toBeInTheDocument()
+  })
+
   it('clicking a badge opens the detail modal with type and confidence', () => {
     const md = '![photo](img.jpeg)'
     const meta = [
