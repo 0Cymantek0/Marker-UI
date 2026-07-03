@@ -9,6 +9,7 @@ import '@testing-library/jest-dom'
 const mockUploadFile = vi.fn()
 const mockGetJobEvents = vi.fn()
 const mockDownloadResult = vi.fn()
+const mockCancelJob = vi.fn()
 const mockDeleteJob = vi.fn()
 const mockGetJobStatus = vi.fn()
 const mockGetHistory = vi.fn()
@@ -22,6 +23,7 @@ vi.mock('@/lib/api', () => ({
   uploadFile: (...args: any[]) => mockUploadFile(...args),
   getJobEvents: (...args: any[]) => mockGetJobEvents(...args),
   downloadResult: (...args: any[]) => mockDownloadResult(...args),
+  cancelJob: (...args: any[]) => mockCancelJob(...args),
   deleteJob: (...args: any[]) => mockDeleteJob(...args),
   getJobStatus: (...args: any[]) => mockGetJobStatus(...args),
   getHistory: (...args: any[]) => mockGetHistory(...args),
@@ -59,6 +61,7 @@ describe('ConvertPage Integration with real hook', () => {
       status: 'pending',
       filename: 'test.pdf'
     })
+    mockCancelJob.mockResolvedValue({ status: 'cancelled', job_id: 'job-uuid-123', cancelled: true })
     mockGetJobEvents.mockReturnValue(createMockEventSource())
     mockGetHistory.mockResolvedValue({ jobs: [], total: 0 })
     mockGetCapabilities.mockResolvedValue({
@@ -204,5 +207,46 @@ describe('ConvertPage Integration with real hook', () => {
     })
     // And the card disappears from the queue.
     expect(screen.queryByText('running.pdf')).not.toBeInTheDocument()
+  })
+
+  it('uses the non-destructive cancel endpoint when cancel is clicked', async () => {
+    mockGetHistory.mockResolvedValue({
+      total: 1,
+      jobs: [
+        {
+          id: 'backend-job-10',
+          job_id: 'backend-job-10',
+          filename: 'cancel-only.pdf',
+          status: 'processing',
+          progress: 42,
+          output_format: 'markdown',
+          converter: 'PdfConverter',
+          created_at: '2026-06-14T03:29:54Z',
+          completed_at: null,
+          error_message: null,
+          result_text: null,
+        },
+      ],
+    })
+
+    render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('cancel-only.pdf')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    await waitFor(() => {
+      expect(mockCancelJob).toHaveBeenCalledWith('backend-job-10')
+    })
+    expect(mockDeleteJob).not.toHaveBeenCalled()
+    expect(screen.getByText('Cancelled')).toBeInTheDocument()
   })
 })

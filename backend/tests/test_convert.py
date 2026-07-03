@@ -309,6 +309,35 @@ async def test_download_completed_job_returns_file(
 
 
 @pytest.mark.asyncio
+async def test_cancel_job_marks_cancelled_without_deleting_row(
+    client: AsyncClient, db_session
+):
+    """POST /cancel is non-destructive: row remains for history/status."""
+    job_id = "rest-cancel-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="running.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=42,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/cancel")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "cancelled", "job_id": job_id, "cancelled": True}
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "cancelled"
+    assert row.progress == 0
+
+
+@pytest.mark.asyncio
 async def test_delete_job_removes_from_db(
     client: AsyncClient, db_session
 ):

@@ -5,6 +5,7 @@ import {
   getJobStatus,
   getHistory,
   downloadResult,
+  cancelJob,
   deleteJob,
   regenerateFormat,
   type ConversionConfig,
@@ -557,7 +558,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       if (!job) return prevJobs
 
       if (job.jobId) {
-        deleteJob(job.jobId).catch(() => {})
+        cancelJob(job.jobId).catch(() => {})
       }
 
       return prevJobs.map((j) => {

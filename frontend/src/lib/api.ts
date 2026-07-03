@@ -673,6 +673,10 @@ export async function deleteJob(jobId: string): Promise<void> {
   return request<void>(`/convert/${jobId}`, { method: 'DELETE' })
 }
 
+export async function cancelJob(jobId: string): Promise<{ status: string; job_id: string; cancelled: boolean }> {
+  return request<{ status: string; job_id: string; cancelled: boolean }>(`/convert/${jobId}/cancel`, { method: 'POST' })
+}
+
 export async function browseFolder(): Promise<{ path: string }> {
   return request<{ path: string }>('/convert/browse-folder')
 }

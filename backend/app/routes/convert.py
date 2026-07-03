@@ -1121,6 +1121,46 @@ async def get_history(
 # ------------------------------------------------------------------
 
 
+@router.post("/{job_id}/cancel")
+async def cancel_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Cancel a pending/running conversion job without deleting its record or files."""
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    previous_status = job.status
+    if previous_status in {"completed", "failed", "cancelled"}:
+        return {
+            "status": previous_status,
+            "job_id": job_id,
+            "cancelled": previous_status == "cancelled",
+        }
+
+    from app.main import _app_state
+
+    await _app_state.task_manager.cancel_job(job_id)
+    await db.refresh(job)
+    job.status = "cancelled"
+    job.progress = 0
+    await record_audit_event(
+        db,
+        event_type="job.cancelled",
+        surface="rest",
+        resource_type="job",
+        resource_id=job_id,
+        status="success",
+        payload={"previous_status": previous_status},
+    )
+    await db.commit()
+    return {"status": "cancelled", "job_id": job_id, "cancelled": True}
+
+
 @router.delete("/{job_id}")
 async def delete_job(
     job_id: str,
