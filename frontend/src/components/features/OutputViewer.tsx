@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { ImageUnderstandingBadge } from '@/components/features/image-understanding/ImageUnderstandingBadge'
 import type { ImageUnderstandingMeta } from '@/lib/api'
 
-type OutputTab = 'markdown' | 'html' | 'json' | 'raw' | 'audio'
+type OutputTab = 'markdown' | 'html' | 'json' | 'chunks' | 'raw' | 'audio'
 
 const ALL_TABS: { value: OutputTab; label: string; icon: any; formatKey?: string }[] = [
   { value: 'markdown', label: 'Markdown', icon: FileText, formatKey: 'markdown' },
   { value: 'html', label: 'HTML', icon: Code, formatKey: 'html' },
   { value: 'json', label: 'JSON', icon: Braces, formatKey: 'json' },
+  { value: 'chunks', label: 'Chunks', icon: Braces, formatKey: 'chunks' },
   { value: 'raw', label: 'Raw Text', icon: Eye },
   { value: 'audio', label: 'Audio', icon: Mic },
 ]
@@ -271,6 +272,11 @@ export function OutputViewer({
               </pre>
             )}
             {activeTab === 'json' && (
+              <pre className="whitespace-pre-wrap font-mono text-xs select-text">
+                {activeContent}
+              </pre>
+            )}
+            {activeTab === 'chunks' && (
               <pre className="whitespace-pre-wrap font-mono text-xs select-text">
                 {activeContent}
               </pre>

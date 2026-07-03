@@ -143,21 +143,26 @@ describe('OutputViewer component', () => {
     // HTML and JSON tabs should NOT be in the document
     expect(screen.queryByRole('button', { name: /html/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /chunks/i })).not.toBeInTheDocument()
   })
 
   it('shows backend-provided formats even when filename is not marker multi-format supported', () => {
     render(
       <OutputViewer
         content="# Hello"
-        formats={{ markdown: '# Hello', html: '<h1>Hello</h1>' }}
-        availableFormats={['markdown', 'html']}
+        formats={{ markdown: '# Hello', html: '<h1>Hello</h1>', chunks: '{"chunks":[]}' }}
+        availableFormats={['markdown', 'html', 'chunks']}
         onDownload={vi.fn()}
         filename="document.docx"
       />
     )
 
     expect(screen.getByRole('button', { name: /html/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /chunks/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /chunks/i }))
+    expect(screen.getByText('{"chunks":[]}')).toBeInTheDocument()
   })
 
   it('does not show regeneratable format tabs without a regenerate handler', () => {
@@ -172,6 +177,7 @@ describe('OutputViewer component', () => {
 
     expect(screen.queryByRole('button', { name: /html/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /chunks/i })).not.toBeInTheDocument()
   })
 
   it('calls onRegenerate when a non-cached format tab is clicked', () => {
@@ -189,6 +195,22 @@ describe('OutputViewer component', () => {
     // Click HTML tab
     fireEvent.click(screen.getByRole('button', { name: /html/i }))
     expect(onRegenerate).toHaveBeenCalledWith('html')
+  })
+
+  it('calls onRegenerate when the Chunks tab is clicked', () => {
+    const onRegenerate = vi.fn()
+    render(
+      <OutputViewer
+        content="# Hello"
+        onDownload={vi.fn()}
+        onRegenerate={onRegenerate}
+        filename="document.pdf"
+        formats={{ markdown: '# Hello' }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /chunks/i }))
+    expect(onRegenerate).toHaveBeenCalledWith('chunks')
   })
 
   it('renders an audio inspection tab when audio metadata is available', () => {
