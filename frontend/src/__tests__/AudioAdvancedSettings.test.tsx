@@ -194,4 +194,25 @@ describe('AudioAdvancedSettings', () => {
     expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_enabled', true)
     expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_strength', 1)
   })
+
+  it('disables provider comparison when only one adapter is shipped', async () => {
+    const onChange = vi.fn()
+    mockGetAudioCapabilities.mockResolvedValue([
+      mockCapabilities[0],
+      { ...mockCapabilities[1], available: false },
+    ])
+
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Benchmark / Compare'))
+
+    const compare = screen.getByRole('button', { name: /compare providers/i })
+    expect(compare).toBeDisabled()
+    expect(screen.getByText(/requires at least two shipped transcription adapters/i)).toBeInTheDocument()
+  })
 })
