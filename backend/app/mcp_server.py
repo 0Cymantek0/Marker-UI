@@ -19,6 +19,7 @@ from app.agent_api import (
     AgentConversionOptions,
     MAX_READ_CHARS,
     SERVICE_NAME,
+    cancel_job,
     capabilities,
     convert_document,
     delete_job,
@@ -149,9 +150,9 @@ class DeleteJobOutput(MarkerOutputModel):
 
 
 class CancelJobOutput(MarkerOutputModel):
-    status: str = Field(description="Cancellation status.", examples=["deleted"])
+    status: str = Field(description="Cancellation status.", examples=["cancelled"])
     job_id: str = Field(description="Cancelled job id.", examples=["11111111-1111-4111-8111-111111111111"])
-    cancelled: bool = Field(description="True when cancel/delete request was accepted.", examples=[True])
+    cancelled: bool = Field(description="True when the job was cancelled by this call or was already cancelled.", examples=[True])
 
 
 class SettingsOutput(MarkerOutputModel):
@@ -1035,11 +1036,10 @@ async def marker_get_job_status(
 async def marker_cancel_job(
     job_id: JobIdParam,
 ) -> CancelJobOutput:
-    """Cancel one job best-effort by removing the job record and keeping files."""
+    """Cancel one job best-effort without deleting its job record or files."""
 
     require_mcp_scopes(SCOPE_JOBS_WRITE)
-    result = await delete_job(job_id, delete_files=False)
-    return {"status": result["status"], "job_id": job_id, "cancelled": True}
+    return await cancel_job(job_id)
 
 
 @mcp.tool(

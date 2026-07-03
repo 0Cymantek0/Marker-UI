@@ -16,6 +16,7 @@ from typing import Any
 
 from app.agent_api import (
     AgentConversionOptions,
+    cancel_job,
     capabilities,
     convert_document,
     delete_job,
@@ -287,7 +288,7 @@ def _build_parser() -> argparse.ArgumentParser:
     jobs_delete.add_argument("--keep-files", action="store_true", help="Keep upload/output files")
     jobs_delete.add_argument("--yes", action="store_true", help="Confirm deletion")
     jobs_delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
-    jobs_cancel = jobs_sub.add_parser("cancel", help="Cancel one job best-effort by deleting its job record")
+    jobs_cancel = jobs_sub.add_parser("cancel", help="Cancel one job best-effort without deleting its record")
     jobs_cancel.add_argument("job_id")
     jobs_cancel.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
@@ -489,9 +490,7 @@ def _handle_jobs(args: argparse.Namespace) -> int:
             args.json,
         )
     if command == "cancel":
-        result = asyncio.run(delete_job(args.job_id, delete_files=False))
-        result["cancelled"] = True
-        result["files_removed"] = []
+        result = asyncio.run(cancel_job(args.job_id))
         return _print_result(result, args.json)
     return 2
 

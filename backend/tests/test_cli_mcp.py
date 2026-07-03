@@ -344,6 +344,92 @@ async def test_mcp_delete_job_output_schema_is_files_removed_list(
     assert any(Path(path).name == "deleted.md" for path in result["files_removed"])
 
 
+@pytest.mark.asyncio
+async def test_agent_cancel_job_marks_cancelled_without_deleting_row(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    cancelled_calls: list[str] = []
+
+    async def fake_cancel(job_id: str) -> None:
+        cancelled_calls.append(job_id)
+
+    monkeypatch.setattr(agent_api, "_cancel_job_best_effort", fake_cancel)
+
+    job_id = "33333333-3333-4333-8333-333333333333"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="pending.csv",
+            original_name="pending.csv",
+            status="pending",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=12,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.cancel_job(job_id)
+
+    assert result == {"status": "cancelled", "job_id": job_id, "cancelled": True}
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "cancelled"
+    assert row.progress == 0
+    assert cancelled_calls == [job_id]
+
+
+@pytest.mark.asyncio
+async def test_agent_cancel_job_does_not_cancel_completed_job(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    cancelled_calls: list[str] = []
+
+    async def fake_cancel(job_id: str) -> None:
+        cancelled_calls.append(job_id)
+
+    monkeypatch.setattr(agent_api, "_cancel_job_best_effort", fake_cancel)
+
+    job_id = "44444444-4444-4444-8444-444444444444"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="done.csv",
+            original_name="done.csv",
+            status="completed",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.cancel_job(job_id)
+
+    assert result == {"status": "completed", "job_id": job_id, "cancelled": False}
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "completed"
+    assert row.progress == 100
+    assert cancelled_calls == []
+
+
 def test_mcp_streamable_http_refuses_non_loopback_without_auth_token():
     from app.mcp_server import run
 

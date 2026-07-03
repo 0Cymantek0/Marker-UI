@@ -583,6 +583,39 @@ async def delete_job(job_id: str, *, delete_files: bool = True) -> dict[str, Any
     return {"status": "deleted", "job_id": job_id, "files_removed": removed}
 
 
+async def cancel_job(job_id: str) -> dict[str, Any]:
+    await _ensure_db_tables()
+    async with _db_session_factory() as session:
+        job = await session.get(ConversionJob, job_id)
+        if not job:
+            raise InputNotFoundError(
+                f"Job not found: {job_id}",
+                details={"job_id": job_id},
+            )
+        previous_status = job.status
+        if previous_status in {"completed", "failed", "cancelled"}:
+            return {
+                "status": previous_status,
+                "job_id": job_id,
+                "cancelled": previous_status == "cancelled",
+            }
+        await _cancel_job_best_effort(job_id)
+        await session.refresh(job)
+        job.status = "cancelled"
+        job.progress = 0
+        await record_audit_event(
+            session,
+            event_type="job.cancelled",
+            surface="agent",
+            resource_type="job",
+            resource_id=job_id,
+            status="success",
+            payload={"previous_status": previous_status},
+        )
+        await session.commit()
+    return {"status": "cancelled", "job_id": job_id, "cancelled": True}
+
+
 async def list_settings(*, category: str | None = None) -> dict[str, Any]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
