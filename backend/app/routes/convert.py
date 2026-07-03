@@ -21,7 +21,7 @@ import aiofiles
 
 from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
 from app.agent_contract import AUDIO_OUTPUT_MODES
-from app.conversion.formats import OUTPUT_FORMAT_SET, OUTPUT_FORMATS_DESCRIPTION
+from app.conversion.formats import OUTPUT_FORMAT_SET, OUTPUT_FORMATS_DESCRIPTION, UPLOAD_ALLOWED_EXTENSIONS
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
 from app.errors import InputNotAllowedError, UnsupportedFormatError
@@ -43,14 +43,7 @@ from app.services.output_format_policy import require_supported_output_formats
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_EXTENSIONS = {
-    ".pdf", ".docx", ".pptx", ".msg", ".xlsx", ".xls", ".epub", ".html",
-    ".htm", ".csv", ".tsv", ".json", ".jsonl", ".txt", ".md", ".rst",
-    ".log", ".xml", ".rss", ".atom", ".ipynb", ".zip",
-    ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac",
-    ".mp4", ".mov", ".mkv", ".webm", ".avi",
-    ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp"
-}
+ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
 MAX_PAGE_RANGE_PAGES = 500
 HARD_MAX_PAGE_RANGE_PAGES = 2000
 

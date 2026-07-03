@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
-from app.conversion.formats import OUTPUT_FORMATS
+from app.conversion.formats import OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -34,7 +34,6 @@ from app.errors import (
 from app.models.job import ConversionJob
 from app.models.settings import Setting
 from app.routes.convert import (
-    ALLOWED_EXTENSIONS,
     _planned_mixed_segments,
     _validate_page_range,
 )
@@ -54,6 +53,7 @@ from app.utils.secrets import decrypt_value, encrypt_value, is_masked, is_sensit
 
 
 SERVICE_NAME = "marker_mcp"
+ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
 TOOL_NAMES = [
     "marker_list_capabilities",
     "marker_plan_conversion",

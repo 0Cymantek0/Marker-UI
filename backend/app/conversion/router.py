@@ -9,147 +9,25 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.conversion.formats import INPUT_FORMATS
 from app.conversion.probe import PdfProbeResult
 from app.conversion.result import ConverterPlan
 from app.conversion.stream_info import StreamInfo
 
-# ---------------------------------------------------------------------------
-# Routing table
-#
-# Maps file extensions to (engine, label, needs_marker, needs_gpu, confidence).
-# The router picks the first match.  Unknown extensions fall through to a
-# low-confidence marker_pdf fallback.
-# ---------------------------------------------------------------------------
-
-_ROUTE_TABLE: list[tuple[frozenset[str], str, str, bool, bool, float]] = [
-    # (extensions, engine, label, needs_marker_models, needs_gpu, confidence)
-    (
-        frozenset({".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp", ".gif"}),
-        "marker_pdf",
-        "Marker Image OCR",
-        True,
-        True,
-        1.0,
-    ),
-    (
-        frozenset({".epub"}),
-        "marker_pdf",
-        "Marker EPUB",
-        True,
-        True,
-        1.0,
-    ),
-    (
-        frozenset({".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac"}),
-        "audio",
-        "Local Audio Transcript",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"}),
-        "video",
-        "Local Video Timeline",
-        False,
-        False,
-        0.90,
-    ),
-    (
-        frozenset({".docx"}),
-        "office_docx",
-        "Fast Office (Word)",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".pptx"}),
-        "office_pptx",
-        "Fast Office (PowerPoint)",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".msg"}),
-        "outlook_msg",
-        "Outlook MSG",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".xlsx", ".xls"}),
-        "spreadsheet",
-        "Fast Spreadsheet",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".csv", ".tsv"}),
-        "text_data",
-        "Text / Data",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".json", ".jsonl"}),
-        "text_data",
-        "Text / Data (JSON)",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".xml", ".rss", ".atom"}),
-        "xml_rss",
-        "XML / RSS",
-        False,
-        False,
-        0.90,
-    ),
-    (
-        frozenset({".html", ".htm"}),
-        "html",
-        "HTML",
-        False,
-        False,
-        0.90,
-    ),
-    (
-        frozenset({".txt", ".md", ".rst", ".log"}),
-        "text_data",
-        "Plain Text",
-        False,
-        False,
-        1.0,
-    ),
-    (
-        frozenset({".ipynb"}),
-        "notebook",
-        "Jupyter Notebook",
-        False,
-        False,
-        0.95,
-    ),
-    (
-        frozenset({".zip"}),
-        "archive",
-        "Archive (ZIP)",
-        False,  # depends on contents — conservative default
-        False,
-        0.90,
-    ),
-]
-
-# Pre-built lookup for O(1) extension matching.
-_EXT_TO_ENTRY: dict[str, tuple[str, str, bool, bool, float]] = {}
-for _exts, _engine, _label, _marker, _gpu, _conf in _ROUTE_TABLE:
-    for _ext in _exts:
-        _EXT_TO_ENTRY[_ext] = (_engine, _label, _marker, _gpu, _conf)
+# Pre-built lookup for O(1) extension matching. PDF still routes through
+# _plan_pdf because probe/config can choose LiteParse or Marker.
+_EXT_TO_ENTRY = {
+    ext: (
+        spec.engine,
+        spec.label,
+        spec.needs_marker_models,
+        spec.needs_gpu,
+        spec.confidence,
+    )
+    for spec in INPUT_FORMATS
+    for ext in spec.extensions
+    if ext != ".pdf"
+}
 
 _ENGINE_META: dict[str, tuple[str, bool, bool, float]] = {
     "marker_pdf": ("Marker PDF", True, True, 1.0),
@@ -168,20 +46,15 @@ _ENGINE_META: dict[str, tuple[str, bool, bool, float]] = {
 }
 
 _ENGINE_COMPATIBLE_EXTS: dict[str, frozenset[str]] = {
-    "marker_pdf": frozenset({".pdf", ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp", ".gif", ".epub"}),
-    "audio": frozenset({".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac"}),
-    "video": frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"}),
-    "liteparse_pdf": frozenset({".pdf"}),
-    "office_docx": frozenset({".docx"}),
-    "office_pptx": frozenset({".pptx"}),
-    "outlook_msg": frozenset({".msg"}),
-    "spreadsheet": frozenset({".xlsx", ".xls"}),
-    "text_data": frozenset({".csv", ".tsv", ".json", ".jsonl", ".txt", ".md", ".rst", ".log"}),
-    "xml_rss": frozenset({".xml", ".rss", ".atom"}),
-    "html": frozenset({".html", ".htm"}),
-    "notebook": frozenset({".ipynb"}),
-    "archive": frozenset({".zip"}),
+    engine: frozenset(
+        ext
+        for spec in INPUT_FORMATS
+        if spec.engine == engine
+        for ext in spec.extensions
+    )
+    for engine in _ENGINE_META
 }
+_ENGINE_COMPATIBLE_EXTS["liteparse_pdf"] = frozenset({".pdf"})
 
 
 def _converter_short_name(value: Any) -> str:

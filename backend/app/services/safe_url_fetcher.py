@@ -12,49 +12,11 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import aiofiles
 import httpx
 
+from app.conversion.formats import CONTENT_TYPE_EXTENSION_MAP
 from app.core.config import MAX_UPLOAD_SIZE, SOURCE_URL_ALLOWLIST
 
 
 MAX_URL_REDIRECTS = 5
-
-_CONTENT_TYPE_EXTENSIONS = {
-    "application/pdf": ".pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-    "application/vnd.ms-excel": ".xls",
-    "application/vnd.ms-outlook": ".msg",
-    "application/zip": ".zip",
-    "text/html": ".html",
-    "application/xhtml+xml": ".html",
-    "text/csv": ".csv",
-    "text/tab-separated-values": ".tsv",
-    "application/json": ".json",
-    "application/x-ndjson": ".jsonl",
-    "application/xml": ".xml",
-    "text/xml": ".xml",
-    "text/plain": ".txt",
-    "text/markdown": ".md",
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "image/tiff": ".tiff",
-    "image/bmp": ".bmp",
-    "image/gif": ".gif",
-    "audio/wav": ".wav",
-    "audio/x-wav": ".wav",
-    "audio/mpeg": ".mp3",
-    "audio/mp4": ".m4a",
-    "audio/x-m4a": ".m4a",
-    "audio/flac": ".flac",
-    "audio/ogg": ".ogg",
-    "audio/aac": ".aac",
-    "video/mp4": ".mp4",
-    "video/quicktime": ".mov",
-    "video/x-matroska": ".mkv",
-    "video/webm": ".webm",
-    "video/x-msvideo": ".avi",
-}
 
 
 class SafeUrlFetchError(Exception):
@@ -186,7 +148,7 @@ def extension_for_download(
     header_name = _filename_from_content_disposition(headers.get("content-disposition"))
     path_name = Path(urlparse(url).path).name
     filename = header_name or path_name or "download"
-    ext_from_type = _CONTENT_TYPE_EXTENSIONS.get(content_type)
+    ext_from_type = CONTENT_TYPE_EXTENSION_MAP.get(content_type)
     ext_from_name = Path(filename).suffix.lower()
     suffix = ext_from_type or ext_from_name
     if suffix not in allowed_extensions:

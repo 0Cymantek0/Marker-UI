@@ -68,7 +68,7 @@ async def upload_client(upload_session):
 class TestUploadExtensionAllowlist:
     @pytest.mark.parametrize(
         "ext",
-        [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp", ".tsv", ".xls", ".msg", ".wav", ".mp4"],
+        [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp", ".gif", ".tsv", ".xls", ".msg", ".wav", ".mp4"],
     )
     @pytest.mark.asyncio
     async def test_allowed_extensions_accepted(self, upload_client: AsyncClient, ext: str):
