@@ -19,6 +19,8 @@ from typing import Any
 from app.audio.ingest import probe_audio
 from app.audio.pipeline import (
     AudioTranscript,
+    append_contradiction_section,
+    detect_possible_contradictions,
     normalize_transcript,
     render_enhanced_markdown,
     render_transcript_markdown,
@@ -115,6 +117,13 @@ class AudioConverter(BaseConverter):
                 template=enhancement_plan["template"],
                 context=config.get("audio_context"),
             )
+        contradictions = (
+            detect_possible_contradictions(transcript)
+            if _truthy(config.get("audio_contradiction_detection"))
+            else []
+        )
+        if contradictions:
+            text = append_contradiction_section(text, contradictions)
 
         transcript_text = " ".join(segment.text for segment in transcript.segments)
         vocab_report = vocabulary_report(
@@ -152,6 +161,7 @@ class AudioConverter(BaseConverter):
                     "vocabulary": vocab_report,
                     "quality": _audio_quality(transcript),
                     "speakers": _speaker_metadata(transcript, config),
+                    "contradictions": contradictions,
                     "enhancement": {
                         "mode": output_mode,
                         "template": enhancement_plan["template"],

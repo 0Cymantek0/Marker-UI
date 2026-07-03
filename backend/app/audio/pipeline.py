@@ -14,6 +14,70 @@ from typing import Any
 
 
 _WORDS_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+_NEGATION_WORDS = frozenset({
+    "no",
+    "not",
+    "never",
+    "cannot",
+    "cant",
+    "won",
+    "wont",
+    "didn",
+    "didnt",
+    "isn",
+    "isnt",
+    "aren",
+    "arent",
+    "false",
+    "reject",
+    "rejected",
+    "blocked",
+    "failed",
+    "cancelled",
+    "canceled",
+})
+_AFFIRMATION_WORDS = frozenset({
+    "yes",
+    "true",
+    "can",
+    "will",
+    "is",
+    "are",
+    "approved",
+    "approve",
+    "accepted",
+    "accept",
+    "passed",
+    "pass",
+    "complete",
+    "completed",
+    "ready",
+})
+_STOPWORDS = frozenset({
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "for",
+    "from",
+    "i",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "we",
+    "with",
+    "you",
+})
 
 
 @dataclass(frozen=True)
@@ -214,6 +278,25 @@ def render_transcript_markdown(transcript: AudioTranscript, *, title: str) -> st
     return "\n".join(lines).strip()
 
 
+def append_contradiction_section(text: str, contradictions: list[dict[str, Any]]) -> str:
+    """Append conservative possible-contradiction findings with source refs."""
+
+    if not contradictions:
+        return text
+    lines = [text.rstrip(), "", "## Possible Contradictions", ""]
+    for item in contradictions:
+        left = item["left"]
+        right = item["right"]
+        terms = ", ".join(item.get("shared_terms") or [])
+        lines.append(
+            "- Opposing polarity with shared terms"
+            f"{f' ({terms})' if terms else ''}: "
+            f"`{left['segment_id']}` {left['text']} [{left['source_ref']}] vs "
+            f"`{right['segment_id']}` {right['text']} [{right['source_ref']}]"
+        )
+    return "\n".join(lines).strip()
+
+
 def render_enhanced_markdown(
     transcript: AudioTranscript,
     *,
@@ -295,6 +378,80 @@ def build_extractive_notes(transcript: AudioTranscript) -> dict[str, list[str]]:
         "key_points": key_points,
         "actions": actions,
         "questions": questions,
+    }
+
+
+def detect_possible_contradictions(transcript: AudioTranscript) -> list[dict[str, Any]]:
+    """Find obvious opposing claims without pretending to prove truth.
+
+    The detector is intentionally conservative: it only compares segments that
+    have explicit positive/negative polarity and at least two shared meaningful
+    terms. The output is a review queue, not an auto-resolution.
+    """
+
+    candidates = [
+        {
+            "segment": segment,
+            "tokens": _meaningful_tokens(segment.text),
+            "polarity": _segment_polarity(segment.text),
+        }
+        for segment in transcript.segments
+        if segment.text
+    ]
+    findings: list[dict[str, Any]] = []
+    for left_index, left in enumerate(candidates):
+        if left["polarity"] == "neutral":
+            continue
+        for right in candidates[left_index + 1 :]:
+            if right["polarity"] == "neutral" or left["polarity"] == right["polarity"]:
+                continue
+            shared = sorted(left["tokens"] & right["tokens"])
+            if len(shared) < 2:
+                continue
+            findings.append(
+                {
+                    "type": "opposing_polarity_shared_terms",
+                    "shared_terms": shared[:8],
+                    "left": _contradiction_segment_payload(left["segment"]),
+                    "right": _contradiction_segment_payload(right["segment"]),
+                }
+            )
+    return findings
+
+
+def _segment_polarity(text: str) -> str:
+    tokens = set(_WORDS_RE.findall(text.lower()))
+    has_negative = bool(tokens & _NEGATION_WORDS)
+    has_positive = bool(tokens & _AFFIRMATION_WORDS)
+    if has_negative and not has_positive:
+        return "negative"
+    if has_positive and not has_negative:
+        return "positive"
+    if has_negative and has_positive:
+        # "not approved" should stay negative.
+        return "negative"
+    return "neutral"
+
+
+def _meaningful_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in _WORDS_RE.findall(text.lower())
+        if (
+            len(token) > 2
+            and token not in _STOPWORDS
+            and token not in _NEGATION_WORDS
+            and token not in _AFFIRMATION_WORDS
+        )
+    }
+
+
+def _contradiction_segment_payload(segment: AudioSegment) -> dict[str, Any]:
+    return {
+        "segment_id": segment.segment_id,
+        "source_ref": segment.source_ref(),
+        "speaker": segment.speaker,
+        "text": segment.text,
     }
 
 

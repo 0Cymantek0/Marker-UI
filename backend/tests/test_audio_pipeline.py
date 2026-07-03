@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from app.audio.pipeline import (
+    append_contradiction_section,
     build_multi_audio_document,
+    detect_possible_contradictions,
     normalize_transcript,
     render_enhanced_markdown,
 )
@@ -69,6 +71,32 @@ def test_enhanced_markdown_builds_extractively_with_source_refs() -> None:
     assert "## Questions" in text
     assert "What is next? [call.wav 00:01.000-00:02.000 speaker_0 | `call_seg_0002`]" in text
     assert "## Original Transcript" in text
+
+
+def test_possible_contradictions_require_opposing_polarity_and_shared_terms() -> None:
+    transcript = normalize_transcript(
+        {
+            "duration": 3.0,
+            "segments": [
+                {"start": 0.0, "end": 1.0, "text": "The deployment is approved for Friday", "confidence": 0.9},
+                {"start": 1.0, "end": 2.0, "text": "The deployment is not approved for Friday", "confidence": 0.9},
+                {"start": 2.0, "end": 3.0, "text": "Budget review happens next week", "confidence": 0.9},
+            ],
+        },
+        source_label="meeting.wav",
+    )
+
+    findings = detect_possible_contradictions(transcript)
+
+    assert len(findings) == 1
+    assert findings[0]["type"] == "opposing_polarity_shared_terms"
+    assert findings[0]["left"]["segment_id"] == "meeting_seg_0001"
+    assert findings[0]["right"]["segment_id"] == "meeting_seg_0002"
+    assert "deployment" in findings[0]["shared_terms"]
+
+    rendered = append_contradiction_section("# Notes", findings)
+    assert "## Possible Contradictions" in rendered
+    assert "meeting_seg_0001" in rendered
 
 
 def test_multi_audio_builder_reports_relationship_evidence_and_batch_risk() -> None:

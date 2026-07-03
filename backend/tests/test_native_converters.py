@@ -429,6 +429,47 @@ def test_audio_structural_enhancement_uses_requested_template(monkeypatch, tmp_p
     assert result.metadata["audio"]["enhancement"]["template"] == "meeting_notes"
 
 
+def test_audio_contradiction_detection_adds_review_findings(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "decision.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 2.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "The launch is approved today", "confidence": 0.9},
+                        {"start": 1.0, "end": 2.0, "text": "The launch is not approved today", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.build_provider",
+        lambda provider_id: FakeProvider(),
+    )
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.probe_audio",
+        lambda filepath: {"available": True},
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {"audio_contradiction_detection": True},
+    )
+
+    assert "## Possible Contradictions" in result.text
+    findings = result.metadata["audio"]["contradictions"]
+    assert len(findings) == 1
+    assert findings[0]["left"]["segment_id"] == "decision_seg_0001"
+    assert findings[0]["right"]["segment_id"] == "decision_seg_0002"
+
+
 def test_audio_transcribe_passes_vocabulary_and_word_timestamp_options(monkeypatch, tmp_path: Path) -> None:
     seen: dict[str, object] = {}
 
