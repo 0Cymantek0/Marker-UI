@@ -1218,6 +1218,100 @@ async def test_upload_accepts_audio_config_blob(client: AsyncClient, db_session)
 
 
 @pytest.mark.asyncio
+async def test_upload_accepts_all_frontend_audio_output_modes(client: AsyncClient, db_session):
+    """REST allow-list must match the frontend audio output style cards."""
+
+    for mode in ("interview_qna", "action_decision_log"):
+        resp = await _upload_file(client, extra_params={"audio_output_mode": mode})
+        assert resp.status_code == 200
+        job_id = resp.json()["job_id"]
+
+        stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+        job = (await db_session.execute(stmt)).scalar_one()
+        cfg = json.loads(job.config_json)
+        assert cfg["audio_output_mode"] == mode
+
+
+@pytest.mark.asyncio
+async def test_upload_resolves_audio_vocabulary_pack_ids(client: AsyncClient, db_session):
+    """Saved pack ids are converted to terms before the audio converter runs."""
+
+    from app.models.settings import Setting
+
+    db_session.add(
+        Setting(
+            key="audio_vocabulary_packs",
+            category="audio",
+            value=json.dumps(
+                [
+                    {"id": "team", "name": "Team", "terms": ["Marker", "LiteParse"]},
+                    {"id": "unused", "name": "Unused", "terms": ["DoNotSend"]},
+                ]
+            ),
+        )
+    )
+    await db_session.commit()
+
+    resp = await _upload_file(
+        client,
+        extra_params={"audio_config": json.dumps({"audio_vocabulary_pack_ids": ["team"]})},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db_session.execute(stmt)).scalar_one()
+    cfg = json.loads(job.config_json)
+    assert cfg["audio_vocabulary_pack_ids"] == ["team"]
+    assert cfg["audio_vocabulary_packs"] == [["Marker", "LiteParse"]]
+
+
+@pytest.mark.asyncio
+async def test_status_surfaces_audio_metadata(client: AsyncClient, db_session):
+    """Completed audio jobs expose transcript metadata for the audio preview UI."""
+
+    job = ConversionJob(
+        id="job-audio-meta",
+        filename="voice.wav",
+        original_name="voice.wav",
+        status="completed",
+        input_format="wav",
+        output_format="markdown",
+        result_text="# Audio Transcript",
+        result_metadata_json=json.dumps(
+            {
+                "audio": {
+                    "transcript": {
+                        "provider": "local_faster_whisper",
+                        "model": "tiny.en",
+                        "segments": [
+                            {
+                                "segment_id": "voice_seg_0001",
+                                "start_ms": 0,
+                                "end_ms": 1000,
+                                "speaker": "speaker_0",
+                                "text": "hello",
+                                "confidence": 0.9,
+                                "warnings": [],
+                            }
+                        ],
+                    },
+                    "quality": {"review_required": False},
+                }
+            }
+        ),
+        progress=100,
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get("/api/convert/status/job-audio-meta")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["conversion_metadata"]["audio"]["transcript"]["segments"][0]["text"] == "hello"
+
+
+@pytest.mark.asyncio
 async def test_upload_rejects_invalid_audio_config_json(client: AsyncClient):
     """Malformed audio_config JSON is rejected with a 400, not silently ignored."""
     resp = await _upload_file(

@@ -108,20 +108,23 @@ class ArchiveConverter(BaseConverter):
                 )
                 lines.extend(["", "## Audio Batch Document", "", batch_text])
 
+        metadata: dict[str, Any] = {
+            "engine_detail": {
+                "format": "zip",
+                "inlined_files": inlined,
+                "converted_children": sum(1 for item in manifest if item["action"] == "converted"),
+                "skipped_children": sum(1 for item in manifest if item["action"] == "skipped"),
+                "failed_children": sum(1 for item in manifest if item["action"] == "failed"),
+                "manifest": manifest,
+                "audio_batch": audio_batch_metadata,
+            }
+        }
+        if audio_batch_metadata:
+            metadata["audio_batch"] = audio_batch_metadata
         return UniversalConversionResult(
             text="\n".join(lines).strip(),
             extension="md",
-            metadata={
-                "engine_detail": {
-                    "format": "zip",
-                    "inlined_files": inlined,
-                    "converted_children": sum(1 for item in manifest if item["action"] == "converted"),
-                    "skipped_children": sum(1 for item in manifest if item["action"] == "skipped"),
-                    "failed_children": sum(1 for item in manifest if item["action"] == "failed"),
-                    "manifest": manifest,
-                    "audio_batch": audio_batch_metadata,
-                }
-            },
+            metadata=metadata,
         )
 
 

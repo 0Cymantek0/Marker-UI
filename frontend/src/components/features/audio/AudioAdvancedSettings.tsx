@@ -77,8 +77,9 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
   const cap = capabilities.find((c) => c.provider_id === activeProvider)
   const isCloud = cap?.cloud ?? false
 
-  const providerOptions = capabilities.length > 0
-    ? capabilities.map((c) => ({
+  const selectableCapabilities = capabilities.filter((c) => c.available !== false)
+  const providerOptions = selectableCapabilities.length > 0
+    ? selectableCapabilities.map((c) => ({
         value: c.provider_id,
         label: `${c.provider_label}${c.cloud ? ' (cloud)' : ''}`,
       }))
@@ -123,6 +124,9 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             />
             {isCloud && (
               <CloudBadge />
+            )}
+            {cap?.available === false && (
+              <ProviderWarning message={`${cap.provider_label} is listed for future support but its adapter is not shipped in this build.`} />
             )}
           </div>
 

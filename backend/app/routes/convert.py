@@ -186,10 +186,84 @@ def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | No
         return None
     metadata = {
         key: parsed[key]
-        for key in ("engine", "probe_result", "mixed_engine_segments", "hybrid_ocr", "assets", "manifest_path")
+        for key in (
+            "engine",
+            "probe_result",
+            "mixed_engine_segments",
+            "hybrid_ocr",
+            "audio",
+            "audio_batch",
+            "video",
+            "assets",
+            "manifest_path",
+        )
         if key in parsed and parsed[key]
     }
     return metadata or None
+
+
+async def _resolve_audio_vocabulary_packs(
+    db: AsyncSession,
+    pack_ids: Any,
+) -> list[list[str]]:
+    """Resolve saved vocabulary pack ids into term lists for conversion.
+
+    The UI sends stable ids, while the audio prompt compiler consumes terms.
+    Missing ids are ignored so stale presets degrade without failing a job.
+    """
+
+    if not isinstance(pack_ids, list):
+        return []
+    requested = {str(item) for item in pack_ids if str(item).strip()}
+    if not requested:
+        return []
+    from app.models.settings import Setting
+
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_vocabulary_packs"))
+    ).scalar_one_or_none()
+    if not row:
+        return []
+    try:
+        packs = json.loads(row.value)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(packs, list):
+        return []
+    resolved: list[list[str]] = []
+    for pack in packs:
+        if not isinstance(pack, dict) or str(pack.get("id")) not in requested:
+            continue
+        terms = [str(term).strip() for term in pack.get("terms") or [] if str(term).strip()]
+        if terms:
+            resolved.append(terms)
+    return resolved
+
+
+async def _load_active_audio_defaults(db: AsyncSession) -> dict[str, str]:
+    """Return active audio provider/model defaults from settings, if present."""
+
+    from app.models.settings import Setting
+
+    row = (
+        await db.execute(select(Setting).where(Setting.key == "audio_active_provider"))
+    ).scalar_one_or_none()
+    if not row:
+        return {}
+    try:
+        data = json.loads(row.value)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    defaults: dict[str, str] = {}
+    provider = str(data.get("provider_id") or "").strip()
+    model = str(data.get("model_id") or "").strip()
+    if provider:
+        defaults["audio_provider"] = provider
+    if model:
+        defaults["audio_model"] = model
+    return defaults
 
 
 def _parse_available_formats(job: ConversionJob) -> list[str]:
@@ -497,7 +571,15 @@ async def upload_file(
         config["page_range"] = page_range
     if lang:
         config["lang"] = lang
-    if audio_output_mode in {"transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"}:
+    if audio_output_mode in {
+        "transcript",
+        "enhanced",
+        "notes",
+        "meeting_notes",
+        "lecture_notes",
+        "interview_qna",
+        "action_decision_log",
+    }:
         config["audio_output_mode"] = audio_output_mode
     if audio_model:
         config["audio_model"] = audio_model
@@ -532,6 +614,15 @@ async def upload_file(
                 continue
             # Flat params already won; never let the blob clobber them.
             config.setdefault(key, value)
+    active_audio_defaults = await _load_active_audio_defaults(db)
+    for key, value in active_audio_defaults.items():
+        config.setdefault(key, value)
+    resolved_vocab_packs = await _resolve_audio_vocabulary_packs(
+        db,
+        config.get("audio_vocabulary_pack_ids"),
+    )
+    if resolved_vocab_packs:
+        config["audio_vocabulary_packs"] = resolved_vocab_packs
     if disable_multiprocessing:
         config["disable_multiprocessing"] = True
     if strip_existing_ocr:

@@ -142,4 +142,43 @@ describe('OutputViewer component', () => {
     fireEvent.click(screen.getByRole('button', { name: /html/i }))
     expect(onRegenerate).toHaveBeenCalledWith('html')
   })
+
+  it('renders an audio inspection tab when audio metadata is available', () => {
+    render(
+      <OutputViewer
+        content="# Audio"
+        onDownload={vi.fn()}
+        filename="voice.wav"
+        audioMetadata={{
+          transcript: {
+            provider: 'local_faster_whisper',
+            model: 'tiny.en',
+            segments: [
+              {
+                segment_id: 'voice_seg_0001',
+                start_ms: 0,
+                end_ms: 1200,
+                speaker: 'speaker_0',
+                text: 'hello audio world',
+                confidence: 0.92,
+                warnings: [],
+              },
+            ],
+          },
+          quality: { review_required: false },
+          speakers: {
+            timeline: [{ speaker: 'speaker_0', display_label: 'Speaker 0', segment_count: 1 }],
+          },
+          vocabulary: { requested_count: 1, detected_count: 1, detected: ['Marker'] },
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /audio/i }))
+
+    expect(screen.getByText('Confidence Timeline')).toBeInTheDocument()
+    expect(screen.getByText('hello audio world')).toBeInTheDocument()
+    expect(screen.getByText(/local_faster_whisper/i)).toBeInTheDocument()
+    expect(screen.getByText(/Hits: Marker/i)).toBeInTheDocument()
+  })
 })

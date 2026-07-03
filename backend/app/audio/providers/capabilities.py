@@ -214,4 +214,12 @@ def cap_to_dict(cap: ProviderCapability) -> dict[str, object]:
 
 def capabilities_payload() -> list[dict[str, object]]:
     """Serialize the whole matrix for the settings/capability API."""
-    return [cap_to_dict(cap) for cap in list_capabilities()]
+    from app.audio.providers.registry import available_provider_ids
+
+    available = set(available_provider_ids())
+    payload = []
+    for cap in list_capabilities():
+        row = cap_to_dict(cap)
+        row["available"] = cap.provider_id in available
+        payload.append(row)
+    return payload

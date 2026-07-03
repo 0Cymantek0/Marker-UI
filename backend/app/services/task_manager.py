@@ -1003,6 +1003,12 @@ class TaskManager:
             result_metadata["probe_result"] = metadata["probe_result"]
         if metadata.get("mixed_engine_segments"):
             result_metadata["mixed_engine_segments"] = metadata["mixed_engine_segments"]
+        if metadata.get("audio"):
+            result_metadata["audio"] = metadata["audio"]
+        if metadata.get("audio_batch"):
+            result_metadata["audio_batch"] = metadata["audio_batch"]
+        if metadata.get("video"):
+            result_metadata["video"] = metadata["video"]
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
         output_format = config.get("output_format", "markdown")
         original_name = config.get("original_name", "output")

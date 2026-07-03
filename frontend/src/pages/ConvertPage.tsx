@@ -770,6 +770,7 @@ export function ConvertPage() {
                     onRegenerate={(fmt) => regenerateJobFormat(selectedJob.id, fmt)}
                     onDownload={(fmt) => download(selectedJob.id, fmt)}
                     imageUnderstanding={selectedJob.imageUnderstanding}
+                    audioMetadata={selectedJob.conversionMetadata?.audio ?? selectedJob.conversionMetadata?.audio_batch ?? null}
                     filename={selectedJob.filename}
                   />
                 </div>
