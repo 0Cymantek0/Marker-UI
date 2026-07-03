@@ -102,7 +102,7 @@ def register_mcp_resources(
         "marker://jobs/{job_id}/output",
         name="marker_job_output",
         title="Marker Job Output",
-        description="First output text chunk associated with a completed job.",
+        description="First bounded offset page of output text associated with a completed job.",
         mime_type="text/plain",
     )
     async def marker_job_output_resource(job_id: str) -> str:

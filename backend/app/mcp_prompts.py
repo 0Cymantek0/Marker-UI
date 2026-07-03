@@ -9,7 +9,7 @@ def register_mcp_prompts(mcp: Any) -> None:
     @mcp.prompt(
         name="convert_for_rag",
         title="Convert For RAG",
-        description="Plan and convert a document into chunk-friendly Markdown for retrieval.",
+        description="Plan and convert a document for retrieval with honest format support.",
     )
     def convert_for_rag(
         input_path: str,
@@ -20,7 +20,8 @@ def register_mcp_prompts(mcp: Any) -> None:
         return (
             f"Convert `{input_path}` for RAG into `{output_dir}` using quality `{quality}`. "
             f"Keep allow_cloud_vlm={allow_cloud_vlm}. Call capabilities, plan, convert or submit, "
-            "then read output chunks and return manifest path, warnings, and retrieval notes."
+            "request output_format=chunks only for Marker-backed sources that support it; otherwise read Markdown "
+            "with bounded offset pages. Return manifest path, warnings, and retrieval notes."
         )
 
     @mcp.prompt(
