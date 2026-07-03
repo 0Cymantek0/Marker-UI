@@ -662,6 +662,30 @@ describe('ConvertPage component', () => {
       })
     })
 
+    it('keeps saved chunks output format for native sources', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['chunks'] }))
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock select TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('chunks')
+      })
+    })
+
     it('requires every selected source to support multi-format rendering', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [],

@@ -919,7 +919,7 @@ class TaskManager:
             formats_requested = _resolve_requested_formats(config)
             formats_envelopes: dict[str, dict[str, Any]] | None = None
             if (
-                len(formats_requested) > 1
+                (len(formats_requested) > 1 or formats_requested[0] != "markdown")
                 and conversion_service.supports_multiple_formats(filepath, dict(config))
             ):
                 formats_envelopes = conversion_service.convert_file_formats(

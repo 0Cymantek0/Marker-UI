@@ -20,8 +20,8 @@ def register_mcp_prompts(mcp: Any) -> None:
         return (
             f"Convert `{input_path}` for RAG into `{output_dir}` using quality `{quality}`. "
             f"Keep allow_cloud_vlm={allow_cloud_vlm}. Call capabilities, plan, convert or submit, "
-            "request output_format=chunks only for Marker-backed sources that support it; otherwise read Markdown "
-            "with bounded offset pages. Return manifest path, warnings, and retrieval notes."
+            "request output_format=chunks for native Markdown-derived chunks or Marker-backed native chunks; "
+            "otherwise read Markdown with bounded offset pages. Return manifest path, warnings, and retrieval notes."
         )
 
     @mcp.prompt(

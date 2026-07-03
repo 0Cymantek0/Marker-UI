@@ -463,6 +463,43 @@ class TestProcessJobStatus:
         assert task_manager.get_status("p2")["status"] == "failed"
 
 
+def test_run_conversion_uses_format_renderer_for_single_chunks_request(task_manager: TaskManager):
+    calls: list[tuple[str, list[str]]] = []
+
+    class FakeConversionService:
+        def supports_multiple_formats(self, filepath, config):
+            return True
+
+        def convert_file_formats(self, filepath, config, formats, device=None):
+            calls.append((filepath, list(formats)))
+            return {
+                "chunks": {
+                    "text": '{"chunks": []}',
+                    "extension": "json",
+                    "images": {},
+                    "metadata": {},
+                }
+            }
+
+        def convert_file(self, filepath, config, device=None):
+            raise AssertionError("single chunks request must use convert_file_formats")
+
+    async def fake_finalize(job_id, result, config, formats_payload=None):
+        assert result["extension"] == "json"
+        assert formats_payload is not None
+
+    with patch.object(task_manager, "_finalize_job", new=fake_finalize):
+        result = task_manager._run_conversion(
+            "chunks-job",
+            "scores.tsv",
+            {"output_format": "chunks"},
+            FakeConversionService(),
+        )
+
+    assert result["text"] == '{"chunks": []}'
+    assert calls == [("scores.tsv", ["chunks"])]
+
+
 class TestExecutionBackendRouting:
     """Phase 1 section 15.2: office/text jobs route to the CPU pool, not the
     GPU process workers, when a process backend is configured."""
@@ -736,4 +773,3 @@ async def test_finalize_job_relabels_markdown_only_result_as_markdown(
         assert Path(row.result_path).suffix == ".md"
 
     await engine.dispose()
-

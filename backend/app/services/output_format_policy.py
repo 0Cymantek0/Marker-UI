@@ -27,8 +27,8 @@ def require_supported_output_formats(
 ) -> list[str]:
     """Ensure requested formats are actually renderable before queue/convert.
 
-    Native converters currently emit Markdown only. Structured formats are
-    valid only when the route can use Marker's multi-render path.
+    Native converters emit Markdown and can derive semantic Markdown chunks.
+    JSON/HTML are valid only when the route can use Marker's multi-render path.
     """
     requested = requested_output_formats_from_config(config)
     config["output_format"] = requested[0]
@@ -55,11 +55,11 @@ def require_supported_output_formats(
     formats = ", ".join(structured)
     raise UnsupportedFormatError(
         f"Output format(s) {formats} are not supported for engine '{plan.engine}' on '{source}'. "
-        "Use markdown, or choose a Marker-backed PDF/image/EPUB route for json/html/chunks.",
+        "Use markdown/chunks, or choose a Marker-backed PDF/image/EPUB route for json/html.",
         details={
             "source": source,
             "engine": plan.engine,
             "requested_formats": requested,
-            "supported_formats": ["markdown"],
+            "supported_formats": ["markdown", "chunks"],
         },
     )

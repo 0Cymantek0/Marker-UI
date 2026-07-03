@@ -156,6 +156,27 @@ async def test_upload_docx_rejects_structured_output_format(client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db_session):
+    files = {"file": ("scores.tsv", io.BytesIO(b"name\tscore\nAda\t10\n"), "text/tab-separated-values")}
+
+    resp = await client.post(
+        "/api/convert/upload",
+        files=files,
+        params={"output_format": "chunks"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["output_format"] == "chunks"
+
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+    assert job.output_format == "chunks"
+    assert config["output_format"] == "chunks"
+
+
+@pytest.mark.asyncio
 async def test_pdf_structured_output_forces_marker_route(client: AsyncClient, db_session):
     resp = await _upload_file(
         client,

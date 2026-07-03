@@ -61,7 +61,7 @@ async def test_mcp_prompt_template_renders_workflow_text():
     assert "Call capabilities" in text
     assert "/workspace/report.pdf" in text
     assert "allow_cloud_vlm=False" in text
-    assert "output_format=chunks only for Marker-backed sources" in text
+    assert "output_format=chunks for native Markdown-derived chunks" in text
     assert "bounded offset pages" in text
     assert "read output chunks" not in text
 

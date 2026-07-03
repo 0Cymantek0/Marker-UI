@@ -127,7 +127,7 @@ describe('OutputViewer component', () => {
     expect(screen.getAllByText('80%').length).toBeGreaterThanOrEqual(1)
   })
 
-  it('hides html and json tabs when filename is not multi-format supported', () => {
+  it('hides html json and chunks tabs for native files without cached output or regenerate handler', () => {
     render(
       <OutputViewer
         content="# Hello"
@@ -140,10 +140,30 @@ describe('OutputViewer component', () => {
     expect(screen.getByRole('button', { name: /markdown/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /raw text/i })).toBeInTheDocument()
 
-    // HTML and JSON tabs should NOT be in the document
+    // HTML/JSON/Chunks tabs need cached output or regeneration.
     expect(screen.queryByRole('button', { name: /html/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /chunks/i })).not.toBeInTheDocument()
+  })
+
+  it('allows native files to regenerate derived chunks but not marker-only html/json', () => {
+    const onRegenerate = vi.fn()
+    render(
+      <OutputViewer
+        content="# Hello"
+        onDownload={vi.fn()}
+        onRegenerate={onRegenerate}
+        filename="document.docx"
+        formats={{ markdown: '# Hello' }}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /chunks/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /html/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /chunks/i }))
+    expect(onRegenerate).toHaveBeenCalledWith('chunks')
   })
 
   it('shows backend-provided formats even when filename is not marker multi-format supported', () => {

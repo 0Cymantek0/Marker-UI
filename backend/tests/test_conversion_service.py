@@ -111,6 +111,40 @@ class TestConversionService:
         assert engine_meta["needs_marker_models"] is True
         assert isinstance(engine_meta["reasons"], list)
 
+    def test_native_converter_derives_chunks_from_markdown_output(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "scores.tsv"
+        source.write_text("name\tscore\nAda\t10\nGrace\t11\n", encoding="utf-8")
+        config = {"output_format": "chunks", "output_formats": ["chunks"]}
+
+        assert svc.supports_multiple_formats(str(source), config) is True
+        result = svc.convert_file_formats(str(source), config, ["chunks"])
+
+        assert len(fake_ms.convert_calls) == 0
+        assert set(result) == {"chunks"}
+        assert result["chunks"]["extension"] == "json"
+        payload = json.loads(result["chunks"]["text"])
+        assert payload["schema_version"] == "marker.chunks.v1"
+        assert payload["chunk_kind"] == "semantic_markdown"
+        assert payload["source"]["name"] == "scores.tsv"
+        assert payload["chunk_count"] >= 1
+        assert "| Ada | 10 |" in payload["chunks"][-1]["text"]
+        assert result["chunks"]["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
+
+    def test_unknown_extension_does_not_claim_derived_chunks_support(self, tmp_path: Any) -> None:
+        """Derived chunks still require a converter that accepts the source."""
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "unknown.binpack"
+        source.write_text("payload", encoding="utf-8")
+
+        assert (
+            svc.supports_multiple_formats(
+                str(source),
+                {"output_format": "chunks", "output_formats": ["chunks"]},
+            )
+            is False
+        )
+
     def test_unregistered_native_engine_does_not_fall_back_to_marker(self, tmp_path: Any) -> None:
         """Missing native converters fail directly instead of crossing into Marker."""
         svc, fake_ms = self._make_service()

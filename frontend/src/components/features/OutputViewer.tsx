@@ -66,6 +66,7 @@ export function OutputViewer({
       if (!tab.formatKey) return true
       if (tab.value === 'markdown') return true
       if (availableFormats.includes(tab.formatKey) || !!formats?.[tab.formatKey]) return true
+      if (tab.value === 'chunks' && !!onRegenerate) return true
       return isMultiSupported && !!onRegenerate
     })
   }, [availableFormats, formats, isMultiSupported, onRegenerate, audioMetadata])

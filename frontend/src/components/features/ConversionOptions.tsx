@@ -402,7 +402,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
           {OUTPUT_FORMATS.map((fmt) => {
             const selected = config.output_formats ?? ['markdown']
             const isActive = selected.includes(fmt.value)
-            const isFormatDisabled = disabled || (!supportsMultiFormat && fmt.value !== 'markdown')
+            const isFormatDisabled = disabled || (!supportsMultiFormat && fmt.value !== 'markdown' && fmt.value !== 'chunks')
             return (
               <button
                 key={fmt.value}

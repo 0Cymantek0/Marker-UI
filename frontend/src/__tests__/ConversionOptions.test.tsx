@@ -267,6 +267,19 @@ describe('ConversionOptions image understanding controls', () => {
     )
   })
 
+  it('keeps chunks selectable when marker multi-format renderers are unavailable', async () => {
+    mockGetLLMProviders.mockResolvedValue([])
+    mockGetActiveLLM.mockResolvedValue(null)
+    const onChange = vi.fn()
+
+    render(<ConversionOptions config={baseConfig} onChange={onChange} supportsMultiFormat={false} />)
+
+    expect(screen.getByRole('button', { name: /markdown/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /chunks/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /json/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /html/i })).toBeDisabled()
+  })
+
   describe('Conversion Presets UI flow', () => {
     it('loads and lists presets on mount', async () => {
       const mockPresets = [

@@ -203,8 +203,9 @@ export function ConvertPage() {
   useEffect(() => {
     if (!supportsMultiFormat) {
       setConfig((prev) => {
-        if (prev.output_formats.length > 1 || prev.output_formats[0] !== 'markdown') {
-          return { ...prev, output_formats: ['markdown'] }
+        const supported = prev.output_formats.filter((fmt) => fmt === 'markdown' || fmt === 'chunks')
+        if (supported.length !== prev.output_formats.length || supported.length === 0) {
+          return { ...prev, output_formats: supported.length > 0 ? supported : ['markdown'] }
         }
         return prev
       })
