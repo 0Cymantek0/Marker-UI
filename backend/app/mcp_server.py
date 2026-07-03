@@ -46,6 +46,7 @@ from app.security.scopes import (
     SCOPE_SETTINGS_READ,
     SCOPE_SETTINGS_WRITE,
 )
+from app.services.output_manifest_reader import manifest_for_output_path
 from app.services.policy import scoped_client_workspace_roots
 from app.services.safe_url_fetcher import assert_safe_source_url
 
@@ -956,7 +957,7 @@ async def marker_get_output_manifest(
     """Read the Marker output manifest associated with an output path."""
 
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
-    manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
+    manifest_path, manifest = manifest_for_output_path(Path(output_path))
     return {"manifest_path": str(manifest_path.resolve()) if manifest_path else None, "manifest": manifest}
 
 
@@ -976,7 +977,7 @@ async def marker_list_output_assets(
     """List sidecar assets recorded in a Marker output manifest."""
 
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
-    manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
+    manifest_path, manifest = manifest_for_output_path(Path(output_path))
     output = manifest.get("output") if isinstance(manifest, dict) else {}
     assets = output.get("assets", []) if isinstance(output, dict) else []
     return {"manifest_path": str(manifest_path.resolve()) if manifest_path else None, "assets": assets}
@@ -1251,32 +1252,6 @@ def _split_conversion_options(
         allow_cloud_vlm=allow_cloud_vlm,
         extra_options=parse_extra_options_json(extra_options_json),
     )
-
-
-def _manifest_for_output_path(path: Path) -> tuple[Path | None, dict[str, Any]]:
-    candidates = [path]
-    if path.suffix != ".json":
-        candidates.append(path.with_name(f"{path.stem}.marker.json"))
-    if path.is_dir():
-        candidates.extend(sorted(path.glob("*.marker.json")))
-    for candidate in candidates:
-        if not candidate.is_file():
-            continue
-        try:
-            manifest = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(manifest, dict) and manifest.get("schema_version") == "marker.output_manifest.v1":
-            return candidate, manifest
-    return None, {}
-
-
-def _output_text_path_from_manifest(manifest: dict[str, Any]) -> str | None:
-    output = manifest.get("output") if isinstance(manifest, dict) else None
-    if not isinstance(output, dict):
-        return None
-    text_path = output.get("text_path")
-    return str(text_path) if text_path else None
 
 
 def _with_output_resource_links(result: dict[str, Any]) -> dict[str, Any]:
