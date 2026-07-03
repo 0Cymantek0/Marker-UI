@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import agent_api
-from app.errors import OutputExistsError
+from app.errors import OutputExistsError, UnsupportedFormatError
 from app.main import _app_state
 from app.agent_api import AgentConversionOptions, convert_document, plan_conversion, read_output, self_test
 from app.database import Base
@@ -580,6 +580,22 @@ async def test_agent_api_converts_same_file_without_clobbering_previous_output(t
     manifest = json.loads(second_manifest.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == "marker.output_manifest.v1"
     assert manifest["output"]["text_path"] == str(second_path.resolve())
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_native_structured_output_format(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\n", encoding="utf-8")
+
+    with pytest.raises(UnsupportedFormatError) as exc_info:
+        await convert_document(
+            local_file_path=str(source),
+            output_dir=str(tmp_path / "out"),
+            max_chars=5000,
+            options=AgentConversionOptions(output_format="json"),
+        )
+
+    assert "not supported for engine 'text_data'" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

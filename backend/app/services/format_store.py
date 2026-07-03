@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.conversion.formats import OUTPUT_FORMATS, OUTPUT_FORMAT_SET
+from app.conversion.formats import OUTPUT_FORMATS, OUTPUT_FORMAT_SET, normalize_output_formats
 
 # The formats this store knows how to persist and serve.
 SUPPORTED_FORMATS = OUTPUT_FORMATS
@@ -36,12 +36,7 @@ def normalize_formats(formats: Any) -> list[str]:
     """
     if not formats:
         return []
-    seen: list[str] = []
-    for fmt in formats:
-        fmt_s = str(fmt).strip().lower()
-        if fmt_s in OUTPUT_FORMAT_SET and fmt_s not in seen:
-            seen.append(fmt_s)
-    return seen
+    return normalize_output_formats(formats)
 
 
 def parse_formats(formats_json: str | None) -> dict[str, str] | None:

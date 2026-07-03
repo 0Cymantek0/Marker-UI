@@ -40,6 +40,7 @@ from app.routes.convert import (
 )
 from app.services.conversion_service import ConversionService
 from app.services.marker_service import MarkerService, build_marker_options
+from app.services.output_format_policy import require_supported_output_formats
 from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION, write_conversion_output
 from app.services.audit import record_audit_event
 from app.services.policy import (
@@ -345,16 +346,23 @@ async def submit_conversion_job(
         if options.page_range and probe_result.page_count > 0:
             _validate_page_range_safe(options.page_range, probe_result.page_count)
 
+    app_state = _get_app_state()
+    require_supported_output_formats(
+        stored_path,
+        config,
+        app_state.conversion_service,
+        source_name=original_name,
+    )
+
     job = ConversionJob(
         id=job_id,
         filename=filename,
         original_name=original_name,
         status="pending",
         input_format=input_format,
-        output_format=options.output_format,
+        output_format=config["output_format"],
         config_json=json.dumps(config),
     )
-    app_state = _get_app_state()
     async with _db_session_factory() as session:
         session.add(job)
         from app.services.task_manager import TaskManager
@@ -376,7 +384,7 @@ async def submit_conversion_job(
             status="success",
             payload={
                 "input_format": input_format,
-                "output_format": options.output_format,
+                "output_format": config["output_format"],
                 "source": "local_file" if is_local else "source_url",
                 "allow_cloud_vlm": options.allow_cloud_vlm,
             },
@@ -405,7 +413,7 @@ async def submit_conversion_job(
         "job_id": job_id,
         "status": "pending",
         "filename": original_name,
-        "output_format": options.output_format,
+        "output_format": config["output_format"],
         "next_step": "Call marker_get_job_status until status is completed, failed, or cancelled.",
     }
 
@@ -433,9 +441,16 @@ async def _convert_resolved_path(
         if options.page_range and probe_result.page_count > 0:
             _validate_page_range_safe(options.page_range, probe_result.page_count)
 
+    service = _conversion_service()
+    require_supported_output_formats(
+        str(path),
+        config,
+        service,
+        source_name=original_name,
+    )
+
     await _prepare_runtime(config)
     marker_options = build_marker_options(await _load_llm_config_for_options(config), config)
-    service = _conversion_service()
     result = await asyncio.to_thread(service.convert_file, str(path), marker_options)
     saved = _save_result(
         result,

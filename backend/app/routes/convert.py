@@ -24,7 +24,7 @@ from app.agent_contract import AUDIO_OUTPUT_MODES
 from app.conversion.formats import OUTPUT_FORMAT_SET, OUTPUT_FORMATS_DESCRIPTION
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
-from app.errors import InputNotAllowedError
+from app.errors import InputNotAllowedError, UnsupportedFormatError
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
 from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
@@ -39,6 +39,7 @@ from app.services.format_store import (
     normalize_formats,
     parse_formats as parse_cached_formats,
 )
+from app.services.output_format_policy import require_supported_output_formats
 
 logger = logging.getLogger(__name__)
 
@@ -517,9 +518,16 @@ async def upload_file(
                 detail=f"File exceeds maximum size (too large) of {MAX_UPLOAD_SIZE} bytes.",
             )
 
+    primary_format = output_format.strip().lower()
+    if primary_format not in OUTPUT_FORMAT_SET:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported output_format '{output_format}'. Expected one of: {OUTPUT_FORMATS_DESCRIPTION}.",
+        )
+
     # Build conversion config from query params
     config: dict[str, Any] = {
-        "output_format": output_format,
+        "output_format": primary_format,
         "original_name": original_name,
     }
     if output_formats:
@@ -700,6 +708,22 @@ async def upload_file(
         if page_range and probe_result.page_count > 0:
             _validate_page_range(page_range, probe_result.page_count)
 
+    from app.main import _app_state
+
+    conversion_service = _app_state.conversion_service
+    try:
+        requested_formats = require_supported_output_formats(
+            stored_path,
+            config,
+            conversion_service,
+            source_name=original_name,
+        )
+    except UnsupportedFormatError as exc:
+        if not is_local:
+            Path(stored_path).unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+    effective_output_format = requested_formats[0]
+
     # DB record
     job = ConversionJob(
         id=job_id,
@@ -707,7 +731,7 @@ async def upload_file(
         original_name=original_name,
         status="pending",
         input_format=input_format,
-        output_format=output_format,
+        output_format=effective_output_format,
         config_json=json.dumps(config),
     )
     db.add(job)
@@ -721,7 +745,7 @@ async def upload_file(
         status="success",
         payload={
             "input_format": input_format,
-            "output_format": output_format,
+            "output_format": effective_output_format,
             "source": "local_file" if is_local else "source_url" if source_url_safe else "upload",
             "allow_cloud_vlm": allow_cloud_vlm,
         },
@@ -737,10 +761,6 @@ async def upload_file(
             payload={"provider": llm_provider, "model": llm_model},
         )
 
-    from app.main import _app_state
-
-    marker_service = _app_state.marker_service
-    conversion_service = _app_state.conversion_service
     task_manager = _app_state.task_manager
 
     llm_config = await _load_llm_config(db)
@@ -765,7 +785,7 @@ async def upload_file(
         job_id=job_id,
         status="pending",
         filename=original_name,
-        output_format=output_format,
+        output_format=effective_output_format,
     )
 
 

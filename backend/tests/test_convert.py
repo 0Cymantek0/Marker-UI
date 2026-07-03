@@ -144,15 +144,35 @@ async def test_pdf_upload_rejects_empty_page_range(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_upload_valid_docx(client: AsyncClient):
+async def test_upload_docx_rejects_structured_output_format(client: AsyncClient):
     files = {"file": ("report.docx", io.BytesIO(b"PK docx content"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
     resp = await client.post(
         "/api/convert/upload",
         files=files,
         params={"output_format": "html"},
     )
+    assert resp.status_code == 400
+    assert "not supported for engine 'office_docx'" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_pdf_structured_output_forces_marker_route(client: AsyncClient, db_session):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(),
+        extra_params={"output_format": "json"},
+    )
     assert resp.status_code == 200
-    assert resp.json()["output_format"] == "html"
+    body = resp.json()
+    assert body["output_format"] == "json"
+
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+
+    assert job.output_format == "json"
+    assert config["output_format"] == "json"
+    assert config["engine_override"] == "marker_pdf"
 
 
 @pytest.mark.asyncio
