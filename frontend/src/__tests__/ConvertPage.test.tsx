@@ -43,6 +43,15 @@ vi.mock('@/components/features/FileUpload', () => ({
       </button>
       <button
         type="button"
+        onClick={() => onFilesSelect([
+          new File(['pdf'], 'sample.pdf', { type: 'application/pdf' }),
+          new File(['name\tscore\nAda\t10\n'], 'sample.tsv', { type: 'text/tab-separated-values' }),
+        ])}
+      >
+        Mock select PDF and TSV
+      </button>
+      <button
+        type="button"
         onClick={() => onFilesSelect([new File(['name\tscore\nAda\t10\n'], 'sample.tsv', { type: 'text/tab-separated-values' })])}
       >
         Mock select TSV
@@ -90,10 +99,19 @@ vi.mock('@/components/features/FileUpload', () => ({
 }))
 
 vi.mock('@/components/features/ConversionOptions', () => ({
-  ConversionOptions: ({ config, onChange }: { config: any; onChange: (cfg: any) => void }) => (
+  ConversionOptions: ({
+    config,
+    onChange,
+    supportsMultiFormat,
+  }: {
+    config: any
+    onChange: (cfg: any) => void
+    supportsMultiFormat?: boolean
+  }) => (
     <div data-testid="conversion-options">
       <span data-testid="config-format">{config.output_formats?.join(',')}</span>
       <span data-testid="config-ocr">{config.force_ocr ? 'ocr-enabled' : 'ocr-disabled'}</span>
+      <span data-testid="supports-multi">{supportsMultiFormat ? 'multi' : 'markdown-only'}</span>
       <button data-testid="trigger-config-change" onClick={() => onChange({ ...config, force_ocr: true })}>
         Trigger Change
       </button>
@@ -602,7 +620,7 @@ describe('ConvertPage component', () => {
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
         regenerateJobFormat: vi.fn(),
-      dismissSwapPrompt: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 
@@ -618,6 +636,51 @@ describe('ConvertPage component', () => {
 
       expect(screen.getByTestId('config-format')).toHaveTextContent('json')
       expect(screen.getByTestId('config-ocr')).toHaveTextContent('ocr-enabled')
+    })
+
+    it('collapses saved structured output formats when selected source cannot render them', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['json'] }))
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock select TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('markdown')
+      })
+    })
+
+    it('requires every selected source to support multi-format rendering', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock select PDF and TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+      })
     })
 
     it('saves config to localStorage when changes are applied', () => {

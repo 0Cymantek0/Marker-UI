@@ -185,7 +185,11 @@ export function ConvertPage() {
   )
 
   const supportsMultiFormat = useMemo(() => {
-    if (selectedFiles.length === 0 && parsedLocalPaths.length === 0) return true
+    const sourceNames = [
+      ...selectedFiles.map((entry) => entry.file.name),
+      ...parsedLocalPaths,
+    ]
+    if (sourceNames.length === 0) return true
     
     const checkExt = (filename: string) => {
       const baseName = filename.split(/[?#]/)[0] ?? ''
@@ -193,9 +197,7 @@ export function ConvertPage() {
       return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
     }
 
-    const hasFileMulti = selectedFiles.some(f => checkExt(f.file.name))
-    const hasPathMulti = parsedLocalPaths.some(p => checkExt(p))
-    return hasFileMulti || hasPathMulti
+    return sourceNames.every(checkExt)
   }, [selectedFiles, parsedLocalPaths])
 
   useEffect(() => {
