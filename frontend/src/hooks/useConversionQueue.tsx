@@ -6,7 +6,6 @@ import {
   getHistory,
   downloadResult,
   cancelJob,
-  deleteJob,
   regenerateFormat,
   type ConversionConfig,
   type JobStatus,
@@ -19,6 +18,7 @@ export type ConversionPhase =
   | 'uploading'
   | 'processing'
   | 'completed'
+  | 'cancelled'
   | 'failed'
 
 export interface JobState {
@@ -172,6 +172,16 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }))
   }, [updateJob])
 
+  const handleJobCancelled = useCallback((id: string, message = '[SYSTEM] Job was cancelled.') => {
+    updateJob(id, (prev) => ({
+      ...prev,
+      phase: 'cancelled',
+      error: null,
+      statusText: 'Cancelled',
+      logs: [...prev.logs, message],
+    }))
+  }, [updateJob])
+
   const handleJobSSEDisconnected = useCallback((id: string, jobId: string) => {
     updateJob(id, (prev) => ({
       ...prev,
@@ -232,27 +242,17 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           }))
         } else if (status.status === 'cancelled') {
           clearInterval(pollInterval)
-          updateJob(id, (prev) => ({
-            ...prev,
-            phase: 'failed',
-            statusText: 'Cancelled',
-            logs: [...prev.logs, '[SYSTEM] Job was cancelled on the backend.'],
-          }))
+          handleJobCancelled(id, '[SYSTEM] Job was cancelled on the backend.')
         }
       } catch (err: any) {
         const is404 = err instanceof Error && err.message.includes('404')
         if (is404) {
           clearInterval(pollInterval)
-          updateJob(id, (prev) => ({
-            ...prev,
-            phase: 'failed',
-            statusText: 'Cancelled',
-            logs: [...prev.logs, '[SYSTEM] Job not found on backend (deleted/cancelled).'],
-          }))
+          handleJobCancelled(id, '[SYSTEM] Job not found on backend.')
         }
       }
     }, 3000)
-  }, [updateJob])
+  }, [handleJobCancelled, updateJob])
 
   const attachJobEvents = useCallback((id: string, jobId: string) => {
     if (eventSourcesRef.current[id]) {
@@ -285,12 +285,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
 
       if (data.status === 'cancelled') {
         closeES()
-        updateJob(id, (prev) => ({
-          ...prev,
-          phase: 'failed',
-          statusText: 'Cancelled',
-          logs: [...prev.logs, '[SYSTEM] Job was cancelled.'],
-        }))
+        handleJobCancelled(id)
         return
       }
 
@@ -331,12 +326,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         handleJobFailed(id, data.error ?? 'Conversion failed')
       } else if (data.status === 'cancelled') {
         closeES()
-        updateJob(id, (prev) => ({
-          ...prev,
-          phase: 'failed',
-          statusText: 'Cancelled',
-          logs: [...prev.logs, '[SYSTEM] Job was cancelled.'],
-        }))
+        handleJobCancelled(id)
       }
     })
 
@@ -344,7 +334,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       closeES()
       handleJobSSEDisconnected(id, jobId)
     }
-  }, [handleJobCompleted, handleJobFailed, handleJobSSEDisconnected, updateJob])
+  }, [handleJobCancelled, handleJobCompleted, handleJobFailed, handleJobSSEDisconnected, updateJob])
 
   useEffect(() => {
     if (hydratedRef.current) return
@@ -565,7 +555,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         if (j.id !== id) return j
         return {
           ...j,
-          phase: 'failed',
+          phase: 'cancelled',
+          error: null,
           statusText: 'Cancelled',
           logs: [...j.logs, '[SYSTEM] Cancel request submitted.'],
         }
@@ -616,14 +607,6 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }
 
     setJobs((prev) => {
-      const job = prev.find((j) => j.id === id)
-      // Cancel + delete the job on the backend before removing it from the list.
-      // Without this a running conversion keeps executing in the background with
-      // no UI left to cancel it. deleteJob() flips the DB to "cancelled" so the
-      // result is discarded at finalize.
-      if (job?.jobId) {
-        deleteJob(job.jobId).catch(() => {})
-      }
       return prev.filter((j) => j.id !== id)
     })
   }, [])

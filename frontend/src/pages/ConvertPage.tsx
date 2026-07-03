@@ -601,6 +601,7 @@ export function ConvertPage() {
                   const isJobRunning = job.phase === 'uploading' || job.phase === 'processing'
                   const isCompleted = job.phase === 'completed'
                   const isFailed = job.phase === 'failed'
+                  const isCancelled = job.phase === 'cancelled'
                   const isQueued = job.phase === 'idle'
                   const engineMeta = job.conversionMetadata?.engine
 
@@ -628,6 +629,7 @@ export function ConvertPage() {
                         <div className={cn(
                           'p-2 rounded-lg shrink-0 transition-colors duration-300',
                           isCompleted ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+                          isCancelled ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
                           isFailed ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' :
                           isJobRunning ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                         )}>
@@ -658,6 +660,7 @@ export function ConvertPage() {
                             <span className={cn(
                               'text-[10px] font-bold tracking-wide flex items-center gap-1.5',
                               isCompleted && 'text-emerald-600 dark:text-emerald-400',
+                              isCancelled && 'text-amber-600 dark:text-amber-400',
                               isFailed && 'text-rose-600 dark:text-rose-400',
                               isJobRunning && 'text-primary',
                               isQueued && 'text-muted-foreground'

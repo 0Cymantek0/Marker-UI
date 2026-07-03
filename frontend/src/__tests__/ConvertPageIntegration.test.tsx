@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import { ConversionProvider } from '@/hooks/useConversionQueue'
 import { BrowserRouter } from 'react-router-dom'
@@ -163,10 +163,9 @@ describe('ConvertPage Integration with real hook', () => {
     expect(mockGetJobEvents).toHaveBeenCalledWith('backend-job-1')
   })
 
-  it('cancels the backend job when the trash/remove button is clicked', async () => {
-    // Regression: deleting a queue item used to only drop it from the UI list,
-    // leaving the conversion running in the background with no way to stop it.
-    // removeJob must now also hit deleteJob (backend cancel + delete).
+  it('removes a queue item locally without deleting backend metadata', async () => {
+    // Remove is a local queue action. Backend cancellation is the explicit
+    // Cancel button so history/output metadata is not silently destroyed.
     mockGetHistory.mockResolvedValue({
       total: 1,
       jobs: [
@@ -185,8 +184,6 @@ describe('ConvertPage Integration with real hook', () => {
         },
       ],
     })
-    mockDeleteJob.mockResolvedValue(undefined)
-
     render(
       <BrowserRouter>
         <ConversionProvider>
@@ -201,12 +198,9 @@ describe('ConvertPage Integration with real hook', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /remove from list/i }))
 
-    // Backend must be told to cancel + delete the still-running job.
-    await waitFor(() => {
-      expect(mockDeleteJob).toHaveBeenCalledWith('backend-job-9')
-    })
-    // And the card disappears from the queue.
     expect(screen.queryByText('running.pdf')).not.toBeInTheDocument()
+    expect(mockCancelJob).not.toHaveBeenCalled()
+    expect(mockDeleteJob).not.toHaveBeenCalled()
   })
 
   it('uses the non-destructive cancel endpoint when cancel is clicked', async () => {
@@ -248,5 +242,38 @@ describe('ConvertPage Integration with real hook', () => {
     })
     expect(mockDeleteJob).not.toHaveBeenCalled()
     expect(screen.getByText('Cancelled')).toBeInTheDocument()
+  })
+
+  it('renders backend cancelled SSE status without marking the job failed', async () => {
+    const eventSource = createMockEventSource()
+    mockGetJobEvents.mockReturnValue(eventSource)
+
+    const { container } = render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /local paths/i }))
+    fireEvent.change(container.querySelector('textarea')!, { target: { value: 'C:\\cancelled.pdf' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Convert 1 Document/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('cancelled.pdf')).toBeInTheDocument()
+    })
+
+    const statusHandler = eventSource.addEventListener.mock.calls.find(([event]) => event === 'status')?.[1]
+    expect(statusHandler).toBeDefined()
+
+    act(() => {
+      statusHandler?.({ data: JSON.stringify({ status: 'cancelled' }) })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Cancelled')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Conversion failed')).not.toBeInTheDocument()
   })
 })
