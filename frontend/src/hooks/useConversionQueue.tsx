@@ -11,6 +11,7 @@ import {
   type JobStatus,
   type ImageUnderstandingMeta,
 } from '@/lib/api'
+import { filenameForDownload } from '@/lib/download'
 
 export type ConversionPhase =
   | 'idle'
@@ -593,21 +594,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     const a = document.createElement('a')
     a.href = url
 
-    if (headerFilename) {
-      a.download = headerFilename
-    } else {
-      const isZip = blob.type === 'application/zip' || blob.type === 'application/x-zip-compressed'
-      const isJson = blob.type === 'application/json'
-      const isHtml = blob.type === 'text/html'
-      const ext = isZip ? 'zip' : isJson ? 'json' : isHtml ? 'html' : 'md'
-
-      const stem = job.filename.includes('.') ? job.filename.split('.').slice(0, -1).join('.') : job.filename
-      if (job.isBunch) {
-        a.download = `marker-${stem}.${ext}`
-      } else {
-        a.download = `${stem}.${ext}`
-      }
-    }
+    a.download = filenameForDownload(blob, job.filename, headerFilename, !!job.isBunch)
 
     document.body.appendChild(a)
     a.click()
