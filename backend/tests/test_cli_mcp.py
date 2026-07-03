@@ -163,6 +163,8 @@ def test_read_output_reads_bounded_chunk_without_full_file_load(tmp_path: Path, 
     assert result["text_chars"] == 1000
     assert result["has_more"] is True
     assert result["next_offset"] == 25
+    assert result["chunk_kind"] == "offset_text"
+    assert result["is_semantic_chunk"] is False
 
 
 @pytest.mark.asyncio
@@ -484,6 +486,13 @@ async def test_mcp_tools_have_complete_input_metadata_and_output_schemas():
     import app.mcp_server as mcp_server
 
     tools = await mcp_server.mcp.list_tools()
+    tools_by_name = {tool.name: tool for tool in tools}
+    chunk_reader = tools_by_name["marker_read_output_chunk"]
+    assert "offset" in (chunk_reader.description or "").lower()
+    assert "semantic" in (chunk_reader.description or "").lower()
+    assert chunk_reader.outputSchema["properties"]["chunk_kind"]["examples"] == ["offset_text"]
+    assert chunk_reader.outputSchema["properties"]["is_semantic_chunk"]["examples"] == [False]
+
     for tool in tools:
         assert tool.outputSchema["type"] == "object", tool.name
         assert tool.outputSchema.get("properties"), tool.name

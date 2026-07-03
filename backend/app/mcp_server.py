@@ -107,12 +107,14 @@ class SubmitJobOutput(MarkerOutputModel):
 
 class ReadOutputResult(MarkerOutputModel):
     path: str = Field(description="Resolved output file path.", examples=["C:\\path\\to\\document.md"])
-    offset: int = Field(description="Returned chunk start offset.", examples=[0])
+    offset: int = Field(description="Returned text page start offset.", examples=[0])
     limit: int = Field(description="Requested maximum characters.", examples=[20000])
-    text: str = Field(description="Output text chunk.", examples=["# Converted"])
+    text: str = Field(description="Output text page.", examples=["# Converted"])
     text_chars: int = Field(description="Total text characters in file.", examples=[50000])
     has_more: bool = Field(description="True when more text remains.", examples=[True])
     next_offset: int | None = Field(default=None, description="Offset for next page.", examples=[20000])
+    chunk_kind: str = Field(description="Chunking mode. offset_text means plain character-offset paging, not semantic/RAG chunking.", examples=["offset_text"])
+    is_semantic_chunk: bool = Field(description="False because this reader returns offset-based text pages, not semantic chunks.", examples=[False])
 
 
 class ManifestToolOutput(MarkerOutputModel):
@@ -919,7 +921,7 @@ async def marker_read_output(
 
 @mcp.tool(
     name="marker_read_output_chunk",
-    title="Read Marker Output Chunk",
+    title="Read Marker Output Offset Page",
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
@@ -932,7 +934,7 @@ async def marker_read_output_chunk(
     offset: OffsetParam = 0,
     limit: LimitParam = 20_000,
 ) -> ReadOutputResult:
-    """Read one bounded chunk from a converted output file."""
+    """Read one bounded offset-based text page from a converted output file. This is not semantic/RAG chunking."""
 
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
     return read_output(output_path, offset=offset, limit=limit)

@@ -484,6 +484,8 @@ def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHAR
         "text_chars": text_chars,
         "has_more": next_offset < text_chars,
         "next_offset": next_offset if next_offset < text_chars else None,
+        "chunk_kind": "offset_text",
+        "is_semantic_chunk": False,
     }
 
 
