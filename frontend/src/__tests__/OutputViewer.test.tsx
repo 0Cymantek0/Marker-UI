@@ -145,6 +145,35 @@ describe('OutputViewer component', () => {
     expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
   })
 
+  it('shows backend-provided formats even when filename is not marker multi-format supported', () => {
+    render(
+      <OutputViewer
+        content="# Hello"
+        formats={{ markdown: '# Hello', html: '<h1>Hello</h1>' }}
+        availableFormats={['markdown', 'html']}
+        onDownload={vi.fn()}
+        filename="document.docx"
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /html/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
+  })
+
+  it('does not show regeneratable format tabs without a regenerate handler', () => {
+    render(
+      <OutputViewer
+        content="# Hello"
+        formats={{ markdown: '# Hello' }}
+        onDownload={vi.fn()}
+        filename="document.pdf"
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /html/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
+  })
+
   it('calls onRegenerate when a non-cached format tab is clicked', () => {
     const onRegenerate = vi.fn()
     render(

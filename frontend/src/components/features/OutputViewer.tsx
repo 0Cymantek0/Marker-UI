@@ -59,11 +59,15 @@ export function OutputViewer({
   }, [filename])
 
   const visibleTabs = useMemo(() => {
-    const tabs = isMultiSupported
-      ? ALL_TABS
-      : ALL_TABS.filter((t) => t.value === 'markdown' || t.value === 'raw' || t.value === 'audio')
-    return tabs.filter((t) => t.value !== 'audio' || !!audioMetadata)
-  }, [isMultiSupported, audioMetadata])
+    return ALL_TABS.filter((tab) => {
+      if (tab.value === 'audio') return !!audioMetadata
+      if (tab.value === 'raw') return true
+      if (!tab.formatKey) return true
+      if (tab.value === 'markdown') return true
+      if (availableFormats.includes(tab.formatKey) || !!formats?.[tab.formatKey]) return true
+      return isMultiSupported && !!onRegenerate
+    })
+  }, [availableFormats, formats, isMultiSupported, onRegenerate, audioMetadata])
 
   const activeContent = useMemo(() => {
     if (activeTab === 'raw') return content
