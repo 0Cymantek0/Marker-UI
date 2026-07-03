@@ -54,6 +54,13 @@ def test_agent_capabilities_and_config_include_frontend_audio_modes():
         assert config["audio_output_mode"] == mode
 
 
+def test_agent_capabilities_include_cancel_and_delete_tools():
+    caps = agent_api.capabilities()
+
+    assert "marker_cancel_job" in caps["tools"]
+    assert "marker_delete_job" in caps["tools"]
+
+
 @pytest.mark.asyncio
 async def test_agent_api_plans_text_without_loading_marker(tmp_path: Path):
     source = tmp_path / "notes.txt"

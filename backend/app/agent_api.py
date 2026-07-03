@@ -61,6 +61,7 @@ TOOL_NAMES = [
     "marker_read_output",
     "marker_list_jobs",
     "marker_get_job_status",
+    "marker_cancel_job",
     "marker_delete_job",
     "marker_list_settings",
     "marker_get_setting",
