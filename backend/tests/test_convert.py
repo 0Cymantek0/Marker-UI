@@ -1187,6 +1187,40 @@ async def test_download_specific_format_does_not_zip_assets(client: AsyncClient,
     assert package_resp.headers["content-type"] == "application/zip"
 
 
+@pytest.mark.asyncio
+async def test_download_chunks_format_uses_json_extension(client: AsyncClient, db_session):
+    """Marker chunks are JSON payloads and should download as .json."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-download-chunks-format"
+    chunks_text = '{"chunks": []}'
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="chunks",
+        result_text=chunks_text,
+        config_json=_json.dumps({"output_format": "chunks"}),
+        formats_json=_json.dumps({"chunks": chunks_text}),
+        result_path=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "chunks"})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.headers["content-disposition"].endswith('filename="doc.json"')
+    assert resp.text == chunks_text
+
+
 # ---------------------------------------------------------------------------
 # Advanced audio controls (plan §5.5) — audio_config JSON blob
 # ---------------------------------------------------------------------------
