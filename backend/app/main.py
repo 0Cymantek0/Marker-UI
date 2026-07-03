@@ -19,6 +19,7 @@ from app.models.audit import AuditEvent  # noqa: F401 - register table metadata
 from app.models.job_event import JobEvent  # noqa: F401 - register table metadata
 from app.routes import convert, settings, models, capabilities, diagnostics
 from app.security.auth import RestAuthMiddleware
+from app.security.headers import SecurityHeadersMiddleware
 from app.services.telemetry import RequestContextMiddleware
 from app.services.marker_service import MarkerService
 from app.services.queue_backends import queue_backend_from_env
@@ -263,6 +264,7 @@ app.add_middleware(
 )
 app.add_middleware(RestAuthMiddleware)
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Routers
 app.include_router(diagnostics.router)
