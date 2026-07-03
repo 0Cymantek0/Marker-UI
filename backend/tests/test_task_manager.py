@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
-from app.services.task_manager import TaskManager
+from app.services.task_manager import (
+    TaskManager,
+    _actual_output_format_for_finalize,
+    _formats_payload_for_finalize,
+)
 from app.services.job_transport import WorkerEvent, WorkerEventType
 
 
@@ -18,6 +22,24 @@ def task_manager():
     tm = TaskManager(max_workers=1)
     yield tm
     tm.shutdown(wait=False)
+
+
+def test_finalize_format_uses_result_extension_for_markdown_only_converter():
+    result = {"text": "# Converted", "extension": "md"}
+
+    actual_format = _actual_output_format_for_finalize(result, "json")
+    formats_json = _formats_payload_for_finalize(result, actual_format, None)
+
+    assert actual_format == "markdown"
+    assert json.loads(formats_json) == {"markdown": "# Converted"}
+
+
+def test_finalize_format_keeps_marker_chunks_request_with_json_extension():
+    result = {"text": '{"chunks": []}', "extension": "json"}
+
+    actual_format = _actual_output_format_for_finalize(result, "chunks")
+
+    assert actual_format == "chunks"
 
 
 # ---------------------------------------------------------------------------
@@ -646,4 +668,72 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
 
     await engine.dispose()
 
+
+@pytest.mark.asyncio
+async def test_finalize_job_relabels_markdown_only_result_as_markdown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Markdown-only converters must not persist Markdown under a fake JSON key."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'final-format.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "44444444-4444-4444-8444-444444444444"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="report.docx",
+            original_name="report.docx",
+            status="pending",
+            input_format="docx",
+            output_format="json",
+            config_json=json.dumps(
+                {
+                    "output_format": "json",
+                    "original_name": "report.docx",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    result_payload = {
+        "text": "# Report\n\nNative Markdown output",
+        "extension": "md",
+        "images": {},
+        "metadata": {"engine": {"engine": "office_docx", "label": "DOCX"}},
+    }
+    config = {
+        "output_format": "json",
+        "original_name": "report.docx",
+        "output_dir": str(tmp_path / "out"),
+    }
+
+    tm = TaskManager(max_workers=1)
+    try:
+        await tm._finalize_job(job_id, result_payload, config)
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row.status == "completed"
+        assert row.output_format == "markdown"
+        assert json.loads(row.formats_json) == {"markdown": "# Report\n\nNative Markdown output"}
+        assert Path(row.result_path).suffix == ".md"
+
+    await engine.dispose()
 

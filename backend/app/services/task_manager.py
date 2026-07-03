@@ -101,6 +101,29 @@ def _formats_payload_for_finalize(
     return json.dumps(payload) if payload else None
 
 
+def _actual_output_format_for_finalize(
+    primary_result: dict[str, Any],
+    requested_format: str,
+) -> str:
+    """Return the format the converter actually produced.
+
+    Native converters currently produce Markdown even when old clients request
+    json/html/chunks. Trust the result extension for that collapse so the UI and
+    downloads do not label Markdown as a structured format. Marker still keeps
+    explicit json/chunks requests because both use a JSON file extension.
+    """
+
+    requested = str(requested_format or "markdown").strip().lower()
+    extension = str(primary_result.get("extension") or "").strip().lower().lstrip(".")
+    if extension in {"md", "markdown"}:
+        return "markdown"
+    if extension in {"html", "htm"}:
+        return "html"
+    if extension == "json":
+        return requested if requested in {"json", "chunks"} else "json"
+    return requested if requested in {"markdown", "json", "html", "chunks"} else "markdown"
+
+
 # Registry of thread ID to job ID (ThreadExecutorBackend only).
 active_conversion_threads: dict[int, str] = {}
 
@@ -1010,7 +1033,10 @@ class TaskManager:
         if metadata.get("video"):
             result_metadata["video"] = metadata["video"]
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
-        output_format = config.get("output_format", "markdown")
+        requested_output_format = config.get("output_format", "markdown")
+        output_format = _actual_output_format_for_finalize(result, requested_output_format)
+        effective_config = dict(config)
+        effective_config["output_format"] = output_format
         original_name = config.get("original_name", "output")
         local_filepath = config.get("local_filepath")
         output_dir = config.get("output_dir")
@@ -1028,7 +1054,7 @@ class TaskManager:
             source_name=original_name or job_id,
             output_base=target_dir,
             output_format=output_format,
-            conversion_config=config,
+            conversion_config=effective_config,
             layout="directory_if_assets",
             disable_image_extraction=bool(config.get("disable_image_extraction", False)),
             job_id=job_id,
@@ -1057,6 +1083,7 @@ class TaskManager:
                     result_text=result_text,
                     result_metadata_json=result_metadata_json,
                     formats_json=formats_json,
+                    output_format=output_format,
                     result_path=str(written.final_path),
                     progress=100,
                     completed_at=datetime.now(timezone.utc),
