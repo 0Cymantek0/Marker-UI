@@ -1277,19 +1277,19 @@ async def regenerate_format(
     # we only override the target output format for this single render.
     config = _read_stored_config(job)
     config["output_format"] = format
-
-    if not conversion_service.supports_multiple_formats(str(source_path), config):
-        suffix = Path(source_path).suffix.lower()
-        from app.conversion.converters.marker_pdf import MarkerPdfConverter
-        if suffix in MarkerPdfConverter._EXTENSIONS:
-            config["engine_override"] = "marker_pdf"
-            config["output_formats"] = [format]
-
-    if not conversion_service.supports_multiple_formats(str(source_path), config):
+    config["output_formats"] = [format]
+    try:
+        require_supported_output_formats(
+            str(source_path),
+            config,
+            conversion_service,
+            source_name=job.original_name,
+        )
+    except UnsupportedFormatError as exc:
         raise HTTPException(
             status_code=409,
-            detail="This job's engine cannot render additional formats.",
-        )
+            detail=exc.message,
+        ) from exc
 
     llm_config = await _load_llm_config(db)
     from app.services.marker_service import build_marker_options

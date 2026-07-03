@@ -1049,6 +1049,46 @@ async def test_regenerate_appends_format_to_existing_job(client: AsyncClient, db
     src.unlink(missing_ok=True)
 
 
+@pytest.mark.asyncio
+async def test_regenerate_rejects_native_structured_format(client: AsyncClient, db_session):
+    """Native Markdown-only jobs cannot regenerate fake JSON/HTML/chunks."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.core.config import UPLOAD_DIR
+
+    job_id = "job-regen-native"
+    uploads = Path(UPLOAD_DIR)
+    uploads.mkdir(parents=True, exist_ok=True)
+    src = uploads / f"{job_id}.tsv"
+    src.write_text("name\tscore\nAda\t10\n", encoding="utf-8")
+
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.tsv",
+        original_name="scores.tsv",
+        status="completed",
+        input_format="tsv",
+        output_format="markdown",
+        result_text="| name | score |",
+        config_json=_json.dumps({"output_format": "markdown"}),
+        formats_json=_json.dumps({"markdown": "| name | score |"}),
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/regenerate", params={"format": "json"})
+
+    assert resp.status_code == 409
+    assert "not supported for engine 'text_data'" in resp.json()["detail"]
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert _json.loads(row.formats_json) == {"markdown": "| name | score |"}
+
+    src.unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # Multi-format upload (output_formats query param)
 # ---------------------------------------------------------------------------
