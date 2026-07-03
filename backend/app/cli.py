@@ -34,6 +34,7 @@ from app.agent_api import (
     submit_conversion_job,
 )
 from app.agent_contract import AUDIO_OUTPUT_MODES, export_json_schemas
+from app.conversion.formats import OUTPUT_FORMATS
 from app.errors import ERROR_SCHEMA_VERSION, MarkerError, from_exception
 from app.eval.runner import run_eval
 
@@ -811,7 +812,7 @@ def _mcp_client_config(client: str) -> dict[str, Any]:
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--output-format", default="markdown", choices=["markdown", "json", "html", "chunks"])
+    parser.add_argument("--output-format", default="markdown", choices=list(OUTPUT_FORMATS))
     parser.add_argument("--converter-cls")
     parser.add_argument("--engine-override")
     parser.add_argument("--conversion-profile", choices=["auto", "fast", "high_accuracy"])

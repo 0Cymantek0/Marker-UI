@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
+from app.conversion.formats import OUTPUT_FORMATS
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -128,7 +129,7 @@ def capabilities() -> dict[str, Any]:
         "service": SERVICE_NAME,
         "tools": TOOL_NAMES,
         "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
-        "output_formats": ["markdown", "json", "html", "chunks"],
+        "output_formats": list(OUTPUT_FORMATS),
         "conversion_profiles": ["auto", "fast", "high_accuracy"],
         "image_handling_modes": ["extraction", "understanding", "both"],
         "ocr_engines": ["surya", "hybrid_ocr"],

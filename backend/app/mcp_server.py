@@ -15,6 +15,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.conversion.formats import OUTPUT_FORMATS_DESCRIPTION
 from app.agent_api import (
     AgentConversionOptions,
     MAX_READ_CHARS,
@@ -196,7 +197,7 @@ PathParam = Annotated[str, Field(description="Local file path. Example: C:\\path
 UrlParam = Annotated[str, Field(description="Public http(s) URL. Example: https://example.com/document.pdf.", examples=["https://example.com/document.pdf"])]
 DirParam = Annotated[str, Field(description="Output directory path. Example: C:\\path\\to\\out.", examples=["C:\\path\\to\\out"])]
 OutputPathParam = Annotated[str, Field(description="Exact output file path that must not already exist.", examples=["C:\\path\\to\\out\\document.md"])]
-OutputFormatParam = Annotated[str, Field(description="Output format: markdown, json, html, or chunks.", examples=["markdown"])]
+OutputFormatParam = Annotated[str, Field(description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}.", examples=["markdown"])]
 ConverterParam = Annotated[str, Field(description="Optional converter class override.", examples=["TableConverter"])]
 EngineParam = Annotated[str, Field(description="Optional engine override such as text_data or marker.", examples=["text_data"])]
 ProfileParam = Annotated[str, Field(description="Conversion profile: auto, fast, or high_accuracy.", examples=["auto"])]

@@ -41,6 +41,7 @@ from typing import Any, AsyncGenerator, Optional
 from fastapi import Request
 from sse_starlette.event import ServerSentEvent
 
+from app.conversion.formats import OUTPUT_FORMAT_SET
 from app.database import async_session_factory
 from app.models.job import ConversionJob
 from app.services.output_writer import write_conversion_output
@@ -65,14 +66,13 @@ def _resolve_requested_formats(config: dict[str, Any]) -> list[str]:
     are honoured so the legacy single-format path keeps working unchanged.
     Unknown formats are dropped so a malformed request never crashes a render.
     """
-    supported = {"markdown", "json", "html", "chunks"}
     raw = config.get("output_formats")
     if isinstance(raw, list) and raw:
-        cleaned = [str(f) for f in dict.fromkeys(raw) if str(f) in supported]
+        cleaned = [str(f) for f in dict.fromkeys(raw) if str(f) in OUTPUT_FORMAT_SET]
         if cleaned:
             return cleaned
     single = str(config.get("output_format", "markdown") or "markdown")
-    return [single] if single in supported else ["markdown"]
+    return [single] if single in OUTPUT_FORMAT_SET else ["markdown"]
 
 
 def _formats_payload_for_finalize(
@@ -121,7 +121,7 @@ def _actual_output_format_for_finalize(
         return "html"
     if extension == "json":
         return requested if requested in {"json", "chunks"} else "json"
-    return requested if requested in {"markdown", "json", "html", "chunks"} else "markdown"
+    return requested if requested in OUTPUT_FORMAT_SET else "markdown"
 
 
 # Registry of thread ID to job ID (ThreadExecutorBackend only).

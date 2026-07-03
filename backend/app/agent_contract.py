@@ -11,13 +11,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.conversion.formats import OUTPUT_FORMATS, OUTPUT_FORMATS_DESCRIPTION, OutputFormat
 from app.errors import ERROR_SCHEMA_VERSION
 from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION
 
 
 CONTRACT_SCHEMA_VERSION = "marker.agent_contract.v1"
 
-OutputFormat = Literal["markdown", "json", "html", "chunks"]
 ImageHandlingMode = Literal["extraction", "understanding", "both"]
 ConversionProfile = Literal["auto", "fast", "high_accuracy"]
 AudioOutputMode = Literal[
@@ -287,7 +287,7 @@ class OptionMetadataModel(ContractModel):
 
 
 OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
-    OptionMetadataModel(name="output_format", cli_flag="--output-format", type="enum", default="markdown", category="output", description="Output format: markdown, json, html, or chunks."),
+    OptionMetadataModel(name="output_format", cli_flag="--output-format", type="enum", default="markdown", category="output", description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}."),
     OptionMetadataModel(name="converter_cls", cli_flag="--converter-cls", type="string", category="routing", description="Optional Marker converter class override."),
     OptionMetadataModel(name="engine_override", cli_flag="--engine-override", type="string", category="routing", description="Optional universal converter engine override."),
     OptionMetadataModel(name="conversion_profile", cli_flag="--conversion-profile", type="enum", category="routing", description="Conversion policy profile."),

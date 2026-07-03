@@ -21,6 +21,7 @@ import aiofiles
 
 from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
 from app.agent_contract import AUDIO_OUTPUT_MODES
+from app.conversion.formats import OUTPUT_FORMAT_SET, OUTPUT_FORMATS_DESCRIPTION
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
 from app.errors import InputNotAllowedError
@@ -32,6 +33,11 @@ from app.services.safe_url_fetcher import (
     SafeUrlFetchError,
     assert_safe_source_url,
     download_source_url,
+)
+from app.services.format_store import (
+    available_formats as available_cached_formats,
+    normalize_formats,
+    parse_formats as parse_cached_formats,
 )
 
 logger = logging.getLogger(__name__)
@@ -165,15 +171,7 @@ def _parse_formats(formats_json: str | None) -> dict[str, str] | None:
     or jobs that never completed), so the response omits the field and the UI
     falls back to the single-format preview.
     """
-    if not formats_json:
-        return None
-    try:
-        parsed = json.loads(formats_json)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    if not isinstance(parsed, dict) or not parsed:
-        return None
-    return {str(k): str(v) for k, v in parsed.items() if v is not None}
+    return parse_cached_formats(formats_json)
 
 
 def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | None:
@@ -274,28 +272,12 @@ def _parse_available_formats(job: ConversionJob) -> list[str]:
     For legacy single-format jobs the cached list is absent, so we fall back to
     the job's ``output_format`` column so older jobs still expose one tab.
     """
-    cached = _parse_formats_json(job.formats_json)
-    if cached is not None:
-        return list(cached.keys())
-    fmt = (job.output_format or "markdown").strip()
-    return [fmt] if fmt else ["markdown"]
+    return available_cached_formats(job.formats_json, job.output_format)
 
 
 def _parse_formats_json(formats_json: str | None) -> dict[str, str] | None:
     """Parse the ``{format: text}`` cache written at finalize/regenerate."""
-    if not formats_json:
-        return None
-    try:
-        parsed = json.loads(formats_json)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    if not isinstance(parsed, dict) or not parsed:
-        return None
-    return {
-        str(fmt): str(text)
-        for fmt, text in parsed.items()
-        if fmt and text is not None
-    }
+    return parse_cached_formats(formats_json)
 
 
 def _planned_mixed_segments(probe_data: Any) -> list[dict[str, Any]] | None:
@@ -372,7 +354,7 @@ async def upload_file(
     local_filepath: Optional[str] = Query(None, description="Optional local absolute file path on the server"),
     source_url: Optional[str] = Query(None, description="Optional public http(s) document URL"),
     output_dir: Optional[str] = Query(None, description="Optional custom output directory path"),
-    output_format: str = Query("markdown", description="Output format: markdown, json, html, chunks"),
+    output_format: str = Query("markdown", description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}"),
     output_formats: Optional[str] = Query(None, description="Comma-separated output formats for multi-format rendering (e.g. markdown,json)"),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
     engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
@@ -541,9 +523,7 @@ async def upload_file(
         "original_name": original_name,
     }
     if output_formats:
-        fmt_list = [f.strip().lower() for f in output_formats.split(",") if f.strip()]
-        supported = {"markdown", "json", "html", "chunks"}
-        fmt_list = [f for f in fmt_list if f in supported]
+        fmt_list = normalize_formats(output_formats.split(","))
         if fmt_list:
             config["output_formats"] = fmt_list
             config["output_format"] = fmt_list[0]
@@ -960,8 +940,7 @@ async def download_result(
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Job not yet completed")
 
-    from app.services.format_store import parse_formats
-    formats_map = parse_formats(job.formats_json) or {}
+    formats_map = parse_cached_formats(job.formats_json) or {}
     if "markdown" not in formats_map and job.result_text:
         formats_map["markdown"] = job.result_text
 
@@ -1196,7 +1175,7 @@ def _job_source_path(job: ConversionJob) -> Path | None:
 @router.post("/{job_id}/regenerate")
 async def regenerate_format(
     job_id: str,
-    format: str = Query(..., description="Output format to regenerate: markdown|json|html|chunks"),
+    format: str = Query(..., description=f"Output format to regenerate: {OUTPUT_FORMATS_DESCRIPTION}"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Render one additional output format for an existing completed job.
@@ -1206,10 +1185,10 @@ async def regenerate_format(
     ``formats_json`` cache and the format becomes instantly viewable in the
     preview tabs without re-running the primary conversion.
     """
-    if format not in ("markdown", "json", "html", "chunks"):
+    if format not in OUTPUT_FORMAT_SET:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported format '{format}'. Allowed: markdown, json, html, chunks.",
+            detail=f"Unsupported format '{format}'. Allowed: {OUTPUT_FORMATS_DESCRIPTION}.",
         )
 
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
