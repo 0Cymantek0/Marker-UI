@@ -104,14 +104,15 @@ class AudioConverter(BaseConverter):
         # above propagates through normalize into the transcript.
         transcript = apply_speaker_aliases(transcript, config.get("audio_speaker_aliases"))
 
-        output_mode = _resolve_output_mode(config)
+        enhancement_plan = _resolve_enhancement_plan(config)
+        output_mode = enhancement_plan["mode"]
         if output_mode == "transcript":
             text = render_transcript_markdown(transcript, title=title)
         else:
             text = render_enhanced_markdown(
                 transcript,
                 title=title,
-                template=output_mode,
+                template=enhancement_plan["template"],
                 context=config.get("audio_context"),
             )
 
@@ -153,6 +154,12 @@ class AudioConverter(BaseConverter):
                     "speakers": _speaker_metadata(transcript, config),
                     "enhancement": {
                         "mode": output_mode,
+                        "template": enhancement_plan["template"],
+                        "trigger": enhancement_plan["trigger"],
+                        "text_enhancement_enabled": enhancement_plan["text_enabled"],
+                        "text_enhancement_strength": enhancement_plan["text_strength"],
+                        "structural_enhancement_enabled": enhancement_plan["structural_enabled"],
+                        "structural_enhancement_mode": enhancement_plan["structural_mode"],
                         "provider": "local_deterministic" if output_mode != "transcript" else None,
                         "provenance_required": output_mode != "transcript",
                     },
@@ -185,6 +192,65 @@ def _resolve_output_mode(config: dict[str, Any]) -> str:
     if mode in {"enhanced", "notes", "meeting_notes", "lecture_notes", "interview_qna", "action_decision_log"}:
         return mode
     return "transcript"
+
+
+def _resolve_enhancement_plan(config: dict[str, Any]) -> dict[str, Any]:
+    """Map UI enhancement toggles to the deterministic evidence-first renderer."""
+
+    requested_mode = _resolve_output_mode(config)
+    text_enabled = _truthy(config.get("audio_text_enhancement_enabled"))
+    text_strength = _clamp_int(config.get("audio_text_enhancement_strength"), minimum=0, maximum=5)
+    structural_enabled = _truthy(config.get("audio_structural_enhancement_enabled"))
+    structural_mode = str(config.get("audio_structural_enhancement_mode") or "auto").strip().lower()
+
+    if requested_mode != "transcript":
+        return {
+            "mode": requested_mode,
+            "template": requested_mode,
+            "trigger": "output_mode",
+            "text_enabled": text_enabled,
+            "text_strength": text_strength,
+            "structural_enabled": structural_enabled,
+            "structural_mode": structural_mode,
+        }
+    if structural_enabled:
+        template = structural_mode if structural_mode and structural_mode != "auto" else "structured_notes"
+        return {
+            "mode": "enhanced",
+            "template": template,
+            "trigger": "structural_enhancement",
+            "text_enabled": text_enabled,
+            "text_strength": text_strength,
+            "structural_enabled": True,
+            "structural_mode": structural_mode,
+        }
+    if text_enabled:
+        return {
+            "mode": "enhanced",
+            "template": "text_enhancement",
+            "trigger": "text_enhancement",
+            "text_enabled": True,
+            "text_strength": max(1, text_strength),
+            "structural_enabled": False,
+            "structural_mode": structural_mode,
+        }
+    return {
+        "mode": "transcript",
+        "template": "transcript",
+        "trigger": None,
+        "text_enabled": text_enabled,
+        "text_strength": text_strength,
+        "structural_enabled": structural_enabled,
+        "structural_mode": structural_mode,
+    }
+
+
+def _clamp_int(value: Any, *, minimum: int, maximum: int) -> int:
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return minimum
+    return max(minimum, min(maximum, coerced))
 
 
 def _truthy(value: Any) -> bool:

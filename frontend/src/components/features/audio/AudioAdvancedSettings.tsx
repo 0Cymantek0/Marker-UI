@@ -370,7 +370,12 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 <ToggleChip
                   label="Improve Transcript Wording"
                   checked={config.audio_text_enhancement_enabled ?? false}
-                  onChange={(v) => onChange('audio_text_enhancement_enabled', v)}
+                  onChange={(v) => {
+                    onChange('audio_text_enhancement_enabled', v)
+                    if (v && !config.audio_text_enhancement_strength) {
+                      onChange('audio_text_enhancement_strength', 1)
+                    }
+                  }}
                   disabled={disabled}
                 />
                 {config.audio_text_enhancement_enabled && (

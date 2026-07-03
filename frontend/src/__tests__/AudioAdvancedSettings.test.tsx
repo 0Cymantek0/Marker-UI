@@ -178,4 +178,20 @@ describe('AudioAdvancedSettings', () => {
 
     expect(screen.getByText('Strength')).toBeInTheDocument()
   })
+
+  it('sets minimal strength when enabling transcript wording improvement', async () => {
+    const onChange = vi.fn()
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Enhancement & Correction'))
+    fireEvent.click(screen.getByRole('button', { name: /improve transcript wording/i }))
+
+    expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_enabled', true)
+    expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_strength', 1)
+  })
 })

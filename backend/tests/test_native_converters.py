@@ -330,9 +330,103 @@ def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, t
     assert result.metadata["engine_detail"]["output_mode"] == "meeting_notes"
     assert result.metadata["audio"]["enhancement"] == {
         "mode": "meeting_notes",
+        "template": "meeting_notes",
+        "trigger": "output_mode",
+        "text_enhancement_enabled": False,
+        "text_enhancement_strength": 0,
+        "structural_enhancement_enabled": False,
+        "structural_enhancement_mode": "auto",
         "provider": "local_deterministic",
         "provenance_required": True,
     }
+
+
+def test_audio_text_enhancement_toggle_uses_enhanced_renderer(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "call.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "language": "en",
+                    "duration": 1.0,
+                    "model": "tiny.en",
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "please send the follow up", "confidence": 0.88},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.build_provider",
+        lambda provider_id: FakeProvider(),
+    )
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.probe_audio",
+        lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {
+            "audio_output_mode": "transcript",
+            "audio_text_enhancement_enabled": True,
+            "audio_text_enhancement_strength": 2,
+        },
+    )
+
+    assert "# Audio Document: call" in result.text
+    assert "## Original Transcript" in result.text
+    assert result.metadata["engine_detail"]["output_mode"] == "enhanced"
+    assert result.metadata["audio"]["enhancement"]["trigger"] == "text_enhancement"
+    assert result.metadata["audio"]["enhancement"]["text_enhancement_strength"] == 2
+
+
+def test_audio_structural_enhancement_uses_requested_template(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "standup.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 1.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "today we decide to ship", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.build_provider",
+        lambda provider_id: FakeProvider(),
+    )
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.probe_audio",
+        lambda filepath: {"available": True},
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {
+            "audio_output_mode": "transcript",
+            "audio_structural_enhancement_enabled": True,
+            "audio_structural_enhancement_mode": "meeting_notes",
+        },
+    )
+
+    assert "- **Mode:** local deterministic meeting_notes" in result.text
+    assert result.metadata["audio"]["enhancement"]["trigger"] == "structural_enhancement"
+    assert result.metadata["audio"]["enhancement"]["template"] == "meeting_notes"
 
 
 def test_audio_transcribe_passes_vocabulary_and_word_timestamp_options(monkeypatch, tmp_path: Path) -> None:
