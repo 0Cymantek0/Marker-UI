@@ -111,23 +111,18 @@ class TestConversionService:
         assert engine_meta["needs_marker_models"] is True
         assert isinstance(engine_meta["reasons"], list)
 
-    def test_unregistered_engine_falls_back_to_marker(self, tmp_path: Any) -> None:
-        """If router picks an engine with no registered converter, fall back to marker_pdf."""
+    def test_unregistered_native_engine_does_not_fall_back_to_marker(self, tmp_path: Any) -> None:
+        """Missing native converters fail directly instead of crossing into Marker."""
         svc, fake_ms = self._make_service()
-        # Unregister office_docx to test fallback
         svc.registry.unregister("office_docx")
-        
+
         docx_path = tmp_path / "test.docx"
         docx_path.write_bytes(b"PK docx content")
 
-        result = svc.convert_file(str(docx_path), {})
+        with pytest.raises(RuntimeError, match="No converter registered for engine 'office_docx'"):
+            svc.convert_file(str(docx_path), {})
 
-        # Should fall back to marker_pdf
-        engine_meta = result["metadata"]["engine"]
-        assert engine_meta["engine"] == "marker_pdf"
-        assert "fallback" in engine_meta["label"].lower() or "no converter" in engine_meta["label"].lower()
-        assert len(engine_meta["warnings"]) > 0
-        assert engine_meta["confidence"] <= 0.5
+        assert fake_ms.convert_calls == []
 
     def test_plan_method_returns_converter_plan(self, tmp_path: Any) -> None:
         """plan() returns a ConverterPlan without executing conversion."""
@@ -146,7 +141,6 @@ class TestConversionService:
     def test_plan_for_unregistered_engine(self, tmp_path: Any) -> None:
         """plan() for unregistered engine shows fallback info."""
         svc, _ = self._make_service()
-        # Unregister office_docx to test fallback
         svc.registry.unregister("office_docx")
         
         docx_path = tmp_path / "report.docx"
@@ -154,10 +148,37 @@ class TestConversionService:
 
         plan = svc.plan(str(docx_path), {})
 
-        # Falls back to marker_pdf since office_docx isn't registered
+        assert plan.engine == "office_docx"
+        assert plan.fallback_chain == []
+        assert "not available" in plan.warnings[0]
+
+    def test_plan_for_unregistered_liteparse_pdf_falls_back_to_marker(self, tmp_path: Any) -> None:
+        """PDF fast-path fallback remains available because Marker accepts PDFs."""
+        svc, _ = self._make_service()
+        svc.registry.unregister("liteparse_pdf")
+
+        pdf_path = tmp_path / "clean.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        plan = svc.plan(
+            str(pdf_path),
+            {
+                "probe_result": {
+                    "page_count": 1,
+                    "text_layer_score": 0.9,
+                    "text_quality_score": 0.95,
+                    "scan_likelihood": 0.0,
+                    "sandwich_likelihood": 0.0,
+                    "layout_complexity_score": 0.0,
+                    "visual_complexity_score": 0.0,
+                    "recommended_engine": "liteparse",
+                    "reasons": ["strong extractable text layer"],
+                    "sampled_image_count": 0,
+                }
+            },
+        )
+
         assert plan.engine == "marker_pdf"
-        assert len(plan.fallback_chain) == 2
-        assert plan.fallback_chain == ["office_docx", "marker_pdf"]
+        assert plan.fallback_chain == ["liteparse_pdf", "marker_pdf"]
 
     def test_registry_has_marker_pdf(self) -> None:
         """Registry contains marker_pdf after construction."""
@@ -190,13 +211,12 @@ class TestConversionService:
         serialized = json.dumps(result, default=str)
         assert '"text"' in serialized
 
-    def test_runtime_fallback_to_marker_when_converter_raises(self, tmp_path: Any) -> None:
-        """BUG-B: a failing office converter falls back to marker_pdf at runtime."""
+    def test_native_runtime_failure_does_not_fallback_to_marker(self, tmp_path: Any) -> None:
+        """A failing native converter preserves its own error and does not invoke Marker."""
         svc, fake_ms = self._make_service()
         docx_path = tmp_path / "corrupt.docx"
         docx_path.write_bytes(b"PK not really a docx")
 
-        # Make the office_docx converter raise at runtime (e.g. BadZipFile).
         office = svc.registry.get("office_docx")
         assert office is not None
         original = office.convert
@@ -206,16 +226,12 @@ class TestConversionService:
 
         office.convert = raising_convert  # type: ignore[assignment]
         try:
-            result = svc.convert_file(str(docx_path), {})
+            with pytest.raises(RuntimeError, match="simulated BadZipFile"):
+                svc.convert_file(str(docx_path), {})
         finally:
             office.convert = original  # type: ignore[assignment]
 
-        # The runtime fallback retried via marker_pdf (the fake marker service).
-        assert len(fake_ms.convert_calls) == 1
-        engine_meta = result["metadata"]["engine"]
-        assert engine_meta["engine"] == "marker_pdf"
-        assert "runtime fallback" in engine_meta["label"].lower()
-        assert engine_meta["fallback_chain"] == ["office_docx", "marker_pdf"]
+        assert fake_ms.convert_calls == []
 
     def test_liteparse_runtime_fallback_preserves_probe_metadata(self, tmp_path: Any) -> None:
         svc, fake_ms = self._make_service()

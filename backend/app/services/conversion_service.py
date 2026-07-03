@@ -232,9 +232,24 @@ class ConversionService:
         """Expose registry for tests and capability queries."""
         return self._registry
 
-    def _resolve_fallback(self, plan: ConverterPlan) -> ConverterPlan:
-        """Fallback to marker_pdf if planned engine has no registered converter."""
+    def _resolve_fallback(
+        self,
+        plan: ConverterPlan,
+        stream_info: StreamInfo,
+        config: dict[str, Any],
+    ) -> ConverterPlan:
+        """Fallback only when the planned engine has an explicit safe fallback."""
         if not self._registry.has(plan.engine):
+            marker = self._registry.get("marker_pdf")
+            if (
+                plan.engine != "liteparse_pdf"
+                or marker is None
+                or not marker.accepts(stream_info, config)
+            ):
+                plan.warnings.append(
+                    f"Converter for '{plan.engine}' not available in this build"
+                )
+                return plan
             return ConverterPlan(
                 engine="marker_pdf",
                 label=f"{plan.label} → Marker PDF (no converter registered)",
@@ -260,7 +275,7 @@ class ConversionService:
             return mixed_plan
         stream_info = StreamInfo.from_path(filepath)
         plan = self._router.plan(stream_info, config)
-        plan = self._resolve_fallback(plan)
+        plan = self._resolve_fallback(plan, stream_info, config)
         self._annotate_sampled_mixed_probe_skip(stream_info.extension, config, plan)
         return plan
 
@@ -283,7 +298,7 @@ class ConversionService:
             sample=b"",
         )
         plan = self._router.plan(stream_info, config)
-        return self._resolve_fallback(plan)
+        return self._resolve_fallback(plan, stream_info, config)
 
 
     def convert_file(
@@ -300,6 +315,7 @@ class ConversionService:
         if self._should_use_mixed_pdf_routing(filepath, config):
             return self._convert_mixed_pdf_segments(filepath, config, device=device)
 
+        stream_info = StreamInfo.from_path(filepath)
         plan = self.plan(filepath, config)
 
         converter = self._registry.get(plan.engine)
@@ -308,6 +324,11 @@ class ConversionService:
             raise RuntimeError(
                 f"No converter registered for engine '{plan.engine}' "
                 f"(file: {filepath})"
+            )
+        if not converter.accepts(stream_info, config):
+            raise RuntimeError(
+                f"Converter '{plan.engine}' does not accept extension "
+                f"'{stream_info.extension}' (file: {filepath})"
             )
 
         logger.info(
@@ -320,12 +341,17 @@ class ConversionService:
         try:
             result = converter.convert(filepath, config, device=device)
         except Exception as exc:
-            # Runtime fallback: if a non-marker converter fails (e.g. a corrupt
-            # DOCX/PPTX raises BadZipFile), re-plan to marker_pdf and retry so the
-            # user gets a best-effort conversion instead of a hard job failure.
-            # The plan-level fallback_chain only covers "no converter registered";
-            # this covers "converter present but raised at runtime".
+            # Only LiteParse may retry through Marker, and only for PDF-like
+            # streams Marker declares it can handle. Native parser failures keep
+            # their original error instead of crossing into GPU/Marker work.
             if plan.engine == "marker_pdf":
+                raise
+            fb_converter = self._registry.get("marker_pdf")
+            if (
+                plan.engine != "liteparse_pdf"
+                or fb_converter is None
+                or not fb_converter.accepts(stream_info, config)
+            ):
                 raise
             logger.warning(
                 "Engine '%s' failed on '%s' (%s); falling back to marker_pdf",
@@ -347,9 +373,6 @@ class ConversionService:
                 fallback_chain=[plan.engine, "marker_pdf"],
                 warnings=plan.warnings + [f"Runtime fallback: {exc}"],
             )
-            fb_converter = self._registry.get(fb_plan.engine)
-            if fb_converter is None:
-                raise
             result = fb_converter.convert(filepath, config, device=device)
             result.metadata["engine"] = fb_plan.to_dict()
             probe_data = config.get("probe_result") if isinstance(config, dict) else None

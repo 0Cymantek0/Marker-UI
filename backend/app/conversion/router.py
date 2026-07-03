@@ -249,8 +249,6 @@ class ConversionRouter:
         if meta is None or ext not in compatible_exts:
             return None
         label, needs_marker, needs_gpu, confidence = meta
-        if engine == "marker_pdf" and ext in _EXT_TO_ENTRY:
-            _engine, label, needs_marker, needs_gpu, confidence = _EXT_TO_ENTRY[ext]
         return ConverterPlan(
             engine=engine,
             label=label,

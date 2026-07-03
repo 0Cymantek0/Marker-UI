@@ -19,8 +19,8 @@ def _write_digital_pdf(path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_convert_plan_docx_fallback_without_registration(client: AsyncClient):
-    """Predicting plan for a docx file falls back to marker_pdf if office_docx is not registered."""
+async def test_convert_plan_docx_without_registration_stays_native(client: AsyncClient):
+    """Predicting plan for docx never suggests incompatible Marker fallback."""
     from app.main import _app_state
     with patch.object(_app_state.conversion_service.registry, "has", return_value=False):
         resp = await client.post(
@@ -29,11 +29,11 @@ async def test_convert_plan_docx_fallback_without_registration(client: AsyncClie
         )
         assert resp.status_code == 200
         plan = resp.json()
-        assert plan["engine"] == "marker_pdf"
-        assert "no converter registered" in plan["label"]
-        assert plan["needs_marker_models"] is True
-        assert plan["fallback_chain"] == ["office_docx", "marker_pdf"]
-        assert len(plan["warnings"]) > 0
+        assert plan["engine"] == "office_docx"
+        assert plan["label"] == "Fast Office (Word)"
+        assert plan["needs_marker_models"] is False
+        assert plan["fallback_chain"] == []
+        assert "office_docx" in plan["warnings"][0]
 
 
 @pytest.mark.asyncio
