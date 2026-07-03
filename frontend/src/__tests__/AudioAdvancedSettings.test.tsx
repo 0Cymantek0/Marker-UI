@@ -215,4 +215,20 @@ describe('AudioAdvancedSettings', () => {
     expect(compare).toBeDisabled()
     expect(screen.getByText(/requires at least two shipped transcription adapters/i)).toBeInTheDocument()
   })
+
+  it('disables cloud enhancement because no cloud enhancement adapter ships', async () => {
+    const onChange = vi.fn()
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Privacy & Providers'))
+
+    const cloudEnhancement = screen.getByRole('button', { name: /allow cloud enhancement/i })
+    expect(cloudEnhancement).toBeDisabled()
+    expect(screen.getByText(/cloud transcript enhancement is not shipped/i)).toBeInTheDocument()
+  })
 })

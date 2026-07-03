@@ -80,6 +80,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
   const selectableCapabilities = capabilities.filter((c) => c.available !== false)
   const comparableProviderCount = selectableCapabilities.filter((c) => c.supports_batch_compare).length
   const canCompareProviders = comparableProviderCount > 1
+  const cloudEnhancementAvailable = false
   const providerOptions = selectableCapabilities.length > 0
     ? selectableCapabilities.map((c) => ({
         value: c.provider_id,
@@ -482,8 +483,11 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 label="Allow Cloud Enhancement"
                 checked={config.audio_enhancement_allow_cloud ?? false}
                 onChange={(v) => onChange('audio_enhancement_allow_cloud', v)}
-                disabled={disabled}
+                disabled={disabled || !cloudEnhancementAvailable}
               />
+              {!cloudEnhancementAvailable && (
+                <ProviderWarning message="Cloud transcript enhancement is not shipped in this build. Enhancement uses local deterministic source-bound notes only." />
+              )}
               {(config.audio_allow_cloud_stt || config.audio_enhancement_allow_cloud) && (
                 <div className="text-[10px] text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug flex items-start gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
