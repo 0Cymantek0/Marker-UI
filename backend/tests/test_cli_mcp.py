@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import agent_api
-from app.errors import OutputExistsError, UnsupportedFormatError
+from app.errors import OutputExistsError, UnsupportedFormatError, UsageError
 from app.main import _app_state
 from app.agent_api import AgentConversionOptions, convert_document, plan_conversion, read_output, self_test
 from app.database import Base
@@ -596,6 +596,53 @@ async def test_agent_api_rejects_native_structured_output_format(tmp_path: Path)
         )
 
     assert "not supported for engine 'text_data'" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_unknown_engine_override() -> None:
+    with pytest.raises(UsageError) as exc_info:
+        await plan_conversion(
+            filename="scores.tsv",
+            size=12,
+            options=AgentConversionOptions(engine_override="does_not_exist"),
+        )
+
+    assert "Unknown engine_override" in str(exc_info.value)
+    assert "text_data" in exc_info.value.details["known_engines"]
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_incompatible_engine_override() -> None:
+    with pytest.raises(UsageError) as exc_info:
+        await plan_conversion(
+            filename="image.png",
+            size=12,
+            options=AgentConversionOptions(engine_override="liteparse_pdf"),
+        )
+
+    assert "incompatible" in str(exc_info.value)
+    assert exc_info.value.details["extension"] == ".png"
+    assert exc_info.value.details["compatible_extensions"] == [".pdf"]
+
+
+@pytest.mark.asyncio
+async def test_agent_api_allows_compatible_engine_override_and_auto_sentinel(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\n", encoding="utf-8")
+
+    explicit = await convert_document(
+        local_file_path=str(source),
+        output_dir=str(tmp_path / "out-explicit"),
+        options=AgentConversionOptions(engine_override="text_data"),
+    )
+    automatic = await plan_conversion(
+        filename="scores.tsv",
+        size=source.stat().st_size,
+        options=AgentConversionOptions(engine_override="auto"),
+    )
+
+    assert explicit["metadata"]["engine"]["engine"] == "text_data"
+    assert automatic["plan"]["engine"] == "text_data"
 
 
 @pytest.mark.asyncio

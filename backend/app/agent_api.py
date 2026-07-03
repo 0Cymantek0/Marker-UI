@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
-from app.conversion.formats import OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
+from app.conversion.formats import INPUT_FORMATS, OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -54,6 +54,16 @@ from app.utils.secrets import decrypt_value, encrypt_value, is_masked, is_sensit
 
 SERVICE_NAME = "marker_mcp"
 ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
+ENGINE_COMPATIBLE_EXTENSIONS = {
+    engine: frozenset(
+        ext
+        for spec in INPUT_FORMATS
+        if spec.engine == engine
+        for ext in spec.extensions
+    )
+    for engine in sorted({spec.engine for spec in INPUT_FORMATS})
+}
+ENGINE_COMPATIBLE_EXTENSIONS["liteparse_pdf"] = frozenset({".pdf"})
 TOOL_NAMES = [
     "marker_list_capabilities",
     "marker_plan_conversion",
@@ -217,6 +227,7 @@ async def plan_conversion(
     if source_path and source_path.is_file():
         path = source_path.resolve()
         _validate_supported_path(path)
+        _validate_engine_override(config, path.suffix)
         if path.suffix.lower() == ".pdf":
             probe_result = await asyncio.to_thread(
                 probe_pdf,
@@ -234,6 +245,7 @@ async def plan_conversion(
         effective_filename = filename or (source_path.name if source_path else "")
         if not effective_filename:
             raise UsageError("Provide local_file_path or filename")
+        _validate_engine_override(config, Path(effective_filename).suffix)
         plan = service.plan_by_metadata(effective_filename, size, config)
         effective_size = size
     return {
@@ -332,6 +344,7 @@ async def submit_conversion_job(
 
     input_format = suffix.lstrip(".")
     config = build_conversion_config(options, original_name=original_name, output_dir=output_dir)
+    _validate_engine_override(config, suffix)
     if is_local:
         config["local_filepath"] = stored_path
     if source_url_safe:
@@ -429,6 +442,7 @@ async def _convert_resolved_path(
     source_url: str | None = None,
 ) -> dict[str, Any]:
     config = build_conversion_config(options, original_name=original_name, output_dir=str(output_base))
+    _validate_engine_override(config, path.suffix)
     if source_url:
         config["source_url"] = source_url
     if path.suffix.lower() == ".pdf":
@@ -1001,6 +1015,35 @@ def _validate_supported_path(path: Path) -> None:
             details={"suffix": path.suffix, "allowed": sorted(ALLOWED_EXTENSIONS)},
         )
     assert_local_input_allowed(path)
+
+
+def _validate_engine_override(config: dict[str, Any], suffix: str) -> None:
+    engine = str(config.get("engine_override") or "").strip()
+    if not engine:
+        return
+    if engine == "auto":
+        config.pop("engine_override", None)
+        return
+
+    extension = suffix.lower()
+    compatible = ENGINE_COMPATIBLE_EXTENSIONS.get(engine)
+    if compatible is None:
+        raise UsageError(
+            f"Unknown engine_override '{engine}'.",
+            details={
+                "engine_override": engine,
+                "known_engines": sorted(ENGINE_COMPATIBLE_EXTENSIONS),
+            },
+        )
+    if extension not in compatible:
+        raise UsageError(
+            f"engine_override '{engine}' is incompatible with extension '{extension or '<none>'}'.",
+            details={
+                "engine_override": engine,
+                "extension": extension,
+                "compatible_extensions": sorted(compatible),
+            },
+        )
 
 
 def _validate_page_range_safe(page_range: str, page_count: int) -> None:
