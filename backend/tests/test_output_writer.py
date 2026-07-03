@@ -98,3 +98,79 @@ def test_write_conversion_output_bundles_assets_and_sanitizes_paths(tmp_path: Pa
     names = sorted(asset["name"] for asset in manifest["output"]["assets"])
     assert names == ["sheets/Sheet_1.csv", "unsafe_image.png"]
     assert all(asset["sha256"] for asset in manifest["output"]["assets"])
+
+
+def test_write_conversion_output_deduplicates_image_asset_names(tmp_path: Path):
+    result = {
+        "text": "hello",
+        "extension": "md",
+        "images": {
+            "figure.png": b"first",
+            "nested/figure.png": b"second",
+        },
+        "metadata": {},
+    }
+
+    written = write_conversion_output(
+        result,
+        source_name="input.tsv",
+        output_base=tmp_path,
+        layout="directory_if_assets",
+    )
+
+    assert (written.final_path / "figure.png").read_bytes() == b"first"
+    assert (written.final_path / "figure-1.png").read_bytes() == b"second"
+    assert sorted(entry["name"] for entry in written.asset_entries) == ["figure-1.png", "figure.png"]
+
+
+def test_write_conversion_output_deduplicates_nested_asset_names(tmp_path: Path):
+    result = {
+        "text": "hello",
+        "extension": "md",
+        "assets": [
+            {"name": "tables/data.csv", "media_type": "text/csv", "data": b"first"},
+            {"name": "tables/data.csv", "media_type": "text/csv", "data": b"second"},
+        ],
+        "metadata": {},
+    }
+
+    written = write_conversion_output(
+        result,
+        source_name="input.tsv",
+        output_base=tmp_path,
+        layout="directory_if_assets",
+    )
+
+    assert (written.final_path / "tables" / "data.csv").read_bytes() == b"first"
+    assert (written.final_path / "tables" / "data-1.csv").read_bytes() == b"second"
+    assert sorted(entry["name"] for entry in written.asset_entries) == [
+        "tables/data-1.csv",
+        "tables/data.csv",
+    ]
+
+
+def test_write_conversion_output_deduplicates_image_and_asset_collision(tmp_path: Path):
+    result = {
+        "text": "hello",
+        "extension": "md",
+        "images": {"shared.bin": b"image"},
+        "assets": [
+            {"name": "shared.bin", "media_type": "application/octet-stream", "data": b"asset"},
+        ],
+        "metadata": {},
+    }
+
+    written = write_conversion_output(
+        result,
+        source_name="input.tsv",
+        output_base=tmp_path,
+        layout="directory_if_assets",
+    )
+
+    assert (written.final_path / "shared.bin").read_bytes() == b"image"
+    assert (written.final_path / "shared-1.bin").read_bytes() == b"asset"
+    manifest = json.loads(written.manifest_path.read_text(encoding="utf-8"))
+    entries = sorted(manifest["output"]["assets"], key=lambda item: item["name"])
+    assert [entry["name"] for entry in entries] == ["shared-1.bin", "shared.bin"]
+    assert [entry["relative_path"] for entry in entries] == ["shared-1.bin", "shared.bin"]
+    assert len({entry["path"] for entry in entries}) == 2
