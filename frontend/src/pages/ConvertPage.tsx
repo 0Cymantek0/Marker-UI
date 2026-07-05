@@ -394,7 +394,7 @@ export function ConvertPage() {
       value,
       options: engineOptionsFor(entry.file.name, planState?.plan ?? null),
       status: sourcePlanStatus(planState, value),
-      title: planState?.plan?.reasons.join(' · '),
+      title: planState?.plan?.reasons.join(' | '),
       onChange: (engine: string) => setSourceEngine(entry.id, engine),
       plan: planState?.plan ?? null,
       loading: planState?.loading ?? false,
