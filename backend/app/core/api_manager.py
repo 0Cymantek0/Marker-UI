@@ -47,12 +47,176 @@ _override_lock = threading.Lock()
 # genuinely stuck: every key is rate-limited, or there is one key, or the model
 # itself is overloaded (repeated 504). So we count ONLY final, post-rotation
 # rate-limit/timeout outcomes per provider and reset on any success. When the
-# streak crosses the threshold we emit ONE log line the UI listens for.
+# streak crosses the threshold we emit a 'model swap suggested' log line the UI
+# listens for — and re-emit at every subsequent threshold so a sustained storm
+# does not go silent after the first nudge.
 _STUCK_THRESHOLD = 3
 _stuck_counter: dict[str, int] = {}
 _stuck_lock = threading.Lock()
 # Status codes that mean "rate limited / overloaded" rather than a config error.
 _RATE_LIMIT_STATUSES = (429, 503, 504)
+# Status codes that trigger fallback-key rotation (auth + rate-limit + overload).
+# 504 included: a gateway timeout may resolve on a different backend instance.
+_ROTATION_STATUSES = (401, 403, 429, 503, 504)
+
+# --- Exponential backoff + per-provider cooldown ----------------------------
+# Marker's vendored LLM services use linear backoff (3s/6s/9s) and ignore the
+# Retry-After header. We sit one layer below them at httpx, so recovering here
+# means marker never sees the 429. Base 2s, factor 2^n, cap 60s, max 4 attempts
+# (2s/4s/8s/16s). Retry-After is honored when it exceeds the computed wait.
+_BACKOFF_BASE = 2.0
+_BACKOFF_FACTOR = 2.0
+_BACKOFF_CAP = 60.0
+_BACKOFF_MAX_ATTEMPTS = 4
+# After backoff + rotation both exhaust, block ALL new calls for this provider
+# for COOLDOWN_SECONDS — gives the throttled endpoint a real break instead of
+# immediately re-hammering it on the next block.
+_COOLDOWN_SECONDS = 30.0
+
+_provider_cooldown_until: dict[str, float] = {}
+_cooldown_lock = threading.Lock()
+
+
+def _set_cooldown(provider_id: str | None) -> None:
+    """Start a per-provider cooldown window (rate-limit recovery pause)."""
+    if not provider_id:
+        return
+    with _cooldown_lock:
+        _provider_cooldown_until[provider_id] = time.time() + _COOLDOWN_SECONDS
+
+
+def _clear_cooldown(provider_id: str | None) -> None:
+    """Cancel any active cooldown for a provider (called on success)."""
+    if not provider_id:
+        return
+    with _cooldown_lock:
+        _provider_cooldown_until.pop(provider_id, None)
+
+
+def _cooldown_remaining(provider_id: str | None) -> float:
+    """Seconds left in the provider's cooldown window, or 0 if none active."""
+    if not provider_id:
+        return 0.0
+    with _cooldown_lock:
+        until = _provider_cooldown_until.get(provider_id)
+    if not until:
+        return 0.0
+    return max(0.0, until - time.time())
+
+
+def _cooldown_response(provider_id: str | None, request: httpx.Request) -> httpx.Response | None:
+    """If provider is in cooldown, return a synthetic 429 with Retry-After
+    so marker's own retry loop sleeps instead of hammering the throttled
+    endpoint. Returns None when no cooldown is active."""
+    remaining = _cooldown_remaining(provider_id)
+    if remaining <= 0:
+        return None
+    logger.info(
+        "provider %s in cooldown, returning synthetic 429 (Retry-After: %.0fs)",
+        provider_id, remaining,
+    )
+    return httpx.Response(
+        429,
+        headers={"Retry-After": str(int(remaining) + 1)},
+        json={"error": {"code": 429, "message": "provider in cooldown after rate-limit storm"}},
+        request=request,
+    )
+
+
+def _sleep_sync(seconds: float) -> None:
+    """Indirection so tests can patch out real sleeps."""
+    time.sleep(seconds)
+
+
+async def _sleep_async(seconds: float) -> None:
+    """Indirection so tests can patch out real sleeps."""
+    await asyncio.sleep(seconds)
+
+
+def _parse_retry_after(response: httpx.Response) -> float | None:
+    """Parse the Retry-After header (seconds or HTTP-date). Capped at _BACKOFF_CAP."""
+    val = response.headers.get("Retry-After") or response.headers.get("retry-after")
+    if not val:
+        return None
+    try:
+        return min(float(val), _BACKOFF_CAP)
+    except ValueError:
+        pass
+    # HTTP-date format (RFC 7231)
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(val)
+        if dt is not None:
+            delta = dt.timestamp() - time.time()
+            return max(0.0, min(delta, _BACKOFF_CAP))
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _compute_backoff(attempt: int, retry_after: float | None) -> float:
+    """Exponential backoff: base * factor^attempt, capped. Retry-After wins if larger."""
+    computed = min(_BACKOFF_CAP, _BACKOFF_BASE * (_BACKOFF_FACTOR ** attempt))
+    if retry_after is not None:
+        return max(computed, min(retry_after, _BACKOFF_CAP))
+    return computed
+
+
+def _backoff_retry_sync(
+    client: httpx.Client,
+    request: httpx.Request,
+    response: httpx.Response,
+    *args: Any,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Exponential backoff retry for 429/503/504 on the SAME key.
+
+    Returns the recovered 2xx response, or the last rate-limit response if all
+    attempts fail (caller then falls through to key rotation).
+    """
+    last = response
+    for attempt in range(_BACKOFF_MAX_ATTEMPTS):
+        retry_after = _parse_retry_after(last)
+        wait = _compute_backoff(attempt, retry_after)
+        logger.info(
+            "backoff retry %d/%d in %.1fs for %s (HTTP %d)",
+            attempt + 1, _BACKOFF_MAX_ATTEMPTS, wait, request.url.host, last.status_code,
+        )
+        _sleep_sync(wait)
+        try:
+            last = _orig_client_send(client, request, *args, **kwargs)
+        except (httpx.ConnectError, httpx.TimeoutException):
+            # Network error mid-backoff: let rotation handle it.
+            return response
+        if last.status_code not in _RATE_LIMIT_STATUSES:
+            return last  # recovered (2xx) or a different error — stop retrying
+    return last
+
+
+async def _backoff_retry_async(
+    client: httpx.AsyncClient,
+    request: httpx.Request,
+    response: httpx.Response,
+    *args: Any,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Async exponential backoff retry. See _backoff_retry_sync."""
+    last = response
+    for attempt in range(_BACKOFF_MAX_ATTEMPTS):
+        retry_after = _parse_retry_after(last)
+        wait = _compute_backoff(attempt, retry_after)
+        logger.info(
+            "backoff retry %d/%d in %.1fs for %s (HTTP %d)",
+            attempt + 1, _BACKOFF_MAX_ATTEMPTS, wait, request.url.host, last.status_code,
+        )
+        await _sleep_async(wait)
+        try:
+            last = await _orig_async_client_send(client, request, *args, **kwargs)
+        except (httpx.ConnectError, httpx.TimeoutException):
+            return response
+        if last.status_code not in _RATE_LIMIT_STATUSES:
+            return last
+    return last
 
 
 def reset_stuck_counter(provider_id: str) -> None:
@@ -77,13 +241,16 @@ def _note_call_outcome(provider_id: str | None, *, ok: bool, rate_limited: bool)
             return  # auth/other errors are not a "swap model" situation
         streak = _stuck_counter.get(provider_id, 0) + 1
         _stuck_counter[provider_id] = streak
-        crossed = streak == _STUCK_THRESHOLD
-    if crossed:
+    # Re-emit at every threshold crossing (3, 6, 9, ...) so a sustained
+    # rate-limit storm keeps nudging the user instead of going silent after
+    # the first signal. The exponential backoff spaces failures out, so this
+    # does not spam — each emit is ~14s apart at minimum.
+    if streak >= _STUCK_THRESHOLD and (streak - _STUCK_THRESHOLD) % _STUCK_THRESHOLD == 0:
         # ASCII-only: Windows consoles default to cp1252 (see memory).
         logger.warning(
             "model swap suggested for provider %s: %d consecutive rate-limit/timeout responses",
             provider_id,
-            _STUCK_THRESHOLD,
+            streak,
         )
 
 
@@ -474,7 +641,7 @@ def _handle_rotation_sync(
             _replace_key_in_request(request, key_value, new_key)
             try:
                 res = _orig_client_send(client, request, *args, **kwargs)
-                if res.status_code in (401, 403, 429, 503):
+                if res.status_code in _ROTATION_STATUSES:
                     return _handle_rotation_sync(client, request, res, *args, **kwargs)
                 return res
             except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -511,7 +678,7 @@ async def _handle_rotation_async(
             _replace_key_in_request(request, key_value, new_key)
             try:
                 res = await _orig_async_client_send(client, request, *args, **kwargs)
-                if res.status_code in (401, 403, 429, 503):
+                if res.status_code in _ROTATION_STATUSES:
                     return await _handle_rotation_async(client, request, res, *args, **kwargs)
                 return res
             except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -561,7 +728,9 @@ def _log_model_call_done(
 
 
 def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
-    """Patched synchronous send method with auto key rotation retry."""
+    """Patched synchronous send: cache -> cooldown -> backoff retry -> key rotation."""
+    from app.core import llm_cache, llm_trace
+
     _resolve_request(request)
     is_llm = _log_model_call_start(request)
     provider_id = _identify_provider(request) if is_llm else None
@@ -570,27 +739,113 @@ def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, 
     gate = _acquire_sync_gate(provider_id) if is_llm else None
     t0 = time.perf_counter()
     try:
+        # Cache hit: replay a previous successful LLM response without touching
+        # the network. Preserves done work when a job is retried.
+        ckey = llm_cache.cache_key(request) if is_llm else None
+        if ckey:
+            cached = llm_cache.cache_get(ckey)
+            if cached is not None:
+                _note_call_outcome(provider_id, ok=True, rate_limited=False)
+                _clear_cooldown(provider_id)
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, cached,
+                        cache_hit=True, elapsed_ms=0,
+                    )
+                return cached
+
+        # Cooldown short-circuit: if this provider is in a rate-limit recovery
+        # window, return a synthetic 429 (with Retry-After) so marker's retry
+        # loop sleeps instead of re-hammering the throttled endpoint.
+        if is_llm:
+            cooled = _cooldown_response(provider_id, request)
+            if cooled is not None:
+                _note_call_outcome(provider_id, ok=False, rate_limited=True)
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, cooled,
+                        cache_hit=False, elapsed_ms=0,
+                    )
+                return cooled
+
         res = _orig_client_send(self, request, *args, **kwargs)
         if is_llm:
             _log_model_call_done(
                 request, res.status_code, int((time.perf_counter() - t0) * 1000)
             )
-        if res.status_code in (401, 403, 429, 503):
+            # Cache the 2xx response for replay on retry.
+            if ckey and 200 <= res.status_code < 300:
+                llm_cache.cache_put(ckey, res)
+
+        if is_llm and res.status_code in _RATE_LIMIT_STATUSES:
+            # Phase 1: exponential backoff (honors Retry-After) on the same key.
+            recovered = _backoff_retry_sync(self, request, res, *args, **kwargs)
+            if 200 <= recovered.status_code < 300:
+                _clear_cooldown(provider_id)
+                _note_call_outcome(provider_id, ok=True, rate_limited=False)
+                if ckey:
+                    llm_cache.cache_put(ckey, recovered)
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, recovered,
+                        cache_hit=False,
+                        elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                    )
+                return recovered
+            # Backoff exhausted; continue to rotation with the last response.
+            res = recovered
+
+        # Phase 2: fallback-key rotation (auth + rate-limit + overload).
+        if res.status_code in _ROTATION_STATUSES:
             rotated = _handle_rotation_sync(self, request, res, *args, **kwargs)
             if rotated:
                 if is_llm:
+                    ok = 200 <= rotated.status_code < 300
+                    if ok:
+                        _clear_cooldown(provider_id)
+                    else:
+                        _set_cooldown(provider_id)
                     _note_call_outcome(
                         provider_id,
-                        ok=200 <= rotated.status_code < 300,
+                        ok=ok,
                         rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
                     )
+                    if ckey:
+                        llm_trace.capture_call(
+                            llm_trace.resolve_job_id(), request, rotated,
+                            cache_hit=False,
+                            elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                        )
                 return rotated
-        if is_llm:
+            # Rotation exhausted — set cooldown so the next call pauses.
+            if is_llm:
+                _set_cooldown(provider_id)
+                _note_call_outcome(
+                    provider_id,
+                    ok=False,
+                    rate_limited=res.status_code in _RATE_LIMIT_STATUSES,
+                )
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, res,
+                        cache_hit=False,
+                        elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                    )
+        elif is_llm:
+            ok = 200 <= res.status_code < 300
+            if ok:
+                _clear_cooldown(provider_id)
             _note_call_outcome(
                 provider_id,
-                ok=200 <= res.status_code < 300,
+                ok=ok,
                 rate_limited=res.status_code in _RATE_LIMIT_STATUSES,
             )
+            if ckey:
+                llm_trace.capture_call(
+                    llm_trace.resolve_job_id(), request, res,
+                    cache_hit=False,
+                    elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                )
         return res
     except (httpx.ConnectError, httpx.TimeoutException) as e:
         if is_llm:
@@ -603,14 +858,20 @@ def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, 
         rotated = _handle_rotation_sync(self, request, e, *args, **kwargs)
         if rotated:
             if is_llm:
+                ok = 200 <= rotated.status_code < 300
+                if ok:
+                    _clear_cooldown(provider_id)
+                else:
+                    _set_cooldown(provider_id)
                 _note_call_outcome(
                     provider_id,
-                    ok=200 <= rotated.status_code < 300,
+                    ok=ok,
                     rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
                 )
             return rotated
         if is_llm:
-            # A timeout that rotation could not recover counts as overloaded.
+            # A network error is not a rate limit — do not set cooldown. The
+            # stuck counter still tracks it so repeated failures nudge a swap.
             _note_call_outcome(provider_id, ok=False, rate_limited=True)
         raise
     finally:
@@ -619,7 +880,9 @@ def patched_client_send(self: httpx.Client, request: httpx.Request, *args: Any, 
 
 
 async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
-    """Patched asynchronous send method with auto key rotation retry."""
+    """Patched asynchronous send: cache -> cooldown -> backoff retry -> key rotation."""
+    from app.core import llm_cache, llm_trace
+
     _resolve_request(request)
     is_llm = _log_model_call_start(request)
     provider_id = _identify_provider(request) if is_llm else None
@@ -630,27 +893,111 @@ async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Requ
         await gate.acquire()
     t0 = time.perf_counter()
     try:
+        # Cache hit: replay a previous successful LLM response without network.
+        ckey = llm_cache.cache_key(request) if is_llm else None
+        if ckey:
+            cached = llm_cache.cache_get(ckey)
+            if cached is not None:
+                _note_call_outcome(provider_id, ok=True, rate_limited=False)
+                _clear_cooldown(provider_id)
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, cached,
+                        cache_hit=True, elapsed_ms=0,
+                    )
+                return cached
+
+        # Cooldown short-circuit: synthetic 429 (with Retry-After) during the
+        # rate-limit recovery window.
+        if is_llm:
+            cooled = _cooldown_response(provider_id, request)
+            if cooled is not None:
+                _note_call_outcome(provider_id, ok=False, rate_limited=True)
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, cooled,
+                        cache_hit=False, elapsed_ms=0,
+                    )
+                return cooled
+
         res = await _orig_async_client_send(self, request, *args, **kwargs)
         if is_llm:
             _log_model_call_done(
                 request, res.status_code, int((time.perf_counter() - t0) * 1000)
             )
-        if res.status_code in (401, 403, 429, 503):
+            # Cache the 2xx response for replay on retry.
+            if ckey and 200 <= res.status_code < 300:
+                llm_cache.cache_put(ckey, res)
+
+        if is_llm and res.status_code in _RATE_LIMIT_STATUSES:
+            # Phase 1: exponential backoff (honors Retry-After) on the same key.
+            recovered = await _backoff_retry_async(self, request, res, *args, **kwargs)
+            if 200 <= recovered.status_code < 300:
+                _clear_cooldown(provider_id)
+                _note_call_outcome(provider_id, ok=True, rate_limited=False)
+                if ckey:
+                    llm_cache.cache_put(ckey, recovered)
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, recovered,
+                        cache_hit=False,
+                        elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                    )
+                return recovered
+            # Backoff exhausted; continue to rotation with the last response.
+            res = recovered
+
+        # Phase 2: fallback-key rotation (auth + rate-limit + overload).
+        if res.status_code in _ROTATION_STATUSES:
             rotated = await _handle_rotation_async(self, request, res, *args, **kwargs)
             if rotated:
                 if is_llm:
+                    ok = 200 <= rotated.status_code < 300
+                    if ok:
+                        _clear_cooldown(provider_id)
+                    else:
+                        _set_cooldown(provider_id)
                     _note_call_outcome(
                         provider_id,
-                        ok=200 <= rotated.status_code < 300,
+                        ok=ok,
                         rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
                     )
+                    if ckey:
+                        llm_trace.capture_call(
+                            llm_trace.resolve_job_id(), request, rotated,
+                            cache_hit=False,
+                            elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                        )
                 return rotated
-        if is_llm:
+            # Rotation exhausted — set cooldown so the next call pauses.
+            if is_llm:
+                _set_cooldown(provider_id)
+                _note_call_outcome(
+                    provider_id,
+                    ok=False,
+                    rate_limited=res.status_code in _RATE_LIMIT_STATUSES,
+                )
+                if ckey:
+                    llm_trace.capture_call(
+                        llm_trace.resolve_job_id(), request, res,
+                        cache_hit=False,
+                        elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                    )
+        elif is_llm:
+            ok = 200 <= res.status_code < 300
+            if ok:
+                _clear_cooldown(provider_id)
             _note_call_outcome(
                 provider_id,
-                ok=200 <= res.status_code < 300,
+                ok=ok,
                 rate_limited=res.status_code in _RATE_LIMIT_STATUSES,
             )
+            if ckey:
+                llm_trace.capture_call(
+                    llm_trace.resolve_job_id(), request, res,
+                    cache_hit=False,
+                    elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                )
         return res
     except (httpx.ConnectError, httpx.TimeoutException) as e:
         if is_llm:
@@ -663,13 +1010,20 @@ async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Requ
         rotated = await _handle_rotation_async(self, request, e, *args, **kwargs)
         if rotated:
             if is_llm:
+                ok = 200 <= rotated.status_code < 300
+                if ok:
+                    _clear_cooldown(provider_id)
+                else:
+                    _set_cooldown(provider_id)
                 _note_call_outcome(
                     provider_id,
-                    ok=200 <= rotated.status_code < 300,
+                    ok=ok,
                     rate_limited=rotated.status_code in _RATE_LIMIT_STATUSES,
                 )
             return rotated
         if is_llm:
+            # A network error is not a rate limit — do not set cooldown. The
+            # stuck counter still tracks it so repeated failures nudge a swap.
             _note_call_outcome(provider_id, ok=False, rate_limited=True)
         raise
     finally:
@@ -680,6 +1034,9 @@ async def patched_async_client_send(self: httpx.AsyncClient, request: httpx.Requ
 def setup_api_manager_monkeypatch() -> None:
     """Apply monkeypatches to httpx Client/AsyncClient send methods."""
     logger.info("Applying httpx client send monkeypatches for live secret substitution...")
+    # Initialize the LLM response cache (no-op if disabled by env).
+    from app.core import llm_cache
+    llm_cache.init_cache_db()
     httpx.Client.send = patched_client_send  # type: ignore[assignment]
     httpx.AsyncClient.send = patched_async_client_send  # type: ignore[assignment]
 

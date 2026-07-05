@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat } from 'lucide-react'
+import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat, RotateCw, AlertTriangle, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { ConversionOptions } from '@/components/features/ConversionOptions'
 import { TerminalLog } from '@/components/features/TerminalLog'
 import { OutputViewer } from '@/components/features/OutputViewer'
 import { ModelSwapDialog } from '@/components/features/conversion/ModelSwapDialog'
+import { LlmTraceViewer } from '@/components/features/conversion/LlmTraceViewer'
 import { useConversionQueue } from '@/hooks/useConversionQueue'
 import type { ConversionConfig } from '@/lib/api'
 import { useNavigate } from 'react-router-dom'
@@ -144,6 +145,8 @@ export function ConvertPage() {
   // Model-swap dialog: which job it targets, and whether it auto-surfaced.
   const [swapJobId, setSwapJobId] = useState<string | null>(null)
   const [swapAuto, setSwapAuto] = useState(false)
+  // LLM trace viewer: which job's LLM calls to inspect.
+  const [traceJobId, setTraceJobId] = useState<string | null>(null)
 
   const [sourcePlans, setSourcePlans] = useState<Record<string, SourcePlanState>>({})
   const [engineOverrides, setEngineOverrides] = useState<Record<string, string>>({})
@@ -329,7 +332,7 @@ export function ConvertPage() {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
   }, [config])
 
-  const { jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited } = useConversionQueue()
+  const { jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited, retryJob } = useConversionQueue()
 
   // Auto-surface the swap dialog when a running job reports it's stuck on rate
   // limits (key rotation exhausted) and the user hasn't dismissed it yet.
@@ -689,6 +692,38 @@ export function ConvertPage() {
                         </div>
                       </div>
 
+                      {/* Rate-limit banner: surfaces sustained throttling on a
+                          running job so the user notices (the auto-dialog is
+                          one-shot). Clickable to open the swap/retry dialog. */}
+                      {isJobRunning && job.rateLimited && (
+                        <button
+                          type="button"
+                          onClick={() => openSwapManual(job.id)}
+                          className="relative z-10 mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors text-left"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">
+                            Rate-limited — swap model or retry with another provider
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Partial-failure banner: completed but some LLM steps
+                          were skipped (rate-limited tables/equations). Offers a
+                          one-click Retry that opens the swap dialog. */}
+                      {isCompleted && job.partialFailure && (
+                        <button
+                          type="button"
+                          onClick={() => openSwapManual(job.id)}
+                          className="relative z-10 mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors text-left"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">
+                            Some LLM steps skipped (rate-limited) — Retry to refine
+                          </span>
+                        </button>
+                      )}
+
                       {/* Actions aligned directly inside the UI card to save space */}
                       <div className="flex items-center gap-1.5 relative z-10" onClick={(e) => e.stopPropagation()}>
                         {isCompleted && (
@@ -729,6 +764,34 @@ export function ConvertPage() {
                           >
                             <Repeat className="w-3.5 h-3.5" />
                             Switch Model
+                          </Button>
+                        )}
+
+                        {((isCompleted && job.partialFailure) || job.phase === 'failed') && job.llmProvider && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openSwapManual(job.id)}
+                            title="Retry this job — swap model or use another provider"
+                            className="h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                          >
+                            <RotateCw className="w-3.5 h-3.5" />
+                            Retry
+                          </Button>
+                        )}
+
+                        {/* Eye icon — opens the LLM call inspector for this job.
+                            Shown for any job that used (or is using) an LLM provider,
+                            so traces can be inspected live during a run or after. */}
+                        {job.llmProvider && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setTraceJobId(job.id)}
+                            title="Inspect LLM calls for this job"
+                            className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
                           </Button>
                         )}
 
@@ -806,8 +869,25 @@ export function ConvertPage() {
         currentModel={swapJob.llmModel}
         onClose={closeSwap}
         onApplied={() => clearRateLimited(swapJob.id)}
+        onRetry={async (provider, model) => {
+          await retryJob(swapJob.id, provider, model)
+        }}
       />
     )}
+
+    {(() => {
+      const traceJob = jobs.find((j) => j.id === traceJobId) || null
+      if (!traceJob) return null
+      return (
+        <LlmTraceViewer
+          open={!!traceJobId}
+          jobId={traceJob.jobId ?? undefined}
+          filename={traceJob.filename}
+          isRunning={traceJob.phase === 'uploading' || traceJob.phase === 'processing'}
+          onClose={() => setTraceJobId(null)}
+        />
+      )
+    })()}
   </div>
   )
 }

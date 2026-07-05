@@ -669,8 +669,65 @@ export async function applyLiveOverride(body: LiveOverrideRequest): Promise<{ st
   })
 }
 
+export interface RetryJobRequestBody {
+  llm_provider?: string
+  llm_model?: string
+}
+
+export interface RetryJobResponse {
+  new_job_id: string
+  source_job_id: string
+  status: string
+}
+
+/** Re-run a terminal job from its stored source file, optionally with a
+ *  different LLM provider/model. Creates a new job; the original stays in
+ *  history. LLM responses cached for the same prompt are replayed, so only
+ *  the work that did not complete is re-done. */
+export async function retryConversionJob(
+  jobId: string,
+  body: RetryJobRequestBody = {}
+): Promise<RetryJobResponse> {
+  return request<RetryJobResponse>(`/convert/${jobId}/retry`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export async function deleteJob(jobId: string): Promise<void> {
   return request<void>(`/convert/${jobId}`, { method: 'DELETE' })
+}
+
+// --- LLM call trace viewer -------------------------------------------------
+
+export interface LlmTracePart {
+  type: 'text' | 'image'
+  text?: string
+  data_url?: string
+  mime?: string
+  size_bytes?: number
+  truncated?: boolean
+  note?: string
+}
+
+export interface LlmTrace {
+  index: number
+  ts: number
+  job_id: string
+  host: string
+  model: string
+  parts: LlmTracePart[]
+  image_count: number
+  prompt_chars: number
+  status: number
+  response: string
+  response_chars: number
+  cache_hit: boolean
+  elapsed_ms: number
+}
+
+export async function getLlmTraces(jobId: string): Promise<{ job_id: string; traces: LlmTrace[] }> {
+  return request<{ job_id: string; traces: LlmTrace[] }>(`/convert/${jobId}/llm-traces`)
 }
 
 export async function cancelJob(jobId: string): Promise<{ status: string; job_id: string; cancelled: boolean }> {

@@ -14,6 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.job import ConversionJob
 from app.models.job_event import JobEvent
 
+# Grace window before a lease-less durable "processing" row is considered
+# crashed and eligible for recovery. Without this, a job that died before
+# mark_started landed (or migrated from an older schema with no lease columns)
+# would sit in "processing" forever and be invisible to recover_queued.
+_STALE_PROCESSING_GRACE_SECONDS = 600  # 10 minutes
+
 
 @dataclass(frozen=True)
 class DurableQueueItem:
@@ -113,6 +119,11 @@ class SQLiteDurableQueueBackend:
         await session.execute(
             update(ConversionJob)
             .where(ConversionJob.id == job_id)
+            # Never resurrect a terminal job: only re-enqueue rows that are still
+            # pending or processing. Without this guard, a duplicate enqueue call
+            # (e.g. recovery racing with a late finalize) could flip a completed/
+            # failed/cancelled row back to pending and silently re-run work.
+            .where(ConversionJob.status.in_(["pending", "processing"]))
             .values(
                 status="pending",
                 queue_backend=self.name,
@@ -136,6 +147,14 @@ class SQLiteDurableQueueBackend:
 
     async def recover_queued(self, session: AsyncSession) -> list[DurableQueueItem]:
         now = _utcnow()
+        stale_before = now - timedelta(seconds=_STALE_PROCESSING_GRACE_SECONDS)
+        # Recover durable rows in two shapes:
+        #   1. pending -> never started (or re-enqueued by recovery itself)
+        #   2. processing with an expired/non-existent lease -> crashed mid-run.
+        # The lease-less processing branch (started_at older than the grace
+        # window) catches jobs that crashed before mark_started landed, or rows
+        # migrated from an older schema that never had lease columns populated.
+        # Without it those rows sit in "processing" forever and are invisible.
         stmt = (
             select(ConversionJob)
             .where(ConversionJob.queue_backend == self.name)
@@ -146,6 +165,14 @@ class SQLiteDurableQueueBackend:
                         ConversionJob.status == "processing",
                         ConversionJob.lease_expires_at.is_not(None),
                         ConversionJob.lease_expires_at <= now,
+                    ),
+                    and_(
+                        ConversionJob.status == "processing",
+                        ConversionJob.lease_expires_at.is_(None),
+                        or_(
+                            ConversionJob.started_at.is_(None),
+                            ConversionJob.started_at <= stale_before,
+                        ),
                     ),
                 )
             )

@@ -828,5 +828,69 @@ describe('ConvertPage component', () => {
       render(<ConvertPage />)
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+
+    it('shows a rate-limited banner on a running job that is rateLimited', () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob({ rateLimited: true, swapPromptDismissed: true })],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+        retryJob: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      expect(screen.getByText(/Rate-limited — swap model or retry/i)).toBeInTheDocument()
+    })
+
+    it('shows a partial-failure banner on a completed job with partialFailure', () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [
+          runningLLMJob({
+            phase: 'completed',
+            progress: 100,
+            statusText: 'Done',
+            partialFailure: true,
+            swapPromptDismissed: true,
+          }),
+        ],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+        retryJob: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      expect(screen.getByText(/Some LLM steps skipped/i)).toBeInTheDocument()
+      // Both the banner and the action button carry "Retry" — assert at least one.
+      expect(screen.getAllByRole('button', { name: /Retry/i }).length).toBeGreaterThan(0)
+    })
+
+    it('does not show the rate-limited banner when rateLimited is false', () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob({ rateLimited: false })],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+        retryJob: vi.fn(),
+      })
+
+      render(<ConvertPage />)
+      expect(screen.queryByText(/Rate-limited — swap model or retry/i)).not.toBeInTheDocument()
+    })
   })
 })

@@ -26,7 +26,7 @@ from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, prob
 from app.database import get_db
 from app.errors import InputNotAllowedError, UnsupportedFormatError
 from app.models.job import ConversionJob
-from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
+from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse, RetryJobRequest
 from app.audio.providers.registry import validate_provider_selection
 from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
 from app.services.audit import record_audit_event
@@ -962,6 +962,20 @@ async def job_events(request: Request, job_id: str):
     return EventSourceResponse(_app_state.task_manager.job_events(request, job_id))
 
 
+@router.get("/{job_id}/llm-traces")
+async def llm_traces(job_id: str) -> dict[str, Any]:
+    """Return the captured LLM call traces for a job.
+
+    Each entry is one LLM generation call with structured ``parts`` (text/image)
+    so the frontend trace viewer can render the prompt and preview any images.
+    Polled by the eye-icon viewer while a job is running; traces persist after
+    completion until the job is removed.
+    """
+    from app.core import llm_trace
+
+    return {"job_id": job_id, "traces": llm_trace.get_traces(job_id)}
+
+
 # ------------------------------------------------------------------
 # Download
 # ------------------------------------------------------------------
@@ -1354,6 +1368,137 @@ async def regenerate_format(
         "job_id": job_id,
         "format": format,
         "available_formats": sorted(merged.keys()),
+    }
+
+
+@router.post("/{job_id}/retry")
+async def retry_job(
+    job_id: str,
+    body: RetryJobRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Re-run a terminal job from its stored source file, optionally with a
+    different LLM provider or model.
+
+    Creates a NEW job row (the original stays in history for audit). The
+    source file is resolved via ``_job_source_path`` (upload copy or local
+    path). LLM responses already cached for the same prompt are replayed
+    instantly, so only the work that did not complete is re-done.
+
+    A non-terminal job cannot be retried — cancel it first. An unknown
+    provider is rejected with 400. A missing source file is rejected with 409.
+    """
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db.execute(stmt)).scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in ("pending", "processing"):
+        raise HTTPException(
+            status_code=409,
+            detail="Job is still running. Cancel it before retrying.",
+        )
+
+    source_path = _job_source_path(job)
+    if source_path is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Source file is no longer available for this job.",
+        )
+
+    config = _read_stored_config(job)
+    # Link the new job to its origin for audit trail.
+    config["retried_from"] = job_id
+
+    # Validate + apply provider/model overrides.
+    if body.llm_provider or body.llm_model:
+        llm_config = await _load_llm_config(db)
+        providers = llm_config.get("providers", [])
+        if body.llm_provider:
+            prov = next((p for p in providers if p["id"] == body.llm_provider), None)
+            if not prov:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown LLM provider '{body.llm_provider}'.",
+                )
+            config["llm_provider"] = body.llm_provider
+            # Clear a stale model override when the provider changes.
+            if body.llm_model:
+                model_cfg = next(
+                    (m for m in prov.get("models", []) if m["model_id"] == body.llm_model),
+                    None,
+                )
+                if not model_cfg:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Model '{body.llm_model}' not configured for provider '{body.llm_provider}'.",
+                    )
+                config["llm_model"] = body.llm_model
+            else:
+                config.pop("llm_model", None)
+        elif body.llm_model:
+            # Same provider, different model.
+            config["llm_model"] = body.llm_model
+
+    # Reset durable-queue retry state for the new job.
+    config.pop("durable_filepath", None)
+
+    from app.main import _app_state
+    task_manager = _app_state.task_manager
+    conversion_service = _app_state.conversion_service
+
+    llm_config = await _load_llm_config(db)
+    from app.services.marker_service import build_marker_options
+    options = build_marker_options(llm_config, config)
+
+    new_job_id = str(uuid.uuid4())
+    stored_path = str(source_path)
+    original_name = config.get("original_name") or job.original_name
+    input_format = (Path(original_name).suffix.lstrip(".") or job.input_format or "").lower()
+
+    new_job = ConversionJob(
+        id=new_job_id,
+        filename=job.filename,
+        original_name=original_name,
+        status="pending",
+        input_format=input_format,
+        output_format=job.output_format,
+        config_json=json.dumps(config),
+    )
+    db.add(new_job)
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        event_type="job.retry_submitted",
+        surface="rest",
+        resource_type="job",
+        resource_id=new_job_id,
+        status="success",
+        payload={
+            "retried_from": job_id,
+            "llm_provider": config.get("llm_provider"),
+            "llm_model": config.get("llm_model"),
+        },
+    )
+
+    from app.services.task_manager import TaskManager
+    if isinstance(task_manager, TaskManager):
+        await task_manager.enqueue_durable_job(
+            db,
+            job_id=new_job_id,
+            filepath=stored_path,
+            config=config,
+            max_retries=int(config.get("max_retries") or 0),
+        )
+
+    await db.commit()
+
+    task_manager.submit_job(new_job_id, stored_path, options, conversion_service)
+
+    return {
+        "new_job_id": new_job_id,
+        "source_job_id": job_id,
+        "status": "pending",
     }
 
 

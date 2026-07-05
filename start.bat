@@ -112,7 +112,7 @@ echo.
 set BACKEND_PORT=8000
 
 :findPort
-    netstat -aon | findstr /R /C:":!BACKEND_PORT! .*LISTENING" >nul 2>&1
+    netstat -aon | findstr /C:":!BACKEND_PORT!" | findstr "LISTENING" >nul 2>&1
     if !ERRORLEVEL! equ 0 (
         set /a BACKEND_PORT+=1
         if !BACKEND_PORT! geq 65535 (
@@ -131,7 +131,7 @@ if not "!BACKEND_PORT!"=="8000" (
 set FRONTEND_PORT=5173
 
 :findFrontendPort
-    netstat -aon | findstr /R /C:":!FRONTEND_PORT! .*LISTENING" >nul 2>&1
+    netstat -aon | findstr /C:":!FRONTEND_PORT!" | findstr "LISTENING" >nul 2>&1
     if !ERRORLEVEL! equ 0 (
         set /a FRONTEND_PORT+=1
         if !FRONTEND_PORT! geq 65535 (
@@ -153,7 +153,7 @@ start /B .venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 
 echo   Waiting for backend to start...
 set WAIT_COUNT=0
 :checkBackendLoop
-netstat -aon | findstr /R /C:":!BACKEND_PORT! .*LISTENING" >nul 2>&1
+netstat -aon | findstr /C:":!BACKEND_PORT!" | findstr "LISTENING" >nul 2>&1
 if !ERRORLEVEL! equ 0 goto backendStarted
 set /a WAIT_COUNT+=1
 if !WAIT_COUNT! geq 30 (

@@ -148,7 +148,13 @@ def _configure_task_manager_backend() -> None:
 
         backend = ProcessExecutorBackend(_app_state.task_manager, detected, num_workers)
         old = _app_state.task_manager
-        _app_state.task_manager = TaskManager(backend=backend)
+        # Preserve the durable queue across the backend swap: the new manager
+        # must keep persisting/recovering durable jobs or a multi-GPU box silently
+        # loses the feature (MARKER_QUEUE_BACKEND would be ignored).
+        _app_state.task_manager = TaskManager(
+            backend=backend,
+            durable_queue=getattr(old, "_durable_queue", None),
+        )
         logger.info(
             "GPU worker scaling: %d GPUs, %d workers -> process backend",
             detected, num_workers,
@@ -183,16 +189,31 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     await load_secrets_from_db()
     setup_api_manager_monkeypatch()
 
-    # Mark stale pending/processing jobs from previous sessions as failed
-    from app.database import async_session_factory
-    from app.models.job import ConversionJob
-    from sqlalchemy import update
-    from datetime import datetime, timezone
-    async with async_session_factory() as session:
-        try:
+    # Recover durable queued jobs from a prior session, then sweep any remaining
+    # non-durable pending/processing rows as failed. Order matters: recovery must
+    # run first so durable rows survive; the sweep only catches non-durable rows
+    # that have no queue backend to recover from.
+    try:
+        from app.services.task_manager import TaskManager
+        if isinstance(_app_state.task_manager, TaskManager):
+            recovered = await _app_state.task_manager.recover_and_sweep_durable_jobs(
+                _app_state.conversion_service
+            )
+            if recovered:
+                logger.info("Recovered %d durable job(s) from prior session: %s", len(recovered), recovered)
+    except Exception:  # noqa: BLE001 - recovery must never block startup
+        logger.exception("Durable job recovery failed on startup; continuing with stale sweep only")
+        # Fall back to the legacy unconditional sweep so non-durable rows still
+        # get cleaned up even if the durable recovery path errored.
+        from app.database import async_session_factory
+        from app.models.job import ConversionJob
+        from sqlalchemy import update
+        from datetime import datetime, timezone
+        async with async_session_factory() as session:
             await session.execute(
                 update(ConversionJob)
                 .where(ConversionJob.status.in_(["pending", "processing"]))
+                .where(ConversionJob.queue_backend.is_(None))
                 .values(
                     status="failed",
                     error_message="Interrupted by server restart",
@@ -200,9 +221,7 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
                 )
             )
             await session.commit()
-            logger.info("Stale pending/processing jobs from prior session marked as failed.")
-        except Exception as e:
-            logger.error("Failed to clean up stale jobs on startup: %s", e)
+            logger.info("Fallback: non-durable stale pending/processing jobs marked as failed.")
 
     # Auto-trigger GPU installation if enabled in settings but CUDA is not ready
     from app.services.gpu_service import gpu_service

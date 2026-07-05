@@ -379,6 +379,13 @@ class TaskManager:
         # both marker and CPU pools.
         self._job_backends: dict[str, ExecutorBackend] = {}
         self._durable_queue = durable_queue
+        # Lease TTL for durable jobs. Long enough that a healthy conversion is
+        # never wrongly flagged as stuck, short enough that a crashed worker is
+        # recoverable within a reasonable window. Overridable via env for ops.
+        try:
+            self._lease_seconds = int(os.getenv("MARKER_DURABLE_LEASE_SECONDS", "1800"))
+        except (TypeError, ValueError):
+            self._lease_seconds = 1800
 
         self._lock = threading.Lock()
         self._drain_stop = threading.Event()
@@ -407,12 +414,155 @@ class TaskManager:
     def backend_name(self) -> str:
         return self._backend.name
 
-    async def recover_durable_jobs(self) -> list[Any]:
-        """Return queued/expired durable jobs for an external resubmitter."""
+    async def recover_durable_jobs(self, conversion_service: Any) -> list[str]:
+        """Reclaim queued/expired durable jobs and resubmit them.
+
+        Called at startup (before the stale-job sweeper) so durable rows
+        survive a crash/restart instead of being marked failed. For each
+        recoverable item we:
+
+        1. Respect the retry budget — jobs at/over ``max_retries`` are marked
+           failed with a clear reason, not retried forever.
+        2. Verify the source file still exists — a job whose input vanished
+           cannot succeed and is marked failed rather than silently dropped.
+        3. Re-enqueue with an incremented ``retry_count`` and a fresh lease,
+           then submit to a worker.
+
+        Returns the list of job_ids that were actually resubmitted (excluding
+        those marked failed for budget/missing-file reasons).
+        """
         if self._durable_queue is None:
             return []
+        from sqlalchemy import select, update
+        from app.services.queue_backends import append_job_event
+
+        async with async_session_factory() as recover_session:
+            items = await self._durable_queue.recover_queued(recover_session)
+        resubmitted: list[str] = []
         async with async_session_factory() as session:
-            return await self._durable_queue.recover_queued(session)
+            for item in items:
+                # Budget check: retry_count already consumed all attempts.
+                if item.max_retries > 0 and item.retry_count >= item.max_retries:
+                    await self._durable_queue.mark_terminal(
+                        session,
+                        job_id=item.job_id,
+                        status="failed",
+                        message=(
+                            f"Durable job exceeded retry budget "
+                            f"(retry_count={item.retry_count}, max_retries={item.max_retries})."
+                        ),
+                    )
+                    continue
+
+                # Source file must still exist or recovery is data loss.
+                filepath = item.filepath
+                if not filepath or not Path(filepath).is_file():
+                    await self._durable_queue.mark_terminal(
+                        session,
+                        job_id=item.job_id,
+                        status="failed",
+                        message=f"Durable job source file not found: {filepath}",
+                    )
+                    continue
+
+                # Re-enqueue with incremented retry_count and a fresh lease so a
+                # duplicate recovery cannot double-submit the same job.
+                config = dict(item.config or {})
+                config.setdefault("original_name", item.job_id)
+                await self._durable_queue.enqueue(
+                    session,
+                    job_id=item.job_id,
+                    filepath=filepath,
+                    config=config,
+                    idempotency_key=item.idempotency_key,
+                    max_retries=item.max_retries,
+                )
+                # Increment retry_count for this recovery attempt (enqueue resets
+                # it to 0, so we set it explicitly to item.retry_count + 1).
+                await session.execute(
+                    update(ConversionJob)
+                    .where(ConversionJob.id == item.job_id)
+                    .values(retry_count=item.retry_count + 1)
+                )
+                await append_job_event(
+                    session,
+                    job_id=item.job_id,
+                    event_type="queue.recovered",
+                    status="pending",
+                    payload={
+                        "retry_count": item.retry_count + 1,
+                        "max_retries": item.max_retries,
+                        "filepath": filepath,
+                    },
+                )
+                resubmitted.append(item.job_id)
+            await session.commit()
+
+        # Submit each reclaimed job to a worker. Done after the commit so the
+        # row is durable before any worker can finalize it.
+        for job_id in resubmitted:
+            # Look up the committed row to rebuild the submit args.
+            async with async_session_factory() as session:
+                row = await session.get(ConversionJob, job_id)
+                if row is None or row.status != "pending":
+                    continue
+                try:
+                    config = json.loads(row.config_json) if row.config_json else {}
+                except (TypeError, ValueError):
+                    config = {}
+                if not isinstance(config, dict):
+                    config = {}
+                filepath = config.get("durable_filepath") or config.get("local_filepath") or ""
+            if not filepath:
+                continue
+            self.submit_job(job_id, filepath, config, conversion_service)
+        return resubmitted
+
+    async def recover_and_sweep_durable_jobs(self, conversion_service: Any) -> dict[str, list[str]]:
+        """Startup reconciliation: recover durable jobs, then sweep the rest.
+
+        This is the single entry point ``lifespan`` calls at boot. It must run
+        BEFORE any unconditional stale-job sweeper, otherwise the sweeper marks
+        every recoverable durable row ``failed`` before recovery can see it.
+
+        Order:
+        1. Recover durable jobs (resubmit those within retry budget whose source
+           file still exists; mark the rest failed with a clear reason).
+        2. Sweep non-durable ``pending``/``processing`` rows left from a prior
+           crashed session to ``failed`` — but ONLY non-durable rows, so durable
+           rows that were intentionally preserved in step 1 survive.
+
+        Returns ``{"recovered": [...job_ids], "swept": [...job_ids]}`` so callers
+        (and tests) can observe exactly what happened.
+        """
+        recovered = await self.recover_durable_jobs(conversion_service)
+
+        from sqlalchemy import select, update
+
+        swept: list[str] = []
+        async with async_session_factory() as session:
+            # Select non-durable pending/processing rows. Durable rows
+            # (queue_backend IS NOT NULL) are owned by the durable queue and
+            # were handled above; sweeping them here would defeat recovery.
+            stmt = (
+                select(ConversionJob.id)
+                .where(ConversionJob.status.in_(["pending", "processing"]))
+                .where(ConversionJob.queue_backend.is_(None))
+            )
+            stale_ids = [row for row in (await session.execute(stmt)).scalars().all()]
+            if stale_ids:
+                await session.execute(
+                    update(ConversionJob)
+                    .where(ConversionJob.id.in_(stale_ids))
+                    .values(
+                        status="failed",
+                        error_message="Interrupted by server restart",
+                        completed_at=datetime.now(timezone.utc),
+                    )
+                )
+                await session.commit()
+                swept.extend(stale_ids)
+        return {"recovered": recovered, "swept": swept}
 
     async def enqueue_durable_job(
         self,
@@ -572,6 +722,12 @@ class TaskManager:
         self._job_has_real_progress[job_id] = False
         self._job_started[job_id] = False
         self._job_providers[job_id] = config.get("llm_provider")
+        # Clear any LLM call traces from a previous run of this job id.
+        try:
+            from app.core import llm_trace
+            llm_trace.reset_traces(job_id)
+        except Exception:  # noqa: BLE001 - trace reset must never block a job
+            pass
 
         backend = self._select_backend(filepath, config, marker_service)
         queued_message = getattr(backend, "queued_message", "Waiting for conversion worker...")
@@ -907,6 +1063,19 @@ class TaskManager:
         self._pids[job_id] = os.getpid()
         thread_ident = threading.get_ident()
         active_conversion_threads[thread_ident] = job_id
+        # Record a durable lease so a crash mid-conversion is detectable by
+        # recover_queued's expired-lease branch. No-op when no durable backend.
+        try:
+            asyncio.run(self._mark_job_started_durable(job_id))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self._mark_job_started_durable(job_id))
+            finally:
+                loop.close()
+        except Exception:  # noqa: BLE001 - lease start must never block a job
+            logger.exception("mark_started dispatch failed for job %s", job_id)
         try:
             self._progress[job_id] = 10
             self._job_status_text[job_id] = "Starting conversion..."
@@ -1039,6 +1208,48 @@ class TaskManager:
         )
         return None
 
+    async def _mark_job_started_durable(self, job_id: str) -> None:
+        """Record a lease when a durable job begins executing.
+
+        Without this the lease columns never get populated in production, so
+        ``recover_queued``'s expired-lease branch (the one that detects jobs
+        that crashed mid-conversion) can never match. Idempotent and a no-op
+        when no durable backend is configured.
+        """
+        if self._durable_queue is None:
+            return
+        try:
+            async with async_session_factory() as session:
+                await self._durable_queue.mark_started(
+                    session,
+                    job_id=job_id,
+                    lease_owner=f"task-manager:{os.getpid()}",
+                    lease_seconds=self._lease_seconds,
+                )
+                await session.commit()
+        except Exception:  # noqa: BLE001 - lease bookkeeping must never break a job
+            logger.exception("mark_started failed for durable job %s", job_id)
+
+    async def _mark_job_terminal_durable(self, job_id: str, *, status: str, message: str | None = None) -> None:
+        """Clear the lease and emit a terminal queue event for durable jobs.
+
+        Called after the terminal UPDATE has already committed. Idempotent and
+        a no-op when no durable backend is configured.
+        """
+        if self._durable_queue is None:
+            return
+        try:
+            async with async_session_factory() as session:
+                await self._durable_queue.mark_terminal(
+                    session,
+                    job_id=job_id,
+                    status=status,
+                    message=message,
+                )
+                await session.commit()
+        except Exception:  # noqa: BLE001 - lease bookkeeping must never break a job
+            logger.exception("mark_terminal failed for durable job %s", job_id)
+
     async def _finalize_job(
         self,
         job_id: str,
@@ -1132,9 +1343,14 @@ class TaskManager:
                     result_path=str(written.final_path),
                     progress=100,
                     completed_at=datetime.now(timezone.utc),
+                    # Clear lease columns on terminal so recover_queued never
+                    # sees a completed durable job as "stuck".
+                    lease_owner=None,
+                    lease_expires_at=None,
                 )
             )
             await session.commit()
+        await self._mark_job_terminal_durable(job_id, status="completed")
 
     async def _fail_job(self, job_id: str, error_message: str) -> None:
         # Same commit-race tolerance as _finalize_job: a fast converter can
@@ -1159,7 +1375,12 @@ class TaskManager:
                     status="failed",
                     error_message=error_message,
                     completed_at=datetime.now(timezone.utc),
+                    # Clear lease columns on terminal so recover_queued never
+                    # sees a failed durable job as "stuck".
+                    lease_owner=None,
+                    lease_expires_at=None,
                 )
             )
             await session.commit()
+        await self._mark_job_terminal_durable(job_id, status="failed", message=error_message)
 

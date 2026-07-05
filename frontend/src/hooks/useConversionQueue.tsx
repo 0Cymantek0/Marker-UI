@@ -7,9 +7,11 @@ import {
   downloadResult,
   cancelJob,
   regenerateFormat,
+  retryConversionJob,
   type ConversionConfig,
   type JobStatus,
   type ImageUnderstandingMeta,
+  type RetryJobRequestBody,
 } from '@/lib/api'
 import { filenameForDownload } from '@/lib/download'
 
@@ -57,6 +59,10 @@ export interface JobState {
   rateLimited?: boolean
   // User dismissed the auto dialog for this job; don't auto-resurface it.
   swapPromptDismissed?: boolean
+  // True when the backend has logged LLM call failures during a run. A
+  // completed job with this flag set finished but may have skipped LLM
+  // refinement on some blocks (rate-limited tables, etc.).
+  partialFailure?: boolean
 }
 
 export interface SourceEngineOverrides {
@@ -82,6 +88,9 @@ interface ConversionContextType {
   // Model-swap prompt controls.
   dismissSwapPrompt: (id: string) => void
   clearRateLimited: (id: string) => void
+  // Cross-provider retry: re-run a terminal job's source file with a new
+  // provider/model. Creates a new job card; the original stays in history.
+  retryJob: (id: string, provider?: string, model?: string) => Promise<void>
 }
 
 const ConversionContext = createContext<ConversionContextType | null>(null)
@@ -304,6 +313,14 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         // limits — the only point at which suggesting a model swap is useful.
         const rateLimited =
           prev.rateLimited || nextLogs.some((l) => l.includes('model swap suggested'))
+        // Any LLM call failure during the run marks partial failure. The job
+        // may still complete, but some LLM-refined blocks (tables, equations)
+        // were likely skipped — surface a Retry prompt on the completed card.
+        const partialFailure =
+          prev.partialFailure ||
+          nextLogs.some(
+            (l) => l.includes('model call FAIL') && l.includes('HTTP 429')
+          )
         return {
           ...prev,
           progress: Math.max(prev.progress, data.progress ?? prev.progress),
@@ -312,6 +329,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           elapsed: data.elapsed,
           eta: data.eta,
           rateLimited,
+          partialFailure,
         }
       })
     })
@@ -350,26 +368,37 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         )
         if (activeJobs.length === 0) return
 
-        const recoveredJobs: JobState[] = activeJobs.map((job) => ({
-          id: `history-${job.id}`,
-          filename: job.filename,
-          file: null,
-          localPath: '',
-          phase: 'processing',
-          progress: job.progress ?? 10,
-          statusText: job.status === 'pending' ? 'Queued on backend...' : 'Processing document...',
-          jobId: job.id,
-          error: null,
-          resultBlob: null,
-          resultText: null,
-          logs: [
-            '[SYSTEM] Recovered active job from backend history.',
-            `[SYSTEM] Re-attaching SSE channel for job: ${job.id}`,
-          ],
-          outputFormat: job.output_format || 'markdown',
-          formats: job.formats ?? null,
-          availableFormats: job.available_formats ?? [job.output_format || 'markdown'],
-        }))
+        const recoveredJobs: JobState[] = activeJobs.map((job) => {
+          const cfg = (job as any).conversion_config || (job as any).config_json || {}
+          const useLlm = (job as any).use_llm ?? cfg.use_llm
+          const llmProvider = (job as any).llm_provider ?? cfg.llm_provider
+          const llmModel = (job as any).llm_model ?? cfg.llm_model
+          return {
+            id: `history-${job.id}`,
+            filename: job.filename,
+            file: null,
+            localPath: '',
+            phase: 'processing',
+            progress: job.progress ?? 10,
+            statusText: job.status === 'pending' ? 'Queued on backend...' : 'Processing document...',
+            jobId: job.id,
+            error: null,
+            resultBlob: null,
+            resultText: null,
+            logs: [
+              '[SYSTEM] Recovered active job from backend history.',
+              `[SYSTEM] Re-attaching SSE channel for job: ${job.id}`,
+            ],
+            outputFormat: job.output_format || 'markdown',
+            formats: job.formats ?? null,
+            availableFormats: job.available_formats ?? [job.output_format || 'markdown'],
+            llmProvider: useLlm ? llmProvider : undefined,
+            llmModel: useLlm ? llmModel : undefined,
+            rateLimited: false,
+            partialFailure: false,
+            swapPromptDismissed: false,
+          }
+        })
 
         const existingBackendIds = new Set(
           jobsRef.current.map((job) => job.jobId).filter(Boolean)
@@ -626,6 +655,53 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }))
   }, [updateJob])
 
+  const retryJob = useCallback(async (id: string, provider?: string, model?: string) => {
+    const job = jobsRef.current.find((j) => j.id === id)
+    if (!job?.jobId) return
+    const body: RetryJobRequestBody = {}
+    if (provider) body.llm_provider = provider
+    if (model) body.llm_model = model
+    const result = await retryConversionJob(job.jobId, body)
+    // Drop the original's rate-limit state so its card stops nagging.
+    updateJob(id, (prev) => ({
+      ...prev,
+      rateLimited: false,
+      swapPromptDismissed: true,
+      partialFailure: false,
+      logs: prev.logs.filter(
+        (l) => !l.includes('model swap suggested') && !l.includes('model call FAIL')
+      ),
+    }))
+    // Add the new job to the queue. SSE attaches on next render cycle once the
+    // job card mounts; the backend durable-queue recovery also covers it.
+    setJobs((prev) => [
+      ...prev,
+      {
+        id: `retry-${result.new_job_id}`,
+        filename: job.filename,
+        file: null,
+        localPath: '',
+        phase: 'processing',
+        progress: 0,
+        statusText: 'Retrying with new provider...',
+        jobId: result.new_job_id,
+        error: null,
+        resultBlob: null,
+        resultText: null,
+        logs: [
+          `[SYSTEM] Retry of job ${job.jobId} — created new job ${result.new_job_id}.`,
+        ],
+        outputFormat: job.outputFormat,
+        formats: null,
+        availableFormats: [],
+        llmProvider: provider ?? job.llmProvider,
+        llmModel: model ?? job.llmModel,
+        rateLimited: false,
+        partialFailure: false,
+      } as JobState,
+    ])
+  }, [updateJob])
+
   const regenerateJobFormat = useCallback(async (id: string, format: string) => {
     const job = jobsRef.current.find((j) => j.id === id)
     if (!job?.jobId) return
@@ -640,7 +716,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
   }, [updateJob])
 
   return (
-    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited }}>
+    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited, retryJob }}>
       {children}
     </ConversionContext.Provider>
   )

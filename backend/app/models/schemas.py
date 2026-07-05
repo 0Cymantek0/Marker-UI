@@ -123,6 +123,28 @@ class ConversionResponse(BaseModel):
     output_format: str
 
 
+class RetryJobRequest(BaseModel):
+    """Body for POST /api/convert/{job_id}/retry — re-run a terminal job from
+    its stored source file, optionally overriding the LLM provider/model.
+
+    A cross-provider retry creates a NEW job (different client/wire format means
+    the running converter cannot be hot-swapped). Same-provider model swaps
+    should use the live-override endpoint instead. Both fields are optional:
+    omit them to retry with the original config unchanged.
+    """
+
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+
+
+class RetryJobResponse(BaseModel):
+    """Returned after a retry creates a new job."""
+
+    new_job_id: str
+    source_job_id: str
+    status: str
+
+
 # ---------------------------------------------------------------------------
 # Job status
 # ---------------------------------------------------------------------------

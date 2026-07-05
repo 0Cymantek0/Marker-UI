@@ -177,7 +177,7 @@ class TestLLMProviders:
             # Check header
             auth_header = request.headers.get("Authorization", "")
             calls.append(auth_header)
-            
+
             if "key-primary" in auth_header:
                 # Primary fails with rate limit
                 return httpx.Response(429, json={"error": "Rate limit exceeded"}, request=request)
@@ -186,7 +186,17 @@ class TestLLMProviders:
                 return httpx.Response(200, json={"data": [{"id": "gpt-4"}]}, request=request)
             return httpx.Response(500, request=request)
 
-        with patch("app.core.api_manager._orig_async_client_send", new=mock_send):
+        # No-op the backoff sleeps so the test does not wait real seconds, and
+        # disable the LLM response cache so the 429s are not short-circuited.
+        import app.core.api_manager as am
+        import app.core.llm_cache as llm_cache
+
+        async def _noop_async(_s: float) -> None:
+            return None
+
+        with patch("app.core.api_manager._orig_async_client_send", new=mock_send), \
+             patch.object(am, "_sleep_async", _noop_async), \
+             patch.object(llm_cache, "_CACHE_ENABLED", False):
             # Query models for this provider
             resp = await test_client.post(
                 "/api/settings/llm/providers/fetch-models",
@@ -199,11 +209,12 @@ class TestLLMProviders:
             )
             assert resp.status_code == 200
             assert resp.json() == ["gpt-4"]
-            
-            # Check call sequence: first primary, then fallback-1
+
+            # Call sequence: primary (429) -> backoff retries on primary (all 429)
+            # -> rotation to fallback-1 (200). The LAST call must be the fallback.
             assert "Bearer key-primary" in calls[0]
-            assert "Bearer key-fallback-1" in calls[1]
-            
+            assert "Bearer key-fallback-1" in calls[-1]
+
             # Check cached active key index is updated to 1
             assert _active_key_index["test-rotation"] == 1
 
