@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
+from app.audio.providers.registry import validate_provider_selection
 from app.conversion.formats import INPUT_FORMATS, OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
@@ -54,6 +55,9 @@ from app.utils.secrets import decrypt_value, encrypt_value, is_masked, is_sensit
 
 SERVICE_NAME = "marker_mcp"
 ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
+AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
+    {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".avi"}
+)
 ENGINE_COMPATIBLE_EXTENSIONS = {
     engine: frozenset(
         ext
@@ -125,6 +129,14 @@ def _parse_scalar(value: str) -> Any:
         return value
 
 
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def capabilities() -> dict[str, Any]:
     service = _conversion_service()
     converters = []
@@ -189,6 +201,78 @@ def build_conversion_config(
     if options.audio_low_confidence_threshold is not None:
         config["audio_low_confidence_threshold"] = options.audio_low_confidence_threshold
     _put_true(config, "audio_word_timestamps", options.audio_word_timestamps)
+    _put(config, "audio_provider", options.audio_provider)
+    _put(config, "audio_language", options.audio_language)
+    _put(config, "audio_device", options.audio_device)
+    _put(config, "audio_compute_type", options.audio_compute_type)
+    if options.audio_beam_size is not None:
+        config["audio_beam_size"] = options.audio_beam_size
+    if options.audio_vad_filter is not None:
+        config["audio_vad_filter"] = options.audio_vad_filter
+    if options.audio_gap_warning_ms is not None:
+        config["audio_gap_warning_ms"] = options.audio_gap_warning_ms
+    _put_true(config, "audio_diarization", options.audio_diarization)
+    if options.audio_min_speakers is not None:
+        config["audio_min_speakers"] = options.audio_min_speakers
+    if options.audio_max_speakers is not None:
+        config["audio_max_speakers"] = options.audio_max_speakers
+    if options.audio_speaker_aliases:
+        config["audio_speaker_aliases"] = options.audio_speaker_aliases
+    _put_true(config, "audio_speaker_memory", options.audio_speaker_memory)
+    if options.audio_speaker_memory_scope != "machine":
+        config["audio_speaker_memory_scope"] = options.audio_speaker_memory_scope
+    if options.audio_vocabulary_pack_ids:
+        config["audio_vocabulary_pack_ids"] = options.audio_vocabulary_pack_ids
+    if options.audio_confidence_heatmap is not True:
+        config["audio_confidence_heatmap"] = options.audio_confidence_heatmap
+    if options.audio_quality_diagnostics is not True:
+        config["audio_quality_diagnostics"] = options.audio_quality_diagnostics
+    _put_true(
+        config,
+        "audio_review_required_on_low_confidence",
+        options.audio_review_required_on_low_confidence,
+    )
+    _put_true(config, "audio_text_enhancement_enabled", options.audio_text_enhancement_enabled)
+    if options.audio_text_enhancement_strength:
+        config["audio_text_enhancement_strength"] = options.audio_text_enhancement_strength
+    if options.audio_text_enhancement_provider != "local_rule_based":
+        config["audio_text_enhancement_provider"] = options.audio_text_enhancement_provider
+    _put(config, "audio_text_enhancement_model", options.audio_text_enhancement_model)
+    _put_true(
+        config,
+        "audio_structural_enhancement_enabled",
+        options.audio_structural_enhancement_enabled,
+    )
+    if options.audio_structural_enhancement_mode != "auto":
+        config["audio_structural_enhancement_mode"] = options.audio_structural_enhancement_mode
+    if options.audio_structural_preserve_words is not True:
+        config["audio_structural_preserve_words"] = options.audio_structural_preserve_words
+    if options.audio_enhancement_require_source_refs is not True:
+        config["audio_enhancement_require_source_refs"] = options.audio_enhancement_require_source_refs
+    if options.audio_enhancement_show_diff is not True:
+        config["audio_enhancement_show_diff"] = options.audio_enhancement_show_diff
+    if options.audio_enhancement_include_audit is not True:
+        config["audio_enhancement_include_audit"] = options.audio_enhancement_include_audit
+    if options.audio_enhancement_fallback_on_validation_failure is not True:
+        config["audio_enhancement_fallback_on_validation_failure"] = (
+            options.audio_enhancement_fallback_on_validation_failure
+        )
+    _put_true(config, "audio_enhancement_allow_cloud", options.audio_enhancement_allow_cloud)
+    _put(
+        config,
+        "audio_enhancement_custom_instructions",
+        options.audio_enhancement_custom_instructions,
+    )
+    _put(config, "audio_fusion_mode", options.audio_fusion_mode)
+    _put_true(config, "audio_contradiction_detection", options.audio_contradiction_detection)
+    if options.audio_context_trust_policy != "transcript_wins":
+        config["audio_context_trust_policy"] = options.audio_context_trust_policy
+    _put_true(config, "audio_allow_cloud_stt", options.audio_allow_cloud_stt)
+    _put_true(config, "audio_benchmark_compare", options.audio_benchmark_compare)
+    if options.audio_compare_providers:
+        config["audio_compare_providers"] = options.audio_compare_providers
+    if options.audio_compare_metrics:
+        config["audio_compare_metrics"] = options.audio_compare_metrics
     _put_true(config, "disable_multiprocessing", options.disable_multiprocessing)
     _put_true(config, "strip_existing_ocr", options.strip_existing_ocr)
     _put_true(config, "redo_inline_math", options.redo_inline_math)
@@ -345,6 +429,16 @@ async def submit_conversion_job(
     input_format = suffix.lstrip(".")
     config = build_conversion_config(options, original_name=original_name, output_dir=output_dir)
     _validate_engine_override(config, suffix)
+    if suffix in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
+        try:
+            validate_provider_selection(
+                config.get("audio_provider"),
+                allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
+            )
+        except (NotImplementedError, PermissionError) as exc:
+            if source_url_safe:
+                Path(stored_path).unlink(missing_ok=True)
+            raise UsageError(str(exc)) from exc
     if is_local:
         config["local_filepath"] = stored_path
     if source_url_safe:

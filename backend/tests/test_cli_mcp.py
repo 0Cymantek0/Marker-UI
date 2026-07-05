@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import agent_api
@@ -52,6 +53,44 @@ def test_agent_capabilities_and_config_include_frontend_audio_modes():
         assert mode in caps["audio_output_modes"]
         config = agent_api.build_conversion_config(AgentConversionOptions(audio_output_mode=mode))
         assert config["audio_output_mode"] == mode
+
+
+def test_agent_build_conversion_config_preserves_advanced_audio_options():
+    config = agent_api.build_conversion_config(
+        AgentConversionOptions(
+            audio_provider="local_faster_whisper",
+            audio_language="en",
+            audio_vad_filter=False,
+            audio_diarization=True,
+            audio_min_speakers=2,
+            audio_speaker_aliases={"speaker_0": "Alice"},
+            audio_vocabulary_pack_ids=["team"],
+            audio_text_enhancement_enabled=True,
+            audio_text_enhancement_strength=3,
+            audio_structural_enhancement_enabled=True,
+            audio_structural_enhancement_mode="meeting_notes",
+            audio_contradiction_detection=True,
+            audio_allow_cloud_stt=True,
+            audio_benchmark_compare=True,
+            audio_compare_providers=["local_faster_whisper"],
+        )
+    )
+
+    assert config["audio_provider"] == "local_faster_whisper"
+    assert config["audio_language"] == "en"
+    assert config["audio_vad_filter"] is False
+    assert config["audio_diarization"] is True
+    assert config["audio_min_speakers"] == 2
+    assert config["audio_speaker_aliases"] == {"speaker_0": "Alice"}
+    assert config["audio_vocabulary_pack_ids"] == ["team"]
+    assert config["audio_text_enhancement_enabled"] is True
+    assert config["audio_text_enhancement_strength"] == 3
+    assert config["audio_structural_enhancement_enabled"] is True
+    assert config["audio_structural_enhancement_mode"] == "meeting_notes"
+    assert config["audio_contradiction_detection"] is True
+    assert config["audio_allow_cloud_stt"] is True
+    assert config["audio_benchmark_compare"] is True
+    assert config["audio_compare_providers"] == ["local_faster_whisper"]
 
 
 def test_agent_capabilities_include_cancel_and_delete_tools():
@@ -311,6 +350,43 @@ async def test_agent_api_submit_job_uses_real_task_manager_and_conversion(
         task_manager.shutdown(wait=False)
         _app_state.task_manager = original_task_manager
         _app_state.conversion_service = original_conversion_service
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_agent_submit_rejects_deferred_audio_provider_before_queue(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    source = tmp_path / "call.wav"
+    source.write_bytes(b"RIFF fake wav")
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'agent-audio.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+    monkeypatch.setattr(agent_api, "_db_tables_ready", False)
+
+    try:
+        with pytest.raises(UsageError, match="not shipped yet"):
+            await agent_api.submit_conversion_job(
+                local_file_path=str(source),
+                options=AgentConversionOptions(
+                    audio_provider="openai",
+                    audio_allow_cloud_stt=True,
+                ),
+            )
+
+        async with session_factory() as session:
+            rows = (await session.execute(select(ConversionJob))).scalars().all()
+        assert rows == []
+    finally:
         await engine.dispose()
 
 
