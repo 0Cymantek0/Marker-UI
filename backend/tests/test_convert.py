@@ -1362,6 +1362,27 @@ async def test_upload_accepts_audio_config_blob(client: AsyncClient, db_session)
 
 
 @pytest.mark.asyncio
+async def test_upload_rejects_deferred_audio_provider_before_queue(client: AsyncClient, db_session):
+    """Known-but-unshipped STT providers fail before a pending job is created."""
+    resp = await _upload_file(
+        client,
+        filename="call.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {"audio_provider": "openai", "audio_allow_cloud_stt": True}
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "not shipped yet" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "call.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
 async def test_upload_accepts_all_frontend_audio_output_modes(client: AsyncClient, db_session):
     """REST allow-list must match the frontend audio output style cards."""
 

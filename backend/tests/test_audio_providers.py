@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import pytest
+
 from app.audio.providers.capabilities import (
     ProviderCapability,
     capabilities_payload,
     get_capability,
     list_capabilities,
 )
+from app.audio.providers.registry import validate_provider_selection
 from app.audio.pipeline import normalize_transcript
 from app.audio.speakers import (
     apply_speaker_aliases,
@@ -55,6 +58,11 @@ def test_capabilities_payload_serializes_all_fields() -> None:
             "requires_api_key",
         ):
             assert key in entry
+
+
+def test_validate_provider_selection_rejects_deferred_provider() -> None:
+    with pytest.raises(NotImplementedError, match="not shipped yet"):
+        validate_provider_selection("openai", allow_cloud_stt=True)
 
 
 def test_cloud_providers_require_api_key() -> None:

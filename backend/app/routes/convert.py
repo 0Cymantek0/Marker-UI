@@ -27,6 +27,7 @@ from app.database import get_db
 from app.errors import InputNotAllowedError, UnsupportedFormatError
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
+from app.audio.providers.registry import validate_provider_selection
 from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
 from app.services.audit import record_audit_event
 from app.services.safe_url_fetcher import (
@@ -46,6 +47,9 @@ logger = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
 MAX_PAGE_RANGE_PAGES = 500
 HARD_MAX_PAGE_RANGE_PAGES = 2000
+AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
+    {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".avi"}
+)
 
 # MAX_UPLOAD_SIZE is imported from app.core.config so the upload + source_url
 # download paths share a single source of truth driven by
@@ -74,6 +78,14 @@ def _count_requested_pages(page_range: str) -> int:
                 raise ValueError
             count += 1
     return count
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _assert_safe_source_url(raw_url: str) -> None:
@@ -597,6 +609,16 @@ async def upload_file(
     )
     if resolved_vocab_packs:
         config["audio_vocabulary_packs"] = resolved_vocab_packs
+    if suffix in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
+        try:
+            validate_provider_selection(
+                config.get("audio_provider"),
+                allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
+            )
+        except (NotImplementedError, PermissionError) as exc:
+            if not is_local:
+                Path(stored_path).unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if disable_multiprocessing:
         config["disable_multiprocessing"] = True
     if strip_existing_ocr:

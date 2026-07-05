@@ -28,6 +28,7 @@ __all__ = [
     "available_provider_ids",
     "build_provider",
     "get_capability",
+    "validate_provider_selection",
 ]
 
 
@@ -86,12 +87,7 @@ def build_provider(provider_id: str | None) -> AudioTranscriptionProvider:
 
     key = (provider_id or DEFAULT_PROVIDER_ID).strip().lower()
     if key in _DEFERRED_PROVIDERS:
-        raise NotImplementedError(
-            f"Audio provider {key!r} ({_DEFERRED_PROVIDERS[key]}) is not shipped yet. "
-            "It is gated behind its adapter + capability flags + provider fixtures "
-            "landing together. Configure it as a provider record and enable cloud STT "
-            "once its adapter ships."
-        )
+        raise NotImplementedError(_deferred_provider_message(key))
     factories = _local_factories()
     factory = factories.get(key)
     if factory is None:
@@ -100,3 +96,36 @@ def build_provider(provider_id: str | None) -> AudioTranscriptionProvider:
         )
         factory = factories[DEFAULT_PROVIDER_ID]
     return factory()
+
+
+def validate_provider_selection(
+    provider_id: str | None,
+    *,
+    allow_cloud_stt: bool = False,
+) -> ProviderCapability:
+    """Validate a requested provider before a job is queued.
+
+    Unknown ids keep the historical local fallback. Declared-but-deferred
+    providers fail early because selecting them would otherwise create a queued
+    job that only fails inside the worker.
+    """
+
+    key = (provider_id or DEFAULT_PROVIDER_ID).strip().lower()
+    if key in _DEFERRED_PROVIDERS:
+        raise NotImplementedError(_deferred_provider_message(key))
+    capability = get_capability(key)
+    if capability.cloud and not allow_cloud_stt:
+        raise PermissionError(
+            f"Audio provider {key!r} is cloud-based but cloud STT is not enabled. "
+            "Enable 'allow cloud STT' to send audio to this provider."
+        )
+    return capability
+
+
+def _deferred_provider_message(provider_id: str) -> str:
+    return (
+        f"Audio provider {provider_id!r} ({_DEFERRED_PROVIDERS[provider_id]}) is not shipped yet. "
+        "It is gated behind its adapter + capability flags + provider fixtures "
+        "landing together. Configure it as a provider record and enable cloud STT "
+        "once its adapter ships."
+    )

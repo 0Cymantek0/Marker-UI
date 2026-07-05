@@ -27,6 +27,7 @@ from app.audio.pipeline import (
     slug_source_id,
 )
 from app.audio.providers import build_provider, get_capability
+from app.audio.providers.registry import validate_provider_selection
 from app.audio.speakers import (
     apply_speaker_aliases,
     speaker_timeline,
@@ -188,12 +189,10 @@ def _resolve_provider(config: dict[str, Any]) -> str:
     """
 
     provider_id = str(config.get("audio_provider") or "local_faster_whisper").strip().lower()
-    capability = get_capability(provider_id)
-    if capability.cloud and not _truthy(config.get("audio_allow_cloud_stt")):
-        raise PermissionError(
-            f"Audio provider {provider_id!r} is cloud-based but cloud STT is not enabled. "
-            "Enable 'allow cloud STT' in Advanced Audio settings to send audio to this provider."
-        )
+    validate_provider_selection(
+        provider_id,
+        allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
+    )
     return provider_id
 
 
