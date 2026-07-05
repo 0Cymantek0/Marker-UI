@@ -235,14 +235,17 @@ export function OutputViewer({
                     img: ({ src, alt, ...props }: any) => {
                       const safeSrc = safeMarkdownImageSrc(src)
                       if (!safeSrc) {
+                        const blockedSrc = String(src ?? '').trim()
                         return (
                           <span
                             role="note"
                             aria-label="External image blocked for privacy"
                             className="not-prose inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-sans text-amber-800 dark:text-amber-200"
+                            title={blockedSrc}
                           >
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                             <span className="truncate">External image blocked</span>
+                            {blockedSrc && <code className="max-w-[220px] truncate font-mono">{blockedSrc}</code>}
                           </span>
                         )
                       }
@@ -301,17 +304,26 @@ function safeMarkdownImageSrc(src: unknown): string | null {
   const raw = String(src ?? '').trim()
   if (!raw) return null
 
+  if (/[\u0000-\u001f<>]/.test(raw)) return null
   if (/^(?:https?:)?\/\//i.test(raw)) return null
+  if (/^[\\/]/.test(raw)) return null
 
   const protocolMatch = raw.match(/^([a-z][a-z0-9+.-]*):/i)
-  if (!protocolMatch) return raw
+  if (protocolMatch) return null
 
-  const protocol = protocolMatch[1]?.toLowerCase()
-  if (protocol === 'blob') return raw
-  if (protocol === 'data' && /^data:image\/(?:png|jpeg|jpg|gif|webp|bmp);/i.test(raw)) {
-    return raw
+  const pathPart = raw.split(/[?#]/, 1)[0] ?? ''
+  if (!pathPart) return null
+  let decodedPath = pathPart
+  try {
+    decodedPath = decodeURIComponent(pathPart)
+  } catch {
+    return null
   }
-  return null
+  if (decodedPath.includes('\\') || decodedPath.startsWith('/')) return null
+  const parts = decodedPath.split('/')
+  if (parts.some((part) => part === '' || part === '.' || part === '..')) return null
+  if (!/\.(?:png|jpe?g|gif|webp|bmp|tiff?)$/i.test(parts[parts.length - 1] ?? '')) return null
+  return raw
 }
 
 function AudioInspectionPanel({ audio }: { audio: Record<string, any> }) {

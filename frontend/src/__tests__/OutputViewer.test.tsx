@@ -85,23 +85,39 @@ describe('OutputViewer component', () => {
     expect(screen.getByRole('img')).toHaveAttribute('src', '_page_2_Figure_0.jpeg')
   })
 
-  it('blocks external markdown images by default', () => {
-    const md = '![tracker](https://tracker.example/pixel.png)'
+  it.each([
+    ['http image', 'http://tracker.example/pixel.png', true],
+    ['https image', 'https://tracker.example/pixel.png', true],
+    ['protocol-relative image', '//tracker.example/pixel.png', true],
+    ['data image', 'data:image/png;base64,AAAA', false],
+    ['file image', 'file:///C:/secret.png', false],
+    ['absolute path image', '/private/secret.png', true],
+    ['path traversal image', '../secret.png', true],
+    ['encoded path traversal image', 'images/%2e%2e/secret.png', true],
+    ['javascript image', 'javascript:alert(1)', false],
+  ])('blocks unsafe markdown image src: %s', (_label, src, rendererKeepsSrc) => {
+    const md = `![tracker](${src})`
 
     render(<OutputViewer content={md} onDownload={vi.fn()} />)
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.getByRole('note', { name: /external image blocked for privacy/i })).toBeInTheDocument()
     expect(screen.getByText('External image blocked')).toBeInTheDocument()
+    if (rendererKeepsSrc) {
+      expect(screen.getByText(src)).toBeInTheDocument()
+    }
   })
 
-  it('blocks dangerous markdown image protocols', () => {
-    const md = '![bad](javascript:alert(1))'
+  it('allows safe nested relative markdown images', () => {
+    const md = '![safe](assets/page_1_Picture_0.webp?cache=1#figure)'
 
     render(<OutputViewer content={md} onDownload={vi.fn()} />)
 
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
-    expect(screen.getByRole('note', { name: /external image blocked for privacy/i })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /safe/i })).toHaveAttribute(
+      'src',
+      'assets/page_1_Picture_0.webp?cache=1#figure',
+    )
+    expect(screen.queryByRole('note', { name: /external image blocked for privacy/i })).not.toBeInTheDocument()
   })
 
   it('clicking a badge opens the detail modal with type and confidence', () => {
