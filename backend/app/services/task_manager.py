@@ -996,6 +996,49 @@ class TaskManager:
             )
             await session.commit()
 
+    async def _read_job_status_with_commit_race_retry(
+        self,
+        job_id: str,
+        *,
+        action: str,
+    ) -> Optional[str]:
+        """Read a job's status, tolerating the commit-before-submit race.
+
+        ``submit_job`` can start a fast CPU/native converter that reaches
+        ``_finalize_job``/``_fail_job`` inside a worker thread before the
+        request's ``get_db`` dependency commits the ``ConversionJob`` row.
+        A single ``SELECT`` on a fresh session then returns ``None`` and the
+        terminal write is silently skipped — the job hangs at ``pending``
+        forever. The REST upload route now commits before submit, but we keep
+        this retry as defense-in-depth so a future regression cannot lose a
+        job silently.
+
+        Bounded: a few short sleeps, total well under one second. If the row
+        is still missing we return ``None`` and the caller logs a distinct
+        WARNING (not the misleading "cancelled or deleted" message).
+        """
+        from sqlalchemy import select
+
+        total_attempts = 6
+        for attempt in range(total_attempts):
+            async with async_session_factory() as session:
+                stmt = select(ConversionJob.status).where(ConversionJob.id == job_id)
+                res = await session.execute(stmt)
+                status = res.scalar_one_or_none()
+            if status is not None:
+                return status
+            # Last attempt: no sleep, just fall through to the missing-row log.
+            if attempt < total_attempts - 1:
+                await asyncio.sleep(0.1)
+
+        logger.warning(
+            "Job %s not visible after %s attempts; %s skipped (row not yet committed or deleted).",
+            job_id,
+            total_attempts,
+            action,
+        )
+        return None
+
     async def _finalize_job(
         self,
         job_id: str,
@@ -1003,15 +1046,17 @@ class TaskManager:
         config: dict[str, Any],
         formats_payload: dict[str, dict[str, Any]] | None = None,
     ) -> None:
-        # Check if job still exists and is not cancelled
-        async with async_session_factory() as session:
-            from sqlalchemy import select
-            stmt = select(ConversionJob.status).where(ConversionJob.id == job_id)
-            res = await session.execute(stmt)
-            status = res.scalar_one_or_none()
-            if not status or status == "cancelled":
-                logger.info("Job %s was cancelled or deleted. Skipping finalization.", job_id)
-                return
+        # Check if job still exists and is not cancelled. Tolerate the
+        # commit-before-submit race: the request transaction may still be
+        # flushing when a fast converter reaches us in a worker thread.
+        status = await self._read_job_status_with_commit_race_retry(
+            job_id, action="finalization"
+        )
+        if status is None:
+            return
+        if status == "cancelled":
+            logger.info("Job %s was cancelled. Skipping finalization.", job_id)
+            return
 
         result_text = result.get("text", "")
         metadata = result.get("metadata") or {}
@@ -1092,16 +1137,20 @@ class TaskManager:
             await session.commit()
 
     async def _fail_job(self, job_id: str, error_message: str) -> None:
-        async with async_session_factory() as session:
-            from sqlalchemy import select, update
-            stmt = select(ConversionJob.status).where(ConversionJob.id == job_id)
-            res = await session.execute(stmt)
-            status = res.scalar_one_or_none()
-            if not status or status == "cancelled":
-                logger.info("Job %s was cancelled or deleted. Skipping failure recording.", job_id)
-                return
+        # Same commit-race tolerance as _finalize_job: a fast converter can
+        # reach the failure path before the request session commits the row.
+        status = await self._read_job_status_with_commit_race_retry(
+            job_id, action="failure recording"
+        )
+        if status is None:
+            return
+        if status == "cancelled":
+            logger.info("Job %s was cancelled. Skipping failure recording.", job_id)
+            return
 
-            # Only mark as failed if not already in a terminal state (e.g. cancelled)
+        # Only mark as failed if not already in a terminal state (e.g. cancelled)
+        async with async_session_factory() as session:
+            from sqlalchemy import update
             await session.execute(
                 update(ConversionJob)
                 .where(ConversionJob.id == job_id)

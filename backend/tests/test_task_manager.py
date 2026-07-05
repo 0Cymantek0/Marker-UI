@@ -773,3 +773,96 @@ async def test_finalize_job_relabels_markdown_only_result_as_markdown(
         assert Path(row.result_path).suffix == ".md"
 
     await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# MUI-003: commit-before-submit race condition
+#
+# Fast CPU/native converters can finish and call _finalize_job inside a worker
+# thread BEFORE the request's get_db dependency commits the job row. The worker
+# opens a fresh session, doesn't see the uncommitted row, and silently skips
+# finalization — leaving the job stuck at "pending" forever.
+#
+# Fix: REST upload must explicitly commit the job row before calling
+# task_manager.submit_job(). Defense-in-depth: _finalize_job should also retry
+# briefly + log a distinct warning when the row is missing, rather than masking
+# the race as "cancelled or deleted."
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_retries_briefly_when_row_not_yet_visible(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """_finalize_job must not silently skip when the job row isn't visible yet.
+
+    The race window between submit_job and get_db's commit is small but real for
+    fast converters. _finalize_job should retry briefly so a just-submitted job
+    whose request transaction is still flushing is finalized, not lost. And the
+    log must distinguish "row missing (possibly mid-commit)" from "user cancelled"
+    so the failure mode is observable.
+    """
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'race_retry.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "55555555-5555-5555-8555-555555555555"
+
+    result_payload = {
+        "text": "# Delayed commit",
+        "extension": "md",
+        "images": {},
+        "metadata": {"engine": {"engine": "text_data", "label": "Text"}},
+    }
+    config = {
+        "output_format": "markdown",
+        "original_name": "data.txt",
+        "output_dir": str(tmp_path / "out"),
+    }
+
+    tm = TaskManager(max_workers=1)
+
+    # Insert the job row AFTER finalize starts, simulating a request commit that
+    # lands slightly after the worker reaches _finalize_job. Without retry,
+    # finalize sees no row and returns immediately.
+    async def _delayed_insert():
+        await asyncio.sleep(0.3)
+        async with session_factory() as session:
+            session.add(ConversionJob(
+                id=job_id,
+                filename="data.txt",
+                original_name="data.txt",
+                status="pending",
+                input_format="txt",
+                output_format="markdown",
+                config_json=json.dumps(config),
+            ))
+            await session.commit()
+
+    insert_task = asyncio.ensure_future(_delayed_insert())
+    try:
+        await tm._finalize_job(job_id, result_payload, config)
+    finally:
+        tm.shutdown(wait=False)
+        await insert_task
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row is not None, "Job row should have been finalized, not lost"
+        assert row.status == "completed"
+        assert row.result_text == "# Delayed commit"
+
+    await engine.dispose()

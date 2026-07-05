@@ -772,6 +772,14 @@ async def upload_file(
             max_retries=int(config.get("max_retries") or 0),
         )
 
+    # Commit the job row (and durable-queue metadata) BEFORE scheduling any
+    # work. A fast CPU/native converter can finish in the worker thread and
+    # reach _finalize_job — which opens a fresh session — before the get_db
+    # dependency's implicit post-return commit runs. Without this explicit
+    # commit the worker cannot see the row, silently skips finalization, and
+    # the job hangs at "pending" forever (MUI-003).
+    await db.commit()
+
     task_manager.submit_job(job_id, stored_path, options, conversion_service)
 
     return ConversionResponse(
