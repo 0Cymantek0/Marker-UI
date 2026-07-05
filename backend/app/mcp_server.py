@@ -7,7 +7,7 @@ available for multi-client local/remote deployments.
 import ipaddress
 import os
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import quote, unquote, urlparse
 
 from mcp.server.auth.settings import AuthSettings
@@ -32,6 +32,7 @@ from app.agent_api import (
     parse_extra_options_json,
     plan_conversion,
     read_output,
+    read_output_chunk,
     set_setting,
     self_test,
     submit_conversion_job,
@@ -108,14 +109,20 @@ class SubmitJobOutput(MarkerOutputModel):
 
 class ReadOutputResult(MarkerOutputModel):
     path: str = Field(description="Resolved output file path.", examples=["C:\\path\\to\\document.md"])
-    offset: int = Field(description="Returned text page start offset.", examples=[0])
-    limit: int = Field(description="Requested maximum characters.", examples=[20000])
-    text: str = Field(description="Output text page.", examples=["# Converted"])
-    text_chars: int = Field(description="Total text characters in file.", examples=[50000])
-    has_more: bool = Field(description="True when more text remains.", examples=[True])
-    next_offset: int | None = Field(default=None, description="Offset for next page.", examples=[20000])
-    chunk_kind: str = Field(description="Chunking mode. offset_text means plain character-offset paging, not semantic/RAG chunking.", examples=["offset_text"])
-    is_semantic_chunk: bool = Field(description="False because this reader returns offset-based text pages, not semantic chunks.", examples=[False])
+    offset: int = Field(default=0, description="Returned text page start offset (offset mode).", examples=[0])
+    limit: int = Field(default=20_000, description="Requested maximum characters (offset mode).", examples=[20000])
+    text: str = Field(description="Output text page (offset mode) or semantic chunk text (semantic mode).", examples=["# Converted"])
+    text_chars: int = Field(default=0, description="Total text characters in file (offset mode).", examples=[50000])
+    has_more: bool = Field(default=False, description="True when more text/chunks remain.", examples=[True])
+    next_offset: int | None = Field(default=None, description="Offset for next page (offset mode).", examples=[20000])
+    chunk_kind: str = Field(description="Chunking mode: offset_text (character-offset paging) or semantic_markdown (structure-aware RAG chunk).", examples=["offset_text"])
+    is_semantic_chunk: bool = Field(description="True when this result is a semantic chunk from a marker.chunks.v1 envelope; false for offset paging.", examples=[False])
+    # Semantic-mode fields (absent in offset mode).
+    chunk_index: int | None = Field(default=None, description="Index of the returned semantic chunk (semantic mode).", examples=[0])
+    chunk_count: int | None = Field(default=None, description="Total semantic chunks in the envelope (semantic mode).", examples=[12])
+    next_chunk_index: int | None = Field(default=None, description="Next chunk index, or null if this was the last (semantic mode).", examples=[1])
+    schema_version: str | None = Field(default=None, description="Chunk envelope schema version (semantic mode).", examples=["marker.chunks.v1"])
+    chunk: dict[str, Any] | None = Field(default=None, description="Full semantic chunk object with id, heading_path, start_line, end_line, char_count, token_estimate (semantic mode).", examples=[{"id": "chunk_0000_abc123", "heading_path": ["Title"]}])
 
 
 class ManifestToolOutput(MarkerOutputModel):
@@ -224,6 +231,11 @@ PageSizeParam = Annotated[int, Field(ge=1, le=100, description="Items per page."
 OffsetParam = Annotated[int, Field(ge=0, description="Character offset.", examples=[0])]
 LimitParam = Annotated[int, Field(ge=1, le=MAX_READ_CHARS, description="Maximum characters to return.", examples=[20000])]
 SizeParam = Annotated[int, Field(ge=0, description="Input size in bytes for metadata-only planning.", examples=[1048576])]
+ChunkModeParam = Annotated[
+    Literal["offset", "semantic"],
+    Field(description="Chunk read mode. 'offset' (default) returns character-offset text paging; 'semantic' returns the Nth structure-aware chunk from a marker.chunks.v1 envelope."),
+]
+ChunkIndexParam = Annotated[int, Field(ge=0, description="Zero-based semantic chunk index (mode='semantic' only).", examples=[0])]
 
 
 INSTRUCTIONS = (
@@ -922,7 +934,7 @@ async def marker_read_output(
 
 @mcp.tool(
     name="marker_read_output_chunk",
-    title="Read Marker Output Offset Page",
+    title="Read Marker Output Chunk",
     annotations={
         "readOnlyHint": True,
         "destructiveHint": False,
@@ -931,14 +943,31 @@ async def marker_read_output(
     },
 )
 async def marker_read_output_chunk(
-    output_path: Annotated[str, Field(description="Path returned as output.text_path by conversion/job status.", examples=["C:\\path\\to\\document.md"])],
+    output_path: Annotated[str, Field(description="Path returned as output.text_path by conversion/job status. For semantic mode, point this at the chunks .json output.", examples=["C:\\path\\to\\document.md"])],
+    mode: ChunkModeParam = "offset",
+    chunk_index: ChunkIndexParam = 0,
     offset: OffsetParam = 0,
     limit: LimitParam = 20_000,
 ) -> ReadOutputResult:
-    """Read one bounded offset-based text page from a converted output file. This is not semantic/RAG chunking."""
+    """Read one chunk from a converted output file.
+
+    ``mode="offset"`` (default, backward compatible) returns a bounded
+    character-offset text page — useful for streaming large outputs.
+
+    ``mode="semantic"`` reads the Nth semantic chunk (``chunk_index``) from a
+    persisted ``marker.chunks.v1`` envelope, returning structural metadata
+    (heading path, line span, token estimate). Use this for RAG retrieval
+    when the conversion produced a chunks artifact.
+    """
 
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
-    return read_output(output_path, offset=offset, limit=limit)
+    return read_output_chunk(
+        output_path,
+        mode=mode,
+        chunk_index=chunk_index,
+        offset=offset,
+        limit=limit,
+    )
 
 
 @mcp.tool(

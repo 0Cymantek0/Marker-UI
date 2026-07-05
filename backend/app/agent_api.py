@@ -612,6 +612,126 @@ def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHAR
     }
 
 
+def read_semantic_chunk(path: str, *, chunk_index: int = 0) -> dict[str, Any]:
+    """Read the Nth semantic chunk from a persisted chunks JSON output file.
+
+    The chunks format is produced by ``build_chunks_envelope`` (native
+    Markdown-only converters + mixed-PDF routing) and persisted as a ``.json``
+    file whose payload matches ``marker.chunks.v1``::
+
+        {
+          "schema_version": "marker.chunks.v1",
+          "chunk_kind": "semantic_markdown",
+          "source": {"name": "..."},
+          "chunk_count": N,
+          "chunks": [
+            {"id": "chunk_0000_...", "index": 0, "text": "...",
+             "heading_path": ["Title"], "start_line": 1, "end_line": 3,
+             "char_count": 42, "token_estimate": 11},
+            ...
+          ]
+        }
+
+    Returns a single chunk enriched with ``is_semantic_chunk=True`` so consumers
+    can distinguish it from the offset
+    pager. Raises ``InputNotFoundError`` for a missing file, ``InputNotAllowedError``
+    for a non-permitted path, ``ValueError`` for a non-chunks file or bad index.
+    """
+    output_path = Path(path).expanduser()
+    _assert_output_read_permitted(output_path)
+    if not output_path.is_file():
+        raise InputNotFoundError(
+            f"Output file not found: {path}",
+            details={"path": str(path)},
+        )
+    try:
+        payload = json.loads(output_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"Output file is not valid JSON chunks output: {path}",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Output file is not a chunks envelope: {path}")
+    schema = str(payload.get("schema_version") or "")
+    chunks = payload.get("chunks")
+    if schema != "marker.chunks.v1" or not isinstance(chunks, list):
+        raise ValueError(
+            f"Output file is not a marker.chunks.v1 envelope (schema_version={schema!r}): {path}",
+        )
+    if not chunks:
+        raise InputNotFoundError(
+            "Chunks envelope contains no chunks.",
+            details={"path": str(path), "schema_version": schema},
+        )
+
+    try:
+        chunk_index = int(chunk_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"chunk_index must be an integer, got {chunk_index!r}") from exc
+    if chunk_index < 0:
+        raise ValueError(f"chunk_index must be >= 0, got {chunk_index}")
+    if chunk_index >= len(chunks):
+        raise InputNotFoundError(
+            f"chunk_index {chunk_index} out of range (chunk_count={len(chunks)}).",
+            details={
+                "path": str(path),
+                "chunk_index": chunk_index,
+                "chunk_count": len(chunks),
+            },
+        )
+    chunk = chunks[chunk_index]
+    if not isinstance(chunk, dict) or "text" not in chunk:
+        raise InputNotFoundError(
+            f"Chunk {chunk_index} is malformed.",
+            details={"path": str(path), "chunk_index": chunk_index},
+        )
+
+    envelope_kind = str(payload.get("chunk_kind") or "semantic_markdown")
+    return {
+        "path": str(output_path.resolve()),
+        "chunk_index": chunk_index,
+        "chunk_count": len(chunks),
+        "schema_version": schema,
+        "chunk_kind": envelope_kind,
+        "is_semantic_chunk": True,
+        "chunk": chunk,
+        "text": str(chunk.get("text") or ""),
+        "heading_path": list(chunk.get("heading_path") or []),
+        "id": str(chunk.get("id") or ""),
+        "has_more": chunk_index + 1 < len(chunks),
+        "next_chunk_index": chunk_index + 1 if chunk_index + 1 < len(chunks) else None,
+    }
+
+
+def read_output_chunk(
+    path: str,
+    *,
+    mode: str = "offset",
+    offset: int = 0,
+    limit: int = DEFAULT_PREVIEW_CHARS,
+    chunk_index: int = 0,
+) -> dict[str, Any]:
+    """Read one chunk of a converted output file in either offset or semantic mode.
+
+    ``mode="offset"`` (default, backward compatible) returns a character-offset
+    text page via ``read_output`` — useful for large single-file browsing.
+
+    ``mode="semantic"`` returns the Nth structural chunk from a persisted
+    ``marker.chunks.v1`` envelope via ``read_semantic_chunk`` — the right call
+    for RAG retrieval where chunk boundaries must respect document structure.
+    """
+    mode_norm = (mode or "offset").strip().lower()
+    if mode_norm == "semantic":
+        return read_semantic_chunk(path, chunk_index=chunk_index)
+    if mode_norm != "offset":
+        raise InputNotAllowedError(
+            f"Unknown read mode {mode!r}; expected 'offset' or 'semantic'.",
+            hint="Use mode='offset' for character paging or mode='semantic' for RAG chunks.",
+            details={"mode": str(mode)},
+        )
+    return read_output(path, offset=offset, limit=limit)
+
+
 def _count_text_chars(path: Path) -> int:
     total = 0
     with path.open("r", encoding="utf-8", errors="replace") as handle:
