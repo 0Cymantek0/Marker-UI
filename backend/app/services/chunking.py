@@ -20,6 +20,7 @@ class MarkdownBlock:
     start_line: int
     end_line: int
     heading_path: tuple[str, ...] = field(default_factory=tuple)
+    kind: str = "text"
 
 
 def build_chunks_envelope(
@@ -76,7 +77,7 @@ def chunk_markdown(
     overlap_chars = max(0, min(int(overlap_chars or 0), max_chars // 3))
     chunks: list[dict[str, Any]] = []
     for block in _markdown_blocks(markdown):
-        for piece in _split_block(block.text, max_chars=max_chars, overlap_chars=overlap_chars):
+        for piece in _split_block(block, max_chars=max_chars, overlap_chars=overlap_chars):
             text = piece.strip()
             if not text:
                 continue
@@ -109,7 +110,7 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
     buffer: list[str] = []
     block_start = 1
 
-    def flush(end_line: int) -> None:
+    def flush(end_line: int, *, kind: str = "text") -> None:
         nonlocal buffer, block_start
         text = "\n".join(buffer).strip()
         if text:
@@ -119,11 +120,14 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
                     start_line=block_start,
                     end_line=end_line,
                     heading_path=tuple(title for _level, title in heading_stack),
+                    kind=kind,
                 )
             )
         buffer = []
 
-    for line_no, line in enumerate(lines, start=1):
+    line_no = 1
+    while line_no <= len(lines):
+        line = lines[line_no - 1]
         heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
         if heading:
             flush(line_no - 1)
@@ -133,23 +137,64 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
             heading_stack.append((level, title))
             block_start = line_no
             buffer = [line]
-            flush(line_no)
+            flush(line_no, kind="heading")
             block_start = line_no + 1
+            line_no += 1
+            continue
+
+        fence = _fence_marker(line)
+        if fence:
+            flush(line_no - 1)
+            block_start = line_no
+            fence_lines = [line]
+            line_no += 1
+            while line_no <= len(lines):
+                fence_lines.append(lines[line_no - 1])
+                if _is_matching_fence(lines[line_no - 1], fence):
+                    break
+                line_no += 1
+            buffer = fence_lines
+            flush(min(line_no, len(lines)), kind="fenced_code")
+            block_start = line_no + 1
+            line_no += 1
+            continue
+
+        if _looks_like_table_start(lines, line_no - 1):
+            flush(line_no - 1)
+            block_start = line_no
+            table_lines = [line, lines[line_no]]
+            line_no += 2
+            while line_no <= len(lines):
+                candidate = lines[line_no - 1]
+                if not candidate.strip() or "|" not in candidate:
+                    break
+                table_lines.append(candidate)
+                line_no += 1
+            buffer = table_lines
+            flush(line_no - 1, kind="table")
+            block_start = line_no
             continue
         if not line.strip():
             flush(line_no - 1)
             block_start = line_no + 1
+            line_no += 1
             continue
         if not buffer:
             block_start = line_no
         buffer.append(line)
+        line_no += 1
     flush(len(lines))
     return blocks
 
 
-def _split_block(text: str, *, max_chars: int, overlap_chars: int) -> list[str]:
+def _split_block(block: MarkdownBlock, *, max_chars: int, overlap_chars: int) -> list[str]:
+    text = block.text
     if len(text) <= max_chars:
         return [text]
+    if block.kind == "table":
+        return _split_table_block(text, max_chars=max_chars)
+    if block.kind == "fenced_code":
+        return _split_fenced_code_block(text, max_chars=max_chars)
     sentences = re.split(r"(?<=[.!?])\s+", text)
     pieces: list[str] = []
     current = ""
@@ -169,6 +214,102 @@ def _split_block(text: str, *, max_chars: int, overlap_chars: int) -> list[str]:
     if current:
         pieces.append(current)
     return pieces
+
+
+def _fence_marker(line: str) -> str | None:
+    match = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+    return match.group(1) if match else None
+
+
+def _is_matching_fence(line: str, opener: str) -> bool:
+    marker = _fence_marker(line)
+    return bool(marker and opener and marker[0] == opener[0] and len(marker) >= len(opener))
+
+
+def _looks_like_table_start(lines: list[str], index: int) -> bool:
+    if index + 1 >= len(lines):
+        return False
+    header = lines[index].strip()
+    separator = lines[index + 1].strip()
+    if "|" not in header or "|" not in separator:
+        return False
+    return bool(re.match(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$", separator))
+
+
+def _split_table_block(text: str, *, max_chars: int) -> list[str]:
+    lines = text.splitlines()
+    if len(lines) <= 2:
+        return _split_text_by_chars(text, max_chars=max_chars)
+
+    header = lines[:2]
+    rows = lines[2:]
+    header_text = "\n".join(header)
+    pieces: list[str] = []
+    current_rows: list[str] = []
+
+    def flush_rows() -> None:
+        nonlocal current_rows
+        if current_rows:
+            pieces.append("\n".join([*header, *current_rows]))
+            current_rows = []
+
+    for row in rows:
+        candidate = "\n".join([*header, *current_rows, row])
+        if current_rows and len(candidate) > max_chars:
+            flush_rows()
+            candidate = "\n".join([*header, row])
+        if len(candidate) > max_chars:
+            flush_rows()
+            for row_piece in _split_text_by_chars(row, max_chars=max_chars - len(header_text) - 1):
+                pieces.append("\n".join([*header, row_piece]))
+        else:
+            current_rows.append(row)
+    flush_rows()
+    return pieces or [text]
+
+
+def _split_fenced_code_block(text: str, *, max_chars: int) -> list[str]:
+    lines = text.splitlines()
+    if len(lines) < 2:
+        return _split_text_by_chars(text, max_chars=max_chars)
+
+    opener = lines[0]
+    closer = lines[-1] if _is_matching_fence(lines[-1], _fence_marker(opener) or "") else lines[0][:3]
+    body = lines[1:-1] if closer == lines[-1] else lines[1:]
+    overhead = len(opener) + len(closer) + 2
+    body_limit = max(40, max_chars - overhead)
+    pieces: list[str] = []
+    current: list[str] = []
+
+    def flush_code() -> None:
+        nonlocal current
+        if current:
+            pieces.append("\n".join([opener, *current, closer]))
+            current = []
+
+    for line in body:
+        candidate = "\n".join([*current, line])
+        if current and len(candidate) > body_limit:
+            flush_code()
+            candidate = line
+        if len(candidate) > body_limit:
+            flush_code()
+            for line_piece in _split_text_by_chars(line, max_chars=body_limit):
+                pieces.append("\n".join([opener, line_piece, closer]))
+        else:
+            current.append(line)
+    flush_code()
+    return pieces or [text]
+
+
+def _split_text_by_chars(text: str, *, max_chars: int) -> list[str]:
+    limit = max(40, max_chars)
+    pieces: list[str] = []
+    remaining = text
+    while remaining:
+        pieces.append(remaining[:limit].rstrip())
+        remaining = remaining[limit:].lstrip()
+    return [piece for piece in pieces if piece]
 
 
 def _chunk_id(source_name: str, index: int, text: str) -> str:
