@@ -58,6 +58,29 @@ async def test_agent_api_converts_tsv_through_real_service(tmp_path: Path):
     assert Path(result["output"]["text_path"]).read_text(encoding="utf-8") == result["text_preview"]
 
 
+@pytest.mark.asyncio
+async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\nbeta\t2\n", encoding="utf-8")
+
+    result = await convert_document(
+        local_file_path=str(source),
+        output_dir=str(tmp_path / "out"),
+        max_chars=5000,
+        options=AgentConversionOptions(output_format="chunks"),
+    )
+
+    output_path = Path(result["output"]["text_path"])
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert output_path.suffix == ".json"
+    assert result["output"]["media_type"] == "application/json"
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert payload["chunk_kind"] == "semantic_markdown"
+    assert payload["chunk_count"] == len(payload["chunks"])
+    assert "| alpha | 1 |" in payload["chunks"][-1]["text"]
+    assert result["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
+
+
 def test_agent_capabilities_and_config_include_frontend_audio_modes():
     caps = agent_api.capabilities()
 

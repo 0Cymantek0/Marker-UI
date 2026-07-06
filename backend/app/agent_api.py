@@ -545,7 +545,7 @@ async def _convert_resolved_path(
             _validate_page_range_safe(options.page_range, probe_result.page_count)
 
     service = _conversion_service()
-    require_supported_output_formats(
+    requested_formats = require_supported_output_formats(
         str(path),
         config,
         service,
@@ -554,7 +554,12 @@ async def _convert_resolved_path(
 
     await _prepare_runtime(config)
     marker_options = build_marker_options(await _load_llm_config_for_options(config), config)
-    result = await asyncio.to_thread(service.convert_file, str(path), marker_options)
+    result = await _convert_primary_format(
+        service,
+        str(path),
+        marker_options,
+        requested_formats,
+    )
     saved = _save_result(
         result,
         source_name=original_name,
@@ -580,6 +585,26 @@ async def _convert_resolved_path(
             else None
         ),
     }
+
+
+async def _convert_primary_format(
+    service: ConversionService,
+    filepath: str,
+    config: dict[str, Any],
+    requested_formats: list[str],
+) -> dict[str, Any]:
+    primary_format = requested_formats[0] if requested_formats else "markdown"
+    if primary_format == "markdown":
+        return await asyncio.to_thread(service.convert_file, filepath, config)
+    formatted = await asyncio.to_thread(
+        service.convert_file_formats,
+        filepath,
+        config,
+        requested_formats or [primary_format],
+    )
+    if primary_format in formatted:
+        return formatted[primary_format]
+    return next(iter(formatted.values()))
 
 
 def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHARS) -> dict[str, Any]:
