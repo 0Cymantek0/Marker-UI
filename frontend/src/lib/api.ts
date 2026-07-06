@@ -12,6 +12,7 @@ export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
 export type OcrEngine = 'surya' | 'hybrid_ocr'
 export type HybridOcrProfile = 'balanced' | 'max_accuracy' | 'low_vram'
 export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
+export type ChunkingStrategy = 'markdown_heading_blocks_v2' | 'unstructured_by_title'
 export type AudioOutputMode =
   | 'transcript'
   | 'enhanced'
@@ -98,6 +99,7 @@ export function normalizeOcrEngine(value: unknown): OcrEngine {
 
 export interface ConversionConfig {
   output_formats: OutputFormat[]
+  chunking_strategy?: ChunkingStrategy
   converter: ConverterType
   engine_override?: string
   use_llm?: boolean
@@ -452,6 +454,7 @@ export async function uploadFile(
   if (config.output_formats.length > 1) {
     params.append('output_formats', config.output_formats.join(','))
   }
+  if (config.chunking_strategy) params.append('chunking_strategy', config.chunking_strategy)
   if (config.conversion_profile) params.append('conversion_profile', config.conversion_profile)
   if (config.converter) params.append('converter', config.converter)
   if (config.engine_override) params.append('engine_override', config.engine_override)

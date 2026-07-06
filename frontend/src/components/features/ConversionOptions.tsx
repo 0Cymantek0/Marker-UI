@@ -20,6 +20,7 @@ import {
   type OutputFormat,
   type ConverterType,
   type ImageHandlingMode,
+  type ChunkingStrategy,
   type OcrEngine,
   type SmartRouterLevel,
   type ActiveLLM,
@@ -38,6 +39,11 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; desc: string; icon: 
   { value: 'json', label: 'JSON', desc: 'Structured JSON layout metadata', icon: Braces },
   { value: 'html', label: 'HTML', desc: 'Rendered HTML structure', icon: Code },
   { value: 'chunks', label: 'Chunks', desc: 'Fragmented text layout chunks', icon: Layers },
+]
+
+const CHUNKING_STRATEGIES: { value: ChunkingStrategy; label: string }[] = [
+  { value: 'markdown_heading_blocks_v2', label: 'Markdown headings' },
+  { value: 'unstructured_by_title', label: 'Unstructured by title' },
 ]
 
 const CONVERTERS: { value: ConverterType; label: string; desc: string }[] = [
@@ -431,6 +437,25 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
             )
           })}
         </div>
+        {(config.output_formats ?? ['markdown']).includes('chunks') && (
+          <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-card/35 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                Chunking Strategy
+              </label>
+              <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+                Use Markdown-preserving chunks by default, or title-aware Unstructured chunks when installed.
+              </p>
+            </div>
+            <Select
+              value={config.chunking_strategy ?? 'markdown_heading_blocks_v2'}
+              onChange={(value) => update('chunking_strategy', value as ChunkingStrategy)}
+              options={CHUNKING_STRATEGIES}
+              disabled={disabled}
+              className="w-full sm:w-56 md:w-56"
+            />
+          </div>
+        )}
       </div>
 
       {/* Converter Type */}

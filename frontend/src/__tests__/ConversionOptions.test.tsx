@@ -280,6 +280,38 @@ describe('ConversionOptions image understanding controls', () => {
     expect(screen.getByRole('button', { name: /html/i })).toBeDisabled()
   })
 
+  it('shows and applies chunking strategy when chunks output is selected', async () => {
+    mockGetLLMProviders.mockResolvedValue([])
+    mockGetActiveLLM.mockResolvedValue(null)
+    const onChange = vi.fn()
+
+    const { rerender } = render(
+      <ConversionOptions
+        config={{ ...baseConfig, output_formats: ['chunks'] }}
+        onChange={onChange}
+        supportsMultiFormat={false}
+      />
+    )
+
+    expect(screen.getByText('Chunking Strategy')).toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: /markdown headings/i })
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('button', { name: /unstructured by title/i }))
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ chunking_strategy: 'unstructured_by_title' })
+    )
+
+    rerender(
+      <ConversionOptions
+        config={{ ...baseConfig, output_formats: ['markdown'] }}
+        onChange={onChange}
+        supportsMultiFormat={false}
+      />
+    )
+    expect(screen.queryByText('Chunking Strategy')).not.toBeInTheDocument()
+  })
+
   describe('Conversion Presets UI flow', () => {
     it('loads and lists presets on mount', async () => {
       const mockPresets = [

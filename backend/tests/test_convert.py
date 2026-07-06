@@ -175,7 +175,10 @@ async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db
     resp = await client.post(
         "/api/convert/upload",
         files=files,
-        params={"output_format": "chunks"},
+        params={
+            "output_format": "chunks",
+            "chunking_strategy": "unstructured_by_title",
+        },
     )
 
     assert resp.status_code == 200
@@ -187,6 +190,7 @@ async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db
     config = json.loads(job.config_json)
     assert job.output_format == "chunks"
     assert config["output_format"] == "chunks"
+    assert config["chunking_strategy"] == "unstructured_by_title"
 
 
 @pytest.mark.asyncio

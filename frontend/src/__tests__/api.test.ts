@@ -124,6 +124,21 @@ describe('uploadFile', () => {
     expect(url.searchParams.get('image_handling_mode')).toBe('understanding')
     expect(url.searchParams.get('disable_image_extraction')).toBe('true')
   })
+
+  it('sends chunking strategy when chunks output is requested', async () => {
+    mockFetchOnce(200, { job_id: 'job-chunks', status: 'pending', filename: 'notes.md' }, true)
+
+    await uploadFile(new File(['# Notes'], 'notes.md', { type: 'text/markdown' }), {
+      output_formats: ['chunks'],
+      converter: 'PdfConverter',
+      chunking_strategy: 'unstructured_by_title',
+    })
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.get('output_format')).toBe('chunks')
+    expect(url.searchParams.get('chunking_strategy')).toBe('unstructured_by_title')
+  })
 })
 
 describe('normalizeOcrEngine', () => {

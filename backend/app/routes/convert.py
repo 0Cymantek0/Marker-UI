@@ -423,6 +423,10 @@ async def upload_file(
     output_dir: Optional[str] = Query(None, description="Optional custom output directory path"),
     output_format: str = Query("markdown", description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}"),
     output_formats: Optional[str] = Query(None, description="Comma-separated output formats for multi-format rendering (e.g. markdown,json)"),
+    chunking_strategy: Optional[str] = Query(
+        None,
+        description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title",
+    ),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
     engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
     conversion_profile: Optional[str] = Query(None, description="Conversion profile: auto, fast, high_accuracy"),
@@ -601,6 +605,15 @@ async def upload_file(
         if fmt_list:
             config["output_formats"] = fmt_list
             config["output_format"] = fmt_list[0]
+    if chunking_strategy:
+        if chunking_strategy not in {"markdown_heading_blocks_v2", "unstructured_by_title"}:
+            if not is_local:
+                Path(stored_path).unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported chunking_strategy. Expected markdown_heading_blocks_v2 or unstructured_by_title.",
+            )
+        config["chunking_strategy"] = chunking_strategy
     if converter:
         config["converter_cls"] = converter
     if engine_override:
