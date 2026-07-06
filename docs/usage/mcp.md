@@ -200,7 +200,18 @@ Canonical v2 tools use one source object:
 
 Tool annotations mark read-only, destructive, idempotent, and closed-world
 behavior for clients that use MCP planning metadata. Destructive tools are still
-policy-gated server side.
+policy-gated server side. URL-capable tools such as `marker_plan`,
+`marker_convert`, `marker_submit`, `marker_convert_file`, and
+`marker_submit_job` advertise `openWorldHint=true`; local-only read/output tools
+keep `openWorldHint=false`.
+
+`marker_convert_file` and `marker_submit_job` expose the same first-class audio
+controls used by the CLI and GUI, including `audio_provider`,
+`audio_allow_cloud_stt`, `audio_diarization`, `audio_speaker_aliases_json`,
+`audio_vocabulary_pack_ids`, `audio_text_enhancement_enabled`,
+`audio_structural_enhancement_enabled`, and `audio_contradiction_detection`.
+The generic v2 tools can also receive advanced fields through
+`extra_options_json`.
 
 ## Resources
 
@@ -228,6 +239,8 @@ policy-gated server side.
 5. Read long output with `marker_read_output_chunk`.
 6. Inspect `.marker.json` manifests before summarizing asset-heavy output.
 7. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.
+8. Keep audio local by default. Set `audio_allow_cloud_stt=true` only when the
+   user explicitly approves a cloud STT provider.
 
 ## Security
 

@@ -70,6 +70,35 @@ def test_cli_guide_batch_json_flag_matches_parser() -> None:
     assert "batch --manifest" not in cli_guide
 
 
+def test_cli_guide_documents_first_class_audio_flags() -> None:
+    cli_guide = (REPO_ROOT / "docs" / "usage" / "cli.md").read_text(encoding="utf-8")
+
+    for flag in (
+        "--audio-provider",
+        "--audio-diarization",
+        "--audio-speaker-alias",
+        "--audio-text-enhancement",
+        "--audio-structural-enhancement",
+        "--audio-contradiction-detection",
+        "--audio-allow-cloud-stt",
+    ):
+        assert flag in cli_guide
+
+
+def test_mcp_guide_documents_url_open_world_and_audio_controls() -> None:
+    mcp_guide = (REPO_ROOT / "docs" / "usage" / "mcp.md").read_text(encoding="utf-8")
+
+    for text in (
+        "openWorldHint=true",
+        "openWorldHint=false",
+        "audio_provider",
+        "audio_allow_cloud_stt",
+        "audio_speaker_aliases_json",
+        "audio_contradiction_detection",
+    ):
+        assert text in mcp_guide
+
+
 def _is_external_or_in_page(target: str) -> bool:
     lowered = target.lower()
     return (
