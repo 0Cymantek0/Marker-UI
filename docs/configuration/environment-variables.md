@@ -13,6 +13,7 @@ Marker UI backend is configured using standard environment variables. You can se
 | `MARKER_DEBUG` | Enables verbose FastAPI debugging and stack traces. | `false` |
 | `MARKER_MAX_UPLOAD_SIZE_MB` | Maximum file size allowed for uploads (in Megabytes). | `100` |
 | `MARKER_SOURCE_URL_ALLOWLIST` | Optional comma-separated host allowlist for `source_url` downloads. Empty allows any public, non-local HTTP(S) host that passes SSRF checks. Entries match exact hosts and subdomains; `*.example.com` is also supported. | unset |
+| `MARKER_SOURCE_URL_REQUIRE_ALLOWLIST` | Require `MARKER_SOURCE_URL_ALLOWLIST` before any `source_url` download is accepted. Recommended for shared or production deployments. | `false` |
 | `MARKER_WORKSPACE_ROOTS` | Optional `os.pathsep`-separated list of local filesystem roots allowed for `local_filepath`/agent local file conversion. On Windows use `;`; on Linux/macOS use `:`. Empty preserves legacy unrestricted local-path behavior. | unset |
 | `MARKER_OUTPUT_ROOT` | Optional root that output reads and explicit output directories/paths must stay inside. When unset, `marker_read_output` only reads Marker outputs that carry a valid `.marker.json` manifest. | unset |
 | `MARKER_DATABASE_URL` | SQLAlchemy connection URL for database persistence. | `sqlite+aiosqlite:///data/marker_ui.db` |

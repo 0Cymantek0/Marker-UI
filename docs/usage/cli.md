@@ -88,7 +88,9 @@ python -m app.cli convert --source-url "https://docs.example.com/report.pdf" --o
 ```
 
 Use `MARKER_SOURCE_URL_ALLOWLIST` when deployments should restrict URL hosts.
-SSRF guards still block local, private, loopback, and unsafe redirect targets.
+Set `MARKER_SOURCE_URL_REQUIRE_ALLOWLIST=true` for shared deployments where URL
+conversion must never fetch arbitrary public hosts. SSRF guards still block
+local, private, loopback, cross-host redirects, and unsafe redirect targets.
 
 ## Advanced Options
 

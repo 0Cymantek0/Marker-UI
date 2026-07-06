@@ -85,12 +85,18 @@ URL conversion accepts only HTTP(S). The safe fetcher blocks:
 - private, loopback, link-local, multicast, unspecified, and reserved IPs;
 - DNS results resolving to blocked IP ranges;
 - redirects to blocked or disallowed hosts;
+- redirects to a different host by default;
 - hosts outside `MARKER_SOURCE_URL_ALLOWLIST` when an allowlist is configured.
+
+For shared or production deployments, set `MARKER_SOURCE_URL_REQUIRE_ALLOWLIST=true`
+and configure `MARKER_SOURCE_URL_ALLOWLIST` so arbitrary public hosts cannot be
+used as a fetch target.
 
 Allowlist example:
 
 ```powershell
 $env:MARKER_SOURCE_URL_ALLOWLIST="docs.example.com,*.trusted.example"
+$env:MARKER_SOURCE_URL_REQUIRE_ALLOWLIST="true"
 ```
 
 Entries match exact hosts and subdomains. Wildcard entries of the form

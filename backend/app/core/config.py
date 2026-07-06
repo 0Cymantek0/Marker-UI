@@ -21,6 +21,10 @@ SOURCE_URL_ALLOWLIST: tuple[str, ...] = tuple(
     for item in os.getenv("MARKER_SOURCE_URL_ALLOWLIST", "").split(",")
     if item.strip()
 )
+SOURCE_URL_REQUIRE_ALLOWLIST: bool = os.getenv(
+    "MARKER_SOURCE_URL_REQUIRE_ALLOWLIST",
+    "false",
+).lower() in ("true", "1", "yes")
 
 # Model prewarming. Phase 1 default is lazy: marker models load on first marker
 # job rather than at startup, so an office-only deployment never pays the

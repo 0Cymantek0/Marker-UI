@@ -13,7 +13,7 @@ import aiofiles
 import httpx
 
 from app.conversion.formats import CONTENT_TYPE_EXTENSION_MAP
-from app.core.config import MAX_UPLOAD_SIZE, SOURCE_URL_ALLOWLIST
+from app.core.config import MAX_UPLOAD_SIZE, SOURCE_URL_ALLOWLIST, SOURCE_URL_REQUIRE_ALLOWLIST
 
 
 MAX_URL_REDIRECTS = 5
@@ -48,25 +48,47 @@ async def download_source_url(
     max_redirects: int = MAX_URL_REDIRECTS,
     timeout: float = 30.0,
     allowlist: tuple[str, ...] | None = None,
+    require_allowlist: bool = SOURCE_URL_REQUIRE_ALLOWLIST,
+    allow_cross_host_redirects: bool = False,
     audit_hook: AuditHook | None = None,
 ) -> DownloadedSource:
     """Download a public HTTP(S) document after SSRF and size checks."""
 
     current_url = raw_url
+    resolved_ips: list[str] = []
     await _audit(audit_hook, "url_fetch.started", {"url": _safe_source_url(raw_url)})
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         for redirect_index in range(max_redirects + 1):
-            assert_safe_source_url(current_url, allowlist=allowlist)
+            resolved_ips = assert_safe_source_url(
+                current_url,
+                allowlist=allowlist,
+                require_allowlist=require_allowlist,
+            )
             async with client.stream("GET", current_url) as response:
                 if response.status_code in {301, 302, 303, 307, 308}:
                     location = response.headers.get("location")
                     if not location:
                         raise SafeUrlFetchError("source_url redirect missing Location header")
-                    current_url = urljoin(current_url, location)
+                    next_url = urljoin(current_url, location)
+                    resolved_ips = assert_safe_source_url(
+                        next_url,
+                        allowlist=allowlist,
+                        require_allowlist=require_allowlist,
+                    )
+                    if not allow_cross_host_redirects and _hostname(next_url) != _hostname(current_url):
+                        raise SafeUrlFetchError(
+                            "source_url redirect to a different host is not allowed",
+                            category="blocked",
+                        )
+                    current_url = next_url
                     await _audit(
                         audit_hook,
                         "url_fetch.redirect",
-                        {"url": _safe_source_url(current_url), "redirect_index": redirect_index + 1},
+                        {
+                            "url": _safe_source_url(current_url),
+                            "redirect_index": redirect_index + 1,
+                            "resolved_ips": resolved_ips,
+                        },
                     )
                     continue
                 if response.status_code >= 400:
@@ -108,13 +130,18 @@ async def download_source_url(
                 await _audit(
                     audit_hook,
                     "url_fetch.completed",
-                    {"url": safe_url, "bytes": total, "suffix": suffix},
+                    {"url": safe_url, "bytes": total, "suffix": suffix, "resolved_ips": resolved_ips},
                 )
                 return DownloadedSource(original_name=original_name, suffix=suffix, safe_url=safe_url)
     raise SafeUrlFetchError("source_url exceeded redirect limit", category="blocked")
 
 
-def assert_safe_source_url(raw_url: str, *, allowlist: tuple[str, ...] | None = None) -> None:
+def assert_safe_source_url(
+    raw_url: str,
+    *,
+    allowlist: tuple[str, ...] | None = None,
+    require_allowlist: bool = False,
+) -> list[str]:
     parsed = urlparse(raw_url)
     hostname = (parsed.hostname or "").lower()
     if parsed.scheme not in {"http", "https"} or not hostname:
@@ -122,12 +149,18 @@ def assert_safe_source_url(raw_url: str, *, allowlist: tuple[str, ...] | None = 
     if parsed.username or parsed.password:
         raise SafeUrlFetchError("source_url must not contain credentials", category="unsafe")
     effective_allowlist = SOURCE_URL_ALLOWLIST if allowlist is None else allowlist
+    if require_allowlist and not effective_allowlist:
+        raise SafeUrlFetchError(
+            "source_url requires MARKER_SOURCE_URL_ALLOWLIST in this deployment",
+            category="blocked",
+        )
     if effective_allowlist and not _host_allowed(hostname, effective_allowlist):
         raise SafeUrlFetchError("source_url host is not in MARKER_SOURCE_URL_ALLOWLIST", category="blocked")
     try:
         addresses = socket.getaddrinfo(hostname, parsed.port, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
         raise SafeUrlFetchError("source_url host could not be resolved", category="unsafe") from exc
+    resolved_ips: list[str] = []
     for _family, _socktype, _proto, _canonname, sockaddr in addresses:
         host = sockaddr[0]
         try:
@@ -136,6 +169,8 @@ def assert_safe_source_url(raw_url: str, *, allowlist: tuple[str, ...] | None = 
             raise SafeUrlFetchError("source_url resolved to an invalid address", category="unsafe") from exc
         if _is_blocked_ip(ip):
             raise SafeUrlFetchError("source_url resolves to a private or local network address", category="unsafe")
+        resolved_ips.append(str(ip))
+    return resolved_ips
 
 
 def extension_for_download(
@@ -177,6 +212,10 @@ def _filename_from_content_disposition(value: str | None) -> str | None:
 def _safe_source_url(raw_url: str) -> str:
     parsed = urlparse(raw_url)
     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+
+def _hostname(raw_url: str) -> str:
+    return (urlparse(raw_url).hostname or "").lower()
 
 
 def _host_allowed(hostname: str, allowlist: tuple[str, ...]) -> bool:

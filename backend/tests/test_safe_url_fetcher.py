@@ -40,6 +40,24 @@ def test_assert_safe_source_url_enforces_allowlist(monkeypatch):
     assert "allowlist" in exc_info.value.detail.lower()
 
 
+def test_assert_safe_source_url_can_require_allowlist(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.safe_url_fetcher.socket.getaddrinfo",
+        lambda *args, **kwargs: [(0, 0, 0, "", ("93.184.216.34", 443))],
+    )
+
+    with pytest.raises(SafeUrlFetchError) as exc_info:
+        assert_safe_source_url("https://example.com/file.pdf", require_allowlist=True)
+
+    assert exc_info.value.category == "blocked"
+    assert "MARKER_SOURCE_URL_ALLOWLIST" in exc_info.value.detail
+    assert_safe_source_url(
+        "https://example.com/file.pdf",
+        allowlist=("example.com",),
+        require_allowlist=True,
+    )
+
+
 def test_extension_for_download_prefers_content_type_and_sanitizes_filename():
     filename, suffix = extension_for_download(
         "https://example.com/download.bin",
@@ -87,6 +105,7 @@ async def test_download_source_url_writes_file_and_audits(monkeypatch, tmp_path:
     assert (tmp_path / "download").read_bytes() == b"%PDF-1.4"
     assert [event for event, _payload in events] == ["url_fetch.started", "url_fetch.completed"]
     assert events[0][1]["url"] == "https://example.com/doc.pdf"
+    assert events[-1][1]["resolved_ips"] == ["93.184.216.34"]
 
 
 @pytest.mark.asyncio
@@ -161,6 +180,56 @@ async def test_download_source_url_rechecks_redirect_target(monkeypatch, tmp_pat
 
     assert "private or local network" in exc_info.value.detail
     assert fake_client.urls == ["https://example.com/doc.pdf"]
+
+
+@pytest.mark.asyncio
+async def test_download_source_url_rejects_cross_host_redirect_by_default(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "app.services.safe_url_fetcher.socket.getaddrinfo",
+        lambda *args, **kwargs: [(0, 0, 0, "", ("93.184.216.34", 443))],
+    )
+    fake_client = _FakeClient(
+        [
+            _FakeResponse(302, {"location": "https://cdn.example.org/doc.pdf"}, []),
+        ]
+    )
+    monkeypatch.setattr("app.services.safe_url_fetcher.httpx.AsyncClient", lambda **kwargs: fake_client)
+
+    with pytest.raises(SafeUrlFetchError) as exc_info:
+        await download_source_url(
+            "https://example.com/doc.pdf",
+            tmp_path / "download",
+            allowed_extensions={".pdf"},
+        )
+
+    assert exc_info.value.category == "blocked"
+    assert "different host" in exc_info.value.detail
+    assert not (tmp_path / "download").exists()
+
+
+@pytest.mark.asyncio
+async def test_download_source_url_allows_cross_host_redirect_when_explicit(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "app.services.safe_url_fetcher.socket.getaddrinfo",
+        lambda *args, **kwargs: [(0, 0, 0, "", ("93.184.216.34", 443))],
+    )
+    fake_client = _FakeClient(
+        [
+            _FakeResponse(302, {"location": "https://cdn.example.org/doc.pdf"}, []),
+            _FakeResponse(200, {"content-type": "application/pdf"}, [b"%PDF"]),
+        ]
+    )
+    monkeypatch.setattr("app.services.safe_url_fetcher.httpx.AsyncClient", lambda **kwargs: fake_client)
+
+    downloaded = await download_source_url(
+        "https://example.com/doc.pdf",
+        tmp_path / "download",
+        allowed_extensions={".pdf"},
+        allow_cross_host_redirects=True,
+    )
+
+    assert downloaded.safe_url == "https://cdn.example.org/doc.pdf"
+    assert fake_client.urls == ["https://example.com/doc.pdf", "https://cdn.example.org/doc.pdf"]
 
 
 class _FakeResponse:
