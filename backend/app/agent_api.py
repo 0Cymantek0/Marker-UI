@@ -343,6 +343,7 @@ async def convert_document(
     source_url: str | None = None,
     output_dir: str | None = None,
     output_path: str | None = None,
+    overwrite: bool = False,
     max_chars: int = DEFAULT_PREVIEW_CHARS,
     options: AgentConversionOptions | None = None,
 ) -> dict[str, Any]:
@@ -367,6 +368,7 @@ async def convert_document(
                 options,
                 output_base=output_base,
                 output_path=output_path,
+                overwrite=overwrite,
                 max_chars=max_chars,
                 source_url=safe_url,
                 original_name=original_name,
@@ -379,6 +381,7 @@ async def convert_document(
         options,
         output_base=output_base,
         output_path=output_path,
+        overwrite=overwrite,
         max_chars=max_chars,
         original_name=path.name,
     )
@@ -522,6 +525,7 @@ async def _convert_resolved_path(
     *,
     output_base: Path,
     output_path: str | None,
+    overwrite: bool,
     max_chars: int,
     original_name: str,
     source_url: str | None = None,
@@ -556,6 +560,7 @@ async def _convert_resolved_path(
         source_name=original_name,
         output_base=output_base,
         output_path=Path(output_path).expanduser() if output_path else None,
+        overwrite=overwrite,
         conversion_config=config,
         source_url=source_url,
     )
@@ -1296,6 +1301,7 @@ def _save_result(
     source_name: str,
     output_base: Path,
     output_path: Path | None,
+    overwrite: bool,
     conversion_config: dict[str, Any],
     source_url: str | None,
 ) -> dict[str, Any]:
@@ -1308,5 +1314,6 @@ def _save_result(
         conversion_config=conversion_config,
         layout="file",
         source_url=source_url,
+        overwrite=overwrite,
     )
     return written.to_agent_output()

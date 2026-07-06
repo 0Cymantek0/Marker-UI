@@ -79,6 +79,7 @@ Local path:
 ```powershell
 python -m app.cli plan "C:\path\to\document.pdf" --conversion-profile auto --json
 python -m app.cli convert "C:\path\to\document.pdf" --output-dir "C:\path\to\out" --json
+python -m app.cli convert "C:\path\to\document.pdf" --output-path "C:\path\to\out\document.md" --overwrite --json
 ```
 
 Safe public URL:
@@ -91,6 +92,28 @@ Use `MARKER_SOURCE_URL_ALLOWLIST` when deployments should restrict URL hosts.
 Set `MARKER_SOURCE_URL_REQUIRE_ALLOWLIST=true` for shared deployments where URL
 conversion must never fetch arbitrary public hosts. SSRF guards still block
 local, private, loopback, cross-host redirects, and unsafe redirect targets.
+
+Single-file convert also accepts the shared request contract from a file or
+stdin. This is the safest route for automation with many options:
+
+```json
+{
+  "local_file_path": "C:\\path\\to\\document.pdf",
+  "output_path": "C:\\path\\to\\out\\document.md",
+  "overwrite": false,
+  "max_chars": 20000,
+  "options": {
+    "output_format": "markdown"
+  }
+}
+```
+
+Run it:
+
+```powershell
+python -m app.cli convert --request-json "C:\path\to\convert-request.json" --json
+Get-Content "C:\path\to\convert-request.json" | python -m app.cli convert --stdin-json --json
+```
 
 ## Advanced Options
 
@@ -127,7 +150,8 @@ Batch mode accepts a JSON manifest with local paths or source URLs:
   "items": [
     {
       "local_file_path": "C:\\path\\to\\one.pdf",
-      "output_dir": "C:\\path\\to\\out"
+      "output_dir": "C:\\path\\to\\out",
+      "overwrite": false
     },
     {
       "source_url": "https://docs.example.com/two.pdf",

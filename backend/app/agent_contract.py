@@ -168,6 +168,7 @@ class ConvertRequestModel(ContractModel):
     source_url: str | None = None
     output_dir: str | None = None
     output_path: str | None = None
+    overwrite: bool = False
     max_chars: int = Field(default=20_000, ge=0, le=100_000)
     options: ConversionOptionsModel = Field(default_factory=ConversionOptionsModel)
 

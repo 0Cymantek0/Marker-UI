@@ -208,7 +208,8 @@ class SelfTestOutput(MarkerOutputModel):
 PathParam = Annotated[str, Field(description="Local file path. Example: C:\\path\\to\\document.pdf.", examples=["C:\\path\\to\\document.pdf"])]
 UrlParam = Annotated[str, Field(description="Public http(s) URL. Example: https://example.com/document.pdf.", examples=["https://example.com/document.pdf"])]
 DirParam = Annotated[str, Field(description="Output directory path. Example: C:\\path\\to\\out.", examples=["C:\\path\\to\\out"])]
-OutputPathParam = Annotated[str, Field(description="Exact output file path that must not already exist.", examples=["C:\\path\\to\\out\\document.md"])]
+OutputPathParam = Annotated[str, Field(description="Exact output file path. Existing files are refused unless overwrite is true.", examples=["C:\\path\\to\\out\\document.md"])]
+OverwriteParam = Annotated[bool, Field(description="Replace an existing explicit output path and manifest when true.", examples=[False])]
 OutputFormatParam = Annotated[str, Field(description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}.", examples=["markdown"])]
 ConverterParam = Annotated[str, Field(description="Optional converter class override.", examples=["TableConverter"])]
 EngineParam = Annotated[str, Field(description="Optional engine override such as text_data or marker.", examples=["text_data"])]
@@ -543,6 +544,7 @@ async def marker_convert_file(
     source_url: UrlParam = "",
     output_dir: DirParam = "",
     output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
     output_format: OutputFormatParam = "markdown",
     max_chars: PreviewCharsParam = 20_000,
     converter_cls: ConverterParam = "",
@@ -664,6 +666,7 @@ async def marker_convert_file(
             source_url=_none_if_blank(source_url),
             output_dir=_none_if_blank(output_dir),
             output_path=_none_if_blank(output_path),
+            overwrite=overwrite,
             max_chars=max_chars,
             options=options,
         )
@@ -685,6 +688,7 @@ async def marker_convert_local_file(
     local_file_path: PathParam,
     output_dir: DirParam = "",
     output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
     output_format: OutputFormatParam = "markdown",
     max_chars: PreviewCharsParam = 20_000,
     conversion_profile: ProfileParam = "",
@@ -707,6 +711,7 @@ async def marker_convert_local_file(
             local_file_path=local_file_path,
             output_dir=_none_if_blank(output_dir),
             output_path=_none_if_blank(output_path),
+            overwrite=overwrite,
             max_chars=max_chars,
             options=options,
         )
@@ -727,6 +732,7 @@ async def marker_convert_url(
     source_url: UrlParam,
     output_dir: DirParam = "",
     output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
     output_format: OutputFormatParam = "markdown",
     max_chars: PreviewCharsParam = 20_000,
     conversion_profile: ProfileParam = "",
@@ -747,6 +753,7 @@ async def marker_convert_url(
         source_url=source_url,
         output_dir=_none_if_blank(output_dir),
         output_path=_none_if_blank(output_path),
+        overwrite=overwrite,
         max_chars=max_chars,
         options=options,
     )

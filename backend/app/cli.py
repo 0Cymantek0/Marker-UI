@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from app.agent_api import (
     AgentConversionOptions,
     cancel_job,
@@ -33,9 +35,9 @@ from app.agent_api import (
     self_test,
     submit_conversion_job,
 )
-from app.agent_contract import AUDIO_OUTPUT_MODES, export_json_schemas
+from app.agent_contract import AUDIO_OUTPUT_MODES, ConvertRequestModel, export_json_schemas
 from app.conversion.formats import OUTPUT_FORMATS
-from app.errors import ERROR_SCHEMA_VERSION, MarkerError, from_exception
+from app.errors import ERROR_SCHEMA_VERSION, MarkerError, UsageError, from_exception
 from app.eval.runner import run_eval
 
 
@@ -85,18 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return _print_result(result, args.json)
         if args.command == "convert":
-            opts = _options_from_args(args)
-            result = asyncio.run(
-                convert_document(
-                    local_file_path=args.input,
-                    source_url=args.source_url,
-                    output_dir=args.output_dir,
-                    output_path=args.output_path,
-                    max_chars=args.max_chars,
-                    options=opts,
-                )
-            )
-            return _print_result(result, args.json)
+            return asyncio.run(_handle_convert(args))
         if args.command == "submit-job":
             opts = _options_from_args(args)
             result = asyncio.run(
@@ -245,6 +236,9 @@ def _build_parser() -> argparse.ArgumentParser:
     conv.add_argument("--source-url", help="Public http(s) source URL")
     conv.add_argument("--output-dir", help="Directory for converted output")
     conv.add_argument("--output-path", help="Exact output text file path")
+    conv.add_argument("--request-json", help="Convert request JSON file")
+    conv.add_argument("--stdin-json", action="store_true", help="Read convert request JSON from stdin")
+    conv.add_argument("--overwrite", action="store_true", help="Replace an existing explicit output path")
     conv.add_argument("--max-chars", type=int, default=20_000, help="Preview chars printed in response")
     _add_common_options(conv)
     conv.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
@@ -638,6 +632,69 @@ def _handle_schema(args: argparse.Namespace) -> int:
     return _print_result(schemas, True)
 
 
+async def _handle_convert(args: argparse.Namespace) -> int:
+    request = _convert_request_from_args(args)
+    result = await convert_document(
+        local_file_path=request.local_file_path,
+        source_url=request.source_url,
+        output_dir=request.output_dir,
+        output_path=request.output_path,
+        overwrite=request.overwrite or bool(args.overwrite),
+        max_chars=request.max_chars,
+        options=request.options,
+    )
+    return _print_result(result, args.json)
+
+
+def _convert_request_from_args(args: argparse.Namespace) -> ConvertRequestModel:
+    if args.request_json and args.stdin_json:
+        raise UsageError("Use only one of --request-json or --stdin-json")
+    if args.request_json:
+        raw_text = Path(args.request_json).expanduser().read_text(encoding="utf-8")
+        return _convert_request_from_json(raw_text)
+    if args.stdin_json:
+        return _convert_request_from_json(sys.stdin.read())
+    return ConvertRequestModel(
+        local_file_path=args.input,
+        source_url=args.source_url,
+        output_dir=args.output_dir,
+        output_path=args.output_path,
+        overwrite=bool(args.overwrite),
+        max_chars=args.max_chars,
+        options=_options_from_args(args),
+    )
+
+
+def _convert_request_from_json(raw_text: str) -> ConvertRequestModel:
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise UsageError(
+            "Invalid convert request JSON",
+            details={"error": exc.msg, "line": exc.lineno, "column": exc.colno},
+        ) from exc
+    if not isinstance(raw, dict):
+        raise UsageError("Convert request JSON must be an object")
+    try:
+        return ConvertRequestModel.model_validate(raw)
+    except ValidationError as exc:
+        raise UsageError(
+            "Invalid convert request JSON",
+            details={"errors": _validation_error_details(exc)},
+        ) from exc
+
+
+def _validation_error_details(exc: ValidationError) -> list[dict[str, Any]]:
+    return [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": error.get("msg", "Invalid value"),
+            "type": error.get("type", "value_error"),
+        }
+        for error in exc.errors()
+    ]
+
+
 async def _handle_batch(args: argparse.Namespace) -> int:
     items = _batch_items_from_args(args)
     results: list[dict[str, Any]] = []
@@ -666,6 +723,7 @@ async def _handle_batch(args: argparse.Namespace) -> int:
                 source_url=item.get("source_url"),
                 output_dir=item.get("output_dir") or args.output_dir,
                 output_path=item.get("output_path"),
+                overwrite=bool(item.get("overwrite", False)),
                 options=_batch_options(args, item),
             )
             results.append({"index": index, "ok": True, "result": result})

@@ -156,6 +156,83 @@ def test_cli_convert_command_writes_real_output(tmp_path: Path):
     assert data["metadata"]["engine"]["engine"] == "text_data"
 
 
+def test_cli_convert_accepts_request_json_file(tmp_path: Path):
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\nDhaka,20\n", encoding="utf-8")
+    request_path = tmp_path / "request.json"
+    output_path = tmp_path / "out" / "fixed.md"
+    request_path.write_text(
+        json.dumps(
+            {
+                "local_file_path": str(source),
+                "output_path": str(output_path),
+                "max_chars": 5000,
+                "options": {"output_format": "markdown", "extra_options": {"text_data_max_rows": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "convert",
+            "--request-json",
+            str(request_path),
+            "--json",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    data = json.loads(completed.stdout)
+    assert Path(data["output"]["text_path"]) == output_path
+    assert output_path.is_file()
+    assert "Only first 1 rows shown" in output_path.read_text(encoding="utf-8")
+
+
+def test_cli_convert_accepts_stdin_json_with_overwrite(tmp_path: Path):
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\n", encoding="utf-8")
+    output_path = tmp_path / "out" / "fixed.md"
+    output_path.parent.mkdir()
+    output_path.write_text("sentinel", encoding="utf-8")
+    request = {
+        "local_file_path": str(source),
+        "output_path": str(output_path),
+        "overwrite": True,
+        "max_chars": 5000,
+        "options": {"output_format": "markdown"},
+    }
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "convert",
+            "--stdin-json",
+            "--json",
+        ],
+        input=json.dumps(request),
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    data = json.loads(completed.stdout)
+    assert Path(data["output"]["text_path"]) == output_path
+    assert "sentinel" not in output_path.read_text(encoding="utf-8")
+    assert "| Kolkata | 10 |" in output_path.read_text(encoding="utf-8")
+
+
 def test_cli_exposes_agent_productivity_knobs_directly(tmp_path: Path):
     source = tmp_path / "data.csv"
     source.write_text("city,value\nKolkata,10\nDhaka,20\nSylhet,30\n", encoding="utf-8")
@@ -795,6 +872,8 @@ async def test_mcp_convert_schema_has_rich_descriptions_and_nullable_booleans():
     properties = schema["properties"]
 
     assert properties["local_file_path"]["description"]
+    assert properties["overwrite"]["description"]
+    assert properties["overwrite"].get("default") is False
     assert properties["max_chars"]["maximum"] == agent_api.MAX_READ_CHARS
     assert properties["router_enabled"].get("default") is None
     assert {item.get("type") for item in properties["router_enabled"].get("anyOf", [])} == {"boolean", "null"}
@@ -937,6 +1016,28 @@ async def test_agent_api_explicit_output_path_refuses_existing_file(tmp_path: Pa
         )
 
     assert output_path.read_text(encoding="utf-8") == "sentinel"
+
+
+@pytest.mark.asyncio
+async def test_agent_api_explicit_output_path_overwrite_replaces_existing_file(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\n", encoding="utf-8")
+    output_path = tmp_path / "out" / "fixed.md"
+    output_path.parent.mkdir()
+    output_path.write_text("sentinel", encoding="utf-8")
+
+    result = await convert_document(
+        local_file_path=str(source),
+        output_path=str(output_path),
+        overwrite=True,
+        max_chars=5000,
+        options=AgentConversionOptions(output_format="markdown"),
+    )
+
+    assert Path(result["output"]["text_path"]) == output_path
+    written_text = output_path.read_text(encoding="utf-8")
+    assert "sentinel" not in written_text
+    assert "| alpha | 1 |" in written_text
 
 
 @pytest.mark.asyncio
