@@ -276,4 +276,57 @@ describe('ConvertPage Integration with real hook', () => {
     })
     expect(screen.queryByText('Conversion failed')).not.toBeInTheDocument()
   })
+
+  it('clears fallback polling when a disconnected job is removed locally', async () => {
+    const eventSource = createMockEventSource()
+    mockGetJobEvents.mockReturnValue(eventSource)
+    mockGetHistory.mockResolvedValue({
+      total: 1,
+      jobs: [
+        {
+          id: 'backend-job-11',
+          job_id: 'backend-job-11',
+          filename: 'disconnecting.pdf',
+          status: 'processing',
+          progress: 42,
+          output_format: 'markdown',
+          converter: 'PdfConverter',
+          created_at: '2026-06-14T03:29:54Z',
+          completed_at: null,
+          error_message: null,
+          result_text: null,
+        },
+      ],
+    })
+
+    render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('disconnecting.pdf')).toBeInTheDocument()
+    })
+
+    vi.useFakeTimers()
+    try {
+      act(() => {
+        eventSource.onerror?.()
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /remove from list/i }))
+
+      act(() => {
+        vi.advanceTimersByTime(9000)
+      })
+
+      expect(screen.queryByText('disconnecting.pdf')).not.toBeInTheDocument()
+      expect(mockGetJobStatus).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

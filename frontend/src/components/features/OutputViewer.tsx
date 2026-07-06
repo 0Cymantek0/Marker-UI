@@ -304,7 +304,7 @@ function safeMarkdownImageSrc(src: unknown): string | null {
   const raw = String(src ?? '').trim()
   if (!raw) return null
 
-  if (/[\u0000-\u001f<>]/.test(raw)) return null
+  if ([...raw].some((ch) => ch === '<' || ch === '>' || ch.charCodeAt(0) < 32)) return null
   if (/^(?:https?:)?\/\//i.test(raw)) return null
   if (/^[\\/]/.test(raw)) return null
 
@@ -313,7 +313,7 @@ function safeMarkdownImageSrc(src: unknown): string | null {
 
   const pathPart = raw.split(/[?#]/, 1)[0] ?? ''
   if (!pathPart) return null
-  let decodedPath = pathPart
+  let decodedPath: string
   try {
     decodedPath = decodeURIComponent(pathPart)
   } catch {

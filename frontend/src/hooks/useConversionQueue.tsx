@@ -99,6 +99,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
   const [jobs, setJobs] = useState<JobState[]>([])
   const jobsRef = useRef<JobState[]>([])
   const eventSourcesRef = useRef<Record<string, EventSource>>({})
+  const pollIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
   const hydratedRef = useRef(false)
 
   useEffect(() => {
@@ -114,6 +115,35 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       })
     )
   }, [])
+
+  const stopJobObservers = useCallback((id: string) => {
+    const eventSource = eventSourcesRef.current[id]
+    if (eventSource) {
+      eventSource.close()
+      delete eventSourcesRef.current[id]
+    }
+    const pollInterval = pollIntervalsRef.current[id]
+    if (pollInterval) {
+      clearInterval(pollInterval)
+      delete pollIntervalsRef.current[id]
+    }
+  }, [])
+
+  const stopAllJobObservers = useCallback(() => {
+    for (const id of Object.keys(eventSourcesRef.current)) {
+      eventSourcesRef.current[id]?.close()
+      delete eventSourcesRef.current[id]
+    }
+    for (const id of Object.keys(pollIntervalsRef.current)) {
+      const pollInterval = pollIntervalsRef.current[id]
+      if (pollInterval) {
+        clearInterval(pollInterval)
+      }
+      delete pollIntervalsRef.current[id]
+    }
+  }, [])
+
+  useEffect(() => () => stopAllJobObservers(), [stopAllJobObservers])
 
   const handleJobCompleted = useCallback((id: string, jobId: string) => {
     updateJob(id, (prev) => ({
@@ -198,11 +228,21 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       logs: [...prev.logs, '[WARN] SSE socket disconnected. Falling back to polling...'],
     }))
 
+    if (pollIntervalsRef.current[id]) {
+      clearInterval(pollIntervalsRef.current[id])
+    }
+
     const pollInterval = setInterval(async () => {
+      const stopPolling = () => {
+        clearInterval(pollInterval)
+        if (pollIntervalsRef.current[id] === pollInterval) {
+          delete pollIntervalsRef.current[id]
+        }
+      }
       try {
         const status = await getJobStatus(jobId)
         if (status.status === 'completed') {
-          clearInterval(pollInterval)
+          stopPolling()
           const imageUnderstanding = status.image_understanding ?? null
           const resultText = status.result_text ?? null
           const conversionMetadata = status.conversion_metadata ?? null
@@ -241,7 +281,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
               }))
             })
         } else if (status.status === 'failed') {
-          clearInterval(pollInterval)
+          stopPolling()
           updateJob(id, (prev) => ({
             ...prev,
             phase: 'failed',
@@ -250,17 +290,18 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
             logs: [...prev.logs, `[ERROR] SSE disconnected, polling detected failure: ${status.error_message ?? 'Unknown'}`],
           }))
         } else if (status.status === 'cancelled') {
-          clearInterval(pollInterval)
+          stopPolling()
           handleJobCancelled(id, '[SYSTEM] Job was cancelled on the backend.')
         }
       } catch (err: any) {
         const is404 = err instanceof Error && err.message.includes('404')
         if (is404) {
-          clearInterval(pollInterval)
+          stopPolling()
           handleJobCancelled(id, '[SYSTEM] Job not found on backend.')
         }
       }
     }, 3000)
+    pollIntervalsRef.current[id] = pollInterval
   }, [handleJobCancelled, updateJob])
 
   const attachJobEvents = useCallback((id: string, jobId: string) => {
@@ -566,11 +607,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
   }, [runJob])
 
   const cancel = useCallback(async (id: string) => {
-    // Immediately close EventSource if active to prevent triggering onerror and polling
-    if (eventSourcesRef.current[id]) {
-      eventSourcesRef.current[id].close()
-      delete eventSourcesRef.current[id]
-    }
+    // Immediately close observers to prevent onerror fallback polling after cancel.
+    stopJobObservers(id)
 
     setJobs((prevJobs) => {
       const job = prevJobs.find((j) => j.id === id)
@@ -591,7 +629,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         }
       })
     })
-  }, [])
+  }, [stopJobObservers])
 
   const download = useCallback(async (id: string, format?: string) => {
     const job = jobs.find((j) => j.id === id)
@@ -628,17 +666,13 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
   }, [updateJob])
 
   const removeJob = useCallback((id: string) => {
-    // Close the SSE socket first so its onerror doesn't kick off a polling loop
-    // for a job we're about to drop.
-    if (eventSourcesRef.current[id]) {
-      eventSourcesRef.current[id].close()
-      delete eventSourcesRef.current[id]
-    }
+    // Close observers first so a removed job cannot keep polling in the background.
+    stopJobObservers(id)
 
     setJobs((prev) => {
       return prev.filter((j) => j.id !== id)
     })
-  }, [])
+  }, [stopJobObservers])
 
   const dismissSwapPrompt = useCallback((id: string) => {
     updateJob(id, { swapPromptDismissed: true })
