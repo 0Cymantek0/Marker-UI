@@ -15,6 +15,7 @@ from app.agent_contract import (
     CONTRACT_SCHEMA_VERSION,
     ConversionOptionsModel,
     ConvertResultModel,
+    OPTION_METADATA,
     OutputManifestModel,
     export_json_schemas,
 )
@@ -62,6 +63,39 @@ def test_export_json_schemas_contains_core_models_and_metadata():
     ]
     assert option_properties["vlm_batch_size"]["anyOf"][0]["maximum"] == 64
     assert option_properties["archive_max_depth"]["anyOf"][0]["minimum"] == 0
+
+
+def test_option_metadata_cli_flags_exist_on_convert_parser():
+    """Schema metadata must not advertise CLI flags argparse cannot parse."""
+    import argparse
+
+    from app.cli import _build_parser
+
+    parser = _build_parser()
+    subparsers = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    convert_parser = subparsers.choices["convert"]
+    convert_flags = {
+        option
+        for action in convert_parser._actions
+        for option in action.option_strings
+    }
+    global_flags = {
+        option
+        for action in parser._actions
+        for option in action.option_strings
+    }
+
+    missing = [
+        (metadata.name, metadata.cli_flag)
+        for metadata in OPTION_METADATA
+        if metadata.cli_flag
+        and metadata.cli_flag.startswith("--")
+        and "/" not in metadata.cli_flag
+        and metadata.cli_flag not in convert_flags
+        and metadata.cli_flag not in global_flags
+    ]
+
+    assert missing == []
 
 
 def test_conversion_options_validate_known_enums_and_extra_options():

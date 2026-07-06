@@ -95,6 +95,9 @@ def test_cli_guide_documents_first_class_audio_flags() -> None:
         "--audio-structural-enhancement",
         "--audio-contradiction-detection",
         "--audio-allow-cloud-stt",
+        "--audio-confidence-heatmap",
+        "--audio-quality-diagnostics",
+        "--audio-fusion-mode",
     ):
         assert flag in cli_guide
 

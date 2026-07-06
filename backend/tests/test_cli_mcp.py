@@ -151,6 +151,8 @@ def test_cli_common_options_include_advanced_audio_flags():
             "speaker_0=Alice",
             "--audio-vocabulary-pack-id",
             "team",
+            "--no-audio-confidence-heatmap",
+            "--audio-quality-diagnostics",
             "--audio-allow-cloud-stt",
             "--audio-text-enhancement",
             "--audio-text-enhancement-strength",
@@ -158,6 +160,8 @@ def test_cli_common_options_include_advanced_audio_flags():
             "--audio-structural-enhancement",
             "--audio-structural-enhancement-mode",
             "meeting_notes",
+            "--audio-fusion-mode",
+            "audio_first",
             "--audio-contradiction-detection",
             "--audio-benchmark-compare",
             "--audio-compare-provider",
@@ -174,11 +178,14 @@ def test_cli_common_options_include_advanced_audio_flags():
     assert config["audio_max_speakers"] == 4
     assert config["audio_speaker_aliases"] == {"speaker_0": "Alice"}
     assert config["audio_vocabulary_pack_ids"] == ["team"]
+    assert config["audio_confidence_heatmap"] is False
+    assert "audio_quality_diagnostics" not in config
     assert config["audio_allow_cloud_stt"] is True
     assert config["audio_text_enhancement_enabled"] is True
     assert config["audio_text_enhancement_strength"] == 2
     assert config["audio_structural_enhancement_enabled"] is True
     assert config["audio_structural_enhancement_mode"] == "meeting_notes"
+    assert config["audio_fusion_mode"] == "audio_first"
     assert config["audio_contradiction_detection"] is True
     assert config["audio_benchmark_compare"] is True
     assert config["audio_compare_providers"] == ["openai"]

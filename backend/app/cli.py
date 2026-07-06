@@ -1075,11 +1075,24 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         default=[],
         help="Saved audio vocabulary pack id. Repeat for multiple packs.",
     )
+    parser.add_argument(
+        "--audio-confidence-heatmap",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Emit per-segment audio confidence metadata.",
+    )
+    parser.add_argument(
+        "--audio-quality-diagnostics",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Emit audio quality diagnostics metadata.",
+    )
     parser.add_argument("--audio-allow-cloud-stt", action="store_true")
     parser.add_argument("--audio-text-enhancement", action="store_true")
     parser.add_argument("--audio-text-enhancement-strength", type=int, default=0)
     parser.add_argument("--audio-structural-enhancement", action="store_true")
     parser.add_argument("--audio-structural-enhancement-mode", default="auto")
+    parser.add_argument("--audio-fusion-mode")
     parser.add_argument("--audio-contradiction-detection", action="store_true")
     parser.add_argument("--audio-benchmark-compare", action="store_true")
     parser.add_argument(
@@ -1185,11 +1198,18 @@ def _options_from_args(args: argparse.Namespace) -> AgentConversionOptions:
         audio_max_speakers=args.audio_max_speakers,
         audio_speaker_aliases=_parse_key_value_map(args.audio_speaker_alias),
         audio_vocabulary_pack_ids=list(args.audio_vocabulary_pack_id or []),
+        audio_confidence_heatmap=(
+            args.audio_confidence_heatmap if args.audio_confidence_heatmap is not None else True
+        ),
+        audio_quality_diagnostics=(
+            args.audio_quality_diagnostics if args.audio_quality_diagnostics is not None else True
+        ),
         audio_allow_cloud_stt=args.audio_allow_cloud_stt,
         audio_text_enhancement_enabled=args.audio_text_enhancement,
         audio_text_enhancement_strength=args.audio_text_enhancement_strength,
         audio_structural_enhancement_enabled=args.audio_structural_enhancement,
         audio_structural_enhancement_mode=args.audio_structural_enhancement_mode,
+        audio_fusion_mode=args.audio_fusion_mode,
         audio_contradiction_detection=args.audio_contradiction_detection,
         audio_benchmark_compare=args.audio_benchmark_compare,
         audio_compare_providers=list(args.audio_compare_provider or []),

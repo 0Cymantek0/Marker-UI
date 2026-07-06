@@ -123,6 +123,7 @@ Common GUI-compatible options have named flags:
 python -m app.cli convert "C:\path\to\meeting.mp3" --audio-output-mode enhanced --audio-word-timestamps --json
 python -m app.cli convert "C:\path\to\meeting.mp3" --audio-provider local_faster_whisper --audio-diarization --audio-speaker-alias speaker_0=Alice --json
 python -m app.cli convert "C:\path\to\meeting.mp3" --audio-text-enhancement --audio-text-enhancement-strength 2 --audio-structural-enhancement --audio-structural-enhancement-mode meeting_notes --audio-contradiction-detection --json
+python -m app.cli convert "C:\path\to\meeting.mp3" --no-audio-confidence-heatmap --audio-quality-diagnostics --audio-fusion-mode audio_first --json
 python -m app.cli convert "C:\path\to\data.tsv" --text-data-max-rows 1000 --json
 python -m app.cli convert "C:\path\to\manuals.zip" --archive-max-files 50 --archive-max-depth 2 --json
 python -m app.cli convert "C:\path\to\scan.pdf" --image-handling-mode both --smart-router-level smart --ocr-min-lines 3 --json
@@ -133,6 +134,9 @@ Cloud STT provider ids require `--audio-allow-cloud-stt`, and providers whose
 adapters are not shipped yet fail before the job is queued. For reusable
 vocabulary or comparison runs, use repeated `--audio-vocabulary-pack-id` and
 `--audio-compare-provider` flags.
+Use `--audio-confidence-heatmap` / `--no-audio-confidence-heatmap`,
+`--audio-quality-diagnostics` / `--no-audio-quality-diagnostics`, and
+`--audio-fusion-mode` for advanced audio audit and context-fusion controls.
 
 Use repeated `--option key=value` or one `--options-json` object for lower-level
 backend options:
