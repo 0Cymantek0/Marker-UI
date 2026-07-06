@@ -20,6 +20,8 @@ class MarkdownBlock:
     text: str
     start_line: int
     end_line: int
+    char_start: int
+    char_end: int
     heading_path: tuple[str, ...] = field(default_factory=tuple)
     kind: str = "text"
     content_types: tuple[str, ...] = field(default_factory=tuple)
@@ -44,6 +46,7 @@ def build_chunks_envelope(
     chunk_metadata = {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
+        "chunking_strategy": "markdown_heading_blocks_v2",
         "source_format": "markdown",
         "source_sha256": payload["source"]["sha256"],
         "chunk_count": payload["chunk_count"],
@@ -81,21 +84,21 @@ def chunk_markdown(
     chunks: list[dict[str, Any]] = []
     source_sha256 = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
     line_offsets = _line_offsets(markdown)
+    markdown_blocks = _markdown_blocks(markdown, line_offsets=line_offsets)
     chunk_blocks = _pack_chunk_blocks(
         [
-            MarkdownBlock(
-                text=piece.strip(),
-                start_line=block.start_line,
-                end_line=block.end_line,
-                heading_path=block.heading_path,
-                kind=block.kind,
-                content_types=block.content_types or (block.kind,),
+            piece
+            for block in markdown_blocks
+            for piece in _split_block(
+                block,
+                max_chars=max_chars,
+                overlap_chars=overlap_chars,
+                line_offsets=line_offsets,
             )
-            for block in _markdown_blocks(markdown)
-            for piece in _split_block(block, max_chars=max_chars, overlap_chars=overlap_chars)
-            if piece.strip()
+            if piece.text.strip()
         ],
         max_chars=max_chars,
+        line_offsets=line_offsets,
     )
     for block in chunk_blocks:
         text = block.text.strip()
@@ -104,11 +107,6 @@ def chunk_markdown(
         index = len(chunks)
         chunk_id = _chunk_id(source_name, index, text)
         token_estimate = max(1, (len(text) + 3) // 4)
-        char_start, char_end = _line_char_span(
-            line_offsets,
-            start_line=block.start_line,
-            end_line=block.end_line,
-        )
         heading_path = list(block.heading_path)
         content_types = list(block.content_types or (block.kind,))
         chunks.append(
@@ -122,8 +120,8 @@ def chunk_markdown(
                 "section_path": heading_path,
                 "start_line": block.start_line,
                 "end_line": block.end_line,
-                "char_start": char_start,
-                "char_end": char_end,
+                "char_start": block.char_start,
+                "char_end": block.char_end,
                 "char_count": len(text),
                 "token_estimate": token_estimate,
                 "token_count": token_estimate,
@@ -135,8 +133,8 @@ def chunk_markdown(
                         "source": source_name,
                         "start_line": block.start_line,
                         "end_line": block.end_line,
-                        "char_start": char_start,
-                        "char_end": char_end,
+                        "char_start": block.char_start,
+                        "char_end": block.char_end,
                         "heading_path": heading_path,
                         "content_types": content_types,
                     }
@@ -149,6 +147,7 @@ def chunk_markdown(
     return {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
+        "chunking_strategy": "markdown_heading_blocks_v2",
         "source": {
             "name": source_name,
             "sha256": source_sha256,
@@ -159,7 +158,7 @@ def chunk_markdown(
     }
 
 
-def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
+def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> list[MarkdownBlock]:
     lines = markdown.splitlines()
     blocks: list[MarkdownBlock] = []
     heading_stack: list[tuple[int, str]] = []
@@ -170,11 +169,18 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
         nonlocal buffer, block_start
         text = "\n".join(buffer).strip()
         if text:
+            char_start, char_end = _line_char_span(
+                line_offsets,
+                start_line=block_start,
+                end_line=end_line,
+            )
             blocks.append(
                 MarkdownBlock(
                     text=text,
                     start_line=block_start,
                     end_line=end_line,
+                    char_start=char_start,
+                    char_end=char_end,
                     heading_path=tuple(title for _level, title in heading_stack),
                     kind=kind,
                     content_types=(kind,),
@@ -244,7 +250,12 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
     return blocks
 
 
-def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[MarkdownBlock]:
+def _pack_chunk_blocks(
+    blocks: list[MarkdownBlock],
+    *,
+    max_chars: int,
+    line_offsets: list[tuple[int, int]],
+) -> list[MarkdownBlock]:
     packed: list[MarkdownBlock] = []
     pending = deque(blocks)
     current: list[MarkdownBlock] = []
@@ -260,6 +271,8 @@ def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[M
                     text=text,
                     start_line=current[0].start_line,
                     end_line=current[-1].end_line,
+                    char_start=current[0].char_start,
+                    char_end=current[-1].char_end,
                     heading_path=_common_heading_path(current),
                     kind=current[0].kind if len(current) == 1 else "mixed",
                     content_types=_content_types(current),
@@ -276,28 +289,14 @@ def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[M
             if _is_standalone_heading(current) and block.kind == "text":
                 heading_budget = max_chars - len(current[0].text) - 2
                 if heading_budget > 0 and len(block.text) > heading_budget:
-                    head_text, tail_text = _split_text_at_limit(block.text, max_chars=heading_budget)
-                    current.append(
-                        MarkdownBlock(
-                            text=head_text,
-                            start_line=block.start_line,
-                            end_line=block.end_line,
-                            heading_path=block.heading_path,
-                            kind=block.kind,
-                            content_types=block.content_types,
-                        )
+                    head_block, tail_block = _split_block_once(
+                        block,
+                        max_chars=heading_budget,
+                        line_offsets=line_offsets,
                     )
-                    if tail_text.strip():
-                        pending.appendleft(
-                            MarkdownBlock(
-                                text=tail_text.strip(),
-                                start_line=block.start_line,
-                                end_line=block.end_line,
-                                heading_path=block.heading_path,
-                                kind=block.kind,
-                                content_types=block.content_types,
-                            ),
-                        )
+                    current.append(head_block)
+                    if tail_block is not None:
+                        pending.appendleft(tail_block)
                     flush()
                     continue
                 current.append(block)
@@ -341,14 +340,22 @@ def _content_types(blocks: list[MarkdownBlock]) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _split_block(block: MarkdownBlock, *, max_chars: int, overlap_chars: int) -> list[str]:
+def _split_block(
+    block: MarkdownBlock,
+    *,
+    max_chars: int,
+    overlap_chars: int,
+    line_offsets: list[tuple[int, int]],
+) -> list[MarkdownBlock]:
     text = block.text
     if len(text) <= max_chars:
-        return [text]
+        return [block]
     if block.kind == "table":
-        return _split_table_block(text, max_chars=max_chars)
+        pieces = _split_table_block(text, max_chars=max_chars)
+        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
     if block.kind == "fenced_code":
-        return _split_fenced_code_block(text, max_chars=max_chars)
+        pieces = _split_fenced_code_block(text, max_chars=max_chars)
+        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
     sentences = re.split(r"(?<=[.!?])\s+", text)
     pieces: list[str] = []
     current = ""
@@ -367,7 +374,7 @@ def _split_block(block: MarkdownBlock, *, max_chars: int, overlap_chars: int) ->
             current = f"{prefix} {current[max_chars:]}".strip() if prefix else current[max_chars:].strip()
     if current:
         pieces.append(current)
-    return pieces
+    return _locate_split_pieces(block, pieces, overlap_chars=overlap_chars, line_offsets=line_offsets)
 
 
 def _fence_marker(line: str) -> str | None:
@@ -471,6 +478,85 @@ def _split_text_by_chars(text: str, *, max_chars: int) -> list[str]:
     return [piece for piece in pieces if piece]
 
 
+def _locate_split_pieces(
+    block: MarkdownBlock,
+    pieces: list[str],
+    *,
+    overlap_chars: int,
+    line_offsets: list[tuple[int, int]],
+) -> list[MarkdownBlock]:
+    located: list[MarkdownBlock] = []
+    search_from = 0
+    for raw_piece in pieces:
+        piece = raw_piece.strip()
+        if not piece:
+            continue
+        start = block.text.find(piece, search_from)
+        if start < 0:
+            start = block.text.find(piece)
+        if start < 0:
+            start = 0
+            end = len(block.text)
+        else:
+            end = start + len(piece)
+        located.append(_block_piece(block, piece, start, end, line_offsets=line_offsets))
+        search_from = max(start + 1, end - overlap_chars)
+    return located
+
+
+def _split_block_once(
+    block: MarkdownBlock,
+    *,
+    max_chars: int,
+    line_offsets: list[tuple[int, int]],
+) -> tuple[MarkdownBlock, MarkdownBlock | None]:
+    head_text, tail_text = _split_text_at_limit(block.text, max_chars=max_chars)
+    head = _block_piece(block, head_text, 0, len(head_text), line_offsets=line_offsets)
+    if not tail_text.strip():
+        return head, None
+    tail_start = block.text.find(tail_text, len(head_text))
+    if tail_start < 0:
+        tail_start = len(block.text) - len(tail_text)
+    tail = _block_piece(
+        block,
+        tail_text,
+        max(0, tail_start),
+        max(0, tail_start) + len(tail_text),
+        line_offsets=line_offsets,
+    )
+    return head, tail
+
+
+def _block_piece(
+    block: MarkdownBlock,
+    text: str,
+    rel_start: int,
+    rel_end: int,
+    *,
+    line_offsets: list[tuple[int, int]],
+) -> MarkdownBlock:
+    stripped = text.strip()
+    leading_trim = len(text) - len(text.lstrip())
+    trailing_trim = len(text) - len(text.rstrip())
+    piece_start = max(block.char_start, block.char_start + rel_start + leading_trim)
+    piece_end = max(piece_start, block.char_start + rel_end - trailing_trim)
+    start_line, end_line = _char_line_span(
+        line_offsets,
+        char_start=piece_start,
+        char_end=piece_end,
+    )
+    return MarkdownBlock(
+        text=stripped,
+        start_line=start_line,
+        end_line=end_line,
+        char_start=piece_start,
+        char_end=piece_end,
+        heading_path=block.heading_path,
+        kind=block.kind,
+        content_types=block.content_types,
+    )
+
+
 def _split_text_at_limit(text: str, *, max_chars: int) -> tuple[str, str]:
     """Split text once, preferring whitespace before the hard limit."""
 
@@ -514,6 +600,29 @@ def _line_char_span(
     start_index = min(max(start_line - 1, 0), len(line_offsets) - 1)
     end_index = min(max(end_line - 1, start_index), len(line_offsets) - 1)
     return line_offsets[start_index][0], line_offsets[end_index][1]
+
+
+def _char_line_span(
+    line_offsets: list[tuple[int, int]],
+    *,
+    char_start: int,
+    char_end: int,
+) -> tuple[int, int]:
+    if not line_offsets:
+        return 1, 1
+    start_pos = max(0, char_start)
+    end_pos = max(start_pos, char_end - 1)
+    start_line = 1
+    end_line = len(line_offsets)
+    for index, (line_start, line_end) in enumerate(line_offsets, start=1):
+        if line_start <= start_pos <= line_end or start_pos < line_start:
+            start_line = index
+            break
+    for index, (line_start, line_end) in enumerate(line_offsets, start=1):
+        if line_start <= end_pos <= line_end or end_pos < line_start:
+            end_line = index
+            break
+    return start_line, max(start_line, end_line)
 
 
 def _contextual_text(text: str, heading_path: list[str]) -> str:

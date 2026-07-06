@@ -13,6 +13,7 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
 
     assert payload["schema_version"] == SCHEMA_VERSION
     assert payload["chunk_kind"] == "semantic_markdown"
+    assert payload["chunking_strategy"] == "markdown_heading_blocks_v2"
     assert payload["chunk_count"] == len(payload["chunks"])
     assert payload["chunks"][0]["heading_path"] == ["Title"]
     assert payload["chunks"][-1]["heading_path"] == ["Title", "Details"]
@@ -38,6 +39,30 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
             "content_types": payload["chunks"][-1]["content_types"],
         }
     ]
+
+
+def test_chunk_markdown_split_text_uses_tight_source_spans() -> None:
+    markdown = "# Long\n\n" + " ".join(f"term{i}" for i in range(80))
+    payload = chunk_markdown(
+        markdown,
+        source_name="long.md",
+        max_chars=200,
+        overlap_chars=0,
+    )
+
+    chunks = payload["chunks"]
+
+    assert len(chunks) > 2
+    assert len({(chunk["char_start"], chunk["char_end"]) for chunk in chunks}) == len(chunks)
+    assert chunks[0]["char_start"] == 0
+    assert chunks[0]["char_end"] < len(markdown)
+    assert chunks[-1]["char_start"] > chunks[0]["char_start"]
+    assert chunks[-1]["char_end"] == len(markdown)
+    for chunk in chunks:
+        source_slice = markdown[chunk["char_start"] : chunk["char_end"]]
+        assert source_slice == chunk["text"]
+        assert chunk["source_refs"][0]["char_start"] == chunk["char_start"]
+        assert chunk["source_refs"][0]["char_end"] == chunk["char_end"]
 
 
 def test_chunk_markdown_packs_headings_with_section_text() -> None:
