@@ -16,6 +16,13 @@ from app.agent_api import (
     read_output,
 )
 from app.agent_contract import CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.security.auth import require_mcp_scopes
+from app.security.scopes import (
+    SCOPE_CAPABILITIES_READ,
+    SCOPE_JOBS_READ,
+    SCOPE_OUTPUTS_READ,
+    SCOPE_SETTINGS_READ,
+)
 from app.services.output_manifest_reader import (
     manifest_for_job_status,
     manifest_for_output_path,
@@ -38,6 +45,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_capabilities_resource() -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_CAPABILITIES_READ)
         data = capabilities()
         if tool_names is not None:
             data["tools"] = tool_names
@@ -55,6 +63,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_health_resource() -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_CAPABILITIES_READ)
         return {"service": SERVICE_NAME, "status": "ok"}
 
     @mcp.resource(
@@ -65,6 +74,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_version_resource() -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_CAPABILITIES_READ)
         return {
             "service": SERVICE_NAME,
             "version": os.getenv("MARKER_VERSION", "unknown"),
@@ -79,6 +89,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_jobs_resource() -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_JOBS_READ)
         return await list_jobs(page=1, page_size=20)
 
     @mcp.resource(
@@ -89,6 +100,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_job_resource(job_id: str) -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_JOBS_READ)
         return await get_job_status(job_id)
 
     @mcp.resource(
@@ -99,6 +111,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_job_manifest_resource(job_id: str) -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_JOBS_READ, SCOPE_OUTPUTS_READ)
         status = await get_job_status(job_id)
         return manifest_for_job_status(status)[1]
 
@@ -110,6 +123,7 @@ def register_mcp_resources(
         mime_type="text/plain",
     )
     async def marker_job_output_resource(job_id: str) -> str:
+        require_mcp_scopes(SCOPE_JOBS_READ, SCOPE_OUTPUTS_READ)
         status = await get_job_status(job_id)
         _, manifest = manifest_for_job_status(status)
         text_path = output_text_path_from_manifest(manifest) or status.get("result_path")
@@ -127,6 +141,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_job_assets_resource(job_id: str) -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_JOBS_READ, SCOPE_OUTPUTS_READ)
         status = await get_job_status(job_id)
         manifest_path, manifest = manifest_for_job_status(status)
         output = manifest.get("output") if isinstance(manifest, dict) else {}
@@ -141,6 +156,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_output_manifest_resource(output_id: str) -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_OUTPUTS_READ)
         _, manifest = manifest_for_output_path(Path(unquote(output_id)))
         return manifest
 
@@ -152,6 +168,7 @@ def register_mcp_resources(
         mime_type="text/markdown",
     )
     def marker_agent_guide_resource() -> str:
+        require_mcp_scopes(SCOPE_CAPABILITIES_READ)
         return (
             "# Marker Agent Guide\n\n"
             "1. Read `marker://capabilities`.\n"
@@ -169,6 +186,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_options_resource() -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_CAPABILITIES_READ)
         return {"schema_version": CONTRACT_SCHEMA_VERSION, "options": export_json_schemas()["option_metadata"]}
 
     @mcp.resource(
@@ -179,4 +197,5 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_settings_resource() -> dict[str, Any]:
+        require_mcp_scopes(SCOPE_SETTINGS_READ)
         return await list_settings()

@@ -8,6 +8,7 @@ import sys
 import tomllib
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -924,6 +925,52 @@ def test_mcp_extra_options_omit_unspecified_booleans():
         max_batch_retries=-1,
     ) == {}
     assert mcp_server._agent_productivity_extra_options(archive_recursive=None) == {}
+
+
+@pytest.mark.asyncio
+async def test_mcp_settings_resource_requires_settings_read_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+    from mcp.server.fastmcp.exceptions import ResourceError
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["capabilities:read"]))
+
+    with pytest.raises(ResourceError, match="settings:read"):
+        await mcp_server.mcp.read_resource("marker://settings")
+
+
+@pytest.mark.asyncio
+async def test_mcp_jobs_resource_requires_jobs_read_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+    from mcp.server.fastmcp.exceptions import ResourceError
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["capabilities:read"]))
+
+    with pytest.raises(ResourceError, match="jobs:read"):
+        await mcp_server.mcp.read_resource("marker://jobs")
+
+
+@pytest.mark.asyncio
+async def test_mcp_output_manifest_resource_requires_outputs_read_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["capabilities:read"]))
+
+    with pytest.raises(ValueError, match="outputs:read"):
+        await mcp_server.mcp.read_resource("marker://outputs/example.md/manifest")
+
+
+@pytest.mark.asyncio
+async def test_mcp_job_output_resource_requires_jobs_and_outputs_scopes(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["jobs:read"]))
+
+    with pytest.raises(ValueError, match="outputs:read"):
+        await mcp_server.mcp.read_resource("marker://jobs/job-1/output")
 
 
 @pytest.mark.asyncio
