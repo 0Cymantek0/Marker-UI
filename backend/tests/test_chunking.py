@@ -19,6 +19,22 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
     assert payload["chunks"][-1]["token_estimate"] > 0
 
 
+def test_chunk_markdown_packs_headings_with_section_text() -> None:
+    payload = chunk_markdown(
+        "# Title\n\nIntro paragraph.\n\nMore context.\n\n## Details\n\nFirst fact.\n\nSecond fact.",
+        source_name="doc.md",
+        max_chars=240,
+    )
+
+    texts = [chunk["text"] for chunk in payload["chunks"]]
+
+    assert not any(text.strip() in {"# Title", "## Details"} for text in texts)
+    assert any(text.startswith("# Title\n\nIntro paragraph.") for text in texts)
+    assert any(text.startswith("## Details\n\nFirst fact.") for text in texts)
+    assert payload["chunks"][0]["start_line"] == 1
+    assert payload["chunks"][0]["end_line"] >= 3
+
+
 def test_chunk_markdown_keeps_fenced_code_with_blank_lines_together() -> None:
     payload = chunk_markdown(
         "# Notes\n\n```python\nprint('first')\n\nprint('second')\n```\n\nDone.",

@@ -76,24 +76,38 @@ def chunk_markdown(
     max_chars = max(200, int(max_chars or DEFAULT_MAX_CHARS))
     overlap_chars = max(0, min(int(overlap_chars or 0), max_chars // 3))
     chunks: list[dict[str, Any]] = []
-    for block in _markdown_blocks(markdown):
-        for piece in _split_block(block, max_chars=max_chars, overlap_chars=overlap_chars):
-            text = piece.strip()
-            if not text:
-                continue
-            index = len(chunks)
-            chunks.append(
-                {
-                    "id": _chunk_id(source_name, index, text),
-                    "index": index,
-                    "text": text,
-                    "heading_path": list(block.heading_path),
-                    "start_line": block.start_line,
-                    "end_line": block.end_line,
-                    "char_count": len(text),
-                    "token_estimate": max(1, (len(text) + 3) // 4),
-                }
+    chunk_blocks = _pack_chunk_blocks(
+        [
+            MarkdownBlock(
+                text=piece.strip(),
+                start_line=block.start_line,
+                end_line=block.end_line,
+                heading_path=block.heading_path,
+                kind=block.kind,
             )
+            for block in _markdown_blocks(markdown)
+            for piece in _split_block(block, max_chars=max_chars, overlap_chars=overlap_chars)
+            if piece.strip()
+        ],
+        max_chars=max_chars,
+    )
+    for block in chunk_blocks:
+        text = block.text.strip()
+        if not text:
+            continue
+        index = len(chunks)
+        chunks.append(
+            {
+                "id": _chunk_id(source_name, index, text),
+                "index": index,
+                "text": text,
+                "heading_path": list(block.heading_path),
+                "start_line": block.start_line,
+                "end_line": block.end_line,
+                "char_count": len(text),
+                "token_estimate": max(1, (len(text) + 3) // 4),
+            }
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
@@ -185,6 +199,57 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
         line_no += 1
     flush(len(lines))
     return blocks
+
+
+def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[MarkdownBlock]:
+    packed: list[MarkdownBlock] = []
+    current: list[MarkdownBlock] = []
+
+    def flush() -> None:
+        nonlocal current
+        if not current:
+            return
+        text = "\n\n".join(block.text for block in current).strip()
+        if text:
+            packed.append(
+                MarkdownBlock(
+                    text=text,
+                    start_line=current[0].start_line,
+                    end_line=current[-1].end_line,
+                    heading_path=_common_heading_path(current),
+                    kind=current[0].kind if len(current) == 1 else "mixed",
+                )
+            )
+        current = []
+
+    for block in blocks:
+        if block.kind == "heading" and current:
+            flush()
+        projected_len = len("\n\n".join([*(item.text for item in current), block.text]))
+        if current and projected_len > max_chars:
+            flush()
+        current.append(block)
+        if block.kind in {"fenced_code", "table"}:
+            flush()
+    flush()
+    return packed
+
+
+def _common_heading_path(blocks: list[MarkdownBlock]) -> tuple[str, ...]:
+    if not blocks:
+        return ()
+    common = list(blocks[0].heading_path)
+    for block in blocks[1:]:
+        next_path = list(block.heading_path)
+        prefix_len = 0
+        for left, right in zip(common, next_path):
+            if left != right:
+                break
+            prefix_len += 1
+        common = common[:prefix_len]
+        if not common:
+            break
+    return tuple(common)
 
 
 def _split_block(block: MarkdownBlock, *, max_chars: int, overlap_chars: int) -> list[str]:
