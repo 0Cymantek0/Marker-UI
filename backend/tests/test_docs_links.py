@@ -31,6 +31,20 @@ def test_readme_links_to_enterprise_cli_mcp_docs() -> None:
         assert (REPO_ROOT / link).is_file()
 
 
+def test_readme_first_screen_documents_agent_entrypoints() -> None:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    for text in (
+        "local-first document-to-agent-context engine",
+        "python -m app.cli self-test --json",
+        'python -m app.cli convert ".\\paper.pdf" --output-dir ".\\out" --json',
+        "python -m app.cli mcp start --tool-profile minimal",
+        ".marker.json",
+        "semantic chunks",
+    ):
+        assert text in readme
+
+
 def test_markdown_links_point_to_existing_local_files() -> None:
     docs = [REPO_ROOT / "README.md", *(REPO_ROOT / "docs").rglob("*.md")]
     failures: list[str] = []
@@ -99,6 +113,48 @@ def test_mcp_guide_documents_url_open_world_and_audio_controls() -> None:
         assert text in mcp_guide
 
 
+def test_mcp_guide_minimal_tools_match_agent_surface() -> None:
+    from app.agent_surface import MCP_MINIMAL_TOOL_NAMES
+
+    mcp_guide = (REPO_ROOT / "docs" / "usage" / "mcp.md").read_text(encoding="utf-8")
+    section = _section_between(
+        mcp_guide,
+        "It exposes the small safe surface needed by\nmost coding agents:",
+        "Use `--tool-profile full`",
+    )
+    documented = tuple(re.findall(r"^- `([^`]+)`$", section, flags=re.MULTILINE))
+
+    assert documented == MCP_MINIMAL_TOOL_NAMES
+
+
+def test_mcp_guide_tool_table_matches_agent_surface() -> None:
+    from app.agent_surface import MCP_ALL_TOOL_NAMES
+
+    mcp_guide = (REPO_ROOT / "docs" / "usage" / "mcp.md").read_text(encoding="utf-8")
+    table = _section_between(mcp_guide, "## Tools", "Tool annotations")
+    documented: set[str] = set()
+    for cell in re.findall(r"^\| ([^|]+) \|", table, flags=re.MULTILINE):
+        if cell in {"Tool", "------"}:
+            continue
+        documented.update(re.findall(r"`(marker_[^`]+)`", cell))
+
+    assert documented == set(MCP_ALL_TOOL_NAMES)
+
+
+def test_mcp_guide_resources_match_agent_surface() -> None:
+    from app.agent_surface import MCP_RESOURCE_URIS
+
+    mcp_guide = (REPO_ROOT / "docs" / "usage" / "mcp.md").read_text(encoding="utf-8")
+    table = _section_between(mcp_guide, "## Resources", "## Agent Workflow")
+    documented = tuple(
+        item
+        for item in re.findall(r"^\| `([^`]+)` \|", table, flags=re.MULTILINE)
+        if item.startswith("marker://")
+    )
+
+    assert documented == MCP_RESOURCE_URIS
+
+
 def _is_external_or_in_page(target: str) -> bool:
     lowered = target.lower()
     return (
@@ -118,3 +174,9 @@ def _is_inside_repo(path: Path) -> bool:
 def _strip_code_spans_and_blocks(text: str) -> str:
     text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
     return re.sub(r"`[^`\n]+`", "", text)
+
+
+def _section_between(text: str, start: str, end: str) -> str:
+    start_index = text.index(start) + len(start)
+    end_index = text.index(end, start_index)
+    return text[start_index:end_index]

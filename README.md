@@ -1,12 +1,34 @@
 # Marker UI
 
-Marker UI is a local-first, production-grade web application and orchestrator designed to convert document types (PDFs, Word documents, spreadsheets, slides, and images) into clean, layout-aware, search-optimized Markdown, HTML, or JSON.
+Marker UI is a local-first document-to-agent-context engine: it converts PDFs,
+Office files, spreadsheets, slides, images, web/data files, archives, audio, and
+experimental video into clean Markdown, HTML, JSON, manifests, and semantic
+chunks.
 
-By wrapping deep-learning neural models with lightweight deterministic parsers and an intelligent VLM pipeline, Marker UI offers a seamless, high-throughput document conversion platform on your own hardware.
+Run it as a browser app, a scriptable CLI, or a small MCP server for coding
+agents. Local parsers and local neural models are the default; cloud VLM/STT
+paths require explicit opt-in. Every conversion writes a `.marker.json`
+manifest with source metadata, output paths, media type, hashes, assets, and
+conversion settings so long outputs can be audited and paged safely.
 
----
+## 30-Second Agent Demo
 
-## Why Marker UI? The Core Strengths
+```powershell
+python -m app.cli self-test --json
+python -m app.cli convert ".\paper.pdf" --output-dir ".\out" --json
+python -m app.cli mcp start --tool-profile minimal
+```
+
+Agents can:
+
+- plan conversions before touching large PDFs or unknown inputs;
+- convert local files or guarded public URLs;
+- submit long jobs, poll status, and cancel without deleting history;
+- page through Markdown or semantic chunks instead of loading huge files;
+- inspect output manifests and asset metadata before summarizing;
+- keep model-controlled settings writes out of the default MCP profile.
+
+## Why Marker UI?
 
 ### 1. Hybrid Conversion Orchestrator
 Unlike raw CLI utilities, Marker UI acts as a smart router that selects the most efficient extraction path based on document file types:
