@@ -131,7 +131,8 @@ python -m app.cli convert "C:\path\to\scan.pdf" --image-handling-mode both --sma
 
 Audio stays local-first. `--audio-provider local_faster_whisper` is the default.
 Cloud STT provider ids require `--audio-allow-cloud-stt`, and providers whose
-adapters are not shipped yet fail before the job is queued. For reusable
+adapters are not shipped yet fail before the job is queued. Unknown provider ids
+are rejected instead of silently falling back to local. For reusable
 vocabulary, use repeated `--audio-vocabulary-pack-id` flags. Provider
 comparison is reserved: `--audio-benchmark-compare` and
 `--audio-compare-provider` are rejected until a benchmark runner and at least

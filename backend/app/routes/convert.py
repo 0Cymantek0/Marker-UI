@@ -680,7 +680,7 @@ async def upload_file(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
             )
-        except (NotImplementedError, PermissionError) as exc:
+        except (NotImplementedError, PermissionError, ValueError) as exc:
             if not is_local:
                 Path(stored_path).unlink(missing_ok=True)
             raise HTTPException(status_code=400, detail=str(exc)) from exc

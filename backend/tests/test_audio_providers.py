@@ -8,8 +8,11 @@ from app.audio.providers.capabilities import (
     get_capability,
     list_capabilities,
 )
-from app.audio.providers.registry import validate_provider_selection
-from app.audio.providers.registry import validate_audio_benchmark_selection
+from app.audio.providers.registry import (
+    build_provider,
+    validate_audio_benchmark_selection,
+    validate_provider_selection,
+)
 from app.audio.pipeline import normalize_transcript
 from app.audio.speakers import (
     apply_speaker_aliases,
@@ -70,6 +73,16 @@ def test_capabilities_payload_serializes_all_fields() -> None:
 def test_validate_provider_selection_rejects_deferred_provider() -> None:
     with pytest.raises(NotImplementedError, match="not shipped yet"):
         validate_provider_selection("openai", allow_cloud_stt=True)
+
+
+def test_validate_provider_selection_rejects_unknown_provider() -> None:
+    with pytest.raises(ValueError, match="Unknown audio provider"):
+        validate_provider_selection("does_not_exist", allow_cloud_stt=True)
+
+
+def test_build_provider_rejects_unknown_provider_without_local_fallback() -> None:
+    with pytest.raises(ValueError, match="Unknown audio provider"):
+        build_provider("does_not_exist")
 
 
 def test_validate_audio_benchmark_selection_rejects_unshipped_comparison() -> None:

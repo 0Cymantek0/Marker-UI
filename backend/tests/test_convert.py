@@ -1545,6 +1545,27 @@ async def test_upload_rejects_deferred_audio_provider_before_queue(client: Async
 
 
 @pytest.mark.asyncio
+async def test_upload_rejects_unknown_audio_provider_before_queue(client: AsyncClient, db_session):
+    """Unknown STT provider ids fail instead of silently falling back to local."""
+    resp = await _upload_file(
+        client,
+        filename="unknown-provider.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {"audio_provider": "does_not_exist", "audio_allow_cloud_stt": True}
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Unknown audio provider" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "unknown-provider.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
 async def test_upload_rejects_unshipped_audio_benchmark_compare_before_queue(client: AsyncClient, db_session):
     """Benchmark comparison is not wired; do not accept a silent no-op job."""
     resp = await _upload_file(

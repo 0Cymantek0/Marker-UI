@@ -8,7 +8,6 @@ behind the same :class:`AudioTranscriptionProvider` interface.
 
 from __future__ import annotations
 
-import logging
 from functools import lru_cache
 from typing import Callable
 
@@ -19,8 +18,6 @@ from app.audio.providers.capabilities import (
     ProviderCapability,
     get_capability,
 )
-
-logger = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_PROVIDER_ID",
@@ -92,10 +89,7 @@ def build_provider(provider_id: str | None) -> AudioTranscriptionProvider:
     factories = _local_factories()
     factory = factories.get(key)
     if factory is None:
-        logger.warning(
-            "Unknown audio provider %r; falling back to %s", key, DEFAULT_PROVIDER_ID
-        )
-        factory = factories[DEFAULT_PROVIDER_ID]
+        raise ValueError(_unknown_provider_message(key))
     return factory()
 
 
@@ -106,14 +100,16 @@ def validate_provider_selection(
 ) -> ProviderCapability:
     """Validate a requested provider before a job is queued.
 
-    Unknown ids keep the historical local fallback. Declared-but-deferred
-    providers fail early because selecting them would otherwise create a queued
-    job that only fails inside the worker.
+    Unknown ids and declared-but-deferred providers fail early because selecting
+    them would otherwise create a queued job that either silently changes
+    provider or only fails inside the worker.
     """
 
     key = (provider_id or DEFAULT_PROVIDER_ID).strip().lower()
     if key in _DEFERRED_PROVIDERS:
         raise NotImplementedError(_deferred_provider_message(key))
+    if key not in PROVIDER_CAPABILITIES:
+        raise ValueError(_unknown_provider_message(key))
     capability = get_capability(key)
     if capability.cloud and not allow_cloud_stt:
         raise PermissionError(
@@ -146,6 +142,13 @@ def _deferred_provider_message(provider_id: str) -> str:
         "It is gated behind its adapter + capability flags + provider fixtures "
         "landing together. Configure it as a provider record and enable cloud STT "
         "once its adapter ships."
+    )
+
+
+def _unknown_provider_message(provider_id: str) -> str:
+    return (
+        f"Unknown audio provider {provider_id!r}. "
+        f"Known providers: {', '.join(all_advertised_provider_ids())}."
     )
 
 

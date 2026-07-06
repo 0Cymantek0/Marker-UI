@@ -461,7 +461,7 @@ async def submit_conversion_job(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
             )
-        except (NotImplementedError, PermissionError) as exc:
+        except (NotImplementedError, PermissionError, ValueError) as exc:
             if source_url_safe:
                 Path(stored_path).unlink(missing_ok=True)
             raise UsageError(str(exc)) from exc
@@ -571,7 +571,7 @@ async def _convert_resolved_path(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
             )
-        except (NotImplementedError, PermissionError) as exc:
+        except (NotImplementedError, PermissionError, ValueError) as exc:
             raise UsageError(str(exc)) from exc
     if source_url:
         config["source_url"] = source_url
