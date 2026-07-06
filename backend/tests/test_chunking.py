@@ -35,6 +35,20 @@ def test_chunk_markdown_packs_headings_with_section_text() -> None:
     assert payload["chunks"][0]["end_line"] >= 3
 
 
+def test_chunk_markdown_keeps_oversized_section_heading_with_first_content() -> None:
+    payload = chunk_markdown(
+        "# Long Section\n\n" + ("alpha " * 80),
+        source_name="long.md",
+        max_chars=200,
+    )
+
+    texts = [chunk["text"] for chunk in payload["chunks"]]
+
+    assert texts[0].startswith("# Long Section\n\nalpha")
+    assert "# Long Section" not in texts[1:]
+    assert all(text.strip() != "# Long Section" for text in texts)
+
+
 def test_chunk_markdown_keeps_fenced_code_with_blank_lines_together() -> None:
     payload = chunk_markdown(
         "# Notes\n\n```python\nprint('first')\n\nprint('second')\n```\n\nDone.",

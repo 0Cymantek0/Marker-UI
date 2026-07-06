@@ -227,12 +227,20 @@ def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[M
             flush()
         projected_len = len("\n\n".join([*(item.text for item in current), block.text]))
         if current and projected_len > max_chars:
+            if _is_standalone_heading(current) and block.kind == "text":
+                current.append(block)
+                flush()
+                continue
             flush()
         current.append(block)
         if block.kind in {"fenced_code", "table"}:
             flush()
     flush()
     return packed
+
+
+def _is_standalone_heading(blocks: list[MarkdownBlock]) -> bool:
+    return len(blocks) == 1 and blocks[0].kind == "heading"
 
 
 def _common_heading_path(blocks: list[MarkdownBlock]) -> tuple[str, ...]:
