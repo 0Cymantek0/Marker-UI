@@ -628,6 +628,52 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                     disabled={disabled}
                   />
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <NumberField
+                    label="Inline Text (KB)"
+                    help="Maximum text child size to inline directly in the archive summary."
+                    value={(tempConfig.archive_inline_bytes ?? 64 * 1024) / 1024}
+                    min={1}
+                    max={1024}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_inline_bytes', v * 1024)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Total Budget (MB)"
+                    help="Maximum total uncompressed bytes to inspect across archive entries."
+                    value={(tempConfig.archive_max_total_uncompressed_bytes ?? 50 * 1024 * 1024) / (1024 * 1024)}
+                    min={1}
+                    max={1000}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_total_uncompressed_bytes', v * 1024 * 1024)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Max Ratio"
+                    help="Skip archive entries whose uncompressed/compressed ratio is suspiciously high."
+                    value={tempConfig.archive_max_compression_ratio ?? 100}
+                    min={1}
+                    max={10000}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_compression_ratio', v)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Max Depth"
+                    help="Maximum nested archive conversion depth."
+                    value={tempConfig.archive_max_depth ?? 2}
+                    min={0}
+                    max={10}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_depth', v)}
+                    disabled={disabled}
+                  />
+                </div>
               </div>
 
               <hr className="border-border/20" />

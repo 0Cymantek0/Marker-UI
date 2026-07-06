@@ -194,6 +194,40 @@ async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db
 
 
 @pytest.mark.asyncio
+async def test_upload_archive_persists_full_budget_controls(client: AsyncClient, db_session):
+    files = {"file": ("bundle.zip", io.BytesIO(b"PK\x05\x06" + b"\x00" * 18), "application/zip")}
+
+    resp = await client.post(
+        "/api/convert/upload",
+        files=files,
+        params={
+            "archive_recursive": "false",
+            "archive_max_files": "12",
+            "archive_inline_bytes": "4096",
+            "archive_max_converted_children": "3",
+            "archive_max_child_bytes": "8192",
+            "archive_max_total_uncompressed_bytes": "16384",
+            "archive_max_compression_ratio": "25",
+            "archive_max_depth": "1",
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+    assert config["archive_recursive"] is False
+    assert config["archive_max_files"] == 12
+    assert config["archive_inline_bytes"] == 4096
+    assert config["archive_max_converted_children"] == 3
+    assert config["archive_max_child_bytes"] == 8192
+    assert config["archive_max_total_uncompressed_bytes"] == 16384
+    assert config["archive_max_compression_ratio"] == 25
+    assert config["archive_max_depth"] == 1
+
+
+@pytest.mark.asyncio
 async def test_pdf_structured_output_forces_marker_route(client: AsyncClient, db_session):
     resp = await _upload_file(
         client,

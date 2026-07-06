@@ -171,8 +171,12 @@ export interface ConversionConfig {
   max_batch_retries?: number
   archive_recursive?: boolean
   archive_max_files?: number
+  archive_inline_bytes?: number
   archive_max_converted_children?: number
   archive_max_child_bytes?: number
+  archive_max_total_uncompressed_bytes?: number
+  archive_max_compression_ratio?: number
+  archive_max_depth?: number
 }
 
 export interface ConversionResponse {
@@ -524,8 +528,12 @@ export async function uploadFile(
   if (config.max_batch_retries !== undefined) params.append('max_batch_retries', String(config.max_batch_retries))
   if (config.archive_recursive !== undefined) params.append('archive_recursive', String(config.archive_recursive))
   if (config.archive_max_files !== undefined) params.append('archive_max_files', String(config.archive_max_files))
+  if (config.archive_inline_bytes !== undefined) params.append('archive_inline_bytes', String(config.archive_inline_bytes))
   if (config.archive_max_converted_children !== undefined) params.append('archive_max_converted_children', String(config.archive_max_converted_children))
   if (config.archive_max_child_bytes !== undefined) params.append('archive_max_child_bytes', String(config.archive_max_child_bytes))
+  if (config.archive_max_total_uncompressed_bytes !== undefined) params.append('archive_max_total_uncompressed_bytes', String(config.archive_max_total_uncompressed_bytes))
+  if (config.archive_max_compression_ratio !== undefined) params.append('archive_max_compression_ratio', String(config.archive_max_compression_ratio))
+  if (config.archive_max_depth !== undefined) params.append('archive_max_depth', String(config.archive_max_depth))
   if (localFilepath) params.append('local_filepath', localFilepath)
   if (sourceUrl) params.append('source_url', sourceUrl)
   if (outputDir) params.append('output_dir', outputDir)

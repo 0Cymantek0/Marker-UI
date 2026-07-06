@@ -486,8 +486,12 @@ async def upload_file(
     max_batch_retries: Optional[int] = Query(None, ge=0, le=5, description="Max extra batch calls to recover missing/garbled indices"),
     archive_recursive: Optional[bool] = Query(None, description="Recursively convert safe deterministic children inside archives"),
     archive_max_files: Optional[int] = Query(None, ge=1, le=1000, description="Max files to scan inside the archive"),
+    archive_inline_bytes: Optional[int] = Query(None, ge=1, description="Max bytes to inline per archive text child"),
     archive_max_converted_children: Optional[int] = Query(None, ge=1, le=100, description="Max child files to convert inside the archive"),
     archive_max_child_bytes: Optional[int] = Query(None, ge=1, description="Max file size limit per child to parse (bytes)"),
+    archive_max_total_uncompressed_bytes: Optional[int] = Query(None, ge=1, description="Max total uncompressed archive bytes to inspect"),
+    archive_max_compression_ratio: Optional[float] = Query(None, ge=1.0, description="Max allowed compression ratio for archive entries"),
+    archive_max_depth: Optional[int] = Query(None, ge=0, le=10, description="Max recursive archive conversion depth"),
     enable_mixed_pdf_routing: bool = Query(False, description="Enable mixed PDF routing; requires a full-page probe"),
     full_page_probe: bool = Query(False, description="Probe every PDF page before planning/routing"),
     db: AsyncSession = Depends(get_db),
@@ -725,10 +729,18 @@ async def upload_file(
         config["archive_recursive"] = archive_recursive
     if archive_max_files is not None:
         config["archive_max_files"] = archive_max_files
+    if archive_inline_bytes is not None:
+        config["archive_inline_bytes"] = archive_inline_bytes
     if archive_max_converted_children is not None:
         config["archive_max_converted_children"] = archive_max_converted_children
     if archive_max_child_bytes is not None:
         config["archive_max_child_bytes"] = archive_max_child_bytes
+    if archive_max_total_uncompressed_bytes is not None:
+        config["archive_max_total_uncompressed_bytes"] = archive_max_total_uncompressed_bytes
+    if archive_max_compression_ratio is not None:
+        config["archive_max_compression_ratio"] = archive_max_compression_ratio
+    if archive_max_depth is not None:
+        config["archive_max_depth"] = archive_max_depth
     if ocr_engine in ("surya", "hybrid_ocr"):
         config["ocr_engine"] = ocr_engine
     elif ocr_engine in ("glm_ocr", "paddleocr_vl"):

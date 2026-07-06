@@ -139,6 +139,34 @@ describe('uploadFile', () => {
     expect(url.searchParams.get('output_format')).toBe('chunks')
     expect(url.searchParams.get('chunking_strategy')).toBe('unstructured_by_title')
   })
+
+  it('sends archive budget controls as upload query params', async () => {
+    mockFetchOnce(200, { job_id: 'job-zip', status: 'pending', filename: 'bundle.zip' }, true)
+
+    await uploadFile(new File(['zip'], 'bundle.zip', { type: 'application/zip' }), {
+      output_formats: ['markdown'],
+      converter: 'PdfConverter',
+      archive_recursive: false,
+      archive_max_files: 12,
+      archive_inline_bytes: 4096,
+      archive_max_converted_children: 3,
+      archive_max_child_bytes: 8192,
+      archive_max_total_uncompressed_bytes: 16384,
+      archive_max_compression_ratio: 25,
+      archive_max_depth: 1,
+    })
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.get('archive_recursive')).toBe('false')
+    expect(url.searchParams.get('archive_max_files')).toBe('12')
+    expect(url.searchParams.get('archive_inline_bytes')).toBe('4096')
+    expect(url.searchParams.get('archive_max_converted_children')).toBe('3')
+    expect(url.searchParams.get('archive_max_child_bytes')).toBe('8192')
+    expect(url.searchParams.get('archive_max_total_uncompressed_bytes')).toBe('16384')
+    expect(url.searchParams.get('archive_max_compression_ratio')).toBe('25')
+    expect(url.searchParams.get('archive_max_depth')).toBe('1')
+  })
 })
 
 describe('normalizeOcrEngine', () => {

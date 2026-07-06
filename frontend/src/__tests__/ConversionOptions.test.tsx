@@ -312,6 +312,30 @@ describe('ConversionOptions image understanding controls', () => {
     expect(screen.queryByText('Chunking Strategy')).not.toBeInTheDocument()
   })
 
+  it('applies full archive budget controls from advanced settings', async () => {
+    mockGetLLMProviders.mockResolvedValue([])
+    mockGetActiveLLM.mockResolvedValue(null)
+    const onChange = vi.fn()
+
+    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+    fireEvent.change(screen.getByLabelText(/inline text/i), { target: { value: '8' } })
+    fireEvent.change(screen.getByLabelText(/total budget/i), { target: { value: '16' } })
+    fireEvent.change(screen.getByLabelText(/max ratio/i), { target: { value: '25' } })
+    fireEvent.change(screen.getByLabelText(/max depth/i), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply settings/i }))
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        archive_inline_bytes: 8 * 1024,
+        archive_max_total_uncompressed_bytes: 16 * 1024 * 1024,
+        archive_max_compression_ratio: 25,
+        archive_max_depth: 1,
+      })
+    )
+  })
+
   describe('Conversion Presets UI flow', () => {
     it('loads and lists presets on mount', async () => {
       const mockPresets = [
