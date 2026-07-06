@@ -341,7 +341,7 @@ def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, t
     }
 
 
-def test_audio_text_enhancement_toggle_uses_enhanced_renderer(monkeypatch, tmp_path: Path) -> None:
+def test_audio_text_enhancement_toggle_uses_corrected_transcript_renderer(monkeypatch, tmp_path: Path) -> None:
     from app.audio.providers.base import RawTranscript
 
     path = tmp_path / "call.wav"
@@ -380,7 +380,9 @@ def test_audio_text_enhancement_toggle_uses_enhanced_renderer(monkeypatch, tmp_p
         },
     )
 
-    assert "# Audio Document: call" in result.text
+    assert "# Enhanced Transcript: call" in result.text
+    assert "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_" in result.text
+    assert "## Enhancement Audit" in result.text
     assert "## Original Transcript" in result.text
     assert result.metadata["engine_detail"]["output_mode"] == "enhanced"
     assert result.metadata["audio"]["enhancement"]["trigger"] == "text_enhancement"

@@ -352,6 +352,63 @@ def render_enhanced_markdown(
     return "\n".join(lines).strip()
 
 
+def render_text_enhanced_markdown(
+    transcript: AudioTranscript,
+    *,
+    title: str,
+    strength: int = 1,
+) -> str:
+    """Render a corrected transcript without changing timeline shape.
+
+    This is deliberately conservative. It performs only deterministic readability
+    cleanup, keeps every segment/source id, and includes a raw transcript appendix
+    plus an audit table for changed segments.
+    """
+
+    lines = [f"# Enhanced Transcript: {title}", ""]
+    lines.append("- **Mode:** local deterministic transcript cleanup")
+    lines.append("- **Rule:** segment order, timestamps, speakers, and source IDs are preserved.")
+    if strength > 1:
+        lines.append(
+            "- **Scope:** strengths above minimal are not LLM-backed in this build; using deterministic cleanup only."
+        )
+    lines.extend(["", "## Transcript", ""])
+    audit_rows: list[tuple[AudioSegment, str, str]] = []
+    if not transcript.segments:
+        lines.append("_No speech segments detected._")
+    for segment in transcript.segments:
+        enhanced = _minimal_text_cleanup(segment.text)
+        if enhanced != segment.text:
+            audit_rows.append((segment, segment.text, enhanced))
+        line = (
+            f"- `{format_timestamp_ms(segment.start_ms)}-{format_timestamp_ms(segment.end_ms)}` "
+            f"{enhanced} _({segment.segment_id}, {segment.speaker})_"
+        )
+        if segment.confidence is not None:
+            line += f" confidence={segment.confidence:.2f}"
+        if segment.warnings:
+            line += f" warnings={','.join(segment.warnings)}"
+        lines.append(line)
+    lines.extend(["", "## Enhancement Audit", ""])
+    if audit_rows:
+        lines.append("| Segment | Change Type | Raw | Enhanced | Review |")
+        lines.append("|---|---|---|---|---|")
+        for segment, raw, enhanced in audit_rows:
+            review = "yes" if segment.warnings else "no"
+            lines.append(
+                f"| `{segment.segment_id}` | deterministic cleanup | "
+                f"{_table_cell(raw)} | {_table_cell(enhanced)} | {review} |"
+            )
+    else:
+        lines.append("- No text changes made.")
+    lines.extend(["", "## Source Map", ""])
+    for segment in transcript.segments:
+        lines.append(f"- `{segment.segment_id}` -> {segment.source_ref()}")
+    lines.extend(["", "## Original Transcript", ""])
+    lines.append(render_transcript_markdown(transcript, title=title))
+    return "\n".join(lines).strip()
+
+
 def build_extractive_notes(transcript: AudioTranscript) -> dict[str, list[str]]:
     """Build conservative notes using only transcript text plus citations."""
     non_empty = [segment for segment in transcript.segments if segment.text]
@@ -696,6 +753,20 @@ def _looks_like_action_or_decision(text: str) -> bool:
 def _looks_like_question(text: str) -> bool:
     stripped = text.strip().lower()
     return stripped.endswith("?") or stripped.startswith(("who ", "what ", "when ", "where ", "why ", "how ", "can ", "could ", "should "))
+
+
+def _minimal_text_cleanup(text: str) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return cleaned
+    cleaned = cleaned[0].upper() + cleaned[1:]
+    if not cleaned.endswith((".", "!", "?", ":", ";")):
+        cleaned += "."
+    return cleaned
+
+
+def _table_cell(value: str) -> str:
+    return str(value).replace("|", "\\|").replace("\n", " ").strip()
 
 
 def _word_overlap(left: str, right: str) -> float:

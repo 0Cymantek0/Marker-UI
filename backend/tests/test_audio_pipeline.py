@@ -8,6 +8,7 @@ from app.audio.pipeline import (
     detect_possible_contradictions,
     normalize_transcript,
     render_enhanced_markdown,
+    render_text_enhanced_markdown,
 )
 
 
@@ -71,6 +72,27 @@ def test_enhanced_markdown_builds_extractively_with_source_refs() -> None:
     assert "## Questions" in text
     assert "What is next? [call.wav 00:01.000-00:02.000 speaker_0 | `call_seg_0002`]" in text
     assert "## Original Transcript" in text
+
+
+def test_text_enhanced_markdown_preserves_timeline_and_adds_audit() -> None:
+    transcript = normalize_transcript(
+        {
+            "duration": 1.0,
+            "segments": [
+                {"start": 0.0, "end": 1.0, "text": "  please send the follow up  ", "confidence": 0.9},
+            ],
+        },
+        source_label="call.wav",
+    )
+
+    text = render_text_enhanced_markdown(transcript, title="call", strength=2)
+
+    assert "# Enhanced Transcript: call" in text
+    assert "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_" in text
+    assert "## Enhancement Audit" in text
+    assert "| `call_seg_0001` | deterministic cleanup | please send the follow up | Please send the follow up. | no |" in text
+    assert "## Original Transcript" in text
+    assert "`00:00.000-00:01.000` please send the follow up _(call_seg_0001, speaker_0)_" in text
 
 
 def test_possible_contradictions_require_opposing_polarity_and_shared_terms() -> None:

@@ -23,6 +23,7 @@ from app.audio.pipeline import (
     detect_possible_contradictions,
     normalize_transcript,
     render_enhanced_markdown,
+    render_text_enhanced_markdown,
     render_transcript_markdown,
     slug_source_id,
 )
@@ -111,6 +112,12 @@ class AudioConverter(BaseConverter):
         output_mode = enhancement_plan["mode"]
         if output_mode == "transcript":
             text = render_transcript_markdown(transcript, title=title)
+        elif enhancement_plan["trigger"] == "text_enhancement" and not enhancement_plan["structural_enabled"]:
+            text = render_text_enhanced_markdown(
+                transcript,
+                title=title,
+                strength=enhancement_plan["text_strength"],
+            )
         else:
             text = render_enhanced_markdown(
                 transcript,
