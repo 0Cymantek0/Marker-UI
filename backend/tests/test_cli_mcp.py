@@ -113,9 +113,11 @@ def test_agent_capabilities_report_per_input_output_formats():
 
     docx = next(item for item in caps["input_formats"] if item["extensions"] == [".docx"])
     pdf = next(item for item in caps["input_formats"] if item["extensions"] == [".pdf"])
+    liteparse = next(item for item in caps["converters"] if item["engine"] == "liteparse_pdf")
 
     assert docx["output_formats"] == ["markdown", "chunks"]
     assert pdf["output_formats"] == ["markdown", "json", "html", "chunks"]
+    assert liteparse["output_formats"] == ["markdown", "chunks"]
 
 
 def test_agent_build_conversion_config_preserves_advanced_audio_options():

@@ -313,3 +313,20 @@ def renderable_output_formats_for_extensions(extensions: Iterable[str]) -> list[
     if normalized and normalized <= MARKER_MULTI_FORMAT_EXTENSIONS:
         return list(OUTPUT_FORMATS)
     return ["markdown", "chunks"]
+
+
+def renderable_output_formats_for_engine(
+    engine: str,
+    extensions: Iterable[str],
+) -> list[OutputFormat]:
+    """Return output formats for a concrete converter engine.
+
+    Extension-level capability answers "can this input type render JSON/HTML
+    through some route?" Converter-level capability must describe the selected
+    engine itself. A clean PDF can force Marker for JSON/HTML, but LiteParse as
+    an engine still emits Markdown plus derived chunks only.
+    """
+
+    if str(engine).strip().lower() == "marker_pdf":
+        return renderable_output_formats_for_extensions(extensions)
+    return ["markdown", "chunks"]

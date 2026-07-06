@@ -28,6 +28,7 @@ from app.conversion.formats import (
     INPUT_FORMATS,
     OUTPUT_FORMATS,
     UPLOAD_ALLOWED_EXTENSIONS,
+    renderable_output_formats_for_engine,
     renderable_output_formats_for_extensions,
 )
 from app.conversion.probe import probe_pdf
@@ -131,7 +132,8 @@ def capabilities() -> dict[str, Any]:
             {
                 "engine": converter.engine_name,
                 "extensions": sorted(converter.supported_extensions),
-                "output_formats": renderable_output_formats_for_extensions(
+                "output_formats": renderable_output_formats_for_engine(
+                    converter.engine_name,
                     converter.supported_extensions
                 ),
                 "needs_marker_models": converter.requires_marker_models,
