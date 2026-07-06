@@ -30,20 +30,24 @@ _EXT_TO_ENTRY = {
     if ext != ".pdf"
 }
 
+def _engine_meta_from_input_formats() -> dict[str, tuple[str, bool, bool, float]]:
+    meta: dict[str, tuple[str, bool, bool, float]] = {}
+    for spec in INPUT_FORMATS:
+        meta.setdefault(
+            spec.engine,
+            (
+                spec.label,
+                spec.needs_marker_models,
+                spec.needs_gpu,
+                spec.confidence,
+            ),
+        )
+    return meta
+
+
 _ENGINE_META: dict[str, tuple[str, bool, bool, float]] = {
-    "marker_pdf": ("Marker PDF", True, True, 1.0),
-    "audio": ("Local Audio Transcript", False, False, 0.95),
-    "video": ("Local Video Timeline", False, False, 0.90),
+    **_engine_meta_from_input_formats(),
     "liteparse_pdf": ("LiteParse Fast PDF", False, False, 0.9),
-    "office_docx": ("Fast Office (Word)", False, False, 0.95),
-    "office_pptx": ("Fast Office (PowerPoint)", False, False, 0.95),
-    "outlook_msg": ("Outlook MSG", False, False, 0.95),
-    "spreadsheet": ("Fast Spreadsheet", False, False, 0.95),
-    "text_data": ("Text / Data", False, False, 0.95),
-    "xml_rss": ("XML / RSS", False, False, 0.90),
-    "html": ("HTML", False, False, 0.90),
-    "notebook": ("Jupyter Notebook", False, False, 0.95),
-    "archive": ("Archive (ZIP)", False, False, 0.90),
 }
 
 _ENGINE_COMPATIBLE_EXTS: dict[str, frozenset[str]] = {
