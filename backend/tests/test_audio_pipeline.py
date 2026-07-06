@@ -88,7 +88,10 @@ def test_text_enhanced_markdown_preserves_timeline_and_adds_audit() -> None:
     text = render_text_enhanced_markdown(transcript, title="call", strength=2)
 
     assert "# Enhanced Transcript: call" in text
-    assert "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_" in text
+    assert (
+        "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_ "
+        "[call.wav 00:00.000-00:01.000 speaker_0 | `call_seg_0001`]"
+    ) in text
     assert "## Enhancement Audit" in text
     assert "| `call_seg_0001` | deterministic cleanup | please send the follow up | Please send the follow up. | no |" in text
     assert "## Original Transcript" in text

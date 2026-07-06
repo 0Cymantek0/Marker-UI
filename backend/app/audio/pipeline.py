@@ -384,6 +384,7 @@ def render_text_enhanced_markdown(
             f"- `{format_timestamp_ms(segment.start_ms)}-{format_timestamp_ms(segment.end_ms)}` "
             f"{enhanced} _({segment.segment_id}, {segment.speaker})_"
         )
+        line += f" [{segment.source_ref()} | `{segment.segment_id}`]"
         if segment.confidence is not None:
             line += f" confidence={segment.confidence:.2f}"
         if segment.warnings:

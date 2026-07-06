@@ -90,6 +90,36 @@ class AudioConverter(BaseConverter):
                 template=enhancement_plan["template"],
                 context=config.get("audio_context"),
             )
+        provenance_validation = _validate_enhancement_provenance(
+            text,
+            transcript,
+            require_source_refs=_truthy(config.get("audio_enhancement_require_source_refs", True)),
+        )
+        if (
+            output_mode != "transcript"
+            and not provenance_validation["valid"]
+            and _truthy(config.get("audio_enhancement_fallback_on_validation_failure", True))
+        ):
+            text = render_transcript_markdown(transcript, title=title)
+            output_mode = "transcript"
+            enhancement_plan = {
+                **enhancement_plan,
+                "mode": "transcript",
+                "trigger": "validation_fallback",
+            }
+            provenance_validation = {
+                **_validate_enhancement_provenance(
+                    text,
+                    transcript,
+                    require_source_refs=_truthy(config.get("audio_enhancement_require_source_refs", True)),
+                ),
+                "fallback_applied": True,
+            }
+        elif output_mode != "transcript" and not provenance_validation["valid"]:
+            raise RuntimeError(
+                "Audio enhancement failed provenance validation: "
+                + ", ".join(provenance_validation["missing"])
+            )
         contradictions = (
             detect_possible_contradictions(transcript)
             if _truthy(config.get("audio_contradiction_detection"))
@@ -145,6 +175,9 @@ class AudioConverter(BaseConverter):
                         "structural_enhancement_mode": enhancement_plan["structural_mode"],
                         "provider": "local_deterministic" if output_mode != "transcript" else None,
                         "provenance_required": output_mode != "transcript",
+                        "source_refs_required": _truthy(config.get("audio_enhancement_require_source_refs", True)),
+                        "source_refs_valid": provenance_validation["valid"],
+                        "provenance_validation": provenance_validation,
                     },
                     "raw_provider_metadata": run.raw_provider_metadata,
                 },
@@ -239,6 +272,31 @@ def _vocabulary_was_truncated(terms: list[str], prompt: str | None) -> bool:
         return False
     full = "Vocabulary terms: " + ", ".join(terms)
     return len(prompt) < len(full)
+
+
+def _validate_enhancement_provenance(
+    text: str,
+    transcript: AudioTranscript,
+    *,
+    require_source_refs: bool,
+) -> dict[str, Any]:
+    """Verify enhanced output keeps direct citations for every spoken segment."""
+
+    if not require_source_refs:
+        return {"valid": True, "required": False, "missing": [], "fallback_applied": False}
+
+    missing: list[str] = []
+    for segment in transcript.segments:
+        if not segment.text:
+            continue
+        if segment.segment_id not in text or segment.source_ref() not in text:
+            missing.append(segment.segment_id)
+    return {
+        "valid": not missing,
+        "required": True,
+        "missing": missing,
+        "fallback_applied": False,
+    }
 
 
 def _audio_quality(transcript: AudioTranscript) -> dict[str, Any]:

@@ -326,7 +326,8 @@ def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, t
     assert "ship the table parser fix [meeting.wav 00:00.000-00:01.000 speaker_0 | `meeting_seg_0001`]" in result.text
     assert "## Original Transcript" in result.text
     assert result.metadata["engine_detail"]["output_mode"] == "meeting_notes"
-    assert result.metadata["audio"]["enhancement"] == {
+    enhancement = result.metadata["audio"]["enhancement"]
+    assert enhancement == {
         "mode": "meeting_notes",
         "template": "meeting_notes",
         "trigger": "output_mode",
@@ -336,6 +337,14 @@ def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, t
         "structural_enhancement_mode": "auto",
         "provider": "local_deterministic",
         "provenance_required": True,
+        "source_refs_required": True,
+        "source_refs_valid": True,
+        "provenance_validation": {
+            "valid": True,
+            "required": True,
+            "missing": [],
+            "fallback_applied": False,
+        },
     }
 
 
@@ -379,12 +388,95 @@ def test_audio_text_enhancement_toggle_uses_corrected_transcript_renderer(monkey
     )
 
     assert "# Enhanced Transcript: call" in result.text
-    assert "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_" in result.text
+    assert (
+        "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_ "
+        "[call.wav 00:00.000-00:01.000 speaker_0 | `call_seg_0001`]"
+    ) in result.text
     assert "## Enhancement Audit" in result.text
     assert "## Original Transcript" in result.text
     assert result.metadata["engine_detail"]["output_mode"] == "enhanced"
     assert result.metadata["audio"]["enhancement"]["trigger"] == "text_enhancement"
     assert result.metadata["audio"]["enhancement"]["text_enhancement_strength"] == 2
+    assert result.metadata["audio"]["enhancement"]["source_refs_valid"] is True
+
+
+def test_audio_enhancement_falls_back_when_source_refs_are_missing(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "bad_refs.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 1.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "needs citation", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda provider_id: FakeProvider())
+    monkeypatch.setattr("app.audio.transcribe.probe_audio", lambda filepath: {"available": True})
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.render_text_enhanced_markdown",
+        lambda transcript, *, title, strength: "# Bad Enhanced\n\n- no citations here",
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {
+            "audio_text_enhancement_enabled": True,
+            "audio_enhancement_fallback_on_validation_failure": True,
+        },
+    )
+
+    assert "# Audio Transcript: bad_refs" in result.text
+    enhancement = result.metadata["audio"]["enhancement"]
+    assert enhancement["trigger"] == "validation_fallback"
+    assert enhancement["provenance_validation"]["fallback_applied"] is True
+
+
+def test_audio_enhancement_can_fail_strictly_when_source_refs_are_missing(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "strict_refs.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 1.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "needs citation", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda provider_id: FakeProvider())
+    monkeypatch.setattr("app.audio.transcribe.probe_audio", lambda filepath: {"available": True})
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.render_text_enhanced_markdown",
+        lambda transcript, *, title, strength: "# Bad Enhanced\n\n- no citations here",
+    )
+
+    with pytest.raises(RuntimeError, match="failed provenance validation"):
+        AudioConverter().convert(
+            str(path),
+            {
+                "audio_text_enhancement_enabled": True,
+                "audio_enhancement_fallback_on_validation_failure": False,
+            },
+        )
 
 
 def test_audio_structural_enhancement_uses_requested_template(monkeypatch, tmp_path: Path) -> None:
