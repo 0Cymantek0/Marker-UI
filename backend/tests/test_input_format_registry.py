@@ -39,8 +39,12 @@ def test_upload_agent_and_router_extensions_share_registry() -> None:
 def test_url_content_type_map_uses_registry_for_gif() -> None:
     assert CONTENT_TYPE_EXTENSION_MAP["image/gif"] == ".gif"
     for spec in INPUT_FORMATS:
+        expected_extensions = spec.content_type_extensions or (spec.extensions[0],) * len(spec.mime_types)
+        assert len(expected_extensions) == len(spec.mime_types)
         for mime_type in spec.mime_types:
             assert CONTENT_TYPE_EXTENSION_MAP[mime_type] in spec.extensions
+        for mime_type, extension in zip(spec.mime_types, expected_extensions):
+            assert CONTENT_TYPE_EXTENSION_MAP[mime_type] == extension
 
     filename, suffix = extension_for_download(
         "https://example.com/animation.bin",

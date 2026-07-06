@@ -35,8 +35,18 @@ class InputFormatSpec:
     needs_marker_models: bool
     needs_gpu: bool
     confidence: float
+    content_type_extensions: tuple[str, ...] | None = None
     upload_allowed: bool = True
     url_allowed: bool = True
+
+    def __post_init__(self) -> None:
+        if self.content_type_extensions is None:
+            return
+        if len(self.content_type_extensions) != len(self.mime_types):
+            raise ValueError(f"{self.label} content_type_extensions must match mime_types")
+        unknown = [ext for ext in self.content_type_extensions if ext not in self.extensions]
+        if unknown:
+            raise ValueError(f"{self.label} maps MIME type(s) to unknown extension(s): {unknown}")
 
 
 INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
@@ -59,6 +69,14 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=True,
         needs_gpu=True,
         confidence=1.0,
+        content_type_extensions=(
+            ".jpg",
+            ".png",
+            ".webp",
+            ".tiff",
+            ".bmp",
+            ".gif",
+        ),
     ),
     InputFormatSpec(
         extensions=(".epub",),
@@ -88,6 +106,16 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=0.95,
+        content_type_extensions=(
+            ".wav",
+            ".wav",
+            ".mp3",
+            ".m4a",
+            ".m4a",
+            ".flac",
+            ".ogg",
+            ".aac",
+        ),
     ),
     InputFormatSpec(
         extensions=(".mp4", ".mov", ".mkv", ".webm", ".avi"),
@@ -98,6 +126,13 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=0.90,
+        content_type_extensions=(
+            ".mp4",
+            ".mov",
+            ".mkv",
+            ".webm",
+            ".avi",
+        ),
     ),
     InputFormatSpec(
         extensions=(".docx",),
@@ -138,6 +173,7 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=0.95,
+        content_type_extensions=(".xlsx", ".xls"),
     ),
     InputFormatSpec(
         extensions=(".csv", ".tsv"),
@@ -148,6 +184,7 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=0.95,
+        content_type_extensions=(".csv", ".tsv"),
     ),
     InputFormatSpec(
         extensions=(".json", ".jsonl"),
@@ -158,6 +195,7 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=0.95,
+        content_type_extensions=(".json", ".jsonl"),
     ),
     InputFormatSpec(
         extensions=(".xml", ".rss", ".atom"),
@@ -168,6 +206,7 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=0.90,
+        content_type_extensions=(".xml", ".xml", ".rss", ".atom"),
     ),
     InputFormatSpec(
         extensions=(".html", ".htm"),
@@ -178,6 +217,7 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=0.90,
+        content_type_extensions=(".html", ".html"),
     ),
     InputFormatSpec(
         extensions=(".txt", ".md", ".rst", ".log"),
@@ -188,6 +228,7 @@ INPUT_FORMATS: tuple[InputFormatSpec, ...] = (
         needs_marker_models=False,
         needs_gpu=False,
         confidence=1.0,
+        content_type_extensions=(".txt", ".md", ".rst"),
     ),
     InputFormatSpec(
         extensions=(".ipynb",),
@@ -229,47 +270,12 @@ URL_ALLOWED_EXTENSIONS = frozenset(
     for ext in spec.extensions
 )
 CONTENT_TYPE_EXTENSION_MAP = {
-    "application/pdf": ".pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-    "application/vnd.ms-excel": ".xls",
-    "application/vnd.ms-outlook": ".msg",
-    "application/zip": ".zip",
-    "application/epub+zip": ".epub",
-    "text/html": ".html",
-    "application/xhtml+xml": ".html",
-    "text/csv": ".csv",
-    "text/tab-separated-values": ".tsv",
-    "application/json": ".json",
-    "application/x-ndjson": ".jsonl",
-    "application/xml": ".xml",
-    "text/xml": ".xml",
-    "application/rss+xml": ".rss",
-    "application/atom+xml": ".atom",
-    "text/plain": ".txt",
-    "text/markdown": ".md",
-    "text/x-rst": ".rst",
-    "application/x-ipynb+json": ".ipynb",
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "image/tiff": ".tiff",
-    "image/bmp": ".bmp",
-    "image/gif": ".gif",
-    "audio/wav": ".wav",
-    "audio/x-wav": ".wav",
-    "audio/mpeg": ".mp3",
-    "audio/mp4": ".m4a",
-    "audio/x-m4a": ".m4a",
-    "audio/flac": ".flac",
-    "audio/ogg": ".ogg",
-    "audio/aac": ".aac",
-    "video/mp4": ".mp4",
-    "video/quicktime": ".mov",
-    "video/x-matroska": ".mkv",
-    "video/webm": ".webm",
-    "video/x-msvideo": ".avi",
+    mime_type: extension
+    for spec in INPUT_FORMATS
+    for mime_type, extension in zip(
+        spec.mime_types,
+        spec.content_type_extensions or (spec.extensions[0],) * len(spec.mime_types),
+    )
 }
 
 
