@@ -264,6 +264,9 @@ OptionalDepthParam = Annotated[int, Field(ge=-1, description="Optional depth/ret
 PositivePixelsParam = Annotated[int, Field(ge=0, description="Optional positive pixel/count limit; 0 means unset.", examples=[2048])]
 DensityParam = Annotated[float, Field(ge=-1.0, le=1.0, description="Optional density threshold from 0 to 1; -1 means unset.", examples=[0.2])]
 ConfidenceParam = Annotated[float, Field(ge=-1.0, le=1.0, description="Optional confidence threshold from 0 to 1; -1 means unset.", examples=[0.35])]
+AudioProviderParam = Annotated[str, Field(description="Audio STT provider id. Local default is local_faster_whisper; cloud providers require audio_allow_cloud_stt.", examples=["local_faster_whisper"])]
+AudioAliasesParam = Annotated[str, Field(description='JSON object mapping speaker labels to user-confirmed aliases, e.g. {"speaker_0":"Alice"}.', examples=['{"speaker_0":"Alice"}'])]
+AudioListParam = Annotated[str, Field(description="Comma-separated values or JSON string array.", examples=["pack_meeting,pack_product"])]
 JobIdParam = Annotated[str, Field(description="Conversion job id.", examples=["11111111-1111-4111-8111-111111111111"])]
 SettingKeyParam = Annotated[str, Field(description="Settings key.", examples=["openai_api_key"])]
 SettingValueParam = Annotated[str, Field(description="Settings value; sensitive keys are encrypted on write.", examples=["dummy-api-key"])]
@@ -741,6 +744,30 @@ async def marker_convert_file(
     audio_context: TextParam = "",
     audio_low_confidence_threshold: ConfidenceParam = -1.0,
     audio_word_timestamps: Annotated[bool, Field(description="Include word-level timestamps for audio.", examples=[False])] = False,
+    audio_provider: AudioProviderParam = "",
+    audio_language: Annotated[str, Field(description="Spoken language hint for audio transcription.", examples=["en"])] = "",
+    audio_device: Annotated[str, Field(description="Local audio inference device such as cpu or cuda.", examples=["cpu"])] = "",
+    audio_compute_type: Annotated[str, Field(description="Local faster-whisper compute type such as int8 or float16.", examples=["int8"])] = "",
+    audio_beam_size: PositiveRowsParam = 0,
+    audio_vad_filter: OptionalBoolParam = None,
+    audio_diarization: Annotated[bool, Field(description="Request speaker diarization when provider supports it.", examples=[False])] = False,
+    audio_min_speakers: PositiveRowsParam = 0,
+    audio_max_speakers: PositiveRowsParam = 0,
+    audio_speaker_aliases_json: AudioAliasesParam = "",
+    audio_vocabulary_pack_ids: AudioListParam = "",
+    audio_confidence_heatmap: OptionalBoolParam = None,
+    audio_quality_diagnostics: OptionalBoolParam = None,
+    audio_review_required_on_low_confidence: Annotated[bool, Field(description="Flag output for review when low-confidence audio appears.", examples=[False])] = False,
+    audio_text_enhancement_enabled: Annotated[bool, Field(description="Enable deterministic source-bound audio text enhancement.", examples=[False])] = False,
+    audio_text_enhancement_strength: Annotated[int, Field(ge=0, le=5, description="Audio text enhancement strength from 0 to 5.", examples=[1])] = 0,
+    audio_structural_enhancement_enabled: Annotated[bool, Field(description="Restructure transcript into notes while preserving source references.", examples=[False])] = False,
+    audio_structural_enhancement_mode: Annotated[str, Field(description="Audio structure mode: auto, meeting_notes, lecture_notes, interview_qna, action_decision_log, or timeline.", examples=["meeting_notes"])] = "",
+    audio_enhancement_allow_cloud: Annotated[bool, Field(description="Explicit opt-in for cloud audio enhancement. No cloud enhancement adapter ships by default.", examples=[False])] = False,
+    audio_fusion_mode: Annotated[str, Field(description="Audio/context fusion mode such as audio_first or contradiction_audit.", examples=["audio_first"])] = "",
+    audio_contradiction_detection: Annotated[bool, Field(description="Detect possible contradictory spoken claims.", examples=[False])] = False,
+    audio_allow_cloud_stt: Annotated[bool, Field(description="Explicit opt-in to send audio to a cloud STT provider.", examples=[False])] = False,
+    audio_benchmark_compare: Annotated[bool, Field(description="Compare configured audio provider against comparison providers.", examples=[False])] = False,
+    audio_compare_providers: AudioListParam = "",
     disable_multiprocessing: Annotated[bool, Field(description="Disable multiprocessing during conversion.", examples=[False])] = False,
     strip_existing_ocr: Annotated[bool, Field(description="Strip existing OCR text before re-OCR.", examples=[False])] = False,
     redo_inline_math: Annotated[bool, Field(description="Reprocess inline math.", examples=[False])] = False,
@@ -800,6 +827,32 @@ async def marker_convert_file(
             else None
         ),
         audio_word_timestamps=audio_word_timestamps,
+        **_advanced_audio_options(
+            audio_provider=audio_provider,
+            audio_language=audio_language,
+            audio_device=audio_device,
+            audio_compute_type=audio_compute_type,
+            audio_beam_size=audio_beam_size,
+            audio_vad_filter=audio_vad_filter,
+            audio_diarization=audio_diarization,
+            audio_min_speakers=audio_min_speakers,
+            audio_max_speakers=audio_max_speakers,
+            audio_speaker_aliases_json=audio_speaker_aliases_json,
+            audio_vocabulary_pack_ids=audio_vocabulary_pack_ids,
+            audio_confidence_heatmap=audio_confidence_heatmap,
+            audio_quality_diagnostics=audio_quality_diagnostics,
+            audio_review_required_on_low_confidence=audio_review_required_on_low_confidence,
+            audio_text_enhancement_enabled=audio_text_enhancement_enabled,
+            audio_text_enhancement_strength=audio_text_enhancement_strength,
+            audio_structural_enhancement_enabled=audio_structural_enhancement_enabled,
+            audio_structural_enhancement_mode=audio_structural_enhancement_mode,
+            audio_enhancement_allow_cloud=audio_enhancement_allow_cloud,
+            audio_fusion_mode=audio_fusion_mode,
+            audio_contradiction_detection=audio_contradiction_detection,
+            audio_allow_cloud_stt=audio_allow_cloud_stt,
+            audio_benchmark_compare=audio_benchmark_compare,
+            audio_compare_providers=audio_compare_providers,
+        ),
         disable_multiprocessing=disable_multiprocessing,
         strip_existing_ocr=strip_existing_ocr,
         redo_inline_math=redo_inline_math,
@@ -970,6 +1023,30 @@ async def marker_submit_job(
     audio_context: TextParam = "",
     audio_low_confidence_threshold: ConfidenceParam = -1.0,
     audio_word_timestamps: Annotated[bool, Field(description="Include word-level timestamps for audio.", examples=[False])] = False,
+    audio_provider: AudioProviderParam = "",
+    audio_language: Annotated[str, Field(description="Spoken language hint for audio transcription.", examples=["en"])] = "",
+    audio_device: Annotated[str, Field(description="Local audio inference device such as cpu or cuda.", examples=["cpu"])] = "",
+    audio_compute_type: Annotated[str, Field(description="Local faster-whisper compute type such as int8 or float16.", examples=["int8"])] = "",
+    audio_beam_size: PositiveRowsParam = 0,
+    audio_vad_filter: OptionalBoolParam = None,
+    audio_diarization: Annotated[bool, Field(description="Request speaker diarization when provider supports it.", examples=[False])] = False,
+    audio_min_speakers: PositiveRowsParam = 0,
+    audio_max_speakers: PositiveRowsParam = 0,
+    audio_speaker_aliases_json: AudioAliasesParam = "",
+    audio_vocabulary_pack_ids: AudioListParam = "",
+    audio_confidence_heatmap: OptionalBoolParam = None,
+    audio_quality_diagnostics: OptionalBoolParam = None,
+    audio_review_required_on_low_confidence: Annotated[bool, Field(description="Flag output for review when low-confidence audio appears.", examples=[False])] = False,
+    audio_text_enhancement_enabled: Annotated[bool, Field(description="Enable deterministic source-bound audio text enhancement.", examples=[False])] = False,
+    audio_text_enhancement_strength: Annotated[int, Field(ge=0, le=5, description="Audio text enhancement strength from 0 to 5.", examples=[1])] = 0,
+    audio_structural_enhancement_enabled: Annotated[bool, Field(description="Restructure transcript into notes while preserving source references.", examples=[False])] = False,
+    audio_structural_enhancement_mode: Annotated[str, Field(description="Audio structure mode: auto, meeting_notes, lecture_notes, interview_qna, action_decision_log, or timeline.", examples=["meeting_notes"])] = "",
+    audio_enhancement_allow_cloud: Annotated[bool, Field(description="Explicit opt-in for cloud audio enhancement. No cloud enhancement adapter ships by default.", examples=[False])] = False,
+    audio_fusion_mode: Annotated[str, Field(description="Audio/context fusion mode such as audio_first or contradiction_audit.", examples=["audio_first"])] = "",
+    audio_contradiction_detection: Annotated[bool, Field(description="Detect possible contradictory spoken claims.", examples=[False])] = False,
+    audio_allow_cloud_stt: Annotated[bool, Field(description="Explicit opt-in to send audio to a cloud STT provider.", examples=[False])] = False,
+    audio_benchmark_compare: Annotated[bool, Field(description="Compare configured audio provider against comparison providers.", examples=[False])] = False,
+    audio_compare_providers: AudioListParam = "",
     disable_multiprocessing: Annotated[bool, Field(description="Disable multiprocessing during conversion.", examples=[False])] = False,
     strip_existing_ocr: Annotated[bool, Field(description="Strip existing OCR text before re-OCR.", examples=[False])] = False,
     redo_inline_math: Annotated[bool, Field(description="Reprocess inline math.", examples=[False])] = False,
@@ -1014,6 +1091,32 @@ async def marker_submit_job(
             else None
         ),
         audio_word_timestamps=audio_word_timestamps,
+        **_advanced_audio_options(
+            audio_provider=audio_provider,
+            audio_language=audio_language,
+            audio_device=audio_device,
+            audio_compute_type=audio_compute_type,
+            audio_beam_size=audio_beam_size,
+            audio_vad_filter=audio_vad_filter,
+            audio_diarization=audio_diarization,
+            audio_min_speakers=audio_min_speakers,
+            audio_max_speakers=audio_max_speakers,
+            audio_speaker_aliases_json=audio_speaker_aliases_json,
+            audio_vocabulary_pack_ids=audio_vocabulary_pack_ids,
+            audio_confidence_heatmap=audio_confidence_heatmap,
+            audio_quality_diagnostics=audio_quality_diagnostics,
+            audio_review_required_on_low_confidence=audio_review_required_on_low_confidence,
+            audio_text_enhancement_enabled=audio_text_enhancement_enabled,
+            audio_text_enhancement_strength=audio_text_enhancement_strength,
+            audio_structural_enhancement_enabled=audio_structural_enhancement_enabled,
+            audio_structural_enhancement_mode=audio_structural_enhancement_mode,
+            audio_enhancement_allow_cloud=audio_enhancement_allow_cloud,
+            audio_fusion_mode=audio_fusion_mode,
+            audio_contradiction_detection=audio_contradiction_detection,
+            audio_allow_cloud_stt=audio_allow_cloud_stt,
+            audio_benchmark_compare=audio_benchmark_compare,
+            audio_compare_providers=audio_compare_providers,
+        ),
         disable_multiprocessing=disable_multiprocessing,
         strip_existing_ocr=strip_existing_ocr,
         redo_inline_math=redo_inline_math,
@@ -1579,6 +1682,110 @@ def _with_job_resource_links(result: dict[str, Any]) -> dict[str, Any]:
     }
     result["resource_links"] = links
     return result
+
+
+def _advanced_audio_options(
+    *,
+    audio_provider: str,
+    audio_language: str,
+    audio_device: str,
+    audio_compute_type: str,
+    audio_beam_size: int,
+    audio_vad_filter: bool | None,
+    audio_diarization: bool,
+    audio_min_speakers: int,
+    audio_max_speakers: int,
+    audio_speaker_aliases_json: str,
+    audio_vocabulary_pack_ids: str,
+    audio_confidence_heatmap: bool | None,
+    audio_quality_diagnostics: bool | None,
+    audio_review_required_on_low_confidence: bool,
+    audio_text_enhancement_enabled: bool,
+    audio_text_enhancement_strength: int,
+    audio_structural_enhancement_enabled: bool,
+    audio_structural_enhancement_mode: str,
+    audio_enhancement_allow_cloud: bool,
+    audio_fusion_mode: str,
+    audio_contradiction_detection: bool,
+    audio_allow_cloud_stt: bool,
+    audio_benchmark_compare: bool,
+    audio_compare_providers: str,
+) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    if audio_provider:
+        options["audio_provider"] = audio_provider.strip()
+    if audio_language:
+        options["audio_language"] = audio_language.strip()
+    if audio_device:
+        options["audio_device"] = audio_device.strip()
+    if audio_compute_type:
+        options["audio_compute_type"] = audio_compute_type.strip()
+    if audio_beam_size > 0:
+        options["audio_beam_size"] = audio_beam_size
+    if audio_vad_filter is not None:
+        options["audio_vad_filter"] = audio_vad_filter
+    if audio_diarization:
+        options["audio_diarization"] = True
+    if audio_min_speakers > 0:
+        options["audio_min_speakers"] = audio_min_speakers
+    if audio_max_speakers > 0:
+        options["audio_max_speakers"] = audio_max_speakers
+    aliases = _json_string_map(audio_speaker_aliases_json)
+    if aliases:
+        options["audio_speaker_aliases"] = aliases
+    pack_ids = _string_list(audio_vocabulary_pack_ids)
+    if pack_ids:
+        options["audio_vocabulary_pack_ids"] = pack_ids
+    if audio_confidence_heatmap is not None:
+        options["audio_confidence_heatmap"] = audio_confidence_heatmap
+    if audio_quality_diagnostics is not None:
+        options["audio_quality_diagnostics"] = audio_quality_diagnostics
+    if audio_review_required_on_low_confidence:
+        options["audio_review_required_on_low_confidence"] = True
+    if audio_text_enhancement_enabled:
+        options["audio_text_enhancement_enabled"] = True
+    if audio_text_enhancement_strength:
+        options["audio_text_enhancement_strength"] = audio_text_enhancement_strength
+    if audio_structural_enhancement_enabled:
+        options["audio_structural_enhancement_enabled"] = True
+    if audio_structural_enhancement_mode:
+        options["audio_structural_enhancement_mode"] = audio_structural_enhancement_mode.strip()
+    if audio_enhancement_allow_cloud:
+        options["audio_enhancement_allow_cloud"] = True
+    if audio_fusion_mode:
+        options["audio_fusion_mode"] = audio_fusion_mode.strip()
+    if audio_contradiction_detection:
+        options["audio_contradiction_detection"] = True
+    if audio_allow_cloud_stt:
+        options["audio_allow_cloud_stt"] = True
+    if audio_benchmark_compare:
+        options["audio_benchmark_compare"] = True
+    compare_providers = _string_list(audio_compare_providers)
+    if compare_providers:
+        options["audio_compare_providers"] = compare_providers
+    return options
+
+
+def _json_string_map(raw: str) -> dict[str, str]:
+    if not raw.strip():
+        return {}
+    parsed = parse_extra_options_json(raw)
+    return {
+        str(key).strip(): str(value).strip()
+        for key, value in parsed.items()
+        if str(key).strip() and str(value).strip()
+    }
+
+
+def _string_list(raw: str) -> list[str]:
+    if not raw.strip():
+        return []
+    stripped = raw.strip()
+    if stripped.startswith("["):
+        data = parse_extra_options_json(f'{{"items": {stripped}}}').get("items")
+        if isinstance(data, list):
+            return [str(item).strip() for item in data if str(item).strip()]
+    return [part.strip() for part in stripped.split(",") if part.strip()]
 
 
 async def _client_workspace_roots(ctx: Context | None) -> list[Path] | None:

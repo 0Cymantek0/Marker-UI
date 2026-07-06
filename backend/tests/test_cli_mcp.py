@@ -990,6 +990,23 @@ async def test_mcp_convert_schema_has_rich_descriptions_and_nullable_booleans():
     assert {item.get("type") for item in properties["router_enabled"].get("anyOf", [])} == {"boolean", "null"}
     assert properties["archive_recursive"].get("default") is None
     assert {item.get("type") for item in properties["archive_recursive"].get("anyOf", [])} == {"boolean", "null"}
+    for field in (
+        "audio_provider",
+        "audio_allow_cloud_stt",
+        "audio_diarization",
+        "audio_speaker_aliases_json",
+        "audio_vocabulary_pack_ids",
+        "audio_text_enhancement_enabled",
+        "audio_structural_enhancement_enabled",
+        "audio_contradiction_detection",
+    ):
+        assert field in properties
+        assert properties[field]["description"]
+
+    submit_schema = next(tool for tool in tools if tool.name == "marker_submit_job").inputSchema
+    submit_props = submit_schema["properties"]
+    assert "audio_provider" in submit_props
+    assert "audio_allow_cloud_stt" in submit_props
 
 
 @pytest.mark.asyncio
@@ -1025,6 +1042,47 @@ async def test_mcp_open_world_annotations_match_url_capability():
         "marker_read_output_chunk",
     }:
         assert by_name[name].annotations.openWorldHint is False, name
+
+
+def test_mcp_advanced_audio_options_map_to_agent_contract_fields():
+    import app.mcp_server as mcp_server
+
+    values = mcp_server._advanced_audio_options(
+        audio_provider="openai",
+        audio_language="en",
+        audio_device="cuda",
+        audio_compute_type="float16",
+        audio_beam_size=4,
+        audio_vad_filter=True,
+        audio_diarization=True,
+        audio_min_speakers=2,
+        audio_max_speakers=4,
+        audio_speaker_aliases_json='{"speaker_0":"Alice"}',
+        audio_vocabulary_pack_ids='["pack-a", "pack-b"]',
+        audio_confidence_heatmap=False,
+        audio_quality_diagnostics=True,
+        audio_review_required_on_low_confidence=True,
+        audio_text_enhancement_enabled=True,
+        audio_text_enhancement_strength=2,
+        audio_structural_enhancement_enabled=True,
+        audio_structural_enhancement_mode="meeting_notes",
+        audio_enhancement_allow_cloud=False,
+        audio_fusion_mode="audio_first",
+        audio_contradiction_detection=True,
+        audio_allow_cloud_stt=True,
+        audio_benchmark_compare=True,
+        audio_compare_providers="local_faster_whisper,openai",
+    )
+    opts = agent_api.AgentConversionOptions(**values)
+
+    assert opts.audio_provider == "openai"
+    assert opts.audio_allow_cloud_stt is True
+    assert opts.audio_diarization is True
+    assert opts.audio_speaker_aliases == {"speaker_0": "Alice"}
+    assert opts.audio_vocabulary_pack_ids == ["pack-a", "pack-b"]
+    assert opts.audio_confidence_heatmap is False
+    assert opts.audio_structural_enhancement_mode == "meeting_notes"
+    assert opts.audio_compare_providers == ["local_faster_whisper", "openai"]
 
 
 
