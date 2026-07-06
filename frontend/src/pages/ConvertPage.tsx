@@ -111,9 +111,11 @@ function commonOutputFormatsForSources(
   markerMultiFormatExtensions: string[] | null,
 ): OutputFormat[] {
   if (filenames.length === 0) return ['markdown', 'json', 'html', 'chunks']
-  const [first, ...rest] = filenames.map((name) => (
+  const perSourceFormats = filenames.map((name) => (
     sourceOutputFormats(name, inputFormats, markerMultiFormatExtensions)
   ))
+  const first = perSourceFormats[0] ?? ['markdown', 'chunks']
+  const rest = perSourceFormats.slice(1)
   return rest.reduce(
     (common, formats) => common.filter((fmt) => formats.includes(fmt)),
     first,

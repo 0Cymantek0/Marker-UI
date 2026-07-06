@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { getHistory, deleteJob, downloadResult, getJobStatus, type JobStatus } from '@/lib/api'
+import { filenameForDownload } from '@/lib/download'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/datetime'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -115,17 +116,7 @@ export function HistoryPage() {
       const a = document.createElement('a')
       a.href = url
 
-      if (headerFilename) {
-        a.download = headerFilename
-      } else {
-        const isZip = blob.type === 'application/zip' || blob.type === 'application/x-zip-compressed'
-        const isJson = blob.type === 'application/json'
-        const isHtml = blob.type === 'text/html'
-        const ext = isZip ? 'zip' : isJson ? 'json' : isHtml ? 'html' : 'md'
-
-        const stem = job.filename.includes('.') ? job.filename.split('.').slice(0, -1).join('.') : job.filename
-        a.download = `${stem}.${ext}`
-      }
+      a.download = filenameForDownload(blob, job.filename, headerFilename)
 
       document.body.appendChild(a)
       a.click()
