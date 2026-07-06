@@ -257,6 +257,28 @@ def build_conversion_config(
     config["hybrid_ocr_profile"] = options.hybrid_ocr_profile
     _put_true(config, "hybrid_ocr_require_specialists", options.hybrid_ocr_require_specialists)
     _put_true(config, "debug", options.debug)
+    for key in (
+        "text_data_max_rows",
+        "archive_recursive",
+        "archive_max_files",
+        "archive_inline_bytes",
+        "archive_max_child_bytes",
+        "archive_max_depth",
+        "archive_max_converted_children",
+        "router_enabled",
+        "smart_router_level",
+        "dedup_enabled",
+        "downscale_vlm_crops",
+        "batch_enabled",
+        "decorative_max_text_density",
+        "ocr_min_text_density",
+        "ocr_min_lines",
+        "dedup_max_distance",
+        "vlm_crop_max_px",
+        "vlm_batch_size",
+        "max_batch_retries",
+    ):
+        _put(config, key, getattr(options, key))
     if output_dir:
         config["output_dir"] = output_dir
     config.update(options.extra_options)

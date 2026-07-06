@@ -55,6 +55,19 @@ from app.services.job_transport import (
 
 logger = logging.getLogger(__name__)
 
+
+def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
 SSE_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 
 
@@ -217,7 +230,7 @@ class ThreadExecutorBackend(ExecutorBackend):
         config: dict[str, Any],
         marker_service: Any,
     ) -> Optional[asyncio.Future]:
-        loop = asyncio.get_event_loop()
+        loop = _get_or_create_event_loop()
 
         def _run_with_start() -> Any:
             self._task_manager._mark_job_started(job_id)
@@ -784,7 +797,7 @@ class TaskManager:
                     if current < 12:
                         self._progress[job_id] = current + 1
 
-            loop = asyncio.get_event_loop()
+            loop = _get_or_create_event_loop()
             if loop.is_running():
                 self._smooth_tasks[job_id] = loop.create_task(_smooth_progress())
             future.add_done_callback(_on_done)

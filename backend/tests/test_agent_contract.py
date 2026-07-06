@@ -47,8 +47,21 @@ def test_export_json_schemas_contains_core_models_and_metadata():
         "allow_cloud_vlm",
         "ocr_engine",
         "hybrid_ocr_profile",
+        "router_enabled",
+        "vlm_batch_size",
+        "text_data_max_rows",
+        "archive_recursive",
         "extra_options",
     }.issubset(option_names)
+
+    option_properties = models["ConversionOptionsModel"]["properties"]
+    assert option_properties["smart_router_level"]["anyOf"][0]["enum"] == [
+        "disabled",
+        "smart",
+        "beeg_brain",
+    ]
+    assert option_properties["vlm_batch_size"]["anyOf"][0]["maximum"] == 64
+    assert option_properties["archive_max_depth"]["anyOf"][0]["minimum"] == 0
 
 
 def test_conversion_options_validate_known_enums_and_extra_options():
@@ -75,6 +88,34 @@ def test_conversion_options_validate_known_enums_and_extra_options():
         ConversionOptionsModel(output_format="docx")
     with pytest.raises(ValueError):
         ConversionOptionsModel(ocr_engine="glm_ocr")
+
+
+def test_conversion_options_validate_agent_productivity_fields():
+    opts = ConversionOptionsModel(
+        text_data_max_rows=10,
+        archive_recursive=False,
+        archive_max_files=25,
+        archive_max_depth=0,
+        router_enabled=False,
+        smart_router_level="beeg_brain",
+        decorative_max_text_density=0.05,
+        ocr_min_lines=1,
+        vlm_crop_max_px=512,
+        vlm_batch_size=4,
+        max_batch_retries=0,
+    )
+
+    assert opts.archive_recursive is False
+    assert opts.router_enabled is False
+    assert opts.smart_router_level == "beeg_brain"
+    assert opts.vlm_batch_size == 4
+
+    with pytest.raises(ValueError):
+        ConversionOptionsModel(text_data_max_rows=0)
+    with pytest.raises(ValueError):
+        ConversionOptionsModel(smart_router_level="huge")
+    with pytest.raises(ValueError):
+        ConversionOptionsModel(vlm_batch_size=65)
 
 
 def test_convert_result_and_manifest_models_accept_current_output_shape(tmp_path: Path):

@@ -31,6 +31,7 @@ AudioOutputMode = Literal[
 ]
 OcrEngine = Literal["surya", "hybrid_ocr"]
 HybridOcrProfile = Literal["balanced", "max_accuracy", "low_vram"]
+SmartRouterLevel = Literal["disabled", "smart", "beeg_brain"]
 
 AUDIO_OUTPUT_MODES: tuple[AudioOutputMode, ...] = (
     "transcript",
@@ -144,6 +145,29 @@ class ConversionOptionsModel(ContractModel):
     hybrid_ocr_profile: HybridOcrProfile = "balanced"
     hybrid_ocr_require_specialists: bool = False
     debug: bool = False
+
+    # Productivity, archive, and image-understanding knobs exposed by CLI/REST/MCP.
+    # Keep them first-class here so JSON agent callers get validation and schema
+    # docs instead of needing to tunnel stable options through extra_options.
+    text_data_max_rows: int | None = Field(default=None, ge=1)
+    archive_recursive: bool | None = None
+    archive_max_files: int | None = Field(default=None, ge=1)
+    archive_inline_bytes: int | None = Field(default=None, ge=1)
+    archive_max_child_bytes: int | None = Field(default=None, ge=1)
+    archive_max_depth: int | None = Field(default=None, ge=0)
+    archive_max_converted_children: int | None = Field(default=None, ge=1)
+    router_enabled: bool | None = None
+    smart_router_level: SmartRouterLevel | None = None
+    dedup_enabled: bool | None = None
+    downscale_vlm_crops: bool | None = None
+    batch_enabled: bool | None = None
+    decorative_max_text_density: float | None = Field(default=None, ge=0.0, le=1.0)
+    ocr_min_text_density: float | None = Field(default=None, ge=0.0, le=1.0)
+    ocr_min_lines: int | None = Field(default=None, ge=1)
+    dedup_max_distance: int | None = Field(default=None, ge=0, le=64)
+    vlm_crop_max_px: int | None = Field(default=None, ge=64, le=4096)
+    vlm_batch_size: int | None = Field(default=None, ge=1, le=64)
+    max_batch_retries: int | None = Field(default=None, ge=0, le=5)
     extra_options: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -305,6 +329,25 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="ocr_engine", cli_flag="--ocr-engine", type="enum", default="surya", category="ocr", description="Local OCR engine: surya or hybrid_ocr."),
     OptionMetadataModel(name="hybrid_ocr_profile", cli_flag="--hybrid-ocr-profile", type="enum", default="balanced", category="ocr", description="Hybrid OCR profile: balanced, max_accuracy, or low_vram."),
     OptionMetadataModel(name="hybrid_ocr_require_specialists", cli_flag="--hybrid-ocr-require-specialists", type="boolean", default=False, category="ocr", description="Fail if Hybrid OCR specialists are unavailable."),
+    OptionMetadataModel(name="router_enabled", cli_flag="--router-enabled", type="boolean", category="images", description="Override the image-understanding Tier-0 router switch."),
+    OptionMetadataModel(name="smart_router_level", cli_flag="--smart-router-level", type="enum", category="images", description="Image routing brain: disabled, smart, or beeg_brain."),
+    OptionMetadataModel(name="dedup_enabled", cli_flag="--dedup-enabled", type="boolean", category="images", description="Collapse duplicate image crops before extraction."),
+    OptionMetadataModel(name="downscale_vlm_crops", cli_flag="--downscale-vlm-crops", type="boolean", category="images", description="Downscale crops before VLM calls."),
+    OptionMetadataModel(name="batch_enabled", cli_flag="--batch-enabled", type="boolean", category="images", description="Batch image routing and extraction calls."),
+    OptionMetadataModel(name="decorative_max_text_density", cli_flag="--decorative-max-text-density", type="number", category="images", description="Text-density threshold at or below which an image is decorative."),
+    OptionMetadataModel(name="ocr_min_text_density", cli_flag="--ocr-min-text-density", type="number", category="images", description="Text-density threshold at or above which an image routes to local OCR."),
+    OptionMetadataModel(name="ocr_min_lines", cli_flag="--ocr-min-lines", type="integer", category="images", description="Minimum detected text lines before OCR routing."),
+    OptionMetadataModel(name="dedup_max_distance", cli_flag="--dedup-max-distance", type="integer", category="images", description="Maximum aHash Hamming distance treated as duplicate."),
+    OptionMetadataModel(name="vlm_crop_max_px", cli_flag="--vlm-crop-max-px", type="integer", category="images", description="Longest-side pixel cap for crops sent to VLM providers."),
+    OptionMetadataModel(name="vlm_batch_size", cli_flag="--vlm-batch-size", type="integer", category="images", description="Maximum images per batched VLM call."),
+    OptionMetadataModel(name="max_batch_retries", cli_flag="--max-batch-retries", type="integer", category="images", description="Extra batch attempts used to recover missing or malformed VLM responses."),
+    OptionMetadataModel(name="text_data_max_rows", cli_flag="--text-data-max-rows", type="integer", category="text_data", description="Maximum rows rendered for text/data table inputs."),
+    OptionMetadataModel(name="archive_recursive", cli_flag="--archive-recursive", type="boolean", category="archives", description="Recursively convert deterministic safe children inside archives."),
+    OptionMetadataModel(name="archive_max_files", cli_flag="--archive-max-files", type="integer", category="archives", description="Maximum files scanned inside an archive."),
+    OptionMetadataModel(name="archive_inline_bytes", cli_flag="--archive-inline-bytes", type="integer", category="archives", description="Maximum small child bytes to inline in archive output."),
+    OptionMetadataModel(name="archive_max_child_bytes", cli_flag="--archive-max-child-bytes", type="integer", category="archives", description="Maximum child file size to parse from an archive."),
+    OptionMetadataModel(name="archive_max_depth", cli_flag="--archive-max-depth", type="integer", category="archives", description="Maximum recursive archive depth."),
+    OptionMetadataModel(name="archive_max_converted_children", cli_flag="--archive-max-converted-children", type="integer", category="archives", description="Maximum child files converted inside an archive."),
     OptionMetadataModel(name="audio_output_mode", cli_flag="--audio-output-mode", type="enum", category="audio", description="Audio transcript or note mode."),
     OptionMetadataModel(name="audio_model", cli_flag="--audio-model", type="string", category="audio", description="Local audio transcription model."),
     OptionMetadataModel(name="audio_vocabulary", cli_flag="--audio-vocabulary", type="string", category="audio", description="Vocabulary hints for audio transcription."),

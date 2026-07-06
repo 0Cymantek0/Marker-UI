@@ -129,6 +129,52 @@ def test_agent_build_conversion_config_preserves_advanced_audio_options():
     assert config["audio_compare_providers"] == ["local_faster_whisper"]
 
 
+def test_agent_build_conversion_config_preserves_productivity_options():
+    config = agent_api.build_conversion_config(
+        AgentConversionOptions(
+            text_data_max_rows=12,
+            archive_recursive=False,
+            archive_max_files=25,
+            archive_inline_bytes=4096,
+            archive_max_child_bytes=8192,
+            archive_max_depth=0,
+            archive_max_converted_children=3,
+            router_enabled=False,
+            smart_router_level="smart",
+            dedup_enabled=False,
+            downscale_vlm_crops=True,
+            batch_enabled=False,
+            decorative_max_text_density=0.05,
+            ocr_min_text_density=0.6,
+            ocr_min_lines=2,
+            dedup_max_distance=0,
+            vlm_crop_max_px=512,
+            vlm_batch_size=4,
+            max_batch_retries=0,
+        )
+    )
+
+    assert config["text_data_max_rows"] == 12
+    assert config["archive_recursive"] is False
+    assert config["archive_max_files"] == 25
+    assert config["archive_inline_bytes"] == 4096
+    assert config["archive_max_child_bytes"] == 8192
+    assert config["archive_max_depth"] == 0
+    assert config["archive_max_converted_children"] == 3
+    assert config["router_enabled"] is False
+    assert config["smart_router_level"] == "smart"
+    assert config["dedup_enabled"] is False
+    assert config["downscale_vlm_crops"] is True
+    assert config["batch_enabled"] is False
+    assert config["decorative_max_text_density"] == 0.05
+    assert config["ocr_min_text_density"] == 0.6
+    assert config["ocr_min_lines"] == 2
+    assert config["dedup_max_distance"] == 0
+    assert config["vlm_crop_max_px"] == 512
+    assert config["vlm_batch_size"] == 4
+    assert config["max_batch_retries"] == 0
+
+
 def test_agent_capabilities_expose_minimal_non_admin_tools():
     caps = agent_api.capabilities()
 
@@ -231,7 +277,7 @@ def test_cli_convert_accepts_request_json_file(tmp_path: Path):
                 "local_file_path": str(source),
                 "output_path": str(output_path),
                 "max_chars": 5000,
-                "options": {"output_format": "markdown", "extra_options": {"text_data_max_rows": 1}},
+                "options": {"output_format": "markdown", "text_data_max_rows": 1},
             }
         ),
         encoding="utf-8",

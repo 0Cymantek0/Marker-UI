@@ -74,7 +74,10 @@ def test_schema_export_and_mcp_init_config_emit_stable_json(tmp_path: Path):
     assert "BatchRequestModel" in schema_payload["models"]
     assert config.returncode == 0
     config_payload = json.loads(config.stdout)
-    assert config_payload["mcpServers"]["marker"]["args"] == ["-m", "app.cli", "mcp", "start"]
+    assert config_payload["client"] == "codex"
+    assert config_payload["format"] == "toml"
+    assert "[mcp_servers.marker]" in config_payload["config"]
+    assert 'args = ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]' in config_payload["config"]
 
 
 def test_mcp_self_test_cli_reports_schema_validation(tmp_path: Path):

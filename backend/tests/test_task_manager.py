@@ -3,6 +3,7 @@
 import asyncio
 import json
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,6 +16,21 @@ from app.services.task_manager import (
     _formats_payload_for_finalize,
 )
 from app.services.job_transport import WorkerEvent, WorkerEventType
+
+
+@contextmanager
+def active_event_loop():
+    try:
+        prev_loop = asyncio.get_event_loop()
+    except RuntimeError:
+        prev_loop = None
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        yield loop
+    finally:
+        loop.close()
+        asyncio.set_event_loop(prev_loop)
 
 
 @pytest.fixture
@@ -281,13 +297,9 @@ class TestBackendSelection:
             tm.shutdown(wait=False)
 
     def test_thread_backend_tracks_future(self):
-        # submit_job calls asyncio.get_event_loop().create_task(...), so we need a
-        # loop active. Save/restore the current loop so this test cannot leak
-        # state into later async tests in the same session.
-        prev_loop = asyncio.get_event_loop()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
+        # Thread submission needs an active event loop; keep it isolated so this
+        # test cannot leak loop state into later async tests in the same session.
+        with active_event_loop():
             tm = TaskManager(max_workers=2)
             try:
                 tm.submit_job("j-thread", "/tmp/x", {"llm_provider": None}, object())
@@ -295,33 +307,26 @@ class TestBackendSelection:
                 assert "j-thread" in tm._tasks
             finally:
                 tm.shutdown(wait=False)
-        finally:
-            loop.close()
-            asyncio.set_event_loop(prev_loop)
 
     def test_cancelled_thread_future_cleanup_does_not_raise(self):
-        prev_loop = asyncio.get_event_loop()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        with active_event_loop() as loop:
+            class _CancelledBackend:
+                is_process = False
+                name = "thread"
 
-        class _CancelledBackend:
-            is_process = False
-            name = "thread"
+                def __init__(self):
+                    self.future = loop.create_future()
+                    self.future.cancel()
 
-            def __init__(self):
-                self.future = loop.create_future()
-                self.future.cancel()
+                def submit(self, run_job, job_id, filepath, config, marker_service):
+                    return self.future
 
-            def submit(self, run_job, job_id, filepath, config, marker_service):
-                return self.future
+                def supports_job(self, job_id):
+                    return False
 
-            def supports_job(self, job_id):
-                return False
+                def shutdown(self, wait=False):
+                    pass
 
-            def shutdown(self, wait=False):
-                pass
-
-        try:
             backend = _CancelledBackend()
             tm = TaskManager(max_workers=1, backend=backend)
             try:
@@ -330,38 +335,32 @@ class TestBackendSelection:
                 assert "j-cancelled" not in tm._tasks
             finally:
                 tm.shutdown(wait=False)
-        finally:
-            loop.close()
-            asyncio.set_event_loop(prev_loop)
 
     def test_second_marker_job_reports_waiting_on_one_wide_marker_pool(self):
         from app.conversion.result import ConverterPlan
 
-        prev_loop = asyncio.get_event_loop()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        started = threading.Event()
-        release = threading.Event()
+        with active_event_loop() as loop:
+            started = threading.Event()
+            release = threading.Event()
 
-        class _FakeConversionService:
-            def plan(self, filepath, config):
-                return ConverterPlan(
-                    engine="marker_pdf",
-                    label="Marker PDF",
-                    confidence=1.0,
-                    reasons=[],
-                    needs_marker_models=True,
-                    needs_gpu=True,
-                    execution_backend="marker_worker",
-                )
+            class _FakeConversionService:
+                def plan(self, filepath, config):
+                    return ConverterPlan(
+                        engine="marker_pdf",
+                        label="Marker PDF",
+                        confidence=1.0,
+                        reasons=[],
+                        needs_marker_models=True,
+                        needs_gpu=True,
+                        execution_backend="marker_worker",
+                    )
 
-            def convert_file(self, filepath, config):
-                if filepath == "/tmp/first.pdf":
-                    started.set()
-                    release.wait(timeout=5)
-                return {"text": "ok", "extension": "md", "images": {}}
+                def convert_file(self, filepath, config):
+                    if filepath == "/tmp/first.pdf":
+                        started.set()
+                        release.wait(timeout=5)
+                    return {"text": "ok", "extension": "md", "images": {}}
 
-        try:
             tm = TaskManager(max_workers=2)
             try:
                 svc = _FakeConversionService()
@@ -378,9 +377,6 @@ class TestBackendSelection:
                 release.set()
                 loop.run_until_complete(asyncio.sleep(0.1))
                 tm.shutdown(wait=False)
-        finally:
-            loop.close()
-            asyncio.set_event_loop(prev_loop)
 
 
 class TestWorkerEventDispatch:
