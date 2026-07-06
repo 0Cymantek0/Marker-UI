@@ -285,6 +285,7 @@ def build_conversion_config(
     _put_true(config, "debug", options.debug)
     for key in (
         "text_data_max_rows",
+        "chunking_strategy",
         "archive_recursive",
         "archive_max_files",
         "archive_inline_bytes",

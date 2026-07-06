@@ -807,6 +807,7 @@ async def marker_convert_file(
     vlm_batch_size: PositivePixelsParam = 0,
     max_batch_retries: OptionalDepthParam = -1,
     text_data_max_rows: PositiveRowsParam = 0,
+    chunking_strategy: Annotated[str, Field(description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title.", examples=["markdown_heading_blocks_v2"])] = "",
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
@@ -898,6 +899,7 @@ async def marker_convert_file(
             ),
             **_agent_productivity_extra_options(
                 text_data_max_rows=text_data_max_rows,
+                chunking_strategy=chunking_strategy,
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
@@ -1075,6 +1077,7 @@ async def marker_submit_job(
     redo_inline_math: Annotated[bool, Field(description="Reprocess inline math.", examples=[False])] = False,
     debug: Annotated[bool, Field(description="Enable debug conversion artifacts/logging.", examples=[False])] = False,
     text_data_max_rows: PositiveRowsParam = 0,
+    chunking_strategy: Annotated[str, Field(description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title.", examples=["markdown_heading_blocks_v2"])] = "",
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
@@ -1149,6 +1152,7 @@ async def marker_submit_job(
         extra_options={
             **_agent_productivity_extra_options(
                 text_data_max_rows=text_data_max_rows,
+                chunking_strategy=chunking_strategy,
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
@@ -1942,6 +1946,7 @@ def _image_understanding_extra_options(
 def _agent_productivity_extra_options(
     *,
     text_data_max_rows: int = 0,
+    chunking_strategy: str = "",
     archive_max_files: int = 0,
     archive_inline_bytes: int = 0,
     archive_max_child_bytes: int = 0,
@@ -1956,6 +1961,8 @@ def _agent_productivity_extra_options(
         options["archive_recursive"] = archive_recursive
     if text_data_max_rows > 0:
         options["text_data_max_rows"] = text_data_max_rows
+    if chunking_strategy:
+        options["chunking_strategy"] = chunking_strategy
     if archive_max_files > 0:
         options["archive_max_files"] = archive_max_files
     if archive_inline_bytes > 0:

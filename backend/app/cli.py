@@ -1115,6 +1115,11 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--redo-inline-math", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--text-data-max-rows", type=int, help="Max CSV/TSV rows to inline in Markdown")
+    parser.add_argument(
+        "--chunking-strategy",
+        choices=["markdown_heading_blocks_v2", "unstructured_by_title"],
+        help="Chunking strategy for derived chunks output",
+    )
     parser.add_argument("--archive-max-files", type=int, help="Max archive entries to inspect")
     parser.add_argument("--archive-inline-bytes", type=int, help="Max bytes to inline per archive text child")
     parser.add_argument("--archive-max-child-bytes", type=int, help="Max bytes per converted archive child")
@@ -1271,6 +1276,7 @@ def _parse_key_value_map(items: list[str] | None) -> dict[str, str]:
 def _direct_extra_options(args: argparse.Namespace) -> dict[str, Any]:
     option_names = (
         "text_data_max_rows",
+        "chunking_strategy",
         "archive_max_files",
         "archive_inline_bytes",
         "archive_max_child_bytes",

@@ -32,6 +32,7 @@ AudioOutputMode = Literal[
 OcrEngine = Literal["surya", "hybrid_ocr"]
 HybridOcrProfile = Literal["balanced", "max_accuracy", "low_vram"]
 SmartRouterLevel = Literal["disabled", "smart", "beeg_brain"]
+ChunkingStrategy = Literal["markdown_heading_blocks_v2", "unstructured_by_title"]
 
 AUDIO_OUTPUT_MODES: tuple[AudioOutputMode, ...] = (
     "transcript",
@@ -149,6 +150,7 @@ class ConversionOptionsModel(ContractModel):
     # Keep them first-class here so JSON agent callers get validation and schema
     # docs instead of needing to tunnel stable options through extra_options.
     text_data_max_rows: int | None = Field(default=None, ge=1)
+    chunking_strategy: ChunkingStrategy | None = None
     archive_recursive: bool | None = None
     archive_max_files: int | None = Field(default=None, ge=1)
     archive_inline_bytes: int | None = Field(default=None, ge=1)
@@ -343,6 +345,7 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="vlm_batch_size", cli_flag="--vlm-batch-size", type="integer", category="images", description="Maximum images per batched VLM call."),
     OptionMetadataModel(name="max_batch_retries", cli_flag="--max-batch-retries", type="integer", category="images", description="Extra batch attempts used to recover missing or malformed VLM responses."),
     OptionMetadataModel(name="text_data_max_rows", cli_flag="--text-data-max-rows", type="integer", category="text_data", description="Maximum rows rendered for text/data table inputs."),
+    OptionMetadataModel(name="chunking_strategy", cli_flag="--chunking-strategy", type="enum", category="chunks", description="Chunking strategy for derived Markdown chunks: markdown_heading_blocks_v2 or unstructured_by_title."),
     OptionMetadataModel(name="archive_recursive", cli_flag="--archive-recursive", type="boolean", category="archives", description="Recursively convert deterministic safe children inside archives."),
     OptionMetadataModel(name="archive_max_files", cli_flag="--archive-max-files", type="integer", category="archives", description="Maximum files scanned inside an archive."),
     OptionMetadataModel(name="archive_inline_bytes", cli_flag="--archive-inline-bytes", type="integer", category="archives", description="Maximum small child bytes to inline in archive output."),
