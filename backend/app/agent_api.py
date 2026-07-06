@@ -691,8 +691,10 @@ def read_semantic_chunk(path: str, *, chunk_index: int = 0) -> dict[str, Any]:
             {"id": "chunk_0000_...", "index": 0, "text": "...",
              "heading_path": ["Title"], "start_line": 1, "end_line": 3,
              "char_count": 42, "token_estimate": 11,
-             "content_hash": "sha256:...", "source_refs": [...],
-             "previous_id": null, "next_id": "chunk_0001_..."},
+            "contextual_text": "Title\n\n...",
+            "content_hash": "sha256:...", "content_types": ["text"],
+            "char_start": 0, "char_end": 120, "source_refs": [...],
+            "previous_id": null, "next_id": "chunk_0001_..."},
              ...
           ]
         }

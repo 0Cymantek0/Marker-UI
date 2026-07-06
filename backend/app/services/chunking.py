@@ -22,6 +22,7 @@ class MarkdownBlock:
     end_line: int
     heading_path: tuple[str, ...] = field(default_factory=tuple)
     kind: str = "text"
+    content_types: tuple[str, ...] = field(default_factory=tuple)
 
 
 def build_chunks_envelope(
@@ -79,6 +80,7 @@ def chunk_markdown(
     overlap_chars = max(0, min(int(overlap_chars or 0), max_chars // 3))
     chunks: list[dict[str, Any]] = []
     source_sha256 = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+    line_offsets = _line_offsets(markdown)
     chunk_blocks = _pack_chunk_blocks(
         [
             MarkdownBlock(
@@ -87,6 +89,7 @@ def chunk_markdown(
                 end_line=block.end_line,
                 heading_path=block.heading_path,
                 kind=block.kind,
+                content_types=block.content_types or (block.kind,),
             )
             for block in _markdown_blocks(markdown)
             for piece in _split_block(block, max_chars=max_chars, overlap_chars=overlap_chars)
@@ -99,16 +102,32 @@ def chunk_markdown(
         if not text:
             continue
         index = len(chunks)
+        chunk_id = _chunk_id(source_name, index, text)
+        token_estimate = max(1, (len(text) + 3) // 4)
+        char_start, char_end = _line_char_span(
+            line_offsets,
+            start_line=block.start_line,
+            end_line=block.end_line,
+        )
+        heading_path = list(block.heading_path)
+        content_types = list(block.content_types or (block.kind,))
         chunks.append(
             {
-                "id": _chunk_id(source_name, index, text),
+                "id": chunk_id,
+                "chunk_id": chunk_id,
                 "index": index,
                 "text": text,
-                "heading_path": list(block.heading_path),
+                "contextual_text": _contextual_text(text, heading_path),
+                "heading_path": heading_path,
+                "section_path": heading_path,
                 "start_line": block.start_line,
                 "end_line": block.end_line,
+                "char_start": char_start,
+                "char_end": char_end,
                 "char_count": len(text),
-                "token_estimate": max(1, (len(text) + 3) // 4),
+                "token_estimate": token_estimate,
+                "token_count": token_estimate,
+                "content_types": content_types,
                 "content_hash": f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}",
                 "source_refs": [
                     {
@@ -116,7 +135,10 @@ def chunk_markdown(
                         "source": source_name,
                         "start_line": block.start_line,
                         "end_line": block.end_line,
-                        "heading_path": list(block.heading_path),
+                        "char_start": char_start,
+                        "char_end": char_end,
+                        "heading_path": heading_path,
+                        "content_types": content_types,
                     }
                 ],
             }
@@ -155,6 +177,7 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
                     end_line=end_line,
                     heading_path=tuple(title for _level, title in heading_stack),
                     kind=kind,
+                    content_types=(kind,),
                 )
             )
         buffer = []
@@ -239,6 +262,7 @@ def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[M
                     end_line=current[-1].end_line,
                     heading_path=_common_heading_path(current),
                     kind=current[0].kind if len(current) == 1 else "mixed",
+                    content_types=_content_types(current),
                 )
             )
         current = []
@@ -260,6 +284,7 @@ def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[M
                             end_line=block.end_line,
                             heading_path=block.heading_path,
                             kind=block.kind,
+                            content_types=block.content_types,
                         )
                     )
                     if tail_text.strip():
@@ -270,6 +295,7 @@ def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[M
                                 end_line=block.end_line,
                                 heading_path=block.heading_path,
                                 kind=block.kind,
+                                content_types=block.content_types,
                             ),
                         )
                     flush()
@@ -304,6 +330,15 @@ def _common_heading_path(blocks: list[MarkdownBlock]) -> tuple[str, ...]:
         if not common:
             break
     return tuple(common)
+
+
+def _content_types(blocks: list[MarkdownBlock]) -> tuple[str, ...]:
+    values: list[str] = []
+    for block in blocks:
+        for kind in block.content_types or (block.kind,):
+            if kind not in values:
+                values.append(kind)
+    return tuple(values)
 
 
 def _split_block(block: MarkdownBlock, *, max_chars: int, overlap_chars: int) -> list[str]:
@@ -448,6 +483,44 @@ def _split_text_at_limit(text: str, *, max_chars: int) -> tuple[str, str]:
     head = text[:split_at].rstrip()
     tail = text[split_at:].lstrip()
     return head, tail
+
+
+def _line_offsets(markdown: str) -> list[tuple[int, int]]:
+    offsets: list[tuple[int, int]] = []
+    cursor = 0
+    lines = markdown.splitlines(keepends=True)
+    if not lines and markdown == "":
+        return [(0, 0)]
+    for line in lines:
+        start = cursor
+        cursor += len(line)
+        end = cursor
+        while end > start and line[end - start - 1] in "\r\n":
+            end -= 1
+        offsets.append((start, end))
+    if markdown and markdown[-1] in "\r\n":
+        offsets.append((cursor, cursor))
+    return offsets
+
+
+def _line_char_span(
+    line_offsets: list[tuple[int, int]],
+    *,
+    start_line: int,
+    end_line: int,
+) -> tuple[int, int]:
+    if not line_offsets:
+        return 0, 0
+    start_index = min(max(start_line - 1, 0), len(line_offsets) - 1)
+    end_index = min(max(end_line - 1, start_index), len(line_offsets) - 1)
+    return line_offsets[start_index][0], line_offsets[end_index][1]
+
+
+def _contextual_text(text: str, heading_path: list[str]) -> str:
+    if not heading_path:
+        return text
+    prefix = " > ".join(heading_path)
+    return f"{prefix}\n\n{text}"
 
 
 def _chunk_id(source_name: str, index: int, text: str) -> str:

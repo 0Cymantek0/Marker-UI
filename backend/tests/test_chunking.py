@@ -21,13 +21,21 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
     assert payload["source"]["sha256"]
     assert payload["source"]["char_count"] == len(markdown)
     assert payload["chunks"][-1]["content_hash"].startswith("sha256:")
+    assert payload["chunks"][-1]["chunk_id"] == payload["chunks"][-1]["id"]
+    assert payload["chunks"][-1]["section_path"] == ["Title", "Details"]
+    assert payload["chunks"][-1]["contextual_text"].startswith("Title > Details")
+    assert payload["chunks"][-1]["token_count"] == payload["chunks"][-1]["token_estimate"]
+    assert payload["chunks"][-1]["char_start"] < payload["chunks"][-1]["char_end"]
     assert payload["chunks"][-1]["source_refs"] == [
         {
             "type": "markdown_line_span",
             "source": "doc.md",
             "start_line": payload["chunks"][-1]["start_line"],
             "end_line": payload["chunks"][-1]["end_line"],
+            "char_start": payload["chunks"][-1]["char_start"],
+            "char_end": payload["chunks"][-1]["char_end"],
             "heading_path": ["Title", "Details"],
+            "content_types": payload["chunks"][-1]["content_types"],
         }
     ]
 
@@ -137,7 +145,29 @@ def test_chunk_markdown_splits_large_tables_on_rows_and_repeats_header() -> None
     assert len(table_chunks) > 1
     assert all("| Name | Score |\n| --- | --- |" in chunk["text"] for chunk in table_chunks)
     assert all(chunk["char_count"] <= 220 for chunk in table_chunks)
+    assert all("table" in chunk["content_types"] for chunk in table_chunks)
     assert not any("Person 1 | Score 1 || Person" in chunk["text"] for chunk in table_chunks)
+
+
+def test_chunk_markdown_emits_rag_ready_context_and_char_spans() -> None:
+    markdown = (
+        "# Handbook\n\n"
+        "Intro.\n\n"
+        "## Install\n\n"
+        "Run setup.\n\n"
+        "```bash\nmarker --help\n```\n"
+    )
+    payload = chunk_markdown(markdown, source_name="handbook.md", max_chars=260)
+
+    chunks = payload["chunks"]
+
+    assert all(chunk["chunk_id"] == chunk["id"] for chunk in chunks)
+    assert all(chunk["char_start"] <= chunk["char_end"] <= len(markdown) for chunk in chunks)
+    assert any(chunk["section_path"] == ["Handbook", "Install"] for chunk in chunks)
+    code_chunk = next(chunk for chunk in chunks if "marker --help" in chunk["text"])
+    assert "fenced_code" in code_chunk["content_types"]
+    assert code_chunk["contextual_text"].startswith("Handbook > Install")
+    assert code_chunk["source_refs"][0]["char_start"] == code_chunk["char_start"]
 
 
 def test_chunk_markdown_respects_size_budget_when_table_header_is_oversized() -> None:
