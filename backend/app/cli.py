@@ -412,18 +412,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--auth-token",
         help="Bearer token for streamable HTTP; defaults to MARKER_MCP_AUTH_TOKEN",
     )
+    mcp.add_argument("--tool-profile", choices=["minimal", "full", "admin"], help="MCP tool profile")
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=False, parser_class=MarkerArgumentParser)
     mcp_start = mcp_sub.add_parser("start", help="Start MCP server")
     mcp_start.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
     mcp_start.add_argument("--host", default="127.0.0.1")
     mcp_start.add_argument("--port", type=int, default=8000)
     mcp_start.add_argument("--auth-token", help="Bearer token for streamable HTTP")
+    mcp_start.add_argument("--tool-profile", choices=["minimal", "full", "admin"], help="MCP tool profile")
     mcp_init = mcp_sub.add_parser("init-config", help="Generate an MCP client configuration snippet")
     mcp_init.add_argument("--client", choices=["codex", "claude", "gemini", "opencode", "antigravity"], required=True)
     mcp_init.add_argument("--output", help="Write config JSON to file instead of stdout")
     mcp_init.add_argument("--dry-run", action="store_true", help="Print without writing output file")
     mcp_init.add_argument("--json", action="store_true", default=True, help="Print JSON")
     mcp_inspect = mcp_sub.add_parser("inspect", help="Inspect MCP tool names without starting transport")
+    mcp_inspect.add_argument("--tool-profile", choices=["minimal", "full", "admin"], help="MCP tool profile")
     mcp_inspect.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     mcp_self = mcp_sub.add_parser("self-test", help="Run MCP readiness checks")
     mcp_self.add_argument("--no-conversion", action="store_true", help="Skip real TSV conversion smoke test")
@@ -771,7 +774,13 @@ def _handle_mcp(args: argparse.Namespace) -> int:
     if command == "start":
         from app.mcp_server import run
 
-        run(transport=args.transport, host=args.host, port=args.port, auth_token=args.auth_token)
+        run(
+            transport=args.transport,
+            host=args.host,
+            port=args.port,
+            auth_token=args.auth_token,
+            tool_profile=args.tool_profile,
+        )
         return 0
     if command == "init-config":
         config = _mcp_client_config(args.client)
@@ -783,8 +792,16 @@ def _handle_mcp(args: argparse.Namespace) -> int:
             config = {**config, "written_to": str(Path(args.output).expanduser().resolve())}
         return _print_result(config, True)
     if command == "inspect":
+        from app import mcp_server
+
+        profile = mcp_server.configure_mcp_tool_profile(args.tool_profile)
         result = capabilities()
-        result["mcp"] = {"transport": "stdio", "command": ["python", "-m", "app.cli", "mcp", "start"]}
+        result["tools"] = list(mcp_server.MCP_ACTIVE_TOOL_NAMES)
+        result["mcp"] = {
+            "transport": "stdio",
+            "tool_profile": profile,
+            "command": ["python", "-m", "app.cli", "mcp", "start", "--tool-profile", profile],
+        }
         return _print_result(result, args.json)
     if command == "self-test":
         from app.mcp_server import marker_self_test

@@ -9,7 +9,12 @@ import pytest
 async def test_mcp_v1_split_tool_annotations():
     import app.mcp_server as mcp_server
 
-    tools = {tool.name: tool for tool in await mcp_server.mcp.list_tools()}
+    previous = mcp_server.MCP_ACTIVE_TOOL_PROFILE
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = {tool.name: tool for tool in await mcp_server.mcp.list_tools()}
+    finally:
+        mcp_server.configure_mcp_tool_profile(previous)
 
     for name in ("marker_plan_url", "marker_convert_url", "marker_submit_url_job"):
         assert tools[name].annotations.openWorldHint is True
@@ -27,7 +32,12 @@ async def test_mcp_v1_split_tool_annotations():
 async def test_mcp_self_test_validates_tools_resources_and_prompts():
     import app.mcp_server as mcp_server
 
-    payload = await mcp_server.marker_self_test(include_conversion=False)
+    previous = mcp_server.MCP_ACTIVE_TOOL_PROFILE
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        payload = await mcp_server.marker_self_test(include_conversion=False)
+    finally:
+        mcp_server.configure_mcp_tool_profile(previous)
 
     assert payload["tools_ok"] is True
     assert payload["resources_ok"] is True

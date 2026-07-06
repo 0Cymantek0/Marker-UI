@@ -281,6 +281,27 @@ MCP_V1_TOOL_NAMES = [
     "marker_delete_setting",
 ]
 
+MCP_TOOL_PROFILES = ("minimal", "full", "admin")
+MCP_MINIMAL_TOOL_NAMES = [
+    "marker_list_capabilities",
+    "marker_plan_conversion",
+    "marker_convert_file",
+    "marker_submit_job",
+    "marker_get_job_status",
+    "marker_cancel_job",
+    "marker_read_output",
+    "marker_get_output_manifest",
+]
+MCP_FULL_TOOL_NAMES = [
+    name
+    for name in MCP_V1_TOOL_NAMES
+    if name not in {"marker_delete_job", "marker_set_setting", "marker_delete_setting"}
+]
+MCP_ADMIN_TOOL_NAMES = list(MCP_V1_TOOL_NAMES)
+MCP_ACTIVE_TOOL_PROFILE = "minimal"
+MCP_ACTIVE_TOOL_NAMES = list(MCP_MINIMAL_TOOL_NAMES)
+_ALL_MCP_TOOLS: dict[str, Any] | None = None
+
 MCP_RESOURCE_URIS = [
     "marker://capabilities",
     "marker://health",
@@ -309,7 +330,7 @@ MCP_PROMPT_NAMES = [
 
 register_mcp_resources(
     mcp,
-    tool_names=MCP_V1_TOOL_NAMES,
+    tool_names=MCP_ACTIVE_TOOL_NAMES,
     resource_uris=MCP_RESOURCE_URIS,
     prompt_names=MCP_PROMPT_NAMES,
 )
@@ -330,7 +351,7 @@ async def marker_list_capabilities() -> CapabilitiesOutput:
     """Return supported extensions, engines, output modes, and tool names."""
 
     data = capabilities()
-    data["tools"] = MCP_V1_TOOL_NAMES
+    data["tools"] = list(MCP_ACTIVE_TOOL_NAMES)
     data["resources"] = MCP_RESOURCE_URIS
     data["prompts"] = MCP_PROMPT_NAMES
     return data
@@ -1194,9 +1215,9 @@ async def marker_self_test(
     resources = await mcp.list_resources()
     templates = await mcp.list_resource_templates()
     prompts = await mcp.list_prompts()
-    data["expected_tools"] = MCP_V1_TOOL_NAMES
+    data["expected_tools"] = list(MCP_ACTIVE_TOOL_NAMES)
     data["registered_tools"] = sorted(tool.name for tool in registered)
-    data["tools_ok"] = sorted(MCP_V1_TOOL_NAMES) == data["registered_tools"]
+    data["tools_ok"] = sorted(MCP_ACTIVE_TOOL_NAMES) == data["registered_tools"]
     data["expected_resources"] = MCP_RESOURCE_URIS
     data["registered_resources"] = sorted(
         [str(resource.uri) for resource in resources]
@@ -1230,13 +1251,53 @@ async def marker_self_test(
     return data
 
 
+def tool_names_for_profile(profile: str | None = None) -> list[str]:
+    normalized = (profile or os.getenv("MARKER_MCP_TOOL_PROFILE") or "minimal").strip().lower()
+    if normalized not in MCP_TOOL_PROFILES:
+        raise ValueError(
+            f"Unknown MCP tool profile '{normalized}'. Expected one of: {', '.join(MCP_TOOL_PROFILES)}"
+        )
+    if normalized == "minimal":
+        return list(MCP_MINIMAL_TOOL_NAMES)
+    if normalized == "full":
+        return list(MCP_FULL_TOOL_NAMES)
+    return list(MCP_ADMIN_TOOL_NAMES)
+
+
+def configure_mcp_tool_profile(profile: str | None = None) -> str:
+    """Apply MCP tool profile to the live FastMCP tool registry."""
+
+    global MCP_ACTIVE_TOOL_PROFILE, _ALL_MCP_TOOLS
+    normalized = (profile or os.getenv("MARKER_MCP_TOOL_PROFILE") or "minimal").strip().lower()
+    names = tool_names_for_profile(normalized)
+    manager = getattr(mcp, "_tool_manager", None)
+    tools = getattr(manager, "_tools", None)
+    if not isinstance(tools, dict):  # pragma: no cover - depends on FastMCP internals
+        raise RuntimeError("FastMCP tool manager does not expose a mutable tool registry")
+    if _ALL_MCP_TOOLS is None:
+        _ALL_MCP_TOOLS = dict(tools)
+    missing = [name for name in names if name not in _ALL_MCP_TOOLS]
+    if missing:
+        raise RuntimeError(f"MCP tool profile '{normalized}' references missing tools: {missing}")
+    tools.clear()
+    tools.update({name: _ALL_MCP_TOOLS[name] for name in names})
+    MCP_ACTIVE_TOOL_NAMES[:] = names
+    MCP_ACTIVE_TOOL_PROFILE = normalized
+    return normalized
+
+
+configure_mcp_tool_profile()
+
+
 def run(
     *,
     transport: str = "stdio",
     host: str = "127.0.0.1",
     port: int = 8000,
     auth_token: str | None = None,
+    tool_profile: str | None = None,
 ) -> None:
+    configure_mcp_tool_profile(tool_profile)
     if transport == "streamable-http":
         token = auth_token or os.getenv("MARKER_MCP_AUTH_TOKEN", "").strip()
         if not _is_loopback_host(host) and not token:

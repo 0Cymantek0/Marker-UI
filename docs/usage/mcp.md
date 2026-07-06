@@ -10,20 +10,20 @@ by the CLI.
 Local stdio:
 
 ```powershell
-python -m app.cli mcp
+python -m app.cli mcp start --tool-profile minimal
 ```
 
 Loopback Streamable HTTP:
 
 ```powershell
-python -m app.cli mcp --transport streamable-http --host 127.0.0.1 --port 8000
+python -m app.cli mcp start --transport streamable-http --host 127.0.0.1 --port 8000 --tool-profile minimal
 ```
 
 Non-loopback Streamable HTTP requires a bearer token:
 
 ```powershell
 $env:MARKER_MCP_AUTH_TOKEN="change-this-token"
-python -m app.cli mcp --transport streamable-http --host 0.0.0.0 --port 8000
+python -m app.cli mcp start --transport streamable-http --host 0.0.0.0 --port 8000 --tool-profile minimal
 ```
 
 HTTP clients must send:
@@ -42,7 +42,7 @@ Codex `.codex/config.toml` using source checkout:
 ```toml
 [mcp_servers.marker]
 command = "python"
-args = ["-m", "app.cli", "mcp"]
+args = ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]
 cwd = "C:\\path\\to\\marker\\backend"
 startup_timeout_sec = 20
 tool_timeout_sec = 600
@@ -54,7 +54,7 @@ Codex with installed package:
 ```toml
 [mcp_servers.marker]
 command = "marker"
-args = ["mcp"]
+args = ["mcp", "start", "--tool-profile", "minimal"]
 startup_timeout_sec = 20
 tool_timeout_sec = 600
 enabled = true
@@ -63,7 +63,7 @@ enabled = true
 Claude Code:
 
 ```powershell
-claude mcp add --transport stdio marker -- python -m app.cli mcp
+claude mcp add --transport stdio marker -- python -m app.cli mcp start --tool-profile minimal
 ```
 
 Run that command from `C:\path\to\marker\backend`, or put equivalent command and
@@ -76,7 +76,7 @@ Gemini CLI `settings.json`:
   "mcpServers": {
     "marker": {
       "command": "python",
-      "args": ["-m", "app.cli", "mcp"],
+      "args": ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"],
       "cwd": "C:\\path\\to\\marker\\backend",
       "timeout": 600000,
       "trust": false
@@ -93,7 +93,7 @@ OpenCode `opencode.json`:
   "mcp": {
     "marker": {
       "type": "local",
-      "command": ["python", "-m", "app.cli", "mcp"],
+      "command": ["python", "-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"],
       "cwd": "C:\\path\\to\\marker\\backend",
       "enabled": true
     }
@@ -108,12 +108,32 @@ Antigravity MCP config:
   "mcpServers": {
     "marker": {
       "command": "python",
-      "args": ["-m", "app.cli", "mcp"],
+      "args": ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"],
       "cwd": "C:\\path\\to\\marker\\backend"
     }
   }
 }
 ```
+
+## Tool Profiles
+
+Default profile is `minimal`, also available through
+`MARKER_MCP_TOOL_PROFILE=minimal`. It exposes the small safe surface needed by
+most coding agents:
+
+- `marker_list_capabilities`
+- `marker_plan_conversion`
+- `marker_convert_file`
+- `marker_submit_job`
+- `marker_get_job_status`
+- `marker_cancel_job`
+- `marker_read_output`
+- `marker_get_output_manifest`
+
+Use `--tool-profile full` for legacy/source-specific convenience tools such as
+`marker_convert_url` and `marker_submit_local_job`. Use `--tool-profile admin`
+only when the agent needs destructive/admin tools such as `marker_delete_job`,
+`marker_set_setting`, or `marker_delete_setting`.
 
 ## Tools
 

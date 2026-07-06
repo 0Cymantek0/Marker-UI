@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 import tomllib
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 import pytest
@@ -25,6 +25,18 @@ from app.services.marker_service import MarkerService
 from app.services.task_manager import TaskManager
 from app.utils.secrets import decrypt_value, encrypt_value
 import app.services.task_manager as task_manager_module
+
+
+@contextmanager
+def mcp_profile(profile: str):
+    import app.mcp_server as mcp_server
+
+    previous = mcp_server.MCP_ACTIVE_TOOL_PROFILE
+    mcp_server.configure_mcp_tool_profile(profile)
+    try:
+        yield mcp_server
+    finally:
+        mcp_server.configure_mcp_tool_profile(previous)
 
 
 @pytest.mark.asyncio
@@ -424,7 +436,11 @@ async def test_mcp_delete_job_output_schema_is_files_removed_list(
     )
     await db_session.commit()
 
-    tools = await mcp_server.mcp.list_tools()
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
     delete_tool = next(tool for tool in tools if tool.name == "marker_delete_job")
     files_removed_schema = delete_tool.outputSchema["properties"]["files_removed"]
     assert files_removed_schema["type"] == "array"
@@ -631,11 +647,100 @@ def test_mcp_streamable_http_configures_bearer_auth_for_non_loopback(monkeypatch
     assert mcp_server.mcp.settings.port == 8765
     assert mcp_server.mcp.settings.auth is not None
     assert mcp_server.mcp._token_verifier is not None
+
+
+@pytest.mark.asyncio
+async def test_mcp_default_tool_profile_is_minimal():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("minimal")
+    tools = await mcp_server.mcp.list_tools()
+    names = [tool.name for tool in tools]
+    caps = await mcp_server.marker_list_capabilities()
+
+    assert len(names) <= 10
+    assert names == mcp_server.MCP_MINIMAL_TOOL_NAMES
+    assert caps["tools"] == names
+    assert "marker_convert_file" in names
+    assert "marker_delete_job" not in names
+    assert "marker_set_setting" not in names
+    assert "marker_delete_setting" not in names
+
+
+@pytest.mark.asyncio
+async def test_mcp_full_and_admin_profiles_gate_destructive_tools():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        full_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_convert_url" in full_names
+        assert "marker_delete_job" not in full_names
+        assert "marker_set_setting" not in full_names
+        assert "marker_delete_setting" not in full_names
+
+        mcp_server.configure_mcp_tool_profile("admin")
+        admin_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_delete_job" in admin_names
+        assert "marker_set_setting" in admin_names
+        assert "marker_delete_setting" in admin_names
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_profile_env_fallback(monkeypatch: pytest.MonkeyPatch):
+    import app.mcp_server as mcp_server
+
+    monkeypatch.setenv("MARKER_MCP_TOOL_PROFILE", "full")
+    mcp_server.configure_mcp_tool_profile(None)
+    try:
+        names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_convert_url" in names
+        assert "marker_delete_job" not in names
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+
+def test_mcp_inspect_honors_tool_profile():
+    project_root = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(project_root / "backend")
+    env["MARKER_PRELOAD_MODELS"] = "false"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "mcp",
+            "inspect",
+            "--tool-profile",
+            "admin",
+            "--json",
+        ],
+        cwd=project_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    data = json.loads(completed.stdout)
+    assert data["mcp"]["tool_profile"] == "admin"
+    assert "marker_delete_job" in data["tools"]
+
+
 @pytest.mark.asyncio
 async def test_mcp_tools_have_complete_input_metadata_and_output_schemas():
     import app.mcp_server as mcp_server
 
-    tools = await mcp_server.mcp.list_tools()
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
     tools_by_name = {tool.name: tool for tool in tools}
     chunk_reader = tools_by_name["marker_read_output_chunk"]
     assert "offset" in (chunk_reader.description or "").lower()
@@ -665,7 +770,11 @@ async def test_mcp_tools_have_complete_input_metadata_and_output_schemas():
 async def test_mcp_convert_schema_has_rich_descriptions_and_nullable_booleans():
     import app.mcp_server as mcp_server
 
-    tools = await mcp_server.mcp.list_tools()
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
     schema = next(tool for tool in tools if tool.name == "marker_convert_file").inputSchema
     properties = schema["properties"]
 
@@ -881,7 +990,7 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
 
     params = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "app.cli", "mcp"],
+        args=["-m", "app.cli", "mcp", "start", "--tool-profile", "admin"],
         cwd=backend_dir,
         env=env,
     )
