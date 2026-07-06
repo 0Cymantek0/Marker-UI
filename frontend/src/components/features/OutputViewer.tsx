@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
-import { Download, Copy, Check, FileText, Code, Braces, Eye, FileSpreadsheet, Loader2, Mic, AlertTriangle } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { Download, Copy, Check, FileText, Code, Braces, Eye, FileSpreadsheet, Loader2, Mic, AlertTriangle, type LucideIcon } from 'lucide-react'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -8,8 +8,9 @@ import { ImageUnderstandingBadge } from '@/components/features/image-understandi
 import type { ImageUnderstandingMeta } from '@/lib/api'
 
 type OutputTab = 'markdown' | 'html' | 'json' | 'chunks' | 'raw' | 'audio'
+type JsonRecord = Record<string, unknown>
 
-const ALL_TABS: { value: OutputTab; label: string; icon: any; formatKey?: string }[] = [
+const ALL_TABS: { value: OutputTab; label: string; icon: LucideIcon; formatKey?: string }[] = [
   { value: 'markdown', label: 'Markdown', icon: FileText, formatKey: 'markdown' },
   { value: 'html', label: 'HTML', icon: Code, formatKey: 'html' },
   { value: 'json', label: 'JSON', icon: Braces, formatKey: 'json' },
@@ -25,7 +26,7 @@ interface OutputViewerProps {
   onRegenerate?: (format: string) => Promise<void>
   onDownload: (format: string) => void
   imageUnderstanding?: ImageUnderstandingMeta[] | null
-  audioMetadata?: Record<string, any> | null
+  audioMetadata?: JsonRecord | null
   filename?: string
 }
 
@@ -51,6 +52,51 @@ export function OutputViewer({
     return m
   }, [imageUnderstanding])
   const metaTotal = metaByFilename.size
+
+  const markdownComponents = useMemo<Components>(() => ({
+    pre: ({ children }) => (
+      <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed bg-transparent p-0 select-text">
+        {children}
+      </pre>
+    ),
+    code: ({ className, children, ...props }) => (
+      <code className={cn('font-mono text-xs', className)} {...props}>
+        {children}
+      </code>
+    ),
+    img: ({ src, alt, ...props }) => {
+      const safeSrc = safeMarkdownImageSrc(src)
+      if (!safeSrc) {
+        const blockedSrc = String(src ?? '').trim()
+        return (
+          <span
+            role="note"
+            aria-label="External image blocked for privacy"
+            className="not-prose inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-sans text-amber-800 dark:text-amber-200"
+            title={blockedSrc}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">External image blocked</span>
+            {blockedSrc && <code className="max-w-[220px] truncate font-mono">{blockedSrc}</code>}
+          </span>
+        )
+      }
+      const imageFilename = safeSrc.split('/').pop() ?? ''
+      const entry = metaByFilename.get(imageFilename)
+      return (
+        <span className="relative inline-block align-middle my-1">
+          <img src={safeSrc} alt={alt} {...props} />
+          {entry && (
+            <ImageUnderstandingBadge
+              meta={entry.meta}
+              index={entry.index}
+              total={metaTotal}
+            />
+          )}
+        </span>
+      )
+    },
+  }), [metaByFilename, metaTotal])
 
   const isMultiSupported = useMemo(() => {
     if (!filename) return true
@@ -221,50 +267,7 @@ export function OutputViewer({
                 )}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
-                  components={{
-                    pre: ({ children }) => (
-                      <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed bg-transparent p-0 select-text">
-                        {children}
-                      </pre>
-                    ),
-                    code: ({ className, children, ...props }: any) => (
-                      <code className={cn('font-mono text-xs', className)} {...props}>
-                        {children}
-                      </code>
-                    ),
-                    img: ({ src, alt, ...props }: any) => {
-                      const safeSrc = safeMarkdownImageSrc(src)
-                      if (!safeSrc) {
-                        const blockedSrc = String(src ?? '').trim()
-                        return (
-                          <span
-                            role="note"
-                            aria-label="External image blocked for privacy"
-                            className="not-prose inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-sans text-amber-800 dark:text-amber-200"
-                            title={blockedSrc}
-                          >
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">External image blocked</span>
-                            {blockedSrc && <code className="max-w-[220px] truncate font-mono">{blockedSrc}</code>}
-                          </span>
-                        )
-                      }
-                      const filename = safeSrc.split('/').pop() ?? ''
-                      const entry = metaByFilename.get(filename)
-                      return (
-                        <span className="relative inline-block align-middle my-1">
-                          <img src={safeSrc} alt={alt} {...props} />
-                          {entry && (
-                            <ImageUnderstandingBadge
-                              meta={entry.meta}
-                              index={entry.index}
-                              total={metaTotal}
-                            />
-                          )}
-                        </span>
-                      )
-                    },
-                  }}
+                  components={markdownComponents}
                 >
                   {activeContent ?? ''}
                 </ReactMarkdown>
@@ -326,29 +329,39 @@ function safeMarkdownImageSrc(src: unknown): string | null {
   return raw
 }
 
-function AudioInspectionPanel({ audio }: { audio: Record<string, any> }) {
-  const transcript = audio.transcript ?? {}
-  const quality = audio.quality ?? transcript.risk_summary ?? {}
-  const segments = Array.isArray(transcript.segments) ? transcript.segments : []
-  const speakers = Array.isArray(audio.speakers?.timeline) ? audio.speakers.timeline : []
-  const vocabulary = audio.vocabulary ?? {}
+function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
+  const transcript = asRecord(audio.transcript)
+  const providerCapability = asRecord(audio.provider_capability)
+  const quality = asRecord(audio.quality ?? transcript.risk_summary)
+  const segments = asRecordArray(transcript.segments)
+  const speakersMeta = asRecord(audio.speakers)
+  const speakers = asRecordArray(speakersMeta.timeline)
+  const vocabulary = asRecord(audio.vocabulary)
+  const transcriptWarnings = stringList(transcript.warnings)
+  const lowConfidenceCount = numberValue(quality.low_confidence_count) ?? 0
+  const unknownConfidenceCount = numberValue(quality.unknown_confidence_count) ?? 0
+  const reviewRequired = quality.review_required === true
+  const requestedVocabularyCount = numberValue(vocabulary.requested_count) ?? 0
+  const detectedVocabularyCount = numberValue(vocabulary.detected_count) ?? 0
+  const detectedVocabulary = stringList(vocabulary.detected)
+  const missedVocabulary = stringList(vocabulary.likely_missed)
 
   return (
     <div className="space-y-4 font-sans text-xs">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <AudioMetric label="Provider" value={transcript.provider ?? audio.provider_capability?.provider_id ?? 'unknown'} />
-        <AudioMetric label="Model" value={transcript.model ?? 'unknown'} />
+        <AudioMetric label="Provider" value={displayValue(transcript.provider ?? providerCapability.provider_id)} />
+        <AudioMetric label="Model" value={displayValue(transcript.model)} />
         <AudioMetric label="Segments" value={String(segments.length)} />
-        <AudioMetric label="Review" value={quality.review_required ? 'required' : 'not required'} tone={quality.review_required ? 'warn' : 'ok'} />
+        <AudioMetric label="Review" value={reviewRequired ? 'required' : 'not required'} tone={reviewRequired ? 'warn' : 'ok'} />
       </div>
 
-      {(quality.low_confidence_count || quality.unknown_confidence_count || transcript.warnings?.length) && (
+      {(lowConfidenceCount > 0 || unknownConfidenceCount > 0 || transcriptWarnings.length > 0) && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-300">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
             <div className="font-bold">Audio review suggested</div>
             <div className="mt-0.5 text-[11px]">
-              Low confidence: {quality.low_confidence_count ?? 0}; unknown confidence: {quality.unknown_confidence_count ?? 0}
+              Low confidence: {lowConfidenceCount}; unknown confidence: {unknownConfidenceCount}
             </div>
           </div>
         </div>
@@ -358,26 +371,29 @@ function AudioInspectionPanel({ audio }: { audio: Record<string, any> }) {
         <section className="space-y-2">
           <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Speaker Timeline</h4>
           <div className="flex flex-wrap gap-2">
-            {speakers.map((speaker: any) => (
-              <span key={speaker.speaker} className="rounded-lg border border-border/40 bg-card/40 px-2.5 py-1.5">
-                <span className="font-semibold">{speaker.display_label ?? speaker.speaker}</span>
-                <span className="ml-2 text-muted-foreground">{speaker.segment_count} segments</span>
-              </span>
-            ))}
+            {speakers.map((speaker, index) => {
+              const speakerId = displayValue(speaker.speaker, `speaker_${index}`)
+              return (
+                <span key={`${speakerId}-${index}`} className="rounded-lg border border-border/40 bg-card/40 px-2.5 py-1.5">
+                  <span className="font-semibold">{displayValue(speaker.display_label, speakerId)}</span>
+                  <span className="ml-2 text-muted-foreground">{displayValue(speaker.segment_count, '0')} segments</span>
+                </span>
+              )
+            })}
           </div>
         </section>
       )}
 
-      {(vocabulary.requested_count || vocabulary.detected_count) && (
+      {(requestedVocabularyCount > 0 || detectedVocabularyCount > 0) && (
         <section className="space-y-2">
           <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Vocabulary</h4>
           <div className="rounded-lg border border-border/40 bg-card/30 p-3">
-            <div>Requested: {vocabulary.requested_count ?? 0}; detected: {vocabulary.detected_count ?? 0}</div>
-            {Array.isArray(vocabulary.detected) && vocabulary.detected.length > 0 && (
-              <div className="mt-1 text-emerald-700 dark:text-emerald-300">Hits: {vocabulary.detected.join(', ')}</div>
+            <div>Requested: {requestedVocabularyCount}; detected: {detectedVocabularyCount}</div>
+            {detectedVocabulary.length > 0 && (
+              <div className="mt-1 text-emerald-700 dark:text-emerald-300">Hits: {detectedVocabulary.join(', ')}</div>
             )}
-            {Array.isArray(vocabulary.likely_missed) && vocabulary.likely_missed.length > 0 && (
-              <div className="mt-1 text-muted-foreground">Likely missed: {vocabulary.likely_missed.join(', ')}</div>
+            {missedVocabulary.length > 0 && (
+              <div className="mt-1 text-muted-foreground">Likely missed: {missedVocabulary.join(', ')}</div>
             )}
           </div>
         </section>
@@ -388,30 +404,36 @@ function AudioInspectionPanel({ audio }: { audio: Record<string, any> }) {
         <div className="space-y-2">
           {segments.length === 0 ? (
             <div className="text-muted-foreground">No audio segments in metadata.</div>
-          ) : segments.map((segment: any) => (
-            <div
-              key={segment.segment_id}
-              className={cn(
-                'rounded-lg border p-3 bg-card/30',
-                confidenceTone(segment.confidence, segment.warnings) === 'low'
-                  ? 'border-red-500/35'
-                  : confidenceTone(segment.confidence, segment.warnings) === 'unknown'
-                    ? 'border-slate-400/35'
-                    : 'border-emerald-500/25'
-              )}
-            >
-              <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-                <code>{formatMs(segment.start_ms)}-{formatMs(segment.end_ms)}</code>
-                <span>{segment.speaker ?? 'speaker_0'}</span>
-                <span>{segment.segment_id}</span>
-                <span>confidence {segment.confidence == null ? 'unknown' : Number(segment.confidence).toFixed(2)}</span>
-                {Array.isArray(segment.warnings) && segment.warnings.length > 0 && (
-                  <span className="text-amber-600 dark:text-amber-300">{segment.warnings.join(', ')}</span>
+          ) : segments.map((segment, index) => {
+            const segmentWarnings = stringList(segment.warnings)
+            const confidence = numberValue(segment.confidence)
+            const tone = confidenceTone(confidence, segmentWarnings)
+            const segmentId = displayValue(segment.segment_id, `segment_${index + 1}`)
+            return (
+              <div
+                key={`${segmentId}-${index}`}
+                className={cn(
+                  'rounded-lg border p-3 bg-card/30',
+                  tone === 'low'
+                    ? 'border-red-500/35'
+                    : tone === 'unknown'
+                      ? 'border-slate-400/35'
+                      : 'border-emerald-500/25'
                 )}
+              >
+                <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                  <code>{formatMs(segment.start_ms)}-{formatMs(segment.end_ms)}</code>
+                  <span>{displayValue(segment.speaker, 'speaker_0')}</span>
+                  <span>{segmentId}</span>
+                  <span>confidence {confidence == null ? 'unknown' : confidence.toFixed(2)}</span>
+                  {segmentWarnings.length > 0 && (
+                    <span className="text-amber-600 dark:text-amber-300">{segmentWarnings.join(', ')}</span>
+                  )}
+                </div>
+                <div className="mt-2 leading-relaxed text-foreground">{displayValue(segment.text, '')}</div>
               </div>
-              <div className="mt-2 leading-relaxed text-foreground">{segment.text}</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
     </div>
@@ -427,6 +449,42 @@ function AudioMetric({ label, value, tone }: { label: string; value: string; ton
       </div>
     </div>
   )
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function asRecord(value: unknown): JsonRecord {
+  return isRecord(value) ? value : {}
+}
+
+function asRecordArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+      .filter((item) => ['string', 'number', 'boolean'].includes(typeof item))
+      .map(String)
+    : []
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function displayValue(value: unknown, fallback = 'unknown'): string {
+  if (typeof value === 'string' && value.trim()) return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'boolean') return String(value)
+  return fallback
 }
 
 function confidenceTone(confidence: unknown, warnings: unknown): 'ok' | 'low' | 'unknown' {

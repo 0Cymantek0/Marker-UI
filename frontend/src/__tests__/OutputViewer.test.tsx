@@ -287,4 +287,30 @@ describe('OutputViewer component', () => {
     expect(screen.getByText(/local_faster_whisper/i)).toBeInTheDocument()
     expect(screen.getByText(/Hits: Marker/i)).toBeInTheDocument()
   })
+
+  it('keeps the audio inspection tab usable when backend metadata is partial or malformed', () => {
+    render(
+      <OutputViewer
+        content="# Audio"
+        onDownload={vi.fn()}
+        filename="voice.wav"
+        audioMetadata={{
+          transcript: {
+            provider: 'local_faster_whisper',
+            segments: 'not-an-array',
+            warnings: ['low signal'],
+          },
+          quality: { review_required: true, low_confidence_count: '2' },
+          speakers: { timeline: 'not-an-array' },
+          vocabulary: { detected: ['Marker'], requested_count: '0' },
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /audio/i }))
+
+    expect(screen.getByText('Audio review suggested')).toBeInTheDocument()
+    expect(screen.getByText('No audio segments in metadata.')).toBeInTheDocument()
+    expect(screen.getByText('required')).toBeInTheDocument()
+  })
 })
