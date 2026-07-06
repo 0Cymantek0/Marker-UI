@@ -4,8 +4,9 @@ from app.services.chunking import SCHEMA_VERSION, chunk_markdown
 
 
 def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
+    markdown = "# Title\n\nIntro paragraph.\n\n## Details\n\nFirst fact. Second fact."
     payload = chunk_markdown(
-        "# Title\n\nIntro paragraph.\n\n## Details\n\nFirst fact. Second fact.",
+        markdown,
         source_name="doc.md",
         max_chars=200,
     )
@@ -17,6 +18,18 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
     assert payload["chunks"][-1]["heading_path"] == ["Title", "Details"]
     assert payload["chunks"][-1]["start_line"] >= 5
     assert payload["chunks"][-1]["token_estimate"] > 0
+    assert payload["source"]["sha256"]
+    assert payload["source"]["char_count"] == len(markdown)
+    assert payload["chunks"][-1]["content_hash"].startswith("sha256:")
+    assert payload["chunks"][-1]["source_refs"] == [
+        {
+            "type": "markdown_line_span",
+            "source": "doc.md",
+            "start_line": payload["chunks"][-1]["start_line"],
+            "end_line": payload["chunks"][-1]["end_line"],
+            "heading_path": ["Title", "Details"],
+        }
+    ]
 
 
 def test_chunk_markdown_packs_headings_with_section_text() -> None:

@@ -665,12 +665,13 @@ def read_semantic_chunk(path: str, *, chunk_index: int = 0) -> dict[str, Any]:
         {
           "schema_version": "marker.chunks.v1",
           "chunk_kind": "semantic_markdown",
-          "source": {"name": "..."},
+          "source": {"name": "...", "sha256": "...", "char_count": 1234},
           "chunk_count": N,
           "chunks": [
             {"id": "chunk_0000_...", "index": 0, "text": "...",
              "heading_path": ["Title"], "start_line": 1, "end_line": 3,
              "char_count": 42, "token_estimate": 11,
+             "content_hash": "sha256:...", "source_refs": [...],
              "previous_id": null, "next_id": "chunk_0001_..."},
              ...
           ]

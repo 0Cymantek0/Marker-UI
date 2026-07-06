@@ -30,7 +30,8 @@ Segments the document text into smaller, overlapping chunks.
 - Optimized for creating vector embeddings in Retrieval-Augmented Generation (RAG) applications.
 - Native Markdown-only converters use the deterministic `marker.chunks.v1`
   semantic chunker. It preserves heading paths, line spans, chunk IDs,
-  `previous_id` / `next_id` links, character counts, and token estimates.
+  `previous_id` / `next_id` links, character counts, token estimates,
+  source document SHA-256, per-chunk content hashes, and source references.
 - Large prose blocks split on sentence and character boundaries with bounded
   overlap. Markdown tables split by rows and repeat the header. Fenced code
   blocks stay fenced, even when split.

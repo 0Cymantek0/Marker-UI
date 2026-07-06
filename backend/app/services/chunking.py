@@ -44,6 +44,7 @@ def build_chunks_envelope(
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
         "source_format": "markdown",
+        "source_sha256": payload["source"]["sha256"],
         "chunk_count": payload["chunk_count"],
         "max_chars": max_chars,
         "overlap_chars": overlap_chars,
@@ -77,6 +78,7 @@ def chunk_markdown(
     max_chars = max(200, int(max_chars or DEFAULT_MAX_CHARS))
     overlap_chars = max(0, min(int(overlap_chars or 0), max_chars // 3))
     chunks: list[dict[str, Any]] = []
+    source_sha256 = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
     chunk_blocks = _pack_chunk_blocks(
         [
             MarkdownBlock(
@@ -107,6 +109,16 @@ def chunk_markdown(
                 "end_line": block.end_line,
                 "char_count": len(text),
                 "token_estimate": max(1, (len(text) + 3) // 4),
+                "content_hash": f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}",
+                "source_refs": [
+                    {
+                        "type": "markdown_line_span",
+                        "source": source_name,
+                        "start_line": block.start_line,
+                        "end_line": block.end_line,
+                        "heading_path": list(block.heading_path),
+                    }
+                ],
             }
         )
     for index, chunk in enumerate(chunks):
@@ -115,7 +127,11 @@ def chunk_markdown(
     return {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
-        "source": {"name": source_name},
+        "source": {
+            "name": source_name,
+            "sha256": source_sha256,
+            "char_count": len(markdown),
+        },
         "chunk_count": len(chunks),
         "chunks": chunks,
     }
