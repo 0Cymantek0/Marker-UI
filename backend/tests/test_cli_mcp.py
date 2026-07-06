@@ -129,6 +129,71 @@ def test_agent_build_conversion_config_preserves_advanced_audio_options():
     assert config["audio_compare_providers"] == ["local_faster_whisper"]
 
 
+def test_cli_common_options_include_advanced_audio_flags():
+    from app import cli as marker_cli
+
+    parser = marker_cli._build_parser()
+    args = parser.parse_args(
+        [
+            "convert",
+            "meeting.wav",
+            "--audio-provider",
+            "local_faster_whisper",
+            "--audio-language",
+            "en",
+            "--audio-vad-filter",
+            "--audio-diarization",
+            "--audio-min-speakers",
+            "2",
+            "--audio-max-speakers",
+            "4",
+            "--audio-speaker-alias",
+            "speaker_0=Alice",
+            "--audio-vocabulary-pack-id",
+            "team",
+            "--audio-allow-cloud-stt",
+            "--audio-text-enhancement",
+            "--audio-text-enhancement-strength",
+            "2",
+            "--audio-structural-enhancement",
+            "--audio-structural-enhancement-mode",
+            "meeting_notes",
+            "--audio-contradiction-detection",
+            "--audio-benchmark-compare",
+            "--audio-compare-provider",
+            "openai",
+        ]
+    )
+    config = agent_api.build_conversion_config(marker_cli._options_from_args(args))
+
+    assert config["audio_provider"] == "local_faster_whisper"
+    assert config["audio_language"] == "en"
+    assert config["audio_vad_filter"] is True
+    assert config["audio_diarization"] is True
+    assert config["audio_min_speakers"] == 2
+    assert config["audio_max_speakers"] == 4
+    assert config["audio_speaker_aliases"] == {"speaker_0": "Alice"}
+    assert config["audio_vocabulary_pack_ids"] == ["team"]
+    assert config["audio_allow_cloud_stt"] is True
+    assert config["audio_text_enhancement_enabled"] is True
+    assert config["audio_text_enhancement_strength"] == 2
+    assert config["audio_structural_enhancement_enabled"] is True
+    assert config["audio_structural_enhancement_mode"] == "meeting_notes"
+    assert config["audio_contradiction_detection"] is True
+    assert config["audio_benchmark_compare"] is True
+    assert config["audio_compare_providers"] == ["openai"]
+
+
+def test_cli_audio_speaker_alias_requires_key_value_pair():
+    from app import cli as marker_cli
+
+    parser = marker_cli._build_parser()
+    args = parser.parse_args(["convert", "meeting.wav", "--audio-speaker-alias", "speaker_0"])
+
+    with pytest.raises(UsageError, match="Expected KEY=VALUE"):
+        marker_cli._options_from_args(args)
+
+
 def test_agent_build_conversion_config_preserves_productivity_options():
     config = agent_api.build_conversion_config(
         AgentConversionOptions(

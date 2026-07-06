@@ -1053,6 +1053,41 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--audio-context")
     parser.add_argument("--audio-low-confidence-threshold", type=float)
     parser.add_argument("--audio-word-timestamps", action="store_true")
+    parser.add_argument("--audio-provider", default="local_faster_whisper")
+    parser.add_argument("--audio-language")
+    parser.add_argument("--audio-device")
+    parser.add_argument("--audio-compute-type")
+    parser.add_argument("--audio-beam-size", type=int)
+    parser.add_argument("--audio-vad-filter", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--audio-diarization", action="store_true")
+    parser.add_argument("--audio-min-speakers", type=int)
+    parser.add_argument("--audio-max-speakers", type=int)
+    parser.add_argument(
+        "--audio-speaker-alias",
+        action="append",
+        default=[],
+        metavar="LABEL=NAME",
+        help="Speaker alias mapping. Repeat for multiple speakers.",
+    )
+    parser.add_argument(
+        "--audio-vocabulary-pack-id",
+        action="append",
+        default=[],
+        help="Saved audio vocabulary pack id. Repeat for multiple packs.",
+    )
+    parser.add_argument("--audio-allow-cloud-stt", action="store_true")
+    parser.add_argument("--audio-text-enhancement", action="store_true")
+    parser.add_argument("--audio-text-enhancement-strength", type=int, default=0)
+    parser.add_argument("--audio-structural-enhancement", action="store_true")
+    parser.add_argument("--audio-structural-enhancement-mode", default="auto")
+    parser.add_argument("--audio-contradiction-detection", action="store_true")
+    parser.add_argument("--audio-benchmark-compare", action="store_true")
+    parser.add_argument(
+        "--audio-compare-provider",
+        action="append",
+        default=[],
+        help="Audio provider id to include in benchmark comparison. Repeat for multiple providers.",
+    )
     parser.add_argument("--disable-multiprocessing", action="store_true")
     parser.add_argument("--strip-existing-ocr", action="store_true")
     parser.add_argument("--redo-inline-math", action="store_true")
@@ -1139,6 +1174,25 @@ def _options_from_args(args: argparse.Namespace) -> AgentConversionOptions:
         audio_context=args.audio_context,
         audio_low_confidence_threshold=args.audio_low_confidence_threshold,
         audio_word_timestamps=args.audio_word_timestamps,
+        audio_provider=args.audio_provider,
+        audio_language=args.audio_language,
+        audio_device=args.audio_device,
+        audio_compute_type=args.audio_compute_type,
+        audio_beam_size=args.audio_beam_size,
+        audio_vad_filter=args.audio_vad_filter,
+        audio_diarization=args.audio_diarization,
+        audio_min_speakers=args.audio_min_speakers,
+        audio_max_speakers=args.audio_max_speakers,
+        audio_speaker_aliases=_parse_key_value_map(args.audio_speaker_alias),
+        audio_vocabulary_pack_ids=list(args.audio_vocabulary_pack_id or []),
+        audio_allow_cloud_stt=args.audio_allow_cloud_stt,
+        audio_text_enhancement_enabled=args.audio_text_enhancement,
+        audio_text_enhancement_strength=args.audio_text_enhancement_strength,
+        audio_structural_enhancement_enabled=args.audio_structural_enhancement,
+        audio_structural_enhancement_mode=args.audio_structural_enhancement_mode,
+        audio_contradiction_detection=args.audio_contradiction_detection,
+        audio_benchmark_compare=args.audio_benchmark_compare,
+        audio_compare_providers=list(args.audio_compare_provider or []),
         disable_multiprocessing=args.disable_multiprocessing,
         strip_existing_ocr=args.strip_existing_ocr,
         redo_inline_math=args.redo_inline_math,
@@ -1152,6 +1206,27 @@ def _options_from_args(args: argparse.Namespace) -> AgentConversionOptions:
             **parse_extra_options_json(args.options_json),
         },
     )
+
+
+def _parse_key_value_map(items: list[str] | None) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for item in items or []:
+        if "=" not in item:
+            raise UsageError(
+                "Expected KEY=VALUE",
+                details={"option": item},
+                hint="Pass speaker aliases as --audio-speaker-alias speaker_0=Alice.",
+            )
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or not value:
+            raise UsageError(
+                "Expected non-empty KEY=VALUE",
+                details={"option": item},
+            )
+        parsed[key] = value
+    return parsed
 
 
 def _direct_extra_options(args: argparse.Namespace) -> dict[str, Any]:
