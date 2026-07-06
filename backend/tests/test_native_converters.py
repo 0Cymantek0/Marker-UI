@@ -671,6 +671,64 @@ def test_archive_converter_lists_zip_without_extracting(tmp_path: Path) -> None:
     assert detail["skipped_children"] == 2
     assert any(item["path"] == "scan.pdf" and item["action"] == "skipped" for item in detail["manifest"])
     assert any(item["path"] == "../sneaky.txt" and item["reason"] == "suspicious archive path" for item in detail["manifest"])
+    assert detail["archive_budget"]["used_uncompressed_bytes"] > 0
+
+
+def test_archive_converter_enforces_global_budget_and_compression_ratio(tmp_path: Path) -> None:
+    path = tmp_path / "guarded.zip"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("first.txt", "alpha")
+        zf.writestr("second.txt", "beta")
+        zf.writestr("compressed.txt", "A" * 10_000)
+
+    result = ArchiveConverter().convert(
+        str(path),
+        {
+            "archive_max_total_uncompressed_bytes": 7,
+            "archive_max_compression_ratio": 2.0,
+        },
+    )
+
+    manifest = result.metadata["engine_detail"]["manifest"]
+    assert any(
+        item["path"] == "second.txt"
+        and item["reason"] == "archive total uncompressed byte budget reached"
+        for item in manifest
+    )
+    assert any(
+        item["path"] == "compressed.txt"
+        and item["reason"] == "archive child compression ratio exceeds limit"
+        for item in manifest
+    )
+
+
+def test_archive_converter_preserves_namespaced_child_assets(monkeypatch, tmp_path: Path) -> None:
+    from app.conversion.result import Asset, UniversalConversionResult
+    import app.conversion.converters.archive as archive_mod
+
+    path = tmp_path / "assets.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("reports/data.csv", "name,score\nAda,10\n")
+
+    class FakeChildConverter:
+        def convert(self, filepath, config, device=None):
+            return UniversalConversionResult(
+                text="# child",
+                extension="md",
+                images={"chart.png": b"png-bytes"},
+                assets=[Asset(name="export/rows.csv", media_type="text/csv", data=b"a,b\n1,2\n")],
+            )
+
+    monkeypatch.setattr(archive_mod, "_child_converter_for_engine", lambda engine: FakeChildConverter())
+
+    result = ArchiveConverter().convert(str(path), {})
+
+    asset_names = [asset.name for asset in result.assets]
+    assert "children/reports/data.csv/assets/export/rows.csv" in asset_names
+    assert "children/reports/data.csv/assets/chart.png" in asset_names
+    manifest_entry = result.metadata["engine_detail"]["manifest"][0]
+    assert manifest_entry["asset_count"] == 2
+    assert manifest_entry["assets"] == asset_names
 
 
 def test_archive_converter_builds_multi_audio_document(monkeypatch, tmp_path: Path) -> None:

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import mimetypes
 from pathlib import Path
+import re
 from typing import Any
 import tempfile
 import zipfile
@@ -17,12 +20,23 @@ from app.conversion.converters.text_data import TextDataConverter
 from app.conversion.converters.video import VideoConverter
 from app.conversion.converters.xml_rss import XmlRssConverter
 from app.conversion.registry import BaseConverter
-from app.conversion.result import UniversalConversionResult
+from app.conversion.result import Asset, UniversalConversionResult
 from app.conversion.router import ConversionRouter
 from app.conversion.stream_info import StreamInfo
 
 
 _TEXT_LIKE_EXTS = frozenset({".txt", ".md", ".rst", ".log", ".csv", ".tsv", ".json", ".jsonl", ".xml", ".html", ".htm"})
+
+
+@dataclass
+class ArchiveBudget:
+    max_files: int
+    max_total_uncompressed_bytes: int
+    max_child_bytes: int
+    max_depth: int
+    max_converted_children: int
+    max_compression_ratio: float
+    used_uncompressed_bytes: int = 0
 
 
 class ArchiveConverter(BaseConverter):
@@ -52,12 +66,21 @@ class ArchiveConverter(BaseConverter):
         max_child_bytes = int(config.get("archive_max_child_bytes", 2 * 1024 * 1024))
         max_depth = int(config.get("archive_max_depth", 2))
         max_converted_children = int(config.get("archive_max_converted_children", 25))
+        budget = ArchiveBudget(
+            max_files=max_files,
+            max_total_uncompressed_bytes=int(config.get("archive_max_total_uncompressed_bytes", 20 * 1024 * 1024)),
+            max_child_bytes=max_child_bytes,
+            max_depth=max_depth,
+            max_converted_children=max_converted_children,
+            max_compression_ratio=float(config.get("archive_max_compression_ratio", 100.0)),
+        )
         depth = int(config.get("_archive_depth", 0))
         recursive = bool(config.get("archive_recursive", True))
         lines = [f"# Archive: {Path(filepath).name}", "", "## Contents", ""]
         converted = 0
         inlined = 0
         manifest: list[dict[str, Any]] = []
+        archive_assets: list[Asset] = []
         audio_transcripts: list[AudioTranscript] = []
         with zipfile.ZipFile(filepath) as zf:
             infos = [info for info in zf.infolist() if not info.is_dir()]
@@ -66,12 +89,18 @@ class ArchiveConverter(BaseConverter):
                 lines.append(f"- `{info.filename}` ({info.file_size} bytes){suspicious}")
             if len(infos) > max_files:
                 lines.append(f"- ... {len(infos) - max_files} more file(s)")
+                for info in infos[max_files:]:
+                    manifest.append(_manifest_entry(info, "skipped", "archive file count limit reached", depth))
 
             if recursive:
                 lines.extend(["", "## Converted Children", ""])
             for info in infos[:max_files]:
                 if converted >= max_converted_children:
                     manifest.append(_manifest_entry(info, "skipped", "archive child conversion limit reached", depth))
+                    continue
+                budget_entry = _check_archive_budget(info, budget, depth)
+                if budget_entry is not None:
+                    manifest.append(budget_entry)
                     continue
                 entry, child_result = _convert_child(
                     zf,
@@ -87,6 +116,11 @@ class ArchiveConverter(BaseConverter):
                     transcript = _audio_transcript_from_result(child_result)
                     if transcript is not None:
                         audio_transcripts.append(transcript)
+                    child_assets = _namespace_child_assets(info, child_result)
+                    if child_assets:
+                        archive_assets.extend(child_assets)
+                        entry["asset_count"] = len(child_assets)
+                        entry["assets"] = [asset.name for asset in child_assets]
                 if child_text:
                     lines.extend(["", f"### `{info.filename}`", "", child_text.strip()])
                     converted += 1
@@ -117,6 +151,15 @@ class ArchiveConverter(BaseConverter):
                 "failed_children": sum(1 for item in manifest if item["action"] == "failed"),
                 "manifest": manifest,
                 "audio_batch": audio_batch_metadata,
+                "archive_budget": {
+                    "max_files": budget.max_files,
+                    "max_total_uncompressed_bytes": budget.max_total_uncompressed_bytes,
+                    "used_uncompressed_bytes": budget.used_uncompressed_bytes,
+                    "max_child_bytes": budget.max_child_bytes,
+                    "max_depth": budget.max_depth,
+                    "max_converted_children": budget.max_converted_children,
+                    "max_compression_ratio": budget.max_compression_ratio,
+                },
             }
         }
         if audio_batch_metadata:
@@ -125,6 +168,7 @@ class ArchiveConverter(BaseConverter):
             text="\n".join(lines).strip(),
             extension="md",
             metadata=metadata,
+            assets=archive_assets,
         )
 
 
@@ -156,6 +200,29 @@ def _manifest_entry(info: zipfile.ZipInfo, action: str, reason: str, depth: int,
     if engine:
         entry["engine"] = engine
     return entry
+
+
+def _check_archive_budget(
+    info: zipfile.ZipInfo,
+    budget: ArchiveBudget,
+    depth: int,
+) -> dict[str, Any] | None:
+    if info.file_size > budget.max_child_bytes:
+        return _manifest_entry(info, "skipped", "child exceeds archive_max_child_bytes", depth)
+    if _compression_ratio(info) > budget.max_compression_ratio:
+        return _manifest_entry(info, "skipped", "archive child compression ratio exceeds limit", depth)
+    if budget.used_uncompressed_bytes + info.file_size > budget.max_total_uncompressed_bytes:
+        return _manifest_entry(info, "skipped", "archive total uncompressed byte budget reached", depth)
+    budget.used_uncompressed_bytes += info.file_size
+    return None
+
+
+def _compression_ratio(info: zipfile.ZipInfo) -> float:
+    if info.file_size <= 0:
+        return 0.0
+    if info.compress_size <= 0:
+        return float("inf")
+    return info.file_size / max(1, info.compress_size)
 
 
 def _convert_child(
@@ -200,6 +267,40 @@ def _convert_child(
         except Exception as exc:
             return _manifest_entry(info, "failed", f"{type(exc).__name__}: {exc}", depth, plan.engine), None
     return _manifest_entry(info, "converted", "converted by child router", depth, plan.engine), result
+
+
+def _namespace_child_assets(info: zipfile.ZipInfo, child_result: UniversalConversionResult) -> list[Asset]:
+    base = Path("children") / _safe_relative_asset_path(info.filename) / "assets"
+    assets: list[Asset] = []
+    for raw_asset in child_result.assets:
+        name = _safe_relative_asset_path(raw_asset.name)
+        assets.append(
+            Asset(
+                name=(base / name).as_posix(),
+                media_type=raw_asset.media_type,
+                data=raw_asset.data,
+                pil=raw_asset.pil,
+            )
+        )
+    for raw_name, payload in (child_result.images or {}).items():
+        name = _safe_relative_asset_path(str(raw_name), fallback="image")
+        media_type = mimetypes.guess_type(str(raw_name))[0] or "application/octet-stream"
+        if isinstance(payload, (bytes, bytearray)):
+            assets.append(Asset(name=(base / name).as_posix(), media_type=media_type, data=bytes(payload)))
+        elif hasattr(payload, "save"):
+            assets.append(Asset(name=(base / name).as_posix(), media_type=media_type, pil=payload))
+    return assets
+
+
+def _safe_relative_asset_path(raw: str, *, fallback: str = "child") -> Path:
+    parts: list[str] = []
+    for part in str(raw or "").replace("\\", "/").split("/"):
+        if part in {"", ".", ".."}:
+            continue
+        cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", part).strip("._")
+        if cleaned:
+            parts.append(cleaned[:80])
+    return Path(*parts) if parts else Path(fallback)
 
 
 def _child_converter_for_engine(engine: str) -> BaseConverter | None:
