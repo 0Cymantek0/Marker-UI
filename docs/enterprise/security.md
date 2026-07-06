@@ -53,7 +53,7 @@ Scopes:
 When REST bearer auth is enabled, route groups enforce matching scopes:
 capabilities/version/model reads use `capabilities:read`; job planning/status
 uses `jobs:read` or `capabilities:read`; upload, cancel, retry, regenerate, and
-delete use `jobs:write`; downloads use `outputs:read`; settings reads use
+delete use `jobs:write`; downloads and job-scoped asset preview URLs use `outputs:read`; settings reads use
 `settings:read`; settings writes and model-management mutations use
 `settings:write`.
 

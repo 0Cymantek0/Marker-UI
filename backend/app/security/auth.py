@@ -231,7 +231,7 @@ def rest_scopes_for_request(method: str, path: str) -> set[str]:
         return {SCOPE_CAPABILITIES_READ} if method == "GET" else {SCOPE_SETTINGS_WRITE}
     if path.startswith("/api/settings"):
         return {SCOPE_SETTINGS_READ} if method == "GET" else {SCOPE_SETTINGS_WRITE}
-    if path.startswith("/api/convert/download"):
+    if path.startswith("/api/convert/download") or path.startswith("/api/convert/assets"):
         return {SCOPE_OUTPUTS_READ}
     if path.startswith("/api/convert/plan"):
         return {SCOPE_CAPABILITIES_READ}

@@ -58,6 +58,7 @@ def test_rest_scope_mapping_covers_core_surfaces():
     assert rest_scopes_for_request("GET", "/api/capabilities") == {SCOPE_CAPABILITIES_READ}
     assert rest_scopes_for_request("POST", "/api/convert/upload") == {SCOPE_JOBS_WRITE}
     assert rest_scopes_for_request("GET", "/api/convert/download/job-1") == {SCOPE_OUTPUTS_READ}
+    assert rest_scopes_for_request("GET", "/api/convert/assets/job-1/chart.png") == {SCOPE_OUTPUTS_READ}
     assert rest_scopes_for_request("GET", "/api/settings/") == {SCOPE_SETTINGS_READ}
     assert rest_scopes_for_request("PUT", "/api/settings/") == {SCOPE_SETTINGS_WRITE}
 
@@ -131,3 +132,24 @@ async def test_rest_middleware_allows_matching_scope_when_configured(monkeypatch
 
     assert allowed.status_code == 200
     assert denied_settings.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_rest_asset_endpoint_requires_outputs_read_scope(monkeypatch):
+    from app.main import app
+
+    monkeypatch.setenv("MARKER_AUTH_TOKENS", "outputs-token=outputs:read;caps-token=capabilities:read")
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        scoped = await client.get(
+            "/api/convert/assets/missing-job/chart.png",
+            headers={"Authorization": "Bearer outputs-token"},
+        )
+        denied = await client.get(
+            "/api/convert/assets/missing-job/chart.png",
+            headers={"Authorization": "Bearer caps-token"},
+        )
+
+    assert scoped.status_code == 404
+    assert denied.status_code == 403
