@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -206,6 +207,7 @@ def _markdown_blocks(markdown: str) -> list[MarkdownBlock]:
 
 def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[MarkdownBlock]:
     packed: list[MarkdownBlock] = []
+    pending = deque(blocks)
     current: list[MarkdownBlock] = []
 
     def flush() -> None:
@@ -225,12 +227,37 @@ def _pack_chunk_blocks(blocks: list[MarkdownBlock], *, max_chars: int) -> list[M
             )
         current = []
 
-    for block in blocks:
+    while pending:
+        block = pending.popleft()
         if block.kind == "heading" and current:
             flush()
         projected_len = len("\n\n".join([*(item.text for item in current), block.text]))
         if current and projected_len > max_chars:
             if _is_standalone_heading(current) and block.kind == "text":
+                heading_budget = max_chars - len(current[0].text) - 2
+                if heading_budget > 0 and len(block.text) > heading_budget:
+                    head_text, tail_text = _split_text_at_limit(block.text, max_chars=heading_budget)
+                    current.append(
+                        MarkdownBlock(
+                            text=head_text,
+                            start_line=block.start_line,
+                            end_line=block.end_line,
+                            heading_path=block.heading_path,
+                            kind=block.kind,
+                        )
+                    )
+                    if tail_text.strip():
+                        pending.appendleft(
+                            MarkdownBlock(
+                                text=tail_text.strip(),
+                                start_line=block.start_line,
+                                end_line=block.end_line,
+                                heading_path=block.heading_path,
+                                kind=block.kind,
+                            ),
+                        )
+                    flush()
+                    continue
                 current.append(block)
                 flush()
                 continue
@@ -386,6 +413,20 @@ def _split_text_by_chars(text: str, *, max_chars: int) -> list[str]:
         pieces.append(remaining[:limit].rstrip())
         remaining = remaining[limit:].lstrip()
     return [piece for piece in pieces if piece]
+
+
+def _split_text_at_limit(text: str, *, max_chars: int) -> tuple[str, str]:
+    """Split text once, preferring whitespace before the hard limit."""
+
+    if len(text) <= max_chars:
+        return text, ""
+    limit = max(1, max_chars)
+    split_at = text.rfind(" ", 0, limit + 1)
+    if split_at < max(1, limit // 2):
+        split_at = limit
+    head = text[:split_at].rstrip()
+    tail = text[split_at:].lstrip()
+    return head, tail
 
 
 def _chunk_id(source_name: str, index: int, text: str) -> str:

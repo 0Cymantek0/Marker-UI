@@ -47,6 +47,22 @@ def test_chunk_markdown_keeps_oversized_section_heading_with_first_content() -> 
     assert texts[0].startswith("# Long Section\n\nalpha")
     assert "# Long Section" not in texts[1:]
     assert all(text.strip() != "# Long Section" for text in texts)
+    assert all(chunk["char_count"] <= 200 for chunk in payload["chunks"])
+
+
+def test_chunk_markdown_respects_size_budget_when_heading_precedes_long_sentence() -> None:
+    payload = chunk_markdown(
+        "# Budget\n\n" + ("word " * 120),
+        source_name="budget.md",
+        max_chars=200,
+        overlap_chars=0,
+    )
+
+    chunks = payload["chunks"]
+
+    assert chunks[0]["text"].startswith("# Budget\n\nword")
+    assert all(chunk["char_count"] <= 200 for chunk in chunks)
+    assert not any(chunk["text"].strip() == "# Budget" for chunk in chunks)
 
 
 def test_chunk_markdown_adds_neighbor_links_for_semantic_navigation() -> None:
