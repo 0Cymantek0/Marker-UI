@@ -146,7 +146,7 @@ most coding agents:
 Use `--tool-profile full` for legacy/source-specific convenience tools such as
 `marker_convert_file`, `marker_convert_url`, and `marker_submit_local_job`.
 Use `--tool-profile admin` only when the agent needs destructive/admin tools
-such as `marker_delete_job`.
+such as `marker_delete_job` or `marker_purge_job_files`.
 
 Settings write/delete tools are disabled even in `admin` unless
 `MARKER_MCP_ENABLE_SETTINGS_WRITE=true` is set. Enable this only for trusted
@@ -192,6 +192,7 @@ Canonical v2 tools use one source object:
 | `marker_get_job_status` | Inspect one job. |
 | `marker_cancel_job` | Request job cancellation. |
 | `marker_delete_job` | Delete job metadata and optionally files. |
+| `marker_purge_job_files` | Remove a completed job's stored output artifacts while keeping metadata. |
 | `marker_list_settings` | Read masked settings by category. |
 | `marker_get_setting` | Read one masked setting. |
 | `marker_set_setting` | Write one encrypted setting. Requires `admin` and `MARKER_MCP_ENABLE_SETTINGS_WRITE=true`. |

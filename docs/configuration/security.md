@@ -57,7 +57,8 @@ documents, the server must not be reachable by untrusted clients.
 4. **Scope gating.** When a token is set, `AuthSettings` requires the
    `marker:mcp` scope so clients must present a valid bearer token for every
    request, including `marker_list_settings`, `marker_get_setting`,
-   `marker_set_setting`, `marker_delete_setting`, and `marker_delete_job`.
+   `marker_set_setting`, `marker_delete_setting`, `marker_delete_job`, and
+   `marker_purge_job_files`.
 
 ### 4.3 Residual risks and operator responsibilities
 
@@ -79,4 +80,3 @@ asserts that `run(transport="streamable-http", host="0.0.0.0")` raises without a
 token, and
 `test_mcp_streamable_http_configures_bearer_auth_for_non_loopback` asserts that a
 token installs `AuthSettings` plus a token verifier before the server starts.
-
