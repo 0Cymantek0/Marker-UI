@@ -71,6 +71,6 @@ Windows has a 260-character path length limit. If python package downloads or mo
 
 ### 3. Path Escaping in Settings
 When using the **Local Absolute Paths** feature in the web app, use forward slashes `/` or double backslashes `\\` to avoid escaping issues:
-- **Correct**: `C:/Users/name/Documents/file.pdf`
-- **Correct**: `C:\\Users\\name\\Documents\\file.pdf`
-- **Incorrect**: `C:\Users\name\Documents\file.pdf`
+- **Correct**: `C:/path/to/document.pdf`
+- **Correct**: `C:\\path\\to\\document.pdf`
+- **Incorrect**: `C:\path\to\document.pdf`
