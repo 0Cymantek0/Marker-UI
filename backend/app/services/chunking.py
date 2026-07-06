@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import re
 from collections import deque
@@ -13,6 +14,8 @@ from typing import Any
 SCHEMA_VERSION = "marker.chunks.v1"
 DEFAULT_MAX_CHARS = 1800
 DEFAULT_OVERLAP_CHARS = 160
+MARKDOWN_CHUNKING_STRATEGY = "markdown_heading_blocks_v2"
+UNSTRUCTURED_CHUNKING_STRATEGY = "unstructured_by_title"
 
 
 @dataclass(frozen=True)
@@ -34,25 +37,31 @@ def build_chunks_envelope(
     metadata: dict[str, Any] | None = None,
     max_chars: int = DEFAULT_MAX_CHARS,
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+    strategy: str = MARKDOWN_CHUNKING_STRATEGY,
 ) -> dict[str, Any]:
     """Return a legacy conversion envelope containing JSON chunk payload."""
 
-    payload = chunk_markdown(
+    payload = chunk_markdown_with_strategy(
         markdown,
         source_name=source_name,
         max_chars=max_chars,
         overlap_chars=overlap_chars,
+        strategy=strategy,
     )
+    resolved_strategy = str(payload.get("chunking_strategy") or MARKDOWN_CHUNKING_STRATEGY)
     chunk_metadata = {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
-        "chunking_strategy": "markdown_heading_blocks_v2",
+        "chunking_strategy": resolved_strategy,
+        "requested_strategy": _normalize_strategy(strategy),
         "source_format": "markdown",
         "source_sha256": payload["source"]["sha256"],
         "chunk_count": payload["chunk_count"],
         "max_chars": max_chars,
         "overlap_chars": overlap_chars,
     }
+    if payload.get("chunking_fallback_reason"):
+        chunk_metadata["fallback_reason"] = payload["chunking_fallback_reason"]
     return {
         "text": json.dumps(payload, ensure_ascii=False, indent=2),
         "extension": "json",
@@ -62,6 +71,41 @@ def build_chunks_envelope(
             "chunking": chunk_metadata,
         },
     }
+
+
+def chunk_markdown_with_strategy(
+    markdown: str,
+    *,
+    source_name: str,
+    max_chars: int = DEFAULT_MAX_CHARS,
+    overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+    strategy: str = MARKDOWN_CHUNKING_STRATEGY,
+) -> dict[str, Any]:
+    normalized = _normalize_strategy(strategy)
+    if normalized == UNSTRUCTURED_CHUNKING_STRATEGY:
+        try:
+            return chunk_markdown_unstructured_by_title(
+                markdown,
+                source_name=source_name,
+                max_chars=max_chars,
+                overlap_chars=overlap_chars,
+            )
+        except Exception as exc:  # noqa: BLE001 - optional strategy must degrade.
+            payload = chunk_markdown(
+                markdown,
+                source_name=source_name,
+                max_chars=max_chars,
+                overlap_chars=overlap_chars,
+            )
+            payload["chunking_strategy_requested"] = UNSTRUCTURED_CHUNKING_STRATEGY
+            payload["chunking_fallback_reason"] = f"{type(exc).__name__}: {exc}"
+            return payload
+    return chunk_markdown(
+        markdown,
+        source_name=source_name,
+        max_chars=max_chars,
+        overlap_chars=overlap_chars,
+    )
 
 
 def chunk_markdown(
@@ -147,7 +191,7 @@ def chunk_markdown(
     return {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
-        "chunking_strategy": "markdown_heading_blocks_v2",
+        "chunking_strategy": MARKDOWN_CHUNKING_STRATEGY,
         "source": {
             "name": source_name,
             "sha256": source_sha256,
@@ -156,6 +200,168 @@ def chunk_markdown(
         "chunk_count": len(chunks),
         "chunks": chunks,
     }
+
+
+def chunk_markdown_unstructured_by_title(
+    markdown: str,
+    *,
+    source_name: str,
+    max_chars: int = DEFAULT_MAX_CHARS,
+    overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+) -> dict[str, Any]:
+    """Chunk Markdown with Unstructured's title-aware element chunker.
+
+    This is explicit opt-in because Unstructured normalizes Markdown syntax
+    (notably tables) differently than the default Markdown-preserving splitter.
+    """
+
+    max_chars = max(200, int(max_chars or DEFAULT_MAX_CHARS))
+    overlap_chars = max(0, min(int(overlap_chars or 0), max_chars // 3))
+    partition_md = importlib.import_module("unstructured.partition.md").partition_md
+    chunk_by_title = importlib.import_module("unstructured.chunking.title").chunk_by_title
+    elements = partition_md(text=markdown)
+    raw_chunks = chunk_by_title(
+        elements,
+        max_characters=max_chars,
+        new_after_n_chars=max(1, max_chars - overlap_chars),
+        combine_text_under_n_chars=0,
+    )
+    line_offsets = _line_offsets(markdown)
+    chunks: list[dict[str, Any]] = []
+    for raw_chunk in raw_chunks:
+        text = str(raw_chunk).strip()
+        if not text:
+            continue
+        index = len(chunks)
+        chunk_id = _chunk_id(source_name, index, text)
+        char_start, char_end, start_line, end_line = _locate_unstructured_chunk_span(
+            markdown,
+            text,
+            line_offsets=line_offsets,
+        )
+        metadata = _public_unstructured_metadata(raw_chunk)
+        content_types = ["unstructured_composite"]
+        if metadata.get("text_as_html"):
+            content_types.append("table")
+        token_estimate = max(1, (len(text) + 3) // 4)
+        chunks.append(
+            {
+                "id": chunk_id,
+                "chunk_id": chunk_id,
+                "index": index,
+                "text": text,
+                "contextual_text": text,
+                "heading_path": [],
+                "section_path": [],
+                "start_line": start_line,
+                "end_line": end_line,
+                "char_start": char_start,
+                "char_end": char_end,
+                "char_count": len(text),
+                "token_estimate": token_estimate,
+                "token_count": token_estimate,
+                "content_types": content_types,
+                "content_hash": f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}",
+                "element_metadata": metadata,
+                "source_refs": [
+                    {
+                        "type": "markdown_line_span",
+                        "source": source_name,
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "char_start": char_start,
+                        "char_end": char_end,
+                        "heading_path": [],
+                        "content_types": content_types,
+                    }
+                ],
+            }
+        )
+    for index, chunk in enumerate(chunks):
+        chunk["previous_id"] = chunks[index - 1]["id"] if index > 0 else None
+        chunk["next_id"] = chunks[index + 1]["id"] if index + 1 < len(chunks) else None
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "chunk_kind": "semantic_markdown",
+        "chunking_strategy": UNSTRUCTURED_CHUNKING_STRATEGY,
+        "source": {
+            "name": source_name,
+            "sha256": hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            "char_count": len(markdown),
+        },
+        "chunk_count": len(chunks),
+        "chunks": chunks,
+    }
+
+
+def _normalize_strategy(strategy: str | None) -> str:
+    value = str(strategy or "").strip().lower().replace("-", "_")
+    if value in {"", "markdown", "markdown_heading", "markdown_heading_blocks"}:
+        return MARKDOWN_CHUNKING_STRATEGY
+    if value in {MARKDOWN_CHUNKING_STRATEGY, UNSTRUCTURED_CHUNKING_STRATEGY, "unstructured"}:
+        return UNSTRUCTURED_CHUNKING_STRATEGY if value == "unstructured" else value
+    return MARKDOWN_CHUNKING_STRATEGY
+
+
+def _public_unstructured_metadata(chunk: object) -> dict[str, Any]:
+    metadata = getattr(chunk, "metadata", None)
+    if metadata is None or not hasattr(metadata, "to_dict"):
+        return {}
+    raw = metadata.to_dict()
+    public: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key == "orig_elements":
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            public[key] = value
+        elif isinstance(value, list) and all(isinstance(item, (str, int, float, bool)) for item in value):
+            public[key] = value
+    return public
+
+
+def _locate_unstructured_chunk_span(
+    markdown: str,
+    text: str,
+    *,
+    line_offsets: list[tuple[int, int]],
+) -> tuple[int, int, int, int]:
+    lines = markdown.splitlines()
+    wanted = [_normalize_markdown_line_text(line) for line in text.splitlines() if line.strip()]
+    wanted = [line for line in wanted if line]
+    if not wanted:
+        return 0, 0, 1, 1
+
+    start_line = _find_normalized_line(lines, wanted[0], start=0)
+    end_line = _find_normalized_line(lines, wanted[-1], start=max(start_line - 1, 0))
+    if start_line <= 0:
+        start_line = 1
+    if end_line <= 0:
+        end_line = start_line
+    char_start, char_end = _line_char_span(
+        line_offsets,
+        start_line=start_line,
+        end_line=end_line,
+    )
+    return char_start, char_end, start_line, max(start_line, end_line)
+
+
+def _find_normalized_line(lines: list[str], needle: str, *, start: int) -> int:
+    for index in range(start, len(lines)):
+        candidate = _normalize_markdown_line_text(lines[index])
+        if candidate == needle or (needle and needle in candidate):
+            return index + 1
+    return -1
+
+
+def _normalize_markdown_line_text(line: str) -> str:
+    stripped = line.strip()
+    heading = re.match(r"^#{1,6}\s+(.+?)\s*$", stripped)
+    if heading:
+        return heading.group(1).strip()
+    if stripped.startswith("|") and stripped.endswith("|"):
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        return " ".join(cell for cell in cells if cell)
+    return re.sub(r"\s+", " ", stripped)
 
 
 def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> list[MarkdownBlock]:

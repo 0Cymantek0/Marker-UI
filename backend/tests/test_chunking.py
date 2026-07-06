@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from app.services.chunking import SCHEMA_VERSION, chunk_markdown
+import json
+
+import pytest
+
+from app.services.chunking import SCHEMA_VERSION, build_chunks_envelope, chunk_markdown, chunk_markdown_with_strategy
 
 
 def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
@@ -63,6 +67,46 @@ def test_chunk_markdown_split_text_uses_tight_source_spans() -> None:
         assert source_slice == chunk["text"]
         assert chunk["source_refs"][0]["char_start"] == chunk["char_start"]
         assert chunk["source_refs"][0]["char_end"] == chunk["char_end"]
+
+
+def test_build_chunks_envelope_falls_back_when_optional_strategy_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_import(name: str):
+        if name.startswith("unstructured."):
+            raise ImportError("missing optional dependency")
+        raise AssertionError(f"unexpected import: {name}")
+
+    monkeypatch.setattr("app.services.chunking.importlib.import_module", fail_import)
+
+    envelope = build_chunks_envelope(
+        "# Title\n\nBody.",
+        source_name="doc.md",
+        strategy="unstructured_by_title",
+    )
+
+    payload = json.loads(envelope["text"])
+    assert payload["chunking_strategy"] == "markdown_heading_blocks_v2"
+    assert payload["chunking_strategy_requested"] == "unstructured_by_title"
+    assert "ImportError" in payload["chunking_fallback_reason"]
+    assert envelope["metadata"]["chunking"]["requested_strategy"] == "unstructured_by_title"
+    assert "fallback_reason" in envelope["metadata"]["chunking"]
+
+
+def test_chunk_markdown_unstructured_by_title_strategy_when_available() -> None:
+    pytest.importorskip("unstructured.partition.md")
+    pytest.importorskip("unstructured.chunking.title")
+
+    payload = chunk_markdown_with_strategy(
+        "# Title\n\nIntro paragraph.\n\n## Details\n\nFirst fact. Second fact.",
+        source_name="doc.md",
+        max_chars=200,
+        strategy="unstructured_by_title",
+    )
+
+    assert payload["chunking_strategy"] == "unstructured_by_title"
+    assert payload["chunk_count"] == 2
+    assert payload["chunks"][0]["text"] == "Title\n\nIntro paragraph."
+    assert payload["chunks"][0]["char_start"] == 0
+    assert payload["chunks"][0]["source_refs"][0]["source"] == "doc.md"
 
 
 def test_chunk_markdown_packs_headings_with_section_text() -> None:

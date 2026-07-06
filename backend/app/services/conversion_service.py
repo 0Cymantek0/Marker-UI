@@ -470,14 +470,14 @@ class ConversionService:
         if self._should_use_mixed_pdf_routing(filepath, config):
             # Mixed routing produces stitched Markdown; derive chunks if asked.
             envelope = self._convert_mixed_pdf_segments(filepath, config, device=device)
-            return _derived_markdown_formats(envelope, filepath, formats)
+            return _derived_markdown_formats(envelope, filepath, formats, config=config)
 
         plan = self.plan(filepath, config)
         converter = self._registry.get(plan.engine)
         if converter is None or not getattr(converter, "supports_multiple_formats", lambda: False)():
             # Markdown-only engine: preserve Markdown and derive chunks if asked.
             envelope = self.convert_file(filepath, config, device=device)
-            return _derived_markdown_formats(envelope, filepath, formats)
+            return _derived_markdown_formats(envelope, filepath, formats, config=config)
 
         results = converter.convert_formats(filepath, config, formats, device=device)
 
@@ -698,6 +698,8 @@ def _derived_markdown_formats(
     markdown_envelope: dict[str, Any],
     filepath: str,
     formats: list[str],
+    *,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     outputs: dict[str, dict[str, Any]] = {}
     requested = [fmt for fmt in dict.fromkeys(str(fmt).strip().lower() for fmt in formats) if fmt]
@@ -710,6 +712,7 @@ def _derived_markdown_formats(
                 text,
                 source_name=Path(filepath).name,
                 metadata=dict(markdown_envelope.get("metadata") or {}),
+                strategy=str((config or {}).get("chunking_strategy") or "markdown_heading_blocks_v2"),
             )
     if not outputs:
         outputs["markdown"] = markdown_envelope

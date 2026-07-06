@@ -130,6 +130,27 @@ class TestConversionService:
         assert payload["chunk_count"] >= 1
         assert "| Ada | 10 |" in payload["chunks"][-1]["text"]
         assert result["chunks"]["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
+        assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "markdown_heading_blocks_v2"
+
+    def test_native_derived_chunks_honor_explicit_chunking_strategy(self, tmp_path: Any) -> None:
+        pytest.importorskip("unstructured.partition.md")
+        pytest.importorskip("unstructured.chunking.title")
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "notes.md"
+        source.write_text("# Title\n\nIntro paragraph.\n\n## Details\n\nFirst fact.", encoding="utf-8")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["chunks"],
+            "chunking_strategy": "unstructured_by_title",
+        }
+
+        result = svc.convert_file_formats(str(source), config, ["chunks"])
+
+        assert len(fake_ms.convert_calls) == 0
+        payload = json.loads(result["chunks"]["text"])
+        assert payload["chunking_strategy"] == "unstructured_by_title"
+        assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "unstructured_by_title"
+        assert result["chunks"]["metadata"]["chunking"]["requested_strategy"] == "unstructured_by_title"
 
     def test_unknown_extension_does_not_claim_derived_chunks_support(self, tmp_path: Any) -> None:
         """Derived chunks still require a converter that accepts the source."""
