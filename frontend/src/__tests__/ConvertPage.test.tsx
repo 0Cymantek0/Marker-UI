@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
+import type { ConversionConfig } from '@/lib/api'
 import '@testing-library/jest-dom'
 
 // Mock react-router-dom
@@ -110,8 +111,8 @@ vi.mock('@/components/features/ConversionOptions', () => ({
     onChange,
     supportsMultiFormat,
   }: {
-    config: any
-    onChange: (cfg: any) => void
+    config: ConversionConfig
+    onChange: (cfg: ConversionConfig) => void
     supportsMultiFormat?: boolean
   }) => (
     <div data-testid="conversion-options">

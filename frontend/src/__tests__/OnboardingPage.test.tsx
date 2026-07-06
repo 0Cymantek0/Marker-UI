@@ -6,6 +6,8 @@ import {
   getModelsStatus,
   getHybridOcrStatus,
   setupHybridOcrModels,
+  type HybridOcrStatus,
+  type ModelTrackerStatus,
 } from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
@@ -20,7 +22,7 @@ vi.mock('@/components/ui/CanvasConfetti', () => ({
   CanvasConfetti: () => null,
 }))
 
-const coreReadyStatus = {
+const coreReadyStatus: ModelTrackerStatus = {
   initialized: true,
   loading: false,
   cancel_requested: false,
@@ -36,7 +38,7 @@ const coreReadyStatus = {
   },
 }
 
-const hybridMissingStatus = {
+const hybridMissingStatus: HybridOcrStatus = {
   schema_version: 'marker.hybrid_ocr_status.v1',
   model_root: 'cache',
   engines_available: ['surya'],
@@ -47,7 +49,7 @@ const hybridMissingStatus = {
   },
 }
 
-const hybridReadyStatus = {
+const hybridReadyStatus: HybridOcrStatus = {
   ...hybridMissingStatus,
   engines_available: ['surya', 'paddleocr_vl'],
   engines: {
@@ -62,9 +64,9 @@ describe('OnboardingPage', () => {
   })
 
   it('downloads missing Hybrid OCR snapshots before completing setup', async () => {
-    vi.mocked(getModelsStatus).mockResolvedValue(coreReadyStatus as any)
-    vi.mocked(getHybridOcrStatus).mockResolvedValue(hybridMissingStatus as any)
-    vi.mocked(setupHybridOcrModels).mockResolvedValue({ status: hybridReadyStatus } as any)
+    vi.mocked(getModelsStatus).mockResolvedValue(coreReadyStatus)
+    vi.mocked(getHybridOcrStatus).mockResolvedValue(hybridMissingStatus)
+    vi.mocked(setupHybridOcrModels).mockResolvedValue({ status: hybridReadyStatus })
     const onComplete = vi.fn()
 
     render(<OnboardingPage onComplete={onComplete} />)

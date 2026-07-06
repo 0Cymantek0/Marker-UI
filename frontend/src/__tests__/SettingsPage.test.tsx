@@ -66,10 +66,10 @@ describe('SettingsPage component', () => {
     model_id: 'gemini-2.0-flash'
   }
 
-  const mockSettings = [
-    { key: 'gpu_acceleration_enabled', value: 'false', category: 'gpu' },
-    { key: 'vlm_model', value: '', category: 'image' },
-    { key: 'max_images_per_doc', value: '50', category: 'image' }
+  const mockSettings: api.SettingsResponse[] = [
+    { key: 'gpu_acceleration_enabled', value: 'false', category: 'gpu', description: null },
+    { key: 'vlm_model', value: '', category: 'image', description: null },
+    { key: 'max_images_per_doc', value: '50', category: 'image', description: null }
   ]
 
   const mockGPUStatus: api.GPUStatus = {
@@ -84,7 +84,7 @@ describe('SettingsPage component', () => {
     vi.restoreAllMocks()
     vi.mocked(api.getLLMProviders).mockResolvedValue(mockProviders)
     vi.mocked(api.getActiveLLM).mockResolvedValue(mockActive)
-    vi.mocked(api.getSettings).mockResolvedValue(mockSettings as any)
+    vi.mocked(api.getSettings).mockResolvedValue(mockSettings)
     vi.mocked(api.getGPUStatus).mockResolvedValue(mockGPUStatus)
   })
 

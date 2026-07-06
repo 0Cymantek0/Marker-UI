@@ -20,22 +20,22 @@ const mockSavePreset = vi.fn()
 const mockDeletePreset = vi.fn()
 
 vi.mock('@/lib/api', () => ({
-  uploadFile: (...args: any[]) => mockUploadFile(...args),
-  getJobEvents: (...args: any[]) => mockGetJobEvents(...args),
-  downloadResult: (...args: any[]) => mockDownloadResult(...args),
-  cancelJob: (...args: any[]) => mockCancelJob(...args),
-  deleteJob: (...args: any[]) => mockDeleteJob(...args),
-  getJobStatus: (...args: any[]) => mockGetJobStatus(...args),
-  getHistory: (...args: any[]) => mockGetHistory(...args),
+  uploadFile: (...args: unknown[]) => mockUploadFile(...args),
+  getJobEvents: (...args: unknown[]) => mockGetJobEvents(...args),
+  downloadResult: (...args: unknown[]) => mockDownloadResult(...args),
+  cancelJob: (...args: unknown[]) => mockCancelJob(...args),
+  deleteJob: (...args: unknown[]) => mockDeleteJob(...args),
+  getJobStatus: (...args: unknown[]) => mockGetJobStatus(...args),
+  getHistory: (...args: unknown[]) => mockGetHistory(...args),
   browseFiles: vi.fn(),
   browseFolder: vi.fn(),
   getCapabilities: () => mockGetCapabilities(),
-  planConversion: (...args: any[]) => mockPlanConversion(...args),
+  planConversion: (...args: unknown[]) => mockPlanConversion(...args),
   getLLMProviders: vi.fn().mockResolvedValue([]),
   getActiveLLM: vi.fn().mockResolvedValue(null),
-  getPresets: (...args: any[]) => mockGetPresets(...args),
-  savePreset: (...args: any[]) => mockSavePreset(...args),
-  deletePreset: (...args: any[]) => mockDeletePreset(...args),
+  getPresets: (...args: unknown[]) => mockGetPresets(...args),
+  savePreset: (...args: unknown[]) => mockSavePreset(...args),
+  deletePreset: (...args: unknown[]) => mockDeletePreset(...args),
 }))
 
 // Mock EventSource helper

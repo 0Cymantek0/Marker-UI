@@ -18,15 +18,15 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
-    getLLMProviders: (...args: any[]) => mockGetLLMProviders(...args),
-    getActiveLLM: (...args: any[]) => mockGetActiveLLM(...args),
-    getPresets: (...args: any[]) => mockGetPresets(...args),
-    savePreset: (...args: any[]) => mockSavePreset(...args),
-    deletePreset: (...args: any[]) => mockDeletePreset(...args),
-    getAudioCapabilities: (...args: any[]) => mockGetAudioCapabilities(...args),
-    getVocabularyPacks: (...args: any[]) => mockGetVocabularyPacks(...args),
-    saveVocabularyPack: (...args: any[]) => mockSaveVocabularyPack(...args),
-    deleteVocabularyPack: (...args: any[]) => mockDeleteVocabularyPack(...args),
+    getLLMProviders: (...args: unknown[]) => mockGetLLMProviders(...args),
+    getActiveLLM: (...args: unknown[]) => mockGetActiveLLM(...args),
+    getPresets: (...args: unknown[]) => mockGetPresets(...args),
+    savePreset: (...args: unknown[]) => mockSavePreset(...args),
+    deletePreset: (...args: unknown[]) => mockDeletePreset(...args),
+    getAudioCapabilities: (...args: unknown[]) => mockGetAudioCapabilities(...args),
+    getVocabularyPacks: (...args: unknown[]) => mockGetVocabularyPacks(...args),
+    saveVocabularyPack: (...args: unknown[]) => mockSaveVocabularyPack(...args),
+    deleteVocabularyPack: (...args: unknown[]) => mockDeleteVocabularyPack(...args),
   }
 })
 

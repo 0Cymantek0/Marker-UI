@@ -13,10 +13,10 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
-    getAudioCapabilities: (...args: any[]) => mockGetAudioCapabilities(...args),
-    getVocabularyPacks: (...args: any[]) => mockGetVocabularyPacks(...args),
-    saveVocabularyPack: (...args: any[]) => mockSaveVocabularyPack(...args),
-    deleteVocabularyPack: (...args: any[]) => mockDeleteVocabularyPack(...args),
+    getAudioCapabilities: (...args: unknown[]) => mockGetAudioCapabilities(...args),
+    getVocabularyPacks: (...args: unknown[]) => mockGetVocabularyPacks(...args),
+    saveVocabularyPack: (...args: unknown[]) => mockSaveVocabularyPack(...args),
+    deleteVocabularyPack: (...args: unknown[]) => mockDeleteVocabularyPack(...args),
   }
 })
 
@@ -131,7 +131,7 @@ describe('AudioAdvancedSettings', () => {
     const onChange = vi.fn()
     const cloudConfig: ConversionConfig = {
       ...baseConfig,
-      audio_provider: 'deepgram' as any,
+      audio_provider: 'deepgram',
       audio_allow_cloud_stt: true,
     }
     render(<AudioAdvancedSettings config={cloudConfig} onChange={onChange} />)
