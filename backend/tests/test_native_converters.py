@@ -261,11 +261,9 @@ def test_audio_converter_renders_timestamped_local_transcript(monkeypatch, tmp_p
                 }
             )
 
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda pid: FakeProvider())
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider", lambda pid: FakeProvider()
-    )
-    monkeypatch.setattr(
-        "app.conversion.converters.audio.probe_audio",
+        "app.audio.transcribe.probe_audio",
         lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
     )
 
@@ -315,11 +313,11 @@ def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, t
 
     fake = FakeProvider()
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider",
+        "app.audio.transcribe.build_provider",
         lambda provider_id: fake,
     )
     monkeypatch.setattr(
-        "app.conversion.converters.audio.probe_audio",
+        "app.audio.transcribe.probe_audio",
         lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
     )
     result = AudioConverter().convert(str(path), {"audio_output_mode": "meeting_notes"})
@@ -363,11 +361,11 @@ def test_audio_text_enhancement_toggle_uses_corrected_transcript_renderer(monkey
             )
 
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider",
+        "app.audio.transcribe.build_provider",
         lambda provider_id: FakeProvider(),
     )
     monkeypatch.setattr(
-        "app.conversion.converters.audio.probe_audio",
+        "app.audio.transcribe.probe_audio",
         lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
     )
 
@@ -409,11 +407,11 @@ def test_audio_structural_enhancement_uses_requested_template(monkeypatch, tmp_p
             )
 
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider",
+        "app.audio.transcribe.build_provider",
         lambda provider_id: FakeProvider(),
     )
     monkeypatch.setattr(
-        "app.conversion.converters.audio.probe_audio",
+        "app.audio.transcribe.probe_audio",
         lambda filepath: {"available": True},
     )
 
@@ -452,11 +450,11 @@ def test_audio_contradiction_detection_adds_review_findings(monkeypatch, tmp_pat
             )
 
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider",
+        "app.audio.transcribe.build_provider",
         lambda provider_id: FakeProvider(),
     )
     monkeypatch.setattr(
-        "app.conversion.converters.audio.probe_audio",
+        "app.audio.transcribe.probe_audio",
         lambda filepath: {"available": True},
     )
 
@@ -480,7 +478,7 @@ def test_audio_benchmark_compare_rejected_before_transcription(monkeypatch, tmp_
         raise AssertionError("provider should not be built for unsupported benchmark mode")
 
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider",
+        "app.audio.transcribe.build_provider",
         fail_build_provider,
     )
 
@@ -604,7 +602,7 @@ def test_archive_converter_builds_multi_audio_document(monkeypatch, tmp_path: Pa
                 }
             )
 
-    monkeypatch.setattr("app.conversion.converters.audio.build_provider", lambda pid: FakeProvider())
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda pid: FakeProvider())
     path = tmp_path / "audio_batch.zip"
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("calls/part1.wav", b"RIFF fake one")

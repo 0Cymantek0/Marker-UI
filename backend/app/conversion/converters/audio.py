@@ -16,30 +16,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.audio.ingest import probe_audio
 from app.audio.pipeline import (
     AudioTranscript,
     append_contradiction_section,
     detect_possible_contradictions,
-    normalize_transcript,
     render_enhanced_markdown,
     render_text_enhanced_markdown,
     render_transcript_markdown,
-    slug_source_id,
 )
-from app.audio.providers import build_provider, get_capability
-from app.audio.providers.registry import (
-    validate_audio_benchmark_selection,
-    validate_provider_selection,
-)
+from app.audio.transcribe import transcribe_audio_file_detailed
 from app.audio.speakers import (
-    apply_speaker_aliases,
     speaker_timeline,
     summarize_speakers,
 )
 from app.audio.vocabulary import (
-    compile_vocabulary_prompt,
-    resolve_vocabulary_terms,
     vocabulary_report,
 )
 from app.conversion.registry import BaseConverter
@@ -71,45 +61,17 @@ class AudioConverter(BaseConverter):
         config: dict[str, Any],
         device: str | None = None,
     ) -> UniversalConversionResult:
-        provider_id = _resolve_provider(config)
-        capability = get_capability(provider_id)
-        media_info = probe_audio(filepath)
-
-        vocabulary_terms = resolve_vocabulary_terms(config)
-        vocabulary_prompt = compile_vocabulary_prompt(
-            terms=vocabulary_terms, capability=capability
-        )
-        provider = build_provider(provider_id)
-        raw = provider.transcribe(
+        title = Path(filepath).stem
+        source_label = str(config.get("audio_source_label") or Path(filepath).name)
+        run = transcribe_audio_file_detailed(
             filepath,
             config,
             device=device,
-            vocabulary_prompt=vocabulary_prompt if capability.supports_prompt_context else None,
-        )
-        raw_payload = raw.to_dict()
-        raw_payload["media_info"] = media_info
-        # Diarization is provider-specific (plan §10). A provider that can't
-        # diarize surfaces an explicit warning instead of silently faking a single
-        # speaker when the user asked for diarization.
-        if config.get("audio_diarization") and not capability.supports_diarization:
-            raw_payload.setdefault("warnings", []).append(
-                "diarization_requested_but_unsupported_by_provider"
-            )
-
-        title = Path(filepath).stem
-        source_label = str(config.get("audio_source_label") or Path(filepath).name)
-        source_id = str(config.get("audio_source_id") or slug_source_id(source_label))
-        transcript = normalize_transcript(
-            raw_payload,
             source_label=source_label,
-            source_id=source_id,
-            config=config,
+            source_id=config.get("audio_source_id"),
         )
-        # Speaker identity is user-controlled (plan §10): only labels the user
-        # explicitly mapped are renamed; everything else stays anonymous. Diarization
-        # itself is provider-specific — faster-whisper can't, so the warning surfaced
-        # above propagates through normalize into the transcript.
-        transcript = apply_speaker_aliases(transcript, config.get("audio_speaker_aliases"))
+        transcript = run.transcript
+        capability = run.capability
 
         enhancement_plan = _resolve_enhancement_plan(config)
         output_mode = enhancement_plan["mode"]
@@ -138,10 +100,10 @@ class AudioConverter(BaseConverter):
 
         transcript_text = " ".join(segment.text for segment in transcript.segments)
         vocab_report = vocabulary_report(
-            terms=vocabulary_terms,
+            terms=run.vocabulary_terms,
             transcript_text=transcript_text,
-            truncated=_vocabulary_was_truncated(vocabulary_terms, vocabulary_prompt),
-            provider_prompted=bool(vocabulary_prompt and capability.supports_prompt_context),
+            truncated=_vocabulary_was_truncated(run.vocabulary_terms, run.vocabulary_prompt),
+            provider_prompted=bool(run.vocabulary_prompt and capability.supports_prompt_context),
         )
         return UniversalConversionResult(
             text=text,
@@ -184,27 +146,10 @@ class AudioConverter(BaseConverter):
                         "provider": "local_deterministic" if output_mode != "transcript" else None,
                         "provenance_required": output_mode != "transcript",
                     },
-                    "raw_provider_metadata": dict(raw.provider_metadata),
+                    "raw_provider_metadata": run.raw_provider_metadata,
                 },
             },
         )
-
-
-def _resolve_provider(config: dict[str, Any]) -> str:
-    """Resolve the audio provider id, enforcing cloud opt-in (plan §3.1).
-
-    Cloud STT is never used unless ``audio_allow_cloud_stt`` is explicitly true.
-    A cloud provider chosen without opt-in is rejected before transcription so no
-    audio leaves the machine unexpectedly.
-    """
-
-    provider_id = str(config.get("audio_provider") or "local_faster_whisper").strip().lower()
-    validate_audio_benchmark_selection(config)
-    validate_provider_selection(
-        provider_id,
-        allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
-    )
-    return provider_id
 
 
 def _resolve_output_mode(config: dict[str, Any]) -> str:
