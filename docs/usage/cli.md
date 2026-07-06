@@ -125,7 +125,7 @@ python -m app.cli convert "C:\path\to\meeting.mp3" --audio-provider local_faster
 python -m app.cli convert "C:\path\to\meeting.mp3" --audio-text-enhancement --audio-text-enhancement-strength 2 --audio-structural-enhancement --audio-structural-enhancement-mode meeting_notes --audio-contradiction-detection --json
 python -m app.cli convert "C:\path\to\meeting.mp3" --no-audio-confidence-heatmap --audio-quality-diagnostics --audio-fusion-mode audio_first --json
 python -m app.cli convert "C:\path\to\data.tsv" --text-data-max-rows 1000 --json
-python -m app.cli convert "C:\path\to\manuals.zip" --archive-max-files 50 --archive-max-depth 2 --json
+python -m app.cli convert "C:\path\to\manuals.zip" --archive-max-files 50 --archive-max-total-uncompressed-bytes 20971520 --archive-max-compression-ratio 100 --archive-max-depth 2 --json
 python -m app.cli convert "C:\path\to\scan.pdf" --image-handling-mode both --smart-router-level smart --ocr-min-lines 3 --json
 ```
 

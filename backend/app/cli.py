@@ -1118,6 +1118,16 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--archive-max-files", type=int, help="Max archive entries to inspect")
     parser.add_argument("--archive-inline-bytes", type=int, help="Max bytes to inline per archive text child")
     parser.add_argument("--archive-max-child-bytes", type=int, help="Max bytes per converted archive child")
+    parser.add_argument(
+        "--archive-max-total-uncompressed-bytes",
+        type=int,
+        help="Max total uncompressed archive bytes to inspect",
+    )
+    parser.add_argument(
+        "--archive-max-compression-ratio",
+        type=float,
+        help="Max allowed archive entry compression ratio",
+    )
     parser.add_argument("--archive-max-depth", type=int, help="Max recursive archive conversion depth")
     parser.add_argument("--archive-max-converted-children", type=int, help="Max archive children to convert")
     parser.add_argument(
@@ -1264,6 +1274,8 @@ def _direct_extra_options(args: argparse.Namespace) -> dict[str, Any]:
         "archive_max_files",
         "archive_inline_bytes",
         "archive_max_child_bytes",
+        "archive_max_total_uncompressed_bytes",
+        "archive_max_compression_ratio",
         "archive_max_depth",
         "archive_max_converted_children",
         "archive_recursive",

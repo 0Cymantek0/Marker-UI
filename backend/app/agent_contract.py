@@ -153,6 +153,8 @@ class ConversionOptionsModel(ContractModel):
     archive_max_files: int | None = Field(default=None, ge=1)
     archive_inline_bytes: int | None = Field(default=None, ge=1)
     archive_max_child_bytes: int | None = Field(default=None, ge=1)
+    archive_max_total_uncompressed_bytes: int | None = Field(default=None, ge=1)
+    archive_max_compression_ratio: float | None = Field(default=None, ge=1.0)
     archive_max_depth: int | None = Field(default=None, ge=0)
     archive_max_converted_children: int | None = Field(default=None, ge=1)
     router_enabled: bool | None = None
@@ -345,6 +347,8 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="archive_max_files", cli_flag="--archive-max-files", type="integer", category="archives", description="Maximum files scanned inside an archive."),
     OptionMetadataModel(name="archive_inline_bytes", cli_flag="--archive-inline-bytes", type="integer", category="archives", description="Maximum small child bytes to inline in archive output."),
     OptionMetadataModel(name="archive_max_child_bytes", cli_flag="--archive-max-child-bytes", type="integer", category="archives", description="Maximum child file size to parse from an archive."),
+    OptionMetadataModel(name="archive_max_total_uncompressed_bytes", cli_flag="--archive-max-total-uncompressed-bytes", type="integer", category="archives", description="Maximum total uncompressed archive bytes to inspect."),
+    OptionMetadataModel(name="archive_max_compression_ratio", cli_flag="--archive-max-compression-ratio", type="number", category="archives", description="Maximum allowed archive entry compression ratio."),
     OptionMetadataModel(name="archive_max_depth", cli_flag="--archive-max-depth", type="integer", category="archives", description="Maximum recursive archive depth."),
     OptionMetadataModel(name="archive_max_converted_children", cli_flag="--archive-max-converted-children", type="integer", category="archives", description="Maximum child files converted inside an archive."),
     OptionMetadataModel(name="audio_output_mode", cli_flag="--audio-output-mode", type="enum", category="audio", description="Audio transcript or note mode."),

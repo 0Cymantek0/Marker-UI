@@ -238,6 +238,8 @@ def test_agent_build_conversion_config_preserves_productivity_options():
             archive_max_files=25,
             archive_inline_bytes=4096,
             archive_max_child_bytes=8192,
+            archive_max_total_uncompressed_bytes=16384,
+            archive_max_compression_ratio=50.0,
             archive_max_depth=0,
             archive_max_converted_children=3,
             router_enabled=False,
@@ -260,6 +262,8 @@ def test_agent_build_conversion_config_preserves_productivity_options():
     assert config["archive_max_files"] == 25
     assert config["archive_inline_bytes"] == 4096
     assert config["archive_max_child_bytes"] == 8192
+    assert config["archive_max_total_uncompressed_bytes"] == 16384
+    assert config["archive_max_compression_ratio"] == 50.0
     assert config["archive_max_depth"] == 0
     assert config["archive_max_converted_children"] == 3
     assert config["router_enabled"] is False
@@ -471,6 +475,10 @@ def test_cli_exposes_agent_productivity_knobs_directly(tmp_path: Path):
             "3",
             "--archive-max-files",
             "50",
+            "--archive-max-total-uncompressed-bytes",
+            "1048576",
+            "--archive-max-compression-ratio",
+            "20",
             "--no-archive-recursive",
             "--json",
         ],
@@ -1161,6 +1169,8 @@ async def test_mcp_convert_schema_has_rich_descriptions_and_nullable_booleans():
     assert {item.get("type") for item in properties["router_enabled"].get("anyOf", [])} == {"boolean", "null"}
     assert properties["archive_recursive"].get("default") is None
     assert {item.get("type") for item in properties["archive_recursive"].get("anyOf", [])} == {"boolean", "null"}
+    assert properties["archive_max_total_uncompressed_bytes"]["default"] == 0
+    assert properties["archive_max_compression_ratio"]["default"] == 0.0
     for field in (
         "audio_provider",
         "audio_allow_cloud_stt",
@@ -1276,6 +1286,13 @@ def test_mcp_extra_options_omit_unspecified_booleans():
         max_batch_retries=-1,
     ) == {}
     assert mcp_server._agent_productivity_extra_options(archive_recursive=None) == {}
+    assert mcp_server._agent_productivity_extra_options(
+        archive_max_total_uncompressed_bytes=4096,
+        archive_max_compression_ratio=25.0,
+    ) == {
+        "archive_max_total_uncompressed_bytes": 4096,
+        "archive_max_compression_ratio": 25.0,
+    }
 
 
 @pytest.mark.asyncio
@@ -1677,6 +1694,8 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
             convert_tool = next(tool for tool in tools.tools if tool.name == "marker_convert_file")
             assert "text_data_max_rows" in convert_tool.inputSchema["properties"]
             assert "archive_max_files" in convert_tool.inputSchema["properties"]
+            assert "archive_max_total_uncompressed_bytes" in convert_tool.inputSchema["properties"]
+            assert "archive_max_compression_ratio" in convert_tool.inputSchema["properties"]
 
             response = await session.call_tool("marker_self_test", {"include_conversion": True})
             payload = json.loads(response.content[0].text)

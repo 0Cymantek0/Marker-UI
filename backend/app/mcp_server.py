@@ -280,6 +280,7 @@ PreviewCharsParam = Annotated[int, Field(ge=0, le=MAX_READ_CHARS, description="M
 PositiveRowsParam = Annotated[int, Field(ge=0, description="Optional non-negative limit; 0 means unset.", examples=[1000])]
 OptionalDepthParam = Annotated[int, Field(ge=-1, description="Optional depth/retry/distance; -1 means unset.", examples=[-1])]
 PositivePixelsParam = Annotated[int, Field(ge=0, description="Optional positive pixel/count limit; 0 means unset.", examples=[2048])]
+ArchiveCompressionRatioParam = Annotated[float, Field(ge=0.0, description="Optional archive compression ratio limit; 0 means unset.", examples=[100.0])]
 DensityParam = Annotated[float, Field(ge=-1.0, le=1.0, description="Optional density threshold from 0 to 1; -1 means unset.", examples=[0.2])]
 ConfidenceParam = Annotated[float, Field(ge=-1.0, le=1.0, description="Optional confidence threshold from 0 to 1; -1 means unset.", examples=[0.35])]
 AudioProviderParam = Annotated[str, Field(description="Audio STT provider id. Local default is local_faster_whisper; cloud providers require audio_allow_cloud_stt.", examples=["local_faster_whisper"])]
@@ -809,6 +810,8 @@ async def marker_convert_file(
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
+    archive_max_total_uncompressed_bytes: PositivePixelsParam = 0,
+    archive_max_compression_ratio: ArchiveCompressionRatioParam = 0.0,
     archive_max_depth: OptionalDepthParam = -1,
     archive_max_converted_children: PositiveRowsParam = 0,
     archive_recursive: OptionalBoolParam = None,
@@ -898,6 +901,8 @@ async def marker_convert_file(
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
+                archive_max_total_uncompressed_bytes=archive_max_total_uncompressed_bytes,
+                archive_max_compression_ratio=archive_max_compression_ratio,
                 archive_max_depth=archive_max_depth,
                 archive_max_converted_children=archive_max_converted_children,
                 archive_recursive=archive_recursive,
@@ -1073,6 +1078,8 @@ async def marker_submit_job(
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
+    archive_max_total_uncompressed_bytes: PositivePixelsParam = 0,
+    archive_max_compression_ratio: ArchiveCompressionRatioParam = 0.0,
     archive_max_depth: OptionalDepthParam = -1,
     archive_max_converted_children: PositiveRowsParam = 0,
     archive_recursive: OptionalBoolParam = None,
@@ -1145,6 +1152,8 @@ async def marker_submit_job(
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
+                archive_max_total_uncompressed_bytes=archive_max_total_uncompressed_bytes,
+                archive_max_compression_ratio=archive_max_compression_ratio,
                 archive_max_depth=archive_max_depth,
                 archive_max_converted_children=archive_max_converted_children,
                 archive_recursive=archive_recursive,
@@ -1936,6 +1945,8 @@ def _agent_productivity_extra_options(
     archive_max_files: int = 0,
     archive_inline_bytes: int = 0,
     archive_max_child_bytes: int = 0,
+    archive_max_total_uncompressed_bytes: int = 0,
+    archive_max_compression_ratio: float = 0.0,
     archive_max_depth: int = -1,
     archive_max_converted_children: int = 0,
     archive_recursive: bool | None = None,
@@ -1951,6 +1962,10 @@ def _agent_productivity_extra_options(
         options["archive_inline_bytes"] = archive_inline_bytes
     if archive_max_child_bytes > 0:
         options["archive_max_child_bytes"] = archive_max_child_bytes
+    if archive_max_total_uncompressed_bytes > 0:
+        options["archive_max_total_uncompressed_bytes"] = archive_max_total_uncompressed_bytes
+    if archive_max_compression_ratio > 0:
+        options["archive_max_compression_ratio"] = archive_max_compression_ratio
     if archive_max_depth >= 0:
         options["archive_max_depth"] = archive_max_depth
     if archive_max_converted_children > 0:

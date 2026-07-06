@@ -52,6 +52,8 @@ def test_export_json_schemas_contains_core_models_and_metadata():
         "vlm_batch_size",
         "text_data_max_rows",
         "archive_recursive",
+        "archive_max_total_uncompressed_bytes",
+        "archive_max_compression_ratio",
         "extra_options",
     }.issubset(option_names)
 
@@ -63,6 +65,7 @@ def test_export_json_schemas_contains_core_models_and_metadata():
     ]
     assert option_properties["vlm_batch_size"]["anyOf"][0]["maximum"] == 64
     assert option_properties["archive_max_depth"]["anyOf"][0]["minimum"] == 0
+    assert option_properties["archive_max_compression_ratio"]["anyOf"][0]["minimum"] == 1.0
 
 
 def test_option_metadata_cli_flags_exist_on_convert_parser():
@@ -129,6 +132,8 @@ def test_conversion_options_validate_agent_productivity_fields():
         text_data_max_rows=10,
         archive_recursive=False,
         archive_max_files=25,
+        archive_max_total_uncompressed_bytes=4096,
+        archive_max_compression_ratio=50.0,
         archive_max_depth=0,
         router_enabled=False,
         smart_router_level="beeg_brain",
@@ -140,6 +145,8 @@ def test_conversion_options_validate_agent_productivity_fields():
     )
 
     assert opts.archive_recursive is False
+    assert opts.archive_max_total_uncompressed_bytes == 4096
+    assert opts.archive_max_compression_ratio == 50.0
     assert opts.router_enabled is False
     assert opts.smart_router_level == "beeg_brain"
     assert opts.vlm_batch_size == 4

@@ -289,6 +289,8 @@ def build_conversion_config(
         "archive_max_files",
         "archive_inline_bytes",
         "archive_max_child_bytes",
+        "archive_max_total_uncompressed_bytes",
+        "archive_max_compression_ratio",
         "archive_max_depth",
         "archive_max_converted_children",
         "router_enabled",
