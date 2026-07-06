@@ -163,6 +163,7 @@ const mockInputFormats = [
     needs_gpu: true,
     upload_allowed: true,
     url_allowed: true,
+    output_formats: ['markdown', 'json', 'html', 'chunks'],
   },
   {
     extensions: ['.docx'],
@@ -173,6 +174,7 @@ const mockInputFormats = [
     needs_gpu: false,
     upload_allowed: true,
     url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
   },
   {
     extensions: ['.tsv'],
@@ -183,6 +185,7 @@ const mockInputFormats = [
     needs_gpu: false,
     upload_allowed: true,
     url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
   },
   {
     extensions: ['.xls'],
@@ -193,6 +196,7 @@ const mockInputFormats = [
     needs_gpu: false,
     upload_allowed: true,
     url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
   },
   {
     extensions: ['.msg'],
@@ -203,6 +207,7 @@ const mockInputFormats = [
     needs_gpu: false,
     upload_allowed: true,
     url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
   },
   {
     extensions: ['.wav'],
@@ -213,6 +218,7 @@ const mockInputFormats = [
     needs_gpu: false,
     upload_allowed: true,
     url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
   },
   {
     extensions: ['.mp4'],
@@ -223,6 +229,7 @@ const mockInputFormats = [
     needs_gpu: false,
     upload_allowed: true,
     url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
   },
 ]
 const mockGetCapabilities = vi.fn().mockResolvedValue({
@@ -734,6 +741,36 @@ describe('ConvertPage component', () => {
       })
 
       localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['json'] }))
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock select TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('markdown')
+      })
+    })
+
+    it('uses per-input output formats over stale marker extension fallback', async () => {
+      mockGetCapabilities.mockResolvedValueOnce({
+        engines: { text_data: 'ready', marker_pdf: 'ready' },
+        output_formats: ['markdown', 'json', 'html', 'chunks'],
+        marker_multi_format_extensions: ['.pdf', '.tsv'],
+        input_formats: mockInputFormats,
+      })
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['html'] }))
 
       render(<ConvertPage />)
       fireEvent.click(screen.getByText('Mock select TSV'))

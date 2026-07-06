@@ -89,14 +89,44 @@ function sourceSupportsMarkerFormats(
   return ext ? markerMultiFormatExtensions.includes(ext) : false
 }
 
-function regeneratableFormatsFor(
+function sourceOutputFormats(
   filename: string | undefined,
+  inputFormats: InputFormatCapability[] | null,
   markerMultiFormatExtensions: string[] | null,
 ): OutputFormat[] {
-  if (filename && sourceSupportsMarkerFormats(filename, markerMultiFormatExtensions)) {
-    return ['html', 'json', 'chunks']
+  if (!filename) return ['markdown', 'chunks']
+  const ext = extensionFor(filename)
+  const spec = inputFormats?.find((item) => item.extensions.includes(ext))
+  if (spec?.output_formats?.length) {
+    return spec.output_formats
   }
-  return ['chunks']
+  return sourceSupportsMarkerFormats(filename, markerMultiFormatExtensions)
+    ? ['markdown', 'json', 'html', 'chunks']
+    : ['markdown', 'chunks']
+}
+
+function commonOutputFormatsForSources(
+  filenames: string[],
+  inputFormats: InputFormatCapability[] | null,
+  markerMultiFormatExtensions: string[] | null,
+): OutputFormat[] {
+  if (filenames.length === 0) return ['markdown', 'json', 'html', 'chunks']
+  const [first, ...rest] = filenames.map((name) => (
+    sourceOutputFormats(name, inputFormats, markerMultiFormatExtensions)
+  ))
+  return rest.reduce(
+    (common, formats) => common.filter((fmt) => formats.includes(fmt)),
+    first,
+  )
+}
+
+function regeneratableFormatsFor(
+  filename: string | undefined,
+  inputFormats: InputFormatCapability[] | null,
+  markerMultiFormatExtensions: string[] | null,
+): OutputFormat[] {
+  return sourceOutputFormats(filename, inputFormats, markerMultiFormatExtensions)
+    .filter((fmt) => fmt !== 'markdown')
 }
 
 function engineOptionsFor(
@@ -206,27 +236,25 @@ export function ConvertPage() {
     [selectedFiles, parsedLocalPaths]
   )
 
-  const supportsMultiFormat = useMemo(() => {
+  const supportedOutputFormats = useMemo(() => {
     const sourceNames = [
       ...selectedFiles.map((entry) => entry.file.name),
       ...parsedLocalPaths,
     ]
-    if (sourceNames.length === 0) return true
-    
-    return sourceNames.every((name) => sourceSupportsMarkerFormats(name, markerMultiFormatExtensions))
-  }, [selectedFiles, parsedLocalPaths, markerMultiFormatExtensions])
+    return commonOutputFormatsForSources(sourceNames, inputFormats, markerMultiFormatExtensions)
+  }, [selectedFiles, parsedLocalPaths, inputFormats, markerMultiFormatExtensions])
+
+  const supportsMultiFormat = supportedOutputFormats.includes('json') || supportedOutputFormats.includes('html')
 
   useEffect(() => {
-    if (!supportsMultiFormat) {
-      setConfig((prev) => {
-        const supported = prev.output_formats.filter((fmt) => fmt === 'markdown' || fmt === 'chunks')
-        if (supported.length !== prev.output_formats.length || supported.length === 0) {
-          return { ...prev, output_formats: supported.length > 0 ? supported : ['markdown'] }
-        }
-        return prev
-      })
-    }
-  }, [supportsMultiFormat])
+    setConfig((prev) => {
+      const supported = prev.output_formats.filter((fmt) => supportedOutputFormats.includes(fmt))
+      if (supported.length !== prev.output_formats.length || supported.length === 0) {
+        return { ...prev, output_formats: supported.length > 0 ? supported : ['markdown'] }
+      }
+      return prev
+    })
+  }, [supportedOutputFormats])
 
   // Plan conversion for each source independently. Uploaded PDFs only get a
   // filename-level preview here; backend upload still probes bytes before queueing.
@@ -849,7 +877,7 @@ export function ConvertPage() {
                     content={previewText}
                     formats={selectedJob.formats}
                     availableFormats={selectedJob.availableFormats}
-                    regeneratableFormats={regeneratableFormatsFor(selectedJob.filename, markerMultiFormatExtensions)}
+                    regeneratableFormats={regeneratableFormatsFor(selectedJob.filename, inputFormats, markerMultiFormatExtensions)}
                     onRegenerate={(fmt) => regenerateJobFormat(selectedJob.id, fmt)}
                     onDownload={(fmt) => download(selectedJob.id, fmt)}
                     imageUnderstanding={selectedJob.imageUnderstanding}
