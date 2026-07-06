@@ -34,10 +34,10 @@ from __future__ import annotations
 import re
 
 from bs4 import BeautifulSoup
-from marker.renderers.markdown import MarkdownRenderer
+from marker.renderers.markdown import Markdownify, MarkdownRenderer
 from marker.settings import settings
 
-from app.processors.image_understanding import IU_HANDLED_PREFIX
+from app.image_understanding_tokens import IU_HANDLED_PREFIX
 
 # Matches the sentinel the processor injects, capturing the keep flag.
 # Tolerates HTML-comment form (``<!-- ... -->``) and the raw tag form, since the
@@ -55,9 +55,54 @@ def _handled_keep(content: str) -> bool | None:
     return m.group(1) == "1"
 
 
+class ImageUnderstandingMarkdownify(Markdownify):
+    """Markdownify customizations scoped to the image-understanding renderer."""
+
+    def convert_marker_comment(self, el, text, parent_tags):
+        # Carry per-image metadata into Markdown as an HTML comment so it
+        # survives for downstream LLMs / grep without rendering visibly.
+        content = el.get_text() or ""
+        return f"\n<!-- {content} -->\n"
+
+    def convert_pre(self, el, text, parent_tags):
+        # Preserve the ```<lang> info string from <code class="language-xxx">.
+        # Without this, Mermaid fences collapse to a bare ``` fence and no
+        # renderer (or react-markdown) can identify them as Mermaid.
+        code_el = el.find("code") if hasattr(el, "find") else None
+        lang = ""
+        if code_el is not None and code_el.has_attr("class"):
+            for cls in code_el["class"]:
+                if cls.startswith("language-"):
+                    lang = cls[len("language-"):]
+                    break
+        if not lang:
+            return super().convert_pre(el, text, parent_tags)
+        if not text:
+            return ""
+        return f"\n\n```{lang}\n{text}\n```\n\n"
+
+
 class ImageUnderstandingRenderer(MarkdownRenderer):
     """MarkdownRenderer that suppresses marker's duplicate ``<img>`` for blocks
     handled by ImageUnderstandingProcessor (see module docstring)."""
+
+    @property
+    def md_cls(self):
+        return ImageUnderstandingMarkdownify(
+            self.paginate_output,
+            self.page_separator,
+            heading_style="ATX",
+            bullets="-",
+            escape_misc=False,
+            escape_underscores=True,
+            escape_asterisks=True,
+            escape_dollars=True,
+            sub_symbol="<sub>",
+            sup_symbol="<sup>",
+            inline_math_delimiters=self.inline_math_delimiters,
+            block_math_delimiters=self.block_math_delimiters,
+            html_tables_in_markdown=self.html_tables_in_markdown,
+        )
 
     def extract_html(self, document, document_output, level=0):
         soup = BeautifulSoup(document_output.html, "html.parser")
