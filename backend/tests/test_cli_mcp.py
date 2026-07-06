@@ -245,6 +245,9 @@ def test_agent_capabilities_expose_minimal_non_admin_tools():
 
     assert "marker_cancel_job" in caps["tools"]
     assert "marker_delete_job" not in caps["tools"]
+    assert "marker_plan before large PDFs" in caps["agent_guidance"]
+    assert "marker_plan_conversion" not in caps["agent_guidance"]
+    assert "mode='semantic'" in caps["agent_guidance"]
 
 
 def test_agent_surface_registry_drives_agent_capabilities_and_mcp_profiles():

@@ -138,9 +138,10 @@ def capabilities() -> dict[str, Any]:
         "audio_output_modes": list(AUDIO_OUTPUT_MODES),
         "converters": converters,
         "agent_guidance": (
-            "Use marker_plan_conversion before large PDFs. Use marker_convert_file "
-            "with output_dir and a bounded max_chars. Use marker_read_output to page "
-            "through long markdown results."
+            "Use marker_plan before large PDFs or unknown inputs. Prefer marker_submit "
+            "for long conversions, then marker_job_status. Use marker_read_output for "
+            "bounded previews and marker_read_output_chunk with mode='semantic' when "
+            "a chunks artifact is available."
         ),
     }
 
