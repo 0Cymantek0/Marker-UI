@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, CONTRACT_SCHEMA_VERSION, export_json_schemas
 from app.agent_surface import (
+    MCP_ALL_TOOL_NAMES as SURFACE_MCP_ALL_TOOL_NAMES,
     MCP_ADMIN_TOOL_NAMES as SURFACE_MCP_ADMIN_TOOL_NAMES,
     MCP_FULL_TOOL_NAMES as SURFACE_MCP_FULL_TOOL_NAMES,
     MCP_MINIMAL_TOOL_NAMES as SURFACE_MCP_MINIMAL_TOOL_NAMES,
@@ -24,6 +25,7 @@ from app.agent_surface import (
     MCP_SETTINGS_WRITE_TOOL_NAMES,
     MCP_TOOL_PROFILES,
     MCP_V1_TOOL_NAMES as SURFACE_MCP_V1_TOOL_NAMES,
+    MCP_V2_TOOL_NAMES as SURFACE_MCP_V2_TOOL_NAMES,
     tool_names_for_profile as surface_tool_names_for_profile,
 )
 from app.conversion.formats import OUTPUT_FORMATS_DESCRIPTION
@@ -53,6 +55,8 @@ from app.mcp_resources import register_mcp_resources
 from app.security.auth import ScopedStaticTokenVerifier, configured_static_tokens, require_mcp_scopes
 from app.security.scopes import (
     DEFAULT_MCP_SCOPES,
+    SCOPE_CAPABILITIES_READ,
+    SCOPE_JOBS_READ,
     SCOPE_JOBS_WRITE,
     SCOPE_OUTPUTS_READ,
     SCOPE_SETTINGS_READ,
@@ -216,7 +220,31 @@ class SelfTestOutput(MarkerOutputModel):
     schemas_ok: bool | None = Field(default=None, description="JSON schema export check result.", examples=[True])
 
 
+class SourceInput(MarkerOutputModel):
+    kind: Literal["local_path", "url"] = Field(
+        description="Source kind: local_path for workspace files, url for safe public HTTP(S).",
+        examples=["local_path"],
+    )
+    path: str = Field(
+        default="",
+        description="Local file path when kind is local_path.",
+        examples=["C:\\path\\to\\document.pdf"],
+    )
+    url: str = Field(
+        default="",
+        description="Public HTTP(S) URL when kind is url.",
+        examples=["https://example.com/document.pdf"],
+    )
+
+
 PathParam = Annotated[str, Field(description="Local file path. Example: C:\\path\\to\\document.pdf.", examples=["C:\\path\\to\\document.pdf"])]
+SourceParam = Annotated[
+    SourceInput,
+    Field(
+        description="Conversion source object.",
+        examples=[{"kind": "local_path", "path": "C:\\path\\to\\document.pdf"}],
+    ),
+]
 UrlParam = Annotated[str, Field(description="Public http(s) URL. Example: https://example.com/document.pdf.", examples=["https://example.com/document.pdf"])]
 DirParam = Annotated[str, Field(description="Output directory path. Example: C:\\path\\to\\out.", examples=["C:\\path\\to\\out"])]
 OutputPathParam = Annotated[str, Field(description="Exact output file path. Existing files are refused unless overwrite is true.", examples=["C:\\path\\to\\out\\document.md"])]
@@ -266,7 +294,9 @@ mcp = FastMCP(
     stateless_http=True,
 )
 
+MCP_V2_TOOL_NAMES = list(SURFACE_MCP_V2_TOOL_NAMES)
 MCP_V1_TOOL_NAMES = list(SURFACE_MCP_V1_TOOL_NAMES)
+MCP_ALL_TOOL_NAMES = list(SURFACE_MCP_ALL_TOOL_NAMES)
 MCP_MINIMAL_TOOL_NAMES = list(SURFACE_MCP_MINIMAL_TOOL_NAMES)
 MCP_FULL_TOOL_NAMES = list(SURFACE_MCP_FULL_TOOL_NAMES)
 MCP_ADMIN_TOOL_NAMES = list(SURFACE_MCP_ADMIN_TOOL_NAMES)
@@ -284,6 +314,206 @@ register_mcp_resources(
     prompt_names=MCP_PROMPT_NAMES,
 )
 register_mcp_prompts(mcp)
+
+
+@mcp.tool(
+    name="marker_capabilities",
+    title="Marker Capabilities",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_capabilities() -> CapabilitiesOutput:
+    """Canonical v2 capability tool."""
+
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
+    data = capabilities()
+    data["tools"] = list(MCP_ACTIVE_TOOL_NAMES)
+    data["resources"] = MCP_RESOURCE_URIS
+    data["prompts"] = MCP_PROMPT_NAMES
+    return data
+
+
+@mcp.tool(
+    name="marker_plan",
+    title="Plan Marker Conversion",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_plan(
+    source: SourceParam,
+    size: SizeParam = 0,
+    output_format: OutputFormatParam = "markdown",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    force_ocr: Annotated[bool, Field(description="Force OCR during planning and conversion.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> PlanOutput:
+    """Canonical v2 planning tool using one source object."""
+
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=False,
+        extra_options_json=extra_options_json,
+    )
+    options.force_ocr = force_ocr
+    if source.kind == "url":
+        url = _required_source_value(source.url, "source.url")
+        assert_safe_source_url(url)
+        filename = Path(unquote(urlparse(url).path)).name or "document"
+        return await plan_conversion(filename=filename, size=size, options=options)
+    return await plan_conversion(
+        local_file_path=_required_source_value(source.path, "source.path"),
+        size=size,
+        options=options,
+    )
+
+
+@mcp.tool(
+    name="marker_convert",
+    title="Convert With Marker",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    },
+)
+async def marker_convert(
+    ctx: Context,
+    source: SourceParam,
+    output_dir: DirParam = "",
+    output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
+    output_format: OutputFormatParam = "markdown",
+    max_chars: PreviewCharsParam = 20_000,
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> ConvertOutput:
+    """Canonical v2 conversion tool using one source object."""
+
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    roots = await _client_workspace_roots(ctx)
+    local_file_path, source_url = _source_to_agent_kwargs(source)
+    with scoped_client_workspace_roots(roots):
+        result = await convert_document(
+            local_file_path=local_file_path,
+            source_url=source_url,
+            output_dir=_none_if_blank(output_dir),
+            output_path=_none_if_blank(output_path),
+            overwrite=overwrite,
+            max_chars=max_chars,
+            options=options,
+        )
+    return _with_output_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_submit",
+    title="Submit Marker Job",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": True,
+    },
+)
+async def marker_submit(
+    ctx: Context,
+    source: SourceParam,
+    output_dir: DirParam = "",
+    output_format: OutputFormatParam = "markdown",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> SubmitJobOutput:
+    """Canonical v2 async job submission tool using one source object."""
+
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    local_file_path, source_url = _source_to_agent_kwargs(source)
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        result = await submit_conversion_job(
+            local_file_path=local_file_path,
+            source_url=source_url,
+            output_dir=_none_if_blank(output_dir),
+            options=options,
+        )
+    return _with_job_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_job_status",
+    title="Get Marker Job Status",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def marker_job_status(
+    job_id: JobIdParam,
+    include_result_text: Annotated[bool, Field(description="Include full result text when available.", examples=[False])] = False,
+    max_chars: PreviewCharsParam = 20_000,
+) -> JobStatusOutput:
+    """Canonical v2 job status tool."""
+
+    require_mcp_scopes(SCOPE_JOBS_READ)
+    return _with_job_resource_links(
+        await get_job_status(
+            job_id,
+            include_result_text=include_result_text,
+            max_chars=max_chars,
+        )
+    )
+
+
+@mcp.tool(
+    name="marker_output_manifest",
+    title="Get Marker Output Manifest",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+def marker_output_manifest(
+    output_path: Annotated[str, Field(description="Output text path returned by marker_convert.", examples=["C:\\path\\to\\out\\document.md"])]
+) -> ManifestToolOutput:
+    """Canonical v2 output manifest tool."""
+
+    require_mcp_scopes(SCOPE_OUTPUTS_READ)
+    manifest_path, manifest = manifest_for_output_path(Path(output_path))
+    return {"manifest_path": str(manifest_path) if manifest_path else None, "manifest": manifest}
 
 
 @mcp.tool(
@@ -1283,6 +1513,19 @@ def run(
             mcp.settings.auth = None
             mcp._token_verifier = None
     mcp.run(transport=transport)
+
+
+def _source_to_agent_kwargs(source: SourceInput) -> tuple[str | None, str | None]:
+    if source.kind == "url":
+        return None, _required_source_value(source.url, "source.url")
+    return _required_source_value(source.path, "source.path"), None
+
+
+def _required_source_value(value: str, field_name: str) -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} is required")
+    return cleaned
 
 
 def _none_if_blank(value: str) -> str | None:

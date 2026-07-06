@@ -44,7 +44,7 @@ async def test_mcp_static_resources_are_readable():
     assert options_payload["schema_version"] == "marker.agent_contract.v1"
     assert any(item["name"] == "output_format" for item in options_payload["options"])
     capabilities_payload = json.loads(capabilities[0].content)
-    assert "marker_convert_file" in capabilities_payload["tools"]
+    assert "marker_convert" in capabilities_payload["tools"]
     assert "marker://docs/agent-guide" in capabilities_payload["resources"]
     assert "convert_for_rag" in capabilities_payload["prompts"]
 

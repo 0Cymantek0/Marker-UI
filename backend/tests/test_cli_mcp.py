@@ -147,8 +147,9 @@ def test_agent_surface_registry_drives_agent_capabilities_and_mcp_profiles():
     assert mcp_server.MCP_MINIMAL_TOOL_NAMES == list(agent_surface.MCP_MINIMAL_TOOL_NAMES)
     assert mcp_server.MCP_FULL_TOOL_NAMES == list(agent_surface.MCP_FULL_TOOL_NAMES)
     assert mcp_server.MCP_ADMIN_TOOL_NAMES == list(agent_surface.MCP_ADMIN_TOOL_NAMES)
-    assert set(agent_surface.DEFAULT_AGENT_TOOL_NAMES).issubset(agent_surface.MCP_V1_TOOL_NAMES)
-    assert set(agent_surface.MCP_TOOL_SPEC_BY_NAME) == set(agent_surface.MCP_V1_TOOL_NAMES)
+    assert set(agent_surface.DEFAULT_AGENT_TOOL_NAMES).issubset(agent_surface.MCP_ALL_TOOL_NAMES)
+    assert mcp_server.MCP_ALL_TOOL_NAMES == list(agent_surface.MCP_ALL_TOOL_NAMES)
+    assert set(agent_surface.MCP_TOOL_SPEC_BY_NAME) == set(agent_surface.MCP_ALL_TOOL_NAMES)
     assert all(spec.scopes for spec in agent_surface.MCP_TOOL_SPECS)
     assert set(agent_surface.MCP_RESOURCE_SPEC_BY_URI) == set(agent_surface.MCP_RESOURCE_URIS)
     assert all(spec.scopes for spec in agent_surface.MCP_RESOURCE_SPECS)
@@ -196,6 +197,27 @@ def test_cli_convert_command_writes_real_output(tmp_path: Path):
     assert "| city | value |" in out_path.read_text(encoding="utf-8")
     assert "Only first 2 rows shown" in out_path.read_text(encoding="utf-8")
     assert data["metadata"]["engine"]["engine"] == "text_data"
+
+
+@pytest.mark.asyncio
+async def test_mcp_v2_convert_uses_source_object(tmp_path: Path):
+    import app.mcp_server as mcp_server
+
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\n", encoding="utf-8")
+
+    result = await mcp_server.marker_convert(
+        None,
+        mcp_server.SourceInput(kind="local_path", path=str(source)),
+        output_dir=str(tmp_path / "out"),
+        max_chars=5000,
+        output_format="markdown",
+    )
+
+    out_path = Path(result["output"]["text_path"])
+    assert out_path.is_file()
+    assert "| Kolkata | 10 |" in out_path.read_text(encoding="utf-8")
+    assert result["resource_links"]["manifest"].startswith("marker://outputs/")
 
 
 def test_cli_convert_accepts_request_json_file(tmp_path: Path):
@@ -789,7 +811,8 @@ async def test_mcp_default_tool_profile_is_minimal():
     assert len(names) <= 10
     assert names == mcp_server.MCP_MINIMAL_TOOL_NAMES
     assert caps["tools"] == names
-    assert "marker_convert_file" in names
+    assert "marker_convert" in names
+    assert "marker_convert_file" not in names
     assert "marker_delete_job" not in names
     assert "marker_set_setting" not in names
     assert "marker_delete_setting" not in names

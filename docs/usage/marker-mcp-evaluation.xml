@@ -1,15 +1,15 @@
 <evaluation>
   <qa_pair>
     <question>You need to convert a local CSV named C:\path\to\scores.csv, inspect only a short preview first, then continue reading if the response is truncated. Which exact ordered MCP tools should you use? Answer as comma-separated tool names.</question>
-    <answer>marker_plan_conversion, marker_convert_file, marker_read_output</answer>
+    <answer>marker_plan, marker_convert, marker_read_output</answer>
   </qa_pair>
   <qa_pair>
     <question>You submitted a long PDF conversion asynchronously and received a job id. Which tool should you poll until the job reaches completed, failed, or cancelled? Answer with the exact tool name.</question>
-    <answer>marker_get_job_status</answer>
+    <answer>marker_job_status</answer>
   </qa_pair>
   <qa_pair>
     <question>You need to confirm available engines, then submit a long conversion job, then page the saved output after completion. Which exact ordered MCP tools should you use? Answer as comma-separated tool names.</question>
-    <answer>marker_list_capabilities, marker_submit_job, marker_get_job_status, marker_read_output</answer>
+    <answer>marker_capabilities, marker_submit, marker_job_status, marker_read_output</answer>
   </qa_pair>
   <qa_pair>
     <question>A user asks whether configured provider secrets are present, but you must not reveal API keys. Which MCP tool lists settings with sensitive values masked? Answer with the exact tool name.</question>

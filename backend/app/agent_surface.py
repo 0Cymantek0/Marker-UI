@@ -37,6 +37,17 @@ class AgentResourceSpec:
 
 MCP_TOOL_PROFILES: tuple[ToolProfile, ...] = ("minimal", "full", "admin")
 
+MCP_V2_TOOL_NAMES: tuple[str, ...] = (
+    "marker_capabilities",
+    "marker_plan",
+    "marker_convert",
+    "marker_submit",
+    "marker_job_status",
+    "marker_cancel_job",
+    "marker_read_output",
+    "marker_output_manifest",
+)
+
 MCP_V1_TOOL_NAMES: tuple[str, ...] = (
     "marker_list_capabilities",
     "marker_get_capabilities",
@@ -66,16 +77,10 @@ MCP_V1_TOOL_NAMES: tuple[str, ...] = (
     "marker_delete_setting",
 )
 
-MCP_MINIMAL_TOOL_NAMES: tuple[str, ...] = (
-    "marker_list_capabilities",
-    "marker_plan_conversion",
-    "marker_convert_file",
-    "marker_submit_job",
-    "marker_get_job_status",
-    "marker_cancel_job",
-    "marker_read_output",
-    "marker_get_output_manifest",
+MCP_ALL_TOOL_NAMES: tuple[str, ...] = tuple(
+    dict.fromkeys((*MCP_V2_TOOL_NAMES, *MCP_V1_TOOL_NAMES))
 )
+MCP_MINIMAL_TOOL_NAMES: tuple[str, ...] = MCP_V2_TOOL_NAMES
 
 MCP_SETTINGS_WRITE_TOOL_NAMES: frozenset[str] = frozenset(
     {"marker_set_setting", "marker_delete_setting"}
@@ -84,9 +89,9 @@ MCP_ADMIN_ONLY_TOOL_NAMES: frozenset[str] = frozenset(
     {"marker_delete_job", *MCP_SETTINGS_WRITE_TOOL_NAMES}
 )
 MCP_FULL_TOOL_NAMES: tuple[str, ...] = tuple(
-    name for name in MCP_V1_TOOL_NAMES if name not in MCP_ADMIN_ONLY_TOOL_NAMES
+    name for name in MCP_ALL_TOOL_NAMES if name not in MCP_ADMIN_ONLY_TOOL_NAMES
 )
-MCP_ADMIN_TOOL_NAMES: tuple[str, ...] = MCP_V1_TOOL_NAMES
+MCP_ADMIN_TOOL_NAMES: tuple[str, ...] = MCP_ALL_TOOL_NAMES
 DEFAULT_AGENT_TOOL_NAMES: tuple[str, ...] = MCP_MINIMAL_TOOL_NAMES
 
 MCP_RESOURCE_URIS: tuple[str, ...] = (
@@ -123,18 +128,22 @@ def _tool_scopes(name: str) -> tuple[str, ...]:
         "marker_self_test",
         "marker_get_health",
         "marker_get_version",
+        "marker_capabilities",
         "marker_plan_conversion",
         "marker_plan_local_file",
         "marker_plan_url",
+        "marker_plan",
     }:
         return (SCOPE_CAPABILITIES_READ,)
     if name in {
         "marker_convert_file",
         "marker_convert_local_file",
         "marker_convert_url",
+        "marker_convert",
         "marker_submit_job",
         "marker_submit_local_job",
         "marker_submit_url_job",
+        "marker_submit",
         "marker_cancel_job",
         "marker_delete_job",
     }:
@@ -143,10 +152,11 @@ def _tool_scopes(name: str) -> tuple[str, ...]:
         "marker_read_output",
         "marker_read_output_chunk",
         "marker_get_output_manifest",
+        "marker_output_manifest",
         "marker_list_output_assets",
     }:
         return (SCOPE_OUTPUTS_READ,)
-    if name in {"marker_list_jobs", "marker_get_job_status"}:
+    if name in {"marker_list_jobs", "marker_get_job_status", "marker_job_status"}:
         return (SCOPE_JOBS_READ,)
     if name in {"marker_list_settings", "marker_get_setting"}:
         return (SCOPE_SETTINGS_READ,)
@@ -167,7 +177,7 @@ MCP_TOOL_SPECS: tuple[AgentToolSpec, ...] = tuple(
         ),
         scopes=_tool_scopes(name),
     )
-    for name in MCP_V1_TOOL_NAMES
+    for name in MCP_ALL_TOOL_NAMES
 )
 
 MCP_RESOURCE_SPECS: tuple[AgentResourceSpec, ...] = (

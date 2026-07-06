@@ -134,28 +134,45 @@ Default profile is `minimal`, also available through
 `MARKER_MCP_TOOL_PROFILE=minimal`. It exposes the small safe surface needed by
 most coding agents:
 
-- `marker_list_capabilities`
-- `marker_plan_conversion`
-- `marker_convert_file`
-- `marker_submit_job`
-- `marker_get_job_status`
+- `marker_capabilities`
+- `marker_plan`
+- `marker_convert`
+- `marker_submit`
+- `marker_job_status`
 - `marker_cancel_job`
 - `marker_read_output`
-- `marker_get_output_manifest`
+- `marker_output_manifest`
 
 Use `--tool-profile full` for legacy/source-specific convenience tools such as
-`marker_convert_url` and `marker_submit_local_job`. Use `--tool-profile admin`
-only when the agent needs destructive/admin tools such as `marker_delete_job`.
+`marker_convert_file`, `marker_convert_url`, and `marker_submit_local_job`.
+Use `--tool-profile admin` only when the agent needs destructive/admin tools
+such as `marker_delete_job`.
 
 Settings write/delete tools are disabled even in `admin` unless
 `MARKER_MCP_ENABLE_SETTINGS_WRITE=true` is set. Enable this only for trusted
 agents because model-controlled settings writes can change provider keys,
 base URLs, and other sensitive runtime behavior.
 
+Canonical v2 tools use one source object:
+
+```json
+{ "kind": "local_path", "path": "C:\\path\\to\\document.pdf" }
+```
+
+```json
+{ "kind": "url", "url": "https://docs.example.com/report.pdf" }
+```
+
 ## Tools
 
 | Tool | Purpose |
 |------|---------|
+| `marker_capabilities` | Canonical v2 capability tool. |
+| `marker_plan` | Canonical v2 planning with a `{kind, path|url}` source object. |
+| `marker_convert` | Canonical v2 conversion with a `{kind, path|url}` source object. |
+| `marker_submit` | Canonical v2 async submission with a `{kind, path|url}` source object. |
+| `marker_job_status` | Canonical v2 job status. |
+| `marker_output_manifest` | Canonical v2 output manifest reader. |
 | `marker_list_capabilities` / `marker_get_capabilities` | Supported formats, engines, tools, resources, prompts, and options. |
 | `marker_get_health` | Lightweight MCP health check. |
 | `marker_get_version` | Version and contract schema version. |
@@ -204,10 +221,10 @@ policy-gated server side.
 
 ## Agent Workflow
 
-1. Read `marker://capabilities`.
-2. Plan with `marker_plan_local_file` or `marker_plan_url` for PDFs and unknown inputs.
-3. Convert small work with `marker_convert_local_file` or `marker_convert_url`.
-4. Submit long work with `marker_submit_local_job` or `marker_submit_url_job`, then poll `marker_get_job_status`.
+1. Read `marker://capabilities` or call `marker_capabilities`.
+2. Plan with `marker_plan` for PDFs and unknown inputs.
+3. Convert small work with `marker_convert`.
+4. Submit long work with `marker_submit`, then poll `marker_job_status`.
 5. Read long output with `marker_read_output_chunk`.
 6. Inspect `.marker.json` manifests before summarizing asset-heavy output.
 7. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.
