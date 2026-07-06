@@ -878,14 +878,14 @@ async def list_settings(*, category: str | None = None) -> dict[str, Any]:
     return {"settings": grouped, "total": len(rows), "masked": True}
 
 
-async def get_setting(key: str) -> dict[str, Any]:
+async def get_setting(key: str, *, category: str | None = None) -> dict[str, Any]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
-        row = await _get_setting_row(session, key)
+        row = await _get_setting_row(session, key, category=category)
         if not row:
             raise InputNotFoundError(
                 f"Setting not found: {key}",
-                details={"key": key},
+                details={"key": key, "category": category},
             )
         return _setting_to_dict(row)
 
@@ -928,10 +928,13 @@ async def set_setting(key: str, value: str, *, category: str = "general") -> dic
         return _setting_to_dict(row)
 
 
-async def delete_setting(key: str) -> dict[str, str]:
+async def delete_setting(key: str, *, category: str | None = None) -> dict[str, str]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
-        await session.execute(delete(Setting).where(Setting.key == key))
+        stmt = delete(Setting).where(Setting.key == key)
+        if category:
+            stmt = stmt.where(Setting.category == category)
+        await session.execute(stmt)
         await record_audit_event(
             session,
             event_type="settings.delete",
@@ -939,7 +942,7 @@ async def delete_setting(key: str) -> dict[str, str]:
             resource_type="setting",
             resource_id=key,
             status="success",
-            payload={"key": key, "sensitive": is_sensitive_key(key)},
+            payload={"key": key, "category": category, "sensitive": is_sensitive_key(key)},
         )
         await session.commit()
     return {"status": "deleted", "key": key}
@@ -1080,8 +1083,11 @@ def _mask_secret_value(raw: str) -> str:
     return mask_value(decrypted)
 
 
-async def _get_setting_row(session: Any, key: str) -> Setting | None:
-    return (await session.execute(select(Setting).where(Setting.key == key))).scalar_one_or_none()
+async def _get_setting_row(session: Any, key: str, *, category: str | None = None) -> Setting | None:
+    stmt = select(Setting).where(Setting.key == key)
+    if category:
+        stmt = stmt.where(Setting.category == category)
+    return (await session.execute(stmt)).scalar_one_or_none()
 
 
 def _json_obj(raw: str | None) -> dict[str, Any]:

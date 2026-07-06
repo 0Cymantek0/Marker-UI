@@ -253,6 +253,11 @@ async def test_agent_api_settings_and_jobs_use_real_database_paths(
     assert "openai_api_key" in serialized
     assert secret not in serialized
 
+    fetched = await agent_api.get_setting("openai_api_key", category="llm")
+    assert fetched["key"] == "openai_api_key"
+    with pytest.raises(agent_api.InputNotFoundError):
+        await agent_api.get_setting("openai_api_key", category="ui")
+
     db_session.add(
         Setting(
             key="llm_providers",
@@ -276,6 +281,10 @@ async def test_agent_api_settings_and_jobs_use_real_database_paths(
     assert "dummy-fallback-key" not in providers_json
     assert "gAAAA" not in providers_json
     assert "max_output_tokens" in providers_json
+
+    await agent_api.delete_setting("llm_providers", category="ui")
+    still_present = await agent_api.get_setting("llm_providers", category="llm")
+    assert still_present["key"] == "llm_providers"
 
     result_file = tmp_path / "finished.md"
     result_file.write_text("# Converted\n\nDone.", encoding="utf-8")
@@ -1021,6 +1030,59 @@ def test_mcp_client_config_opencode_uses_command_array(tmp_path: Path):
     assert server["type"] == "local"
     assert server["command"] == ["python", "-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]
     assert server["cwd"] == str(tmp_path.resolve())
+
+
+def test_cli_settings_get_and_delete_accept_documented_category(monkeypatch: pytest.MonkeyPatch, capsys):
+    from app import cli
+
+    calls: list[tuple[str, str, str | None]] = []
+
+    async def fake_get_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("get", key, category))
+        return {"key": key, "value": "********", "category": category or "general"}
+
+    async def fake_delete_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("delete", key, category))
+        return {"status": "deleted", "key": key}
+
+    monkeypatch.setattr(cli, "get_setting", fake_get_setting)
+    monkeypatch.setattr(cli, "delete_setting", fake_delete_setting)
+
+    assert cli.main(["settings", "get", "openai_api_key", "--category", "llm", "--json"]) == 0
+    get_payload = json.loads(capsys.readouterr().out)
+    assert get_payload["category"] == "llm"
+
+    assert cli.main(["settings", "delete", "openai_api_key", "--category", "llm", "--json"]) == 0
+    delete_payload = json.loads(capsys.readouterr().out)
+    assert delete_payload["status"] == "deleted"
+    assert calls == [
+        ("get", "openai_api_key", "llm"),
+        ("delete", "openai_api_key", "llm"),
+    ]
+
+
+def test_cli_config_alias_get_and_delete_accept_documented_category(monkeypatch: pytest.MonkeyPatch):
+    from app import cli
+
+    calls: list[tuple[str, str, str | None]] = []
+
+    async def fake_get_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("get", key, category))
+        return {"key": key, "value": "********", "category": category or "general"}
+
+    async def fake_delete_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("delete", key, category))
+        return {"status": "deleted", "key": key}
+
+    monkeypatch.setattr(cli, "get_setting", fake_get_setting)
+    monkeypatch.setattr(cli, "delete_setting", fake_delete_setting)
+
+    assert cli.main(["config", "get", "openai_api_key", "--category", "llm", "--json"]) == 0
+    assert cli.main(["config", "delete", "openai_api_key", "--category", "llm", "--json"]) == 0
+    assert calls == [
+        ("get", "openai_api_key", "llm"),
+        ("delete", "openai_api_key", "llm"),
+    ]
 
 
 

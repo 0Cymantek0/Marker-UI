@@ -1151,11 +1151,12 @@ async def marker_list_settings(
 )
 async def marker_get_setting(
     key: SettingKeyParam,
+    category: Annotated[str, Field(description="Optional settings category guard.", examples=["llm"])] = "",
 ) -> SettingOutput:
     """Read one persisted setting with sensitive values masked."""
 
     require_mcp_scopes(SCOPE_SETTINGS_READ)
-    return await get_setting(key)
+    return await get_setting(key, category=_none_if_blank(category))
 
 
 @mcp.tool(
@@ -1191,11 +1192,12 @@ async def marker_set_setting(
 )
 async def marker_delete_setting(
     key: SettingKeyParam,
+    category: Annotated[str, Field(description="Optional settings category guard.", examples=["llm"])] = "",
 ) -> DeleteSettingOutput:
     """Delete one persisted setting key."""
 
     require_mcp_scopes(SCOPE_SETTINGS_WRITE)
-    return await delete_setting(key)
+    return await delete_setting(key, category=_none_if_blank(category))
 
 
 @mcp.tool(

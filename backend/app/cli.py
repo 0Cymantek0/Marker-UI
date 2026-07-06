@@ -361,6 +361,7 @@ def _build_parser() -> argparse.ArgumentParser:
     settings_list.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     settings_get = settings_sub.add_parser("get", help="Get one masked setting")
     settings_get.add_argument("key")
+    settings_get.add_argument("--category")
     settings_get.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     settings_set = settings_sub.add_parser("set", help="Set one setting")
     settings_set.add_argument("key")
@@ -369,6 +370,7 @@ def _build_parser() -> argparse.ArgumentParser:
     settings_set.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     settings_delete = settings_sub.add_parser("delete", help="Delete one setting")
     settings_delete.add_argument("key")
+    settings_delete.add_argument("--category")
     settings_delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     config = sub.add_parser("config", help="Alias for settings list/get/set/delete")
@@ -378,6 +380,7 @@ def _build_parser() -> argparse.ArgumentParser:
     config_list.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     config_get = config_sub.add_parser("get", help="Get one masked setting")
     config_get.add_argument("key")
+    config_get.add_argument("--category")
     config_get.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     config_set = config_sub.add_parser("set", help="Set one setting")
     config_set.add_argument("key")
@@ -386,6 +389,7 @@ def _build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     config_delete = config_sub.add_parser("delete", help="Delete one setting")
     config_delete.add_argument("key")
+    config_delete.add_argument("--category")
     config_delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     test = sub.add_parser("self-test", help="Run CLI/MCP readiness checks")
@@ -470,14 +474,20 @@ def _handle_settings(args: argparse.Namespace) -> int:
             args.json,
         )
     if args.settings_command == "get":
-        return _print_result(asyncio.run(get_setting(args.key)), args.json)
+        return _print_result(
+            asyncio.run(get_setting(args.key, category=args.category)),
+            args.json,
+        )
     if args.settings_command == "set":
         return _print_result(
             asyncio.run(set_setting(args.key, args.value, category=args.category)),
             args.json,
         )
     if args.settings_command == "delete":
-        return _print_result(asyncio.run(delete_setting(args.key)), args.json)
+        return _print_result(
+            asyncio.run(delete_setting(args.key, category=args.category)),
+            args.json,
+        )
     return 2
 
 
