@@ -12,6 +12,7 @@ import {
   type JobStatus,
   type ImageUnderstandingMeta,
   type RetryJobRequestBody,
+  type ConverterPlanResponse,
 } from '@/lib/api'
 import { filenameForDownload } from '@/lib/download'
 
@@ -49,7 +50,7 @@ export interface JobState {
   isBunch?: boolean
   // Per-image understanding metadata for the badge UI.
   imageUnderstanding?: ImageUnderstandingMeta[] | null
-  conversionMetadata?: Record<string, any> | null
+  conversionMetadata?: ConversionMetadata | null
   // LLM provider/model this job runs under — lets the model-swap dialog
   // pre-fill and scope a same-provider hot-swap. Empty when not using an LLM.
   llmProvider?: string
@@ -69,6 +70,20 @@ export interface SourceEngineOverrides {
   fileKeys?: string[]
   fileEngineOverrides?: Record<string, string>
   localPathEngineOverrides?: Record<string, string>
+}
+
+export interface ConversionMetadata {
+  engine?: ConverterPlanResponse | null
+  probe_result?: Record<string, unknown> | null
+  audio?: Record<string, unknown> | null
+  audio_batch?: Record<string, unknown> | null
+  mixed_engine_segments?: {
+    page_range?: string | null
+    requested_engine?: string | null
+    actual_engine?: string | null
+    fallback_reason?: string | null
+    pages?: number[] | null
+  }[] | null
 }
 
 interface ConversionContextType {
@@ -94,6 +109,44 @@ interface ConversionContextType {
 }
 
 const ConversionContext = createContext<ConversionContextType | null>(null)
+
+interface ConversionSsePayload {
+  status?: JobStatus['status']
+  message?: string
+  error?: string
+  logs?: string[]
+  progress?: number
+  elapsed?: number
+  eta?: number
+}
+
+type RecoveredJobStatus = JobStatus & {
+  conversion_config?: Partial<ConversionConfig>
+  config_json?: Partial<ConversionConfig>
+  use_llm?: boolean
+  llm_provider?: string
+  llm_model?: string
+}
+
+function parseSsePayload(raw: string): ConversionSsePayload {
+  if (!raw) return {}
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed as ConversionSsePayload : {}
+  } catch {
+    return {}
+  }
+}
+
+function recoveredJobConfig(job: RecoveredJobStatus): Partial<ConversionConfig> {
+  if (job.conversion_config && typeof job.conversion_config === 'object') {
+    return job.conversion_config
+  }
+  if (job.config_json && typeof job.config_json === 'object') {
+    return job.config_json
+  }
+  return {}
+}
 
 export function ConversionProvider({ children }: { children: React.ReactNode }) {
   const [jobs, setJobs] = useState<JobState[]>([])
@@ -158,14 +211,14 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         // the clean document text (the blob may be a ZIP, see resultText).
         let imageUnderstanding: ImageUnderstandingMeta[] | null = null
         let resultText: string | null = null
-        let conversionMetadata: Record<string, any> | null = null
+        let conversionMetadata: ConversionMetadata | null = null
         let formats: Record<string, string> | null = null
         let availableFormats: string[] | undefined
         try {
           const status = await getJobStatus(jobId)
           imageUnderstanding = status.image_understanding ?? null
           resultText = status.result_text ?? null
-          conversionMetadata = status.conversion_metadata ?? null
+          conversionMetadata = status.conversion_metadata as ConversionMetadata | null
           formats = status.formats ?? null
           availableFormats = status.available_formats ?? undefined
         } catch {
@@ -293,7 +346,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           stopPolling()
           handleJobCancelled(id, '[SYSTEM] Job was cancelled on the backend.')
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         const is404 = err instanceof Error && err.message.includes('404')
         if (is404) {
           stopPolling()
@@ -318,7 +371,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }
 
     es.addEventListener('progress', (e) => {
-      const data = e.data ? JSON.parse(e.data) : {}
+      const data = parseSsePayload(e.data)
       const messageStr = data.message || 'Executing conversion pipelines...'
 
       if (data.status === 'completed') {
@@ -376,7 +429,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     })
 
     es.addEventListener('status', (e) => {
-      const data = e.data ? JSON.parse(e.data) : {}
+      const data = parseSsePayload(e.data)
       if (data.status === 'completed') {
         closeES()
         handleJobCompleted(id, jobId)
@@ -409,11 +462,11 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         )
         if (activeJobs.length === 0) return
 
-        const recoveredJobs: JobState[] = activeJobs.map((job) => {
-          const cfg = (job as any).conversion_config || (job as any).config_json || {}
-          const useLlm = (job as any).use_llm ?? cfg.use_llm
-          const llmProvider = (job as any).llm_provider ?? cfg.llm_provider
-          const llmModel = (job as any).llm_model ?? cfg.llm_model
+        const recoveredJobs: JobState[] = activeJobs.map((job: RecoveredJobStatus) => {
+          const cfg = recoveredJobConfig(job)
+          const useLlm = job.use_llm ?? cfg.use_llm
+          const llmProvider = job.llm_provider ?? cfg.llm_provider
+          const llmModel = job.llm_model ?? cfg.llm_model
           return {
             id: `history-${job.id}`,
             filename: job.filename,
