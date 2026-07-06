@@ -19,7 +19,8 @@ from sqlalchemy import delete, func, select
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
 from app.audio.providers.registry import validate_provider_selection
-from app.conversion.formats import INPUT_FORMATS, OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
+from app.conversion.engine_policy import validate_engine_override as _validate_engine_override
+from app.conversion.formats import OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -58,16 +59,6 @@ ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
 AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
     {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".avi"}
 )
-ENGINE_COMPATIBLE_EXTENSIONS = {
-    engine: frozenset(
-        ext
-        for spec in INPUT_FORMATS
-        if spec.engine == engine
-        for ext in spec.extensions
-    )
-    for engine in sorted({spec.engine for spec in INPUT_FORMATS})
-}
-ENGINE_COMPATIBLE_EXTENSIONS["liteparse_pdf"] = frozenset({".pdf"})
 TOOL_NAMES = [
     "marker_list_capabilities",
     "marker_plan_conversion",
@@ -1229,35 +1220,6 @@ def _validate_supported_path(path: Path) -> None:
             details={"suffix": path.suffix, "allowed": sorted(ALLOWED_EXTENSIONS)},
         )
     assert_local_input_allowed(path)
-
-
-def _validate_engine_override(config: dict[str, Any], suffix: str) -> None:
-    engine = str(config.get("engine_override") or "").strip()
-    if not engine:
-        return
-    if engine == "auto":
-        config.pop("engine_override", None)
-        return
-
-    extension = suffix.lower()
-    compatible = ENGINE_COMPATIBLE_EXTENSIONS.get(engine)
-    if compatible is None:
-        raise UsageError(
-            f"Unknown engine_override '{engine}'.",
-            details={
-                "engine_override": engine,
-                "known_engines": sorted(ENGINE_COMPATIBLE_EXTENSIONS),
-            },
-        )
-    if extension not in compatible:
-        raise UsageError(
-            f"engine_override '{engine}' is incompatible with extension '{extension or '<none>'}'.",
-            details={
-                "engine_override": engine,
-                "extension": extension,
-                "compatible_extensions": sorted(compatible),
-            },
-        )
 
 
 def _validate_page_range_safe(page_range: str, page_count: int) -> None:

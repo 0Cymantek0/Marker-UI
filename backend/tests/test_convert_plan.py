@@ -57,6 +57,21 @@ async def test_convert_plan_docx_with_registration(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_convert_plan_rejects_incompatible_engine_override(client: AsyncClient):
+    resp = await client.post(
+        "/api/convert/plan",
+        json={
+            "filename": "my_report.docx",
+            "size": 102400,
+            "engine_override": "marker_pdf",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "engine_override 'marker_pdf' is incompatible with extension '.docx'" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_convert_plan_pdf(client: AsyncClient):
     """Filename-only PDF plan is conservative and marked preliminary."""
     resp = await client.post(

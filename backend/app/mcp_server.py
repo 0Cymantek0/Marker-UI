@@ -233,7 +233,7 @@ LimitParam = Annotated[int, Field(ge=1, le=MAX_READ_CHARS, description="Maximum 
 SizeParam = Annotated[int, Field(ge=0, description="Input size in bytes for metadata-only planning.", examples=[1048576])]
 ChunkModeParam = Annotated[
     Literal["offset", "semantic"],
-    Field(description="Chunk read mode. 'offset' (default) returns character-offset text paging; 'semantic' returns the Nth structure-aware chunk from a marker.chunks.v1 envelope."),
+    Field(description="Chunk read mode. 'offset' (default) returns character-offset text paging; 'semantic' returns the Nth structure-aware chunk from a marker.chunks.v1 envelope.", examples=["offset"]),
 ]
 ChunkIndexParam = Annotated[int, Field(ge=0, description="Zero-based semantic chunk index (mode='semantic' only).", examples=[0])]
 

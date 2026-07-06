@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.conversion.engine_policy import ENGINE_COMPATIBLE_EXTENSIONS
 from app.conversion.formats import INPUT_FORMATS
 from app.conversion.probe import PdfProbeResult
 from app.conversion.result import ConverterPlan
@@ -46,15 +47,9 @@ _ENGINE_META: dict[str, tuple[str, bool, bool, float]] = {
 }
 
 _ENGINE_COMPATIBLE_EXTS: dict[str, frozenset[str]] = {
-    engine: frozenset(
-        ext
-        for spec in INPUT_FORMATS
-        if spec.engine == engine
-        for ext in spec.extensions
-    )
+    engine: ENGINE_COMPATIBLE_EXTENSIONS.get(engine, frozenset())
     for engine in _ENGINE_META
 }
-_ENGINE_COMPATIBLE_EXTS["liteparse_pdf"] = frozenset({".pdf"})
 
 
 def _converter_short_name(value: Any) -> str:

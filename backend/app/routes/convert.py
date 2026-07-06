@@ -21,10 +21,11 @@ import aiofiles
 
 from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
 from app.agent_contract import AUDIO_OUTPUT_MODES
+from app.conversion.engine_policy import validate_engine_override
 from app.conversion.formats import OUTPUT_FORMAT_SET, OUTPUT_FORMATS_DESCRIPTION, UPLOAD_ALLOWED_EXTENSIONS
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
-from app.errors import InputNotAllowedError, UnsupportedFormatError
+from app.errors import InputNotAllowedError, UnsupportedFormatError, UsageError
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse, RetryJobRequest
 from app.audio.providers.registry import validate_provider_selection
@@ -600,6 +601,12 @@ async def upload_file(
                 continue
             # Flat params already won; never let the blob clobber them.
             config.setdefault(key, value)
+    try:
+        validate_engine_override(config, suffix)
+    except UsageError as exc:
+        if not is_local:
+            Path(stored_path).unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=exc.message) from exc
     active_audio_defaults = await _load_active_audio_defaults(db)
     for key, value in active_audio_defaults.items():
         config.setdefault(key, value)
@@ -835,9 +842,11 @@ async def plan_conversion(
         config["enable_mixed_pdf_routing"] = True
     if req.full_page_probe:
         config["full_page_probe"] = True
+    plan_suffix = Path(req.filename).suffix
     if req.local_filepath:
         path = Path(req.local_filepath)
         if path.is_absolute() and path.is_file():
+            plan_suffix = path.suffix
             try:
                 assert_local_input_allowed(path)
             except InputNotAllowedError as exc:
@@ -850,6 +859,10 @@ async def plan_conversion(
             )
             config["probe_result"] = probe_result.to_dict()
             preliminary = False
+    try:
+        validate_engine_override(config, plan_suffix)
+    except UsageError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
 
     plan = (
         _app_state.conversion_service.plan(req.local_filepath, config)

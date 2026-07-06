@@ -58,6 +58,12 @@ vi.mock('@/components/features/FileUpload', () => ({
       </button>
       <button
         type="button"
+        onClick={() => onFilesSelect([new File(['docx'], 'report.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })])}
+      >
+        Mock select DOCX
+      </button>
+      <button
+        type="button"
         onClick={() => onFilesSelect([new File(['xls'], 'legacy.xls', { type: 'application/vnd.ms-excel' })])}
       >
         Mock select XLS
@@ -684,6 +690,41 @@ describe('ConvertPage component', () => {
         expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
         expect(screen.getByTestId('config-format')).toHaveTextContent('chunks')
       })
+    })
+
+    it('does not offer incompatible Marker override for DOCX sources', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+      mockPlanConversion.mockResolvedValueOnce({
+        engine: 'office_docx',
+        label: 'Fast Office (Word)',
+        confidence: 0.95,
+        reasons: [],
+        needs_marker_models: false,
+        needs_gpu: false,
+        execution_backend: 'cpu_thread',
+        needs_cloud: false,
+        optional_dependencies: [],
+        fallback_chain: [],
+        warnings: [],
+        preliminary: true,
+      })
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock select DOCX'))
+
+      const control = await screen.findByLabelText('Engine for file 1')
+      expect(within(control).queryByRole('option', { name: 'Marker PDF' })).not.toBeInTheDocument()
+      expect(within(control).getByRole('option', { name: 'Fast Office (Word)' })).toBeInTheDocument()
     })
 
     it('requires every selected source to support multi-format rendering', async () => {

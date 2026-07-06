@@ -156,6 +156,19 @@ async def test_upload_docx_rejects_structured_output_format(client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_upload_docx_rejects_incompatible_engine_override(client: AsyncClient):
+    files = {"file": ("report.docx", io.BytesIO(b"PK docx content"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+    resp = await client.post(
+        "/api/convert/upload",
+        files=files,
+        params={"engine_override": "marker_pdf"},
+    )
+
+    assert resp.status_code == 400
+    assert "engine_override 'marker_pdf' is incompatible with extension '.docx'" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db_session):
     files = {"file": ("scores.tsv", io.BytesIO(b"name\tscore\nAda\t10\n"), "text/tab-separated-values")}
 
