@@ -11,7 +11,7 @@ import { OutputViewer } from '@/components/features/OutputViewer'
 import { ModelSwapDialog } from '@/components/features/conversion/ModelSwapDialog'
 import { LlmTraceViewer } from '@/components/features/conversion/LlmTraceViewer'
 import { useConversionQueue } from '@/hooks/useConversionQueue'
-import type { ConversionConfig } from '@/lib/api'
+import type { ConversionConfig, OutputFormat } from '@/lib/api'
 import { useNavigate } from 'react-router-dom'
 import { planConversion, getCapabilities } from '@/lib/api'
 import type { ConverterPlanResponse } from '@/lib/api'
@@ -78,6 +78,25 @@ function extensionFor(filename: string | undefined) {
   const clean = filename?.split('?')[0]?.trim() ?? ''
   const dot = clean.lastIndexOf('.')
   return dot >= 0 ? clean.slice(dot).toLowerCase() : ''
+}
+
+function sourceSupportsMarkerFormats(
+  filename: string,
+  markerMultiFormatExtensions: string[] | null,
+): boolean {
+  if (markerMultiFormatExtensions === null) return true
+  const ext = extensionFor(filename)
+  return ext ? markerMultiFormatExtensions.includes(ext) : false
+}
+
+function regeneratableFormatsFor(
+  filename: string | undefined,
+  markerMultiFormatExtensions: string[] | null,
+): OutputFormat[] {
+  if (filename && sourceSupportsMarkerFormats(filename, markerMultiFormatExtensions)) {
+    return ['html', 'json', 'chunks']
+  }
+  return ['chunks']
 }
 
 function engineOptionsFor(filename: string | undefined, plan: ConverterPlanResponse | null): SelectOption[] {
@@ -151,6 +170,7 @@ export function ConvertPage() {
   const [sourcePlans, setSourcePlans] = useState<Record<string, SourcePlanState>>({})
   const [engineOverrides, setEngineOverrides] = useState<Record<string, string>>({})
   const [capabilities, setCapabilities] = useState<Record<string, string>>({})
+  const [markerMultiFormatExtensions, setMarkerMultiFormatExtensions] = useState<string[] | null>(null)
 
   // Fetch capabilities on mount and poll
   useEffect(() => {
@@ -160,6 +180,7 @@ export function ConvertPage() {
         const data = await getCapabilities()
         if (active) {
           setCapabilities(data.engines)
+          setMarkerMultiFormatExtensions(data.marker_multi_format_extensions ?? null)
         }
       } catch (err) {
         console.error('Failed to fetch capabilities:', err)
@@ -194,14 +215,8 @@ export function ConvertPage() {
     ]
     if (sourceNames.length === 0) return true
     
-    const checkExt = (filename: string) => {
-      const baseName = filename.split(/[?#]/)[0] ?? ''
-      const ext = baseName.split('.').pop()?.toLowerCase()
-      return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
-    }
-
-    return sourceNames.every(checkExt)
-  }, [selectedFiles, parsedLocalPaths])
+    return sourceNames.every((name) => sourceSupportsMarkerFormats(name, markerMultiFormatExtensions))
+  }, [selectedFiles, parsedLocalPaths, markerMultiFormatExtensions])
 
   useEffect(() => {
     if (!supportsMultiFormat) {
@@ -836,6 +851,7 @@ export function ConvertPage() {
                     content={previewText}
                     formats={selectedJob.formats}
                     availableFormats={selectedJob.availableFormats}
+                    regeneratableFormats={regeneratableFormatsFor(selectedJob.filename, markerMultiFormatExtensions)}
                     onRegenerate={(fmt) => regenerateJobFormat(selectedJob.id, fmt)}
                     onDownload={(fmt) => download(selectedJob.id, fmt)}
                     imageUnderstanding={selectedJob.imageUnderstanding}

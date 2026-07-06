@@ -23,6 +23,7 @@ interface OutputViewerProps {
   content: string | null
   formats?: Record<string, string> | null
   availableFormats?: string[]
+  regeneratableFormats?: string[]
   onRegenerate?: (format: string) => Promise<void>
   onDownload: (format: string) => void
   imageUnderstanding?: ImageUnderstandingMeta[] | null
@@ -34,11 +35,11 @@ export function OutputViewer({
   content,
   formats = null,
   availableFormats = [],
+  regeneratableFormats = [],
   onRegenerate,
   onDownload,
   imageUnderstanding,
-  audioMetadata,
-  filename
+  audioMetadata
 }: OutputViewerProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>('markdown')
   const [copied, setCopied] = useState(false)
@@ -98,12 +99,10 @@ export function OutputViewer({
     },
   }), [metaByFilename, metaTotal])
 
-  const isMultiSupported = useMemo(() => {
-    if (!filename) return true
-    const baseName = filename.split(/[?#]/)[0] ?? ''
-    const ext = baseName.split('.').pop()?.toLowerCase()
-    return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
-  }, [filename])
+  const regeneratableFormatSet = useMemo(
+    () => new Set(regeneratableFormats),
+    [regeneratableFormats],
+  )
 
   const visibleTabs = useMemo(() => {
     return ALL_TABS.filter((tab) => {
@@ -112,10 +111,9 @@ export function OutputViewer({
       if (!tab.formatKey) return true
       if (tab.value === 'markdown') return true
       if (availableFormats.includes(tab.formatKey) || !!formats?.[tab.formatKey]) return true
-      if (tab.value === 'chunks' && !!onRegenerate) return true
-      return isMultiSupported && !!onRegenerate
+      return !!onRegenerate && regeneratableFormatSet.has(tab.formatKey)
     })
-  }, [availableFormats, formats, isMultiSupported, onRegenerate, audioMetadata])
+  }, [availableFormats, formats, onRegenerate, audioMetadata, regeneratableFormatSet])
 
   const activeContent = useMemo(() => {
     if (activeTab === 'raw') return content

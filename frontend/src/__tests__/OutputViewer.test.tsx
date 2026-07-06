@@ -169,6 +169,7 @@ describe('OutputViewer component', () => {
         content="# Hello"
         onDownload={vi.fn()}
         onRegenerate={onRegenerate}
+        regeneratableFormats={['chunks']}
         filename="document.docx"
         formats={{ markdown: '# Hello' }}
       />
@@ -223,6 +224,7 @@ describe('OutputViewer component', () => {
         content="# Hello"
         onDownload={vi.fn()}
         onRegenerate={onRegenerate}
+        regeneratableFormats={['html', 'json', 'chunks']}
         filename="document.pdf"
         formats={{ markdown: '# Hello' }}
       />
@@ -240,6 +242,7 @@ describe('OutputViewer component', () => {
         content="# Hello"
         onDownload={vi.fn()}
         onRegenerate={onRegenerate}
+        regeneratableFormats={['html', 'json', 'chunks']}
         filename="document.pdf"
         formats={{ markdown: '# Hello' }}
       />

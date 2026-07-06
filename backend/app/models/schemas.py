@@ -335,10 +335,26 @@ class FetchModelsRequest(BaseModel):
 # Conversion Planning & Capabilities
 # ---------------------------------------------------------------------------
 
+class InputFormatCapability(BaseModel):
+    """One supported input format group exposed to GUI/agents."""
+
+    extensions: list[str]
+    engine: str
+    label: str
+    category: str
+    needs_marker_models: bool
+    needs_gpu: bool
+    upload_allowed: bool
+    url_allowed: bool
+
+
 class CapabilitiesResponse(BaseModel):
-    """Supported engines and their status."""
+    """Supported engines, formats, and their status."""
 
     engines: dict[str, str]
+    output_formats: list[str] = Field(default_factory=list)
+    marker_multi_format_extensions: list[str] = Field(default_factory=list)
+    input_formats: list[InputFormatCapability] = Field(default_factory=list)
 
 
 class ConvertPlanRequest(BaseModel):

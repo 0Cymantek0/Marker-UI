@@ -161,7 +161,10 @@ const mockGetCapabilities = vi.fn().mockResolvedValue({
     spreadsheet: 'ready',
     text_data: 'ready',
     html: 'ready',
-  }
+  },
+  output_formats: ['markdown', 'json', 'html', 'chunks'],
+  marker_multi_format_extensions: ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'],
+  input_formats: [],
 })
 const mockPlanConversion = vi.fn().mockResolvedValue({
   engine: 'marker_pdf',
@@ -746,6 +749,35 @@ describe('ConvertPage component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+      })
+    })
+
+    it('uses backend capability extensions for multi-format support', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+      mockGetCapabilities.mockResolvedValueOnce({
+        engines: { office_docx: 'ready' },
+        output_formats: ['markdown', 'json', 'html', 'chunks'],
+        marker_multi_format_extensions: ['.docx'],
+        input_formats: [],
+      })
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['json'] }))
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock select DOCX'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('multi')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('json')
       })
     })
 

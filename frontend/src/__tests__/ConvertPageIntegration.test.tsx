@@ -68,7 +68,10 @@ describe('ConvertPage Integration with real hook', () => {
       engines: {
         marker_pdf: 'ready',
         office_docx: 'ready',
-      }
+      },
+      output_formats: ['markdown', 'json', 'html', 'chunks'],
+      marker_multi_format_extensions: ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'],
+      input_formats: [],
     })
     mockPlanConversion.mockResolvedValue({
       engine: 'marker_pdf',
