@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Package, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { messageFromUnknownError } from '@/lib/errors'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -68,8 +69,8 @@ export function VocabularyPackEditor({
       setCreating(false)
       loadPacks()
       onChangePackIds([...selectedPackIds, created.id])
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save vocabulary pack.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to save vocabulary pack.'))
     }
   }
 
@@ -80,8 +81,8 @@ export function VocabularyPackEditor({
       toast.success(`Pack "${packName}" deleted.`)
       onChangePackIds(selectedPackIds.filter((id) => id !== packId))
       loadPacks()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete pack.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to delete pack.'))
     }
   }
 

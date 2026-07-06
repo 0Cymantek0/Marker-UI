@@ -27,8 +27,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/select'
-import { getSettings, getGPUStatus, installGPU, toggleGPU, getGPUWorkersResolved, setGPUWorkers, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, updateSetting, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus, type GPUWorkerMode, type GPUWorkersResolved } from '@/lib/api'
+import { getSettings, getGPUStatus, installGPU, toggleGPU, getGPUWorkersResolved, setGPUWorkers, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, updateSetting, type BackendLLMConfig, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus, type GPUWorkerMode, type GPUWorkersResolved } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { messageFromUnknownError } from '@/lib/errors'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TestConnectionButton } from '@/components/features/settings/TestConnectionButton'
 
@@ -409,7 +410,7 @@ export function SettingsPage() {
     
     try {
       // Map to legacy structure for the backend connection tester
-      const backendConfig: any = {
+      const backendConfig: BackendLLMConfig = {
         llm_service: 
           draftProvider.type === 'custom_openai' ? 'openai' : 
           draftProvider.type === 'custom_anthropic' ? 'claude' : 
@@ -455,7 +456,7 @@ export function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(backendConfig),
       })
-      const data = await res.json()
+      const data = await res.json() as { success?: boolean; message?: string; detail?: string }
       if (res.ok && data.success) {
         const result = { success: true, message: data.message || 'Connected successfully!' }
         setTestResult(result)
@@ -468,7 +469,7 @@ export function SettingsPage() {
         return result
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Network error.'
+      const msg = messageFromUnknownError(err, 'Network error.')
       const result = { success: false, message: msg }
       setTestResult(result)
       toast.error('Connection test failed.')
@@ -499,7 +500,7 @@ export function SettingsPage() {
         toast.success(`Successfully fetched ${list.length} models`)
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to query models'
+      const msg = messageFromUnknownError(err, 'Failed to query models')
       toast.error(msg)
     } finally {
       setIsFetchingModels(false)

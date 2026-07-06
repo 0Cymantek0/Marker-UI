@@ -12,6 +12,7 @@ import { CanvasConfetti } from '@/components/ui/CanvasConfetti'
 import { EngineConsole } from '@/components/features/onboarding/EngineConsole'
 import { DeveloperConsole } from '@/components/features/onboarding/DeveloperConsole'
 import { PipelineVisualizer } from '@/components/features/onboarding/PipelineVisualizer'
+import { messageFromUnknownError } from '@/lib/errors'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -99,8 +100,8 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
     try {
       await cancelModelsDownload()
       toast.success('Cancellation request sent')
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to cancel')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to cancel'))
     } finally {
       setIsCancelling(false)
     }
@@ -111,8 +112,8 @@ export function OnboardingPage({ onComplete }: OnboardingPageProps) {
     try {
       await retryModelsDownload()
       toast.success('Download restarted successfully')
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to restart')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to restart'))
     } finally {
       setIsRetrying(false)
     }

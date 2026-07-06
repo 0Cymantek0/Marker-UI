@@ -292,6 +292,7 @@ export interface BackendLLMConfig {
   claude_api_key?: string | null
   claude_model_name?: string | null
   vertex_project_id?: string | null
+  vertex_location?: string | null
   azure_api_key?: string | null
   azure_endpoint?: string | null
   azure_deployment_name?: string | null

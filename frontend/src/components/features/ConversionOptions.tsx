@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { FileText, Code, Braces, Layers, HelpCircle, Settings2, X, ChevronDown, FlaskConical, Trash2, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { messageFromUnknownError } from '@/lib/errors'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -210,8 +211,8 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
       setPresetDesc('')
       setIsSavingPreset(false)
       loadPresets()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save preset.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to save preset.'))
     }
   }
 
@@ -223,8 +224,8 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
       await deletePreset(presetId)
       toast.success(`Preset "${name}" deleted.`)
       loadPresets()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete preset.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to delete preset.'))
     }
   }
 
@@ -708,9 +709,9 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                           className="w-full md:w-full"
                         />
                         <p className="text-[11px] text-muted-foreground leading-normal" data-testid="smart-router-desc">
-                          {((SMART_ROUTER_OPTIONS.find(
+                          {SMART_ROUTER_OPTIONS.find(
                             (o) => o.value === (tempConfig.smart_router_level ?? IU_DEFAULTS.smart_router_level),
-                          ) ?? SMART_ROUTER_OPTIONS[1]) as any).desc}
+                          )?.desc ?? 'Classifies each crop with local layout signals before routing.'}
                         </p>
                       </div>
                     )}
