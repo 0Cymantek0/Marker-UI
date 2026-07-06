@@ -1,6 +1,8 @@
 # Supported Output Formats
 
-Marker UI supports converting documents into several structured formats. Choosing the correct format determines how text, tables, and images are exported.
+Marker UI supports several output formats, but availability depends on the
+selected conversion route. Use `/api/capabilities` or `marker_capabilities` to
+read per-input `output_formats` before enabling UI or agent choices.
 
 ---
 
@@ -14,6 +16,9 @@ Generates standard GitHub Flavored Markdown (GFM).
 
 ## 2. JSON
 Returns a structured JSON payload representing the document structure.
+- Supported for Marker-backed PDF/image/EPUB routes today.
+- Native deterministic routes reject JSON instead of returning mislabeled
+  Markdown.
 - Ideal for downstream LLM ingestion, agentic workflows, or custom database ingestion.
 - Contains separate fields for document metadata, raw text, and tables.
 
@@ -21,6 +26,9 @@ Returns a structured JSON payload representing the document structure.
 
 ## 3. HTML
 Generates structured HTML5 markup with semantic layout tags.
+- Supported for Marker-backed PDF/image/EPUB routes today.
+- Native deterministic routes reject HTML instead of returning mislabeled
+  Markdown.
 - Keeps tables as `<table>` tags and equations formatted clearly.
 
 ---

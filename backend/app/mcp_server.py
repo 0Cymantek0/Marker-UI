@@ -76,6 +76,14 @@ class CapabilitiesOutput(MarkerOutputModel):
     tools: list[str] = Field(description="Available MCP tool names.", examples=[["marker_convert_file"]])
     allowed_extensions: list[str] = Field(description="Supported file extensions.", examples=[[".pdf", ".csv"]])
     output_formats: list[str] = Field(description="Supported output formats.", examples=[["markdown", "json"]])
+    input_formats: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Input format groups with the output formats each group can actually render.",
+        examples=[[
+            {"extensions": [".docx"], "engine": "office_docx", "output_formats": ["markdown", "chunks"]},
+            {"extensions": [".pdf"], "engine": "marker_pdf", "output_formats": ["markdown", "json", "html", "chunks"]},
+        ]],
+    )
     conversion_profiles: list[str] = Field(description="Conversion profile names.", examples=[["auto", "fast"]])
     image_handling_modes: list[str] = Field(description="Image handling modes.", examples=[["extraction", "understanding"]])
     audio_output_modes: list[str] = Field(description="Audio summary modes.", examples=[["transcript", "notes"]])

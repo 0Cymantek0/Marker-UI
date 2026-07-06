@@ -24,7 +24,12 @@ from app.audio.providers.registry import (
     validate_provider_selection,
 )
 from app.conversion.engine_policy import validate_engine_override as _validate_engine_override
-from app.conversion.formats import OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
+from app.conversion.formats import (
+    INPUT_FORMATS,
+    OUTPUT_FORMATS,
+    UPLOAD_ALLOWED_EXTENSIONS,
+    renderable_output_formats_for_extensions,
+)
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -125,15 +130,29 @@ def capabilities() -> dict[str, Any]:
             {
                 "engine": converter.engine_name,
                 "extensions": sorted(converter.supported_extensions),
+                "output_formats": renderable_output_formats_for_extensions(
+                    converter.supported_extensions
+                ),
                 "needs_marker_models": converter.requires_marker_models,
                 "needs_gpu": converter.requires_gpu,
             }
         )
+    input_formats = [
+        {
+            "extensions": list(spec.extensions),
+            "engine": spec.engine,
+            "label": spec.label,
+            "category": spec.category,
+            "output_formats": renderable_output_formats_for_extensions(spec.extensions),
+        }
+        for spec in INPUT_FORMATS
+    ]
     return {
         "service": SERVICE_NAME,
         "tools": TOOL_NAMES,
         "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
         "output_formats": list(OUTPUT_FORMATS),
+        "input_formats": input_formats,
         "conversion_profiles": ["auto", "fast", "high_accuracy"],
         "image_handling_modes": ["extraction", "understanding", "both"],
         "ocr_engines": ["surya", "hybrid_ocr"],

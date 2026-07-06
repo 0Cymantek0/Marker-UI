@@ -1,5 +1,10 @@
 from fastapi import APIRouter
-from app.conversion.formats import INPUT_FORMATS, MARKER_MULTI_FORMAT_EXTENSIONS, OUTPUT_FORMATS
+from app.conversion.formats import (
+    INPUT_FORMATS,
+    MARKER_MULTI_FORMAT_EXTENSIONS,
+    OUTPUT_FORMATS,
+    renderable_output_formats_for_extensions,
+)
 from app.models.schemas import CapabilitiesResponse, InputFormatCapability
 from app.conversion.dependencies import get_engine_status
 
@@ -22,6 +27,7 @@ async def get_capabilities() -> CapabilitiesResponse:
                 needs_gpu=spec.needs_gpu,
                 upload_allowed=spec.upload_allowed,
                 url_allowed=spec.url_allowed,
+                output_formats=renderable_output_formats_for_extensions(spec.extensions),
             )
             for spec in INPUT_FORMATS
         ],

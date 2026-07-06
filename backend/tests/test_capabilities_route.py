@@ -22,4 +22,8 @@ async def test_capabilities_exposes_format_registry_metadata() -> None:
         "needs_gpu": False,
         "upload_allowed": True,
         "url_allowed": True,
+        "output_formats": ["markdown", "chunks"],
     } in payload["input_formats"]
+
+    pdf = next(item for item in payload["input_formats"] if item["extensions"] == [".pdf"])
+    assert pdf["output_formats"] == ["markdown", "json", "html", "chunks"]

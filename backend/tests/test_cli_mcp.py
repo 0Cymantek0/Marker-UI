@@ -108,6 +108,16 @@ def test_agent_capabilities_and_config_include_frontend_audio_modes():
         assert config["audio_output_mode"] == mode
 
 
+def test_agent_capabilities_report_per_input_output_formats():
+    caps = agent_api.capabilities()
+
+    docx = next(item for item in caps["input_formats"] if item["extensions"] == [".docx"])
+    pdf = next(item for item in caps["input_formats"] if item["extensions"] == [".pdf"])
+
+    assert docx["output_formats"] == ["markdown", "chunks"]
+    assert pdf["output_formats"] == ["markdown", "json", "html", "chunks"]
+
+
 def test_agent_build_conversion_config_preserves_advanced_audio_options():
     config = agent_api.build_conversion_config(
         AgentConversionOptions(

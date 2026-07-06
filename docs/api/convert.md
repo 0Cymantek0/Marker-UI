@@ -15,6 +15,10 @@ Submits a file for conversion or points the engine to a local absolute path.
 ### Request Body (Multipart Form)
 - **`file`**: (Optional) The raw binary file to convert. Required if `local_filepath` is not provided.
 - **`output_format`**: String. Either `markdown`, `html`, `json`, or `chunks` (Default: `markdown`).
+  `markdown` is universal. `chunks` is available for native Markdown-derived
+  outputs and Marker-backed outputs. `html` and `json` require a Marker-backed
+  PDF/image/EPUB route today; native deterministic routes reject them instead
+  of returning mislabeled Markdown.
 - **`use_llm`**: Boolean. Enable LLM refinement (Default: `false`).
 - **`converter`**: String. Either `PdfConverter` or `TableConverter` (Default: `PdfConverter`).
 - **`local_filepath`**: (Optional) String. Absolute path to a file on the server's local storage.
@@ -44,6 +48,10 @@ curl -X POST "http://localhost:8000/api/convert/upload" \
   -F "local_filepath=/data/docs/important-report.pdf" \
   -F "output_format=json"
 ```
+
+Use `/api/capabilities` before presenting format choices. Each
+`input_formats[]` entry includes the `output_formats` that extension group can
+actually render.
 
 ---
 

@@ -2,8 +2,9 @@
 
 Marker UI is a local-first document-to-agent-context engine: it converts PDFs,
 Office files, spreadsheets, slides, images, web/data files, archives, audio, and
-experimental video into clean Markdown, HTML, JSON, manifests, and semantic
-chunks.
+experimental video into clean Markdown, manifests, and semantic chunks.
+Marker-backed PDF/image/EPUB routes can also render HTML and JSON; native
+deterministic routes expose only formats they can actually render.
 
 Run it as a browser app, a scriptable CLI, or a small MCP server for coding
 agents. Local parsers and local neural models are the default; cloud VLM/STT

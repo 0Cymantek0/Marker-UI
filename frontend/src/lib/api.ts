@@ -905,6 +905,7 @@ export interface InputFormatCapability {
   needs_gpu: boolean
   upload_allowed: boolean
   url_allowed: boolean
+  output_formats?: OutputFormat[]
 }
 
 export interface CapabilitiesResponse {

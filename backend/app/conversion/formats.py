@@ -299,3 +299,17 @@ def requested_output_formats_from_config(config: dict[str, Any]) -> list[str]:
         if formats:
             return formats
     return normalize_output_formats([config.get("output_format") or "markdown"]) or ["markdown"]
+
+
+def renderable_output_formats_for_extensions(extensions: Iterable[str]) -> list[OutputFormat]:
+    """Return truthful output formats for one input extension group.
+
+    Marker-backed PDF/image/EPUB routes can render every public output format.
+    Native Markdown-only routes can render Markdown plus derived semantic chunks;
+    JSON/HTML need a structured renderer and must not be advertised there.
+    """
+
+    normalized = {str(ext).strip().lower() for ext in extensions}
+    if normalized and normalized <= MARKER_MULTI_FORMAT_EXTENSIONS:
+        return list(OUTPUT_FORMATS)
+    return ["markdown", "chunks"]

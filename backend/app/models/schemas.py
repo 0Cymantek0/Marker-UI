@@ -346,6 +346,7 @@ class InputFormatCapability(BaseModel):
     needs_gpu: bool
     upload_allowed: bool
     url_allowed: bool
+    output_formats: list[str] = Field(default_factory=list)
 
 
 class CapabilitiesResponse(BaseModel):
