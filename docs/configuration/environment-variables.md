@@ -20,6 +20,7 @@ Marker UI backend is configured using standard environment variables. You can se
 | `MARKER_PRELOAD_MODELS` | Preload Marker models at worker startup when `true`; keep lazy for lightweight CLI/MCP startup with `false`. | `false` |
 | `MARKER_MCP_AUTH_TOKEN` | Bearer token required when MCP Streamable HTTP binds to any non-loopback host. Localhost stdio and loopback HTTP do not require it. | unset |
 | `MARKER_MCP_AUTH_SCOPES` | Space- or comma-separated scopes granted to `MARKER_MCP_AUTH_TOKEN`. | all MCP scopes |
+| `MARKER_MCP_ENABLE_SETTINGS_WRITE` | Registers MCP settings write/delete tools in the `admin` tool profile. Keep unset unless a trusted agent should modify stored settings. | `false` |
 | `MARKER_REST_AUTH_TOKEN` | Enables REST bearer auth for `/api/*` except health/version endpoints. | unset |
 | `MARKER_AUTH_TOKEN` | Legacy alias used as a REST token when `MARKER_REST_AUTH_TOKEN` is unset. | unset |
 | `MARKER_REST_AUTH_SCOPES` | Space- or comma-separated scopes granted to the REST token. | REST scopes |

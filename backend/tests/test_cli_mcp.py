@@ -668,9 +668,10 @@ async def test_mcp_default_tool_profile_is_minimal():
 
 
 @pytest.mark.asyncio
-async def test_mcp_full_and_admin_profiles_gate_destructive_tools():
+async def test_mcp_full_and_admin_profiles_gate_destructive_tools(monkeypatch: pytest.MonkeyPatch):
     import app.mcp_server as mcp_server
 
+    monkeypatch.delenv("MARKER_MCP_ENABLE_SETTINGS_WRITE", raising=False)
     mcp_server.configure_mcp_tool_profile("full")
     try:
         full_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
@@ -682,8 +683,14 @@ async def test_mcp_full_and_admin_profiles_gate_destructive_tools():
         mcp_server.configure_mcp_tool_profile("admin")
         admin_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
         assert "marker_delete_job" in admin_names
-        assert "marker_set_setting" in admin_names
-        assert "marker_delete_setting" in admin_names
+        assert "marker_set_setting" not in admin_names
+        assert "marker_delete_setting" not in admin_names
+
+        monkeypatch.setenv("MARKER_MCP_ENABLE_SETTINGS_WRITE", "true")
+        mcp_server.configure_mcp_tool_profile("admin")
+        write_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_set_setting" in write_names
+        assert "marker_delete_setting" in write_names
     finally:
         mcp_server.configure_mcp_tool_profile("minimal")
 
@@ -1047,6 +1054,7 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
     backend_dir = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
     env["MARKER_PRELOAD_MODELS"] = "false"
+    env["MARKER_MCP_ENABLE_SETTINGS_WRITE"] = "true"
     env["ENCRYPTION_KEY"] = "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdHRlc3Q="
 
     params = StdioServerParameters(

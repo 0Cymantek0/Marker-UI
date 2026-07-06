@@ -6,10 +6,11 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_mcp_v1_split_tool_annotations():
+async def test_mcp_v1_split_tool_annotations(monkeypatch: pytest.MonkeyPatch):
     import app.mcp_server as mcp_server
 
     previous = mcp_server.MCP_ACTIVE_TOOL_PROFILE
+    monkeypatch.setenv("MARKER_MCP_ENABLE_SETTINGS_WRITE", "true")
     mcp_server.configure_mcp_tool_profile("admin")
     try:
         tools = {tool.name: tool for tool in await mcp_server.mcp.list_tools()}
@@ -40,6 +41,8 @@ async def test_mcp_self_test_validates_tools_resources_and_prompts():
         mcp_server.configure_mcp_tool_profile(previous)
 
     assert payload["tools_ok"] is True
+    assert payload["tool_profile"] == "admin"
+    assert payload["settings_write_enabled"] is False
     assert payload["resources_ok"] is True
     assert payload["prompts_ok"] is True
     assert payload["schemas_ok"] is True

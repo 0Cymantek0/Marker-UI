@@ -50,6 +50,10 @@ Scopes:
 | `settings:write` | Settings writes and deletes. |
 | `*` | All scopes. |
 
+`settings:write` scope is not enough to expose MCP settings write/delete tools.
+Set `MARKER_MCP_ENABLE_SETTINGS_WRITE=true` and use `--tool-profile admin` only
+for trusted agents that should be able to modify stored configuration.
+
 Health endpoints `/api/health`, `/api/healthz`, `/api/readyz`, and
 `/api/version` remain unauthenticated so orchestration can probe the service.
 

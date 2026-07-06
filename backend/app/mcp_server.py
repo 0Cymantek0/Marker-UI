@@ -186,6 +186,8 @@ class DeleteSettingOutput(MarkerOutputModel):
 class SelfTestOutput(MarkerOutputModel):
     service: str = Field(description="Service identifier.", examples=[SERVICE_NAME])
     expected_tools: list[str] = Field(description="Expected tool names.", examples=[["marker_convert_file"]])
+    tool_profile: str | None = Field(default=None, description="Active MCP tool profile.", examples=["minimal"])
+    settings_write_enabled: bool | None = Field(default=None, description="True when settings write/delete tools are registered.", examples=[False])
     capabilities_ok: bool = Field(description="Capability check result.", examples=[True])
     conversion_ok: bool | None = Field(default=None, description="Conversion smoke result when run.", examples=[True])
     notes: list[str] = Field(description="Diagnostic notes.", examples=[[]])
@@ -298,6 +300,7 @@ MCP_FULL_TOOL_NAMES = [
     if name not in {"marker_delete_job", "marker_set_setting", "marker_delete_setting"}
 ]
 MCP_ADMIN_TOOL_NAMES = list(MCP_V1_TOOL_NAMES)
+MCP_SETTINGS_WRITE_TOOL_NAMES = {"marker_set_setting", "marker_delete_setting"}
 MCP_ACTIVE_TOOL_PROFILE = "minimal"
 MCP_ACTIVE_TOOL_NAMES = list(MCP_MINIMAL_TOOL_NAMES)
 _ALL_MCP_TOOLS: dict[str, Any] | None = None
@@ -1216,6 +1219,8 @@ async def marker_self_test(
     templates = await mcp.list_resource_templates()
     prompts = await mcp.list_prompts()
     data["expected_tools"] = list(MCP_ACTIVE_TOOL_NAMES)
+    data["tool_profile"] = MCP_ACTIVE_TOOL_PROFILE
+    data["settings_write_enabled"] = mcp_settings_write_enabled()
     data["registered_tools"] = sorted(tool.name for tool in registered)
     data["tools_ok"] = sorted(MCP_ACTIVE_TOOL_NAMES) == data["registered_tools"]
     data["expected_resources"] = MCP_RESOURCE_URIS
@@ -1261,7 +1266,18 @@ def tool_names_for_profile(profile: str | None = None) -> list[str]:
         return list(MCP_MINIMAL_TOOL_NAMES)
     if normalized == "full":
         return list(MCP_FULL_TOOL_NAMES)
-    return list(MCP_ADMIN_TOOL_NAMES)
+    names = list(MCP_ADMIN_TOOL_NAMES)
+    if not mcp_settings_write_enabled():
+        names = [name for name in names if name not in MCP_SETTINGS_WRITE_TOOL_NAMES]
+    return names
+
+
+def mcp_settings_write_enabled() -> bool:
+    return os.getenv("MARKER_MCP_ENABLE_SETTINGS_WRITE", "false").strip().lower() in {
+        "true",
+        "1",
+        "yes",
+    }
 
 
 def configure_mcp_tool_profile(profile: str | None = None) -> str:
