@@ -955,6 +955,67 @@ def test_marker_pyproject_exposes_console_entrypoint():
     assert packages["include"] == ["app*"]
 
 
+def test_mcp_client_config_codex_source_mode_emits_parseable_toml(tmp_path: Path):
+    from app.cli import _mcp_client_config
+
+    config = _mcp_client_config(
+        "codex",
+        mode="source",
+        cwd=str(tmp_path),
+        server_name="marker_docs",
+        tool_profile="minimal",
+    )
+
+    assert config["format"] == "toml"
+    parsed = tomllib.loads(config["config"])
+    server = parsed["mcp_servers"]["marker_docs"]
+    assert server["command"] == "python"
+    assert server["args"] == ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]
+    assert server["cwd"] == str(tmp_path.resolve())
+    assert server["env"]["MARKER_PRELOAD_MODELS"] == "false"
+
+
+def test_mcp_client_config_installed_and_http_modes_parse_as_json():
+    from app.cli import _mcp_client_config
+
+    clients = ["claude", "gemini", "cursor", "zed", "cline", "continue", "windsurf", "antigravity"]
+    for client in clients:
+        config = _mcp_client_config(
+            client,
+            mode="installed",
+            server_name="marker",
+            tool_profile="full",
+        )
+        assert config["format"] == "json"
+        json.dumps(config["config"])
+
+    installed = _mcp_client_config("gemini", mode="installed", tool_profile="full")
+    server = installed["config"]["mcpServers"]["marker"]
+    assert server["command"] == "marker"
+    assert server["args"] == ["mcp", "start", "--tool-profile", "full"]
+    assert "cwd" not in server
+
+    http = _mcp_client_config(
+        "cursor",
+        mode="http",
+        url="https://marker.example/mcp",
+        auth_token="token-123",
+    )
+    http_server = http["config"]["mcpServers"]["marker"]
+    assert http_server["url"] == "https://marker.example/mcp"
+    assert http_server["headers"]["Authorization"] == "Bearer token-123"
+
+
+def test_mcp_client_config_opencode_uses_command_array(tmp_path: Path):
+    from app.cli import _mcp_client_config
+
+    config = _mcp_client_config("opencode", mode="source", cwd=str(tmp_path))
+    server = config["config"]["mcp"]["marker"]
+    assert server["type"] == "local"
+    assert server["command"] == ["python", "-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]
+    assert server["cwd"] == str(tmp_path.resolve())
+
+
 
 def test_repo_root_module_cli_self_test_works():
     project_root = Path(__file__).resolve().parents[2]

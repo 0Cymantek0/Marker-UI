@@ -37,6 +37,19 @@ on an untrusted network.
 
 ## Client Configs
 
+Generate snippets with:
+
+```powershell
+python -m app.cli mcp init-config --client codex --mode source --cwd "C:\path\to\marker\backend" --tool-profile minimal --output config.toml
+python -m app.cli mcp init-config --client cursor --mode installed --tool-profile minimal --output mcp.json
+python -m app.cli mcp init-config --client gemini --mode http --url "http://127.0.0.1:8000/mcp" --output settings.json
+```
+
+Supported clients: `codex`, `claude`, `gemini`, `opencode`, `cursor`, `zed`,
+`cline`, `continue`, `goose`, `windsurf`, and `antigravity`. Source mode emits
+`cwd`; installed mode uses the `marker` console command; HTTP mode emits a URL
+and optional bearer header when `--auth-token` is provided.
+
 Codex `.codex/config.toml` using source checkout:
 
 ```toml

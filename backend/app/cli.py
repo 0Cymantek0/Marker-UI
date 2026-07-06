@@ -421,8 +421,30 @@ def _build_parser() -> argparse.ArgumentParser:
     mcp_start.add_argument("--auth-token", help="Bearer token for streamable HTTP")
     mcp_start.add_argument("--tool-profile", choices=["minimal", "full", "admin"], help="MCP tool profile")
     mcp_init = mcp_sub.add_parser("init-config", help="Generate an MCP client configuration snippet")
-    mcp_init.add_argument("--client", choices=["codex", "claude", "gemini", "opencode", "antigravity"], required=True)
-    mcp_init.add_argument("--output", help="Write config JSON to file instead of stdout")
+    mcp_init.add_argument(
+        "--client",
+        choices=[
+            "codex",
+            "claude",
+            "gemini",
+            "opencode",
+            "cursor",
+            "zed",
+            "cline",
+            "continue",
+            "goose",
+            "windsurf",
+            "antigravity",
+        ],
+        required=True,
+    )
+    mcp_init.add_argument("--mode", choices=["source", "installed", "http"], default="source")
+    mcp_init.add_argument("--cwd", help="Backend working directory for source mode")
+    mcp_init.add_argument("--server-name", default="marker", help="MCP server name in generated config")
+    mcp_init.add_argument("--tool-profile", choices=["minimal", "full", "admin"], default="minimal")
+    mcp_init.add_argument("--url", default="http://127.0.0.1:8000/mcp", help="Streamable HTTP URL for http mode")
+    mcp_init.add_argument("--auth-token", help="Bearer token for http mode")
+    mcp_init.add_argument("--output", help="Write generated TOML/JSON config content to file")
     mcp_init.add_argument("--dry-run", action="store_true", help="Print without writing output file")
     mcp_init.add_argument("--json", action="store_true", default=True, help="Print JSON")
     mcp_inspect = mcp_sub.add_parser("inspect", help="Inspect MCP tool names without starting transport")
@@ -783,10 +805,20 @@ def _handle_mcp(args: argparse.Namespace) -> int:
         )
         return 0
     if command == "init-config":
-        config = _mcp_client_config(args.client)
+        config = _mcp_client_config(
+            args.client,
+            mode=args.mode,
+            cwd=args.cwd,
+            server_name=args.server_name,
+            tool_profile=args.tool_profile,
+            url=args.url,
+            auth_token=args.auth_token,
+        )
         if args.output and not args.dry_run:
+            payload = config["config"]
+            text = payload if isinstance(payload, str) else json.dumps(payload, indent=2, ensure_ascii=False)
             Path(args.output).expanduser().write_text(
-                json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+                text + "\n",
                 encoding="utf-8",
             )
             config = {**config, "written_to": str(Path(args.output).expanduser().resolve())}
@@ -813,21 +845,123 @@ def _handle_mcp(args: argparse.Namespace) -> int:
     return 2
 
 
-def _mcp_client_config(client: str) -> dict[str, Any]:
-    base = {
+def _mcp_client_config(
+    client: str,
+    *,
+    mode: str = "source",
+    cwd: str | None = None,
+    server_name: str = "marker",
+    tool_profile: str = "minimal",
+    url: str = "http://127.0.0.1:8000/mcp",
+    auth_token: str | None = None,
+) -> dict[str, Any]:
+    if mode not in {"source", "installed", "http"}:
+        raise UsageError("mode must be source, installed, or http")
+    if tool_profile not in {"minimal", "full", "admin"}:
+        raise UsageError("tool_profile must be minimal, full, or admin")
+    server_name = server_name.strip() or "marker"
+    local = _mcp_local_server_config(mode=mode, cwd=cwd, tool_profile=tool_profile)
+    http = _mcp_http_server_config(url=url, auth_token=auth_token)
+    server = http if mode == "http" else local
+
+    if client == "codex":
+        return {
+            "client": client,
+            "mode": mode,
+            "server_name": server_name,
+            "format": "toml",
+            "config": _codex_mcp_toml(server_name, server),
+        }
+
+    if client == "opencode":
+        config = {
+            "mcp": {
+                server_name: _opencode_server_config(server, mode=mode),
+            }
+        }
+    elif client == "goose":
+        config = {"extensions": {server_name: server}}
+    elif client == "antigravity":
+        config = {"servers": {server_name: server}}
+    else:
+        config = {"mcpServers": {server_name: server}}
+    return {
+        "client": client,
+        "mode": mode,
+        "server_name": server_name,
+        "format": "json",
+        "config": config,
+    }
+
+
+def _mcp_local_server_config(
+    *,
+    mode: str,
+    cwd: str | None,
+    tool_profile: str,
+) -> dict[str, Any]:
+    if mode == "installed":
+        return {
+            "command": "marker",
+            "args": ["mcp", "start", "--tool-profile", tool_profile],
+            "env": {"MARKER_PRELOAD_MODELS": "false"},
+        }
+    backend_cwd = str(Path(cwd).expanduser().resolve()) if cwd else str(Path.cwd().resolve())
+    return {
         "command": "python",
-        "args": ["-m", "app.cli", "mcp", "start"],
+        "args": ["-m", "app.cli", "mcp", "start", "--tool-profile", tool_profile],
+        "cwd": backend_cwd,
         "env": {"MARKER_PRELOAD_MODELS": "false"},
     }
-    if client in {"codex", "claude"}:
-        return {"mcpServers": {"marker": base}}
-    if client == "gemini":
-        return {"mcpServers": {"marker": base}}
-    if client == "opencode":
-        return {"mcp": {"marker": base}}
-    if client == "antigravity":
-        return {"servers": {"marker": base}}
-    return {"marker": base}
+
+
+def _mcp_http_server_config(*, url: str, auth_token: str | None) -> dict[str, Any]:
+    server: dict[str, Any] = {"url": url}
+    if auth_token:
+        server["headers"] = {"Authorization": f"Bearer {auth_token}"}
+    return server
+
+
+def _opencode_server_config(server: dict[str, Any], *, mode: str) -> dict[str, Any]:
+    if mode == "http":
+        return {"type": "remote", **server}
+    command = [str(server["command"]), *[str(item) for item in server.get("args", [])]]
+    result: dict[str, Any] = {
+        "type": "local",
+        "command": command,
+        "enabled": True,
+    }
+    if server.get("cwd"):
+        result["cwd"] = server["cwd"]
+    if server.get("env"):
+        result["env"] = server["env"]
+    return result
+
+
+def _codex_mcp_toml(server_name: str, server: dict[str, Any]) -> str:
+    lines = [f"[mcp_servers.{server_name}]"]
+    for key in ("command", "url", "cwd"):
+        if key in server:
+            lines.append(f'{key} = "{_toml_escape(str(server[key]))}"')
+    if "args" in server:
+        args = ", ".join(f'"{_toml_escape(str(item))}"' for item in server["args"])
+        lines.append(f"args = [{args}]")
+    lines.append("startup_timeout_sec = 20")
+    lines.append("tool_timeout_sec = 600")
+    lines.append("enabled = true")
+    if "headers" in server:
+        lines.append(f"[mcp_servers.{server_name}.headers]")
+        for key, value in server["headers"].items():
+            lines.append(f'{key} = "{_toml_escape(str(value))}"')
+    if "env" in server:
+        lines.append(f"[mcp_servers.{server_name}.env]")
+        for key, value in server["env"].items():
+            lines.append(f'{key} = "{_toml_escape(str(value))}"')
+    return "\n".join(lines)
+
+
+def _toml_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
