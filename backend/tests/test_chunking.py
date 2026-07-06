@@ -125,3 +125,27 @@ def test_chunk_markdown_splits_large_tables_on_rows_and_repeats_header() -> None
     assert all("| Name | Score |\n| --- | --- |" in chunk["text"] for chunk in table_chunks)
     assert all(chunk["char_count"] <= 220 for chunk in table_chunks)
     assert not any("Person 1 | Score 1 || Person" in chunk["text"] for chunk in table_chunks)
+
+
+def test_chunk_markdown_respects_size_budget_when_table_header_is_oversized() -> None:
+    long_header = "| " + ("Column " * 40) + "|"
+    payload = chunk_markdown(
+        f"{long_header}\n| --- |\n| value |",
+        source_name="wide-table.md",
+        max_chars=200,
+    )
+
+    assert payload["chunk_count"] > 1
+    assert all(chunk["char_count"] <= 200 for chunk in payload["chunks"])
+
+
+def test_chunk_markdown_respects_size_budget_when_code_fence_info_is_oversized() -> None:
+    long_info = "python " + ("metadata " * 30)
+    payload = chunk_markdown(
+        f"```{long_info}\nprint('ok')\n```",
+        source_name="long-fence.md",
+        max_chars=200,
+    )
+
+    assert payload["chunk_count"] > 1
+    assert all(chunk["char_count"] <= 200 for chunk in payload["chunks"])

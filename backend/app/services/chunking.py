@@ -347,6 +347,9 @@ def _split_table_block(text: str, *, max_chars: int) -> list[str]:
     header = lines[:2]
     rows = lines[2:]
     header_text = "\n".join(header)
+    row_limit = max_chars - len(header_text) - 1
+    if row_limit < 1:
+        return _split_text_by_chars(text, max_chars=max_chars)
     pieces: list[str] = []
     current_rows: list[str] = []
 
@@ -363,7 +366,7 @@ def _split_table_block(text: str, *, max_chars: int) -> list[str]:
             candidate = "\n".join([*header, row])
         if len(candidate) > max_chars:
             flush_rows()
-            for row_piece in _split_text_by_chars(row, max_chars=max_chars - len(header_text) - 1):
+            for row_piece in _split_text_by_chars(row, max_chars=row_limit):
                 pieces.append("\n".join([*header, row_piece]))
         else:
             current_rows.append(row)
@@ -380,7 +383,9 @@ def _split_fenced_code_block(text: str, *, max_chars: int) -> list[str]:
     closer = lines[-1] if _is_matching_fence(lines[-1], _fence_marker(opener) or "") else lines[0][:3]
     body = lines[1:-1] if closer == lines[-1] else lines[1:]
     overhead = len(opener) + len(closer) + 2
-    body_limit = max(40, max_chars - overhead)
+    body_limit = max_chars - overhead
+    if body_limit < 1:
+        return _split_text_by_chars(text, max_chars=max_chars)
     pieces: list[str] = []
     current: list[str] = []
 
@@ -406,7 +411,7 @@ def _split_fenced_code_block(text: str, *, max_chars: int) -> list[str]:
 
 
 def _split_text_by_chars(text: str, *, max_chars: int) -> list[str]:
-    limit = max(40, max_chars)
+    limit = max(1, max_chars)
     pieces: list[str] = []
     remaining = text
     while remaining:
