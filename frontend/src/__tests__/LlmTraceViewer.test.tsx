@@ -156,6 +156,39 @@ describe('LlmTraceViewer', () => {
     expect(screen.getAllByRole('table').length).toBeGreaterThan(0)
   })
 
+  it('renders LLM table HTML as inert text-only cells', async () => {
+    mockGetLlmTraces.mockResolvedValue({
+      job_id: 'job-1',
+      traces: [{
+        ...SAMPLE_TRACES[0],
+        response: JSON.stringify({
+          corrected_html: '<table><tr><td onclick="alert(1)"><img src="https://evil.test/pixel.png" onerror="alert(2)">Ada<script>alert(3)</script><a href="javascript:alert(4)">link</a></td></tr></table>',
+        }),
+      }],
+    })
+
+    render(
+      <LlmTraceViewer
+        open
+        jobId="job-uuid-1"
+        filename="report.pdf"
+        isRunning={false}
+        onClose={vi.fn()}
+      />
+    )
+    await waitFor(() => expect(screen.getByText('HTTP 200')).toBeInTheDocument())
+    await act(async () => {
+      fireEvent.click(screen.getByText('HTTP 200'))
+      fireEvent.click(screen.getByText('Rendered'))
+    })
+
+    expect(screen.getAllByRole('cell').some((cell) => cell.textContent === 'Adalink')).toBe(true)
+    expect(document.querySelector('td img')).toBeNull()
+    expect(document.querySelector('td a')).toBeNull()
+    expect(document.querySelector('[onclick]')).toBeNull()
+    expect(document.querySelector('[onerror]')).toBeNull()
+  })
+
   it('polls for traces while the job is running', async () => {
     render(
       <LlmTraceViewer

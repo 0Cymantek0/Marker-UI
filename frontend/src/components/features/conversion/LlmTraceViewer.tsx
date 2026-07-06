@@ -5,6 +5,15 @@ import { Button } from '@/components/ui/button'
 import { getLlmTraces, type LlmTrace } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
+type SafeTableCell = {
+  tag: 'td' | 'th'
+  text: string
+  colSpan?: number
+  rowSpan?: number
+}
+
+type SafeTableRow = SafeTableCell[]
+
 interface LlmTraceViewerProps {
   open: boolean
   jobId?: string
@@ -310,15 +319,12 @@ function PartView({ part, viewMode }: { part: import('@/lib/api').LlmTracePart; 
 
   if (viewMode === 'rendered' && hasTable) {
     const tableMatch = text.match(/<table[\s\S]*?<\/table>/i)
-    if (tableMatch) {
+    const rows = tableMatch ? parseSafeTableRows(tableMatch[0]) : null
+    if (rows) {
       return (
         <div className="space-y-2">
           <div className="rounded-lg border border-border/30 bg-background/50 p-3 overflow-x-auto">
-            <table
-              className="text-[11px] border-collapse"
-              style={{ tableLayout: 'auto' }}
-              dangerouslySetInnerHTML={{ __html: sanitizeTableHtml(tableMatch[0]) }}
-            />
+            <SafeTable rows={rows} className="text-[11px] border-collapse" />
           </div>
           <details className="text-[10px] text-muted-foreground">
             <summary className="cursor-pointer hover:text-foreground">Full prompt ({text.length} chars)</summary>
@@ -353,14 +359,12 @@ function ResponseView({ trace, viewMode }: { trace: LlmTrace; viewMode: 'raw' | 
 
   if (viewMode === 'rendered' && correctedHtml && /<table[\s>]/i.test(correctedHtml)) {
     const tableMatch = correctedHtml.match(/<table[\s\S]*?<\/table>/i)
-    if (tableMatch) {
+    const rows = tableMatch ? parseSafeTableRows(tableMatch[0]) : null
+    if (rows) {
       return (
         <div className="space-y-2">
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 overflow-x-auto">
-            <table
-              className="text-[11px] border-collapse"
-              dangerouslySetInnerHTML={{ __html: sanitizeTableHtml(tableMatch[0]) }}
-            />
+            <SafeTable rows={rows} className="text-[11px] border-collapse" />
           </div>
           <details className="text-[10px] text-muted-foreground">
             <summary className="cursor-pointer hover:text-foreground">Raw response ({text.length} chars)</summary>
@@ -383,12 +387,59 @@ function ResponseView({ trace, viewMode }: { trace: LlmTrace; viewMode: 'raw' | 
   )
 }
 
-// Strip script/style/event handlers from table HTML before rendering.
-function sanitizeTableHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '')
-    .replace(/javascript:/gi, '')
+function SafeTable({ rows, className }: { rows: SafeTableRow[]; className?: string }) {
+  return (
+    <table className={className} style={{ tableLayout: 'auto' }}>
+      <tbody>
+        {rows.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {row.map((cell, cellIndex) => {
+              const props = {
+                key: cellIndex,
+                colSpan: cell.colSpan,
+                rowSpan: cell.rowSpan,
+                className: 'border border-border/40 px-2 py-1 align-top',
+              }
+              return cell.tag === 'th'
+                ? <th {...props} scope="col">{cell.text}</th>
+                : <td {...props}>{cell.text}</td>
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function parseSafeTableRows(html: string): SafeTableRow[] | null {
+  if (typeof DOMParser === 'undefined') return null
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const table = doc.querySelector('table')
+  if (!table) return null
+  table.querySelectorAll('script, style, noscript, template').forEach((node) => node.remove())
+
+  const rows = Array.from(table.querySelectorAll('tr'))
+    .map((row) => (
+      Array.from(row.children)
+        .filter((child): child is HTMLTableCellElement => (
+          child instanceof HTMLTableCellElement
+          && (child.tagName.toLowerCase() === 'td' || child.tagName.toLowerCase() === 'th')
+        ))
+        .map((cell) => ({
+          tag: cell.tagName.toLowerCase() === 'th' ? 'th' as const : 'td' as const,
+          text: cell.textContent ?? '',
+          colSpan: safeSpan(cell.getAttribute('colspan')),
+          rowSpan: safeSpan(cell.getAttribute('rowspan')),
+        }))
+    ))
+    .filter((row) => row.length > 0)
+
+  return rows.length > 0 ? rows : null
+}
+
+function safeSpan(value: string | null): number | undefined {
+  if (!value) return undefined
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return undefined
+  return Math.min(parsed, 100)
 }
