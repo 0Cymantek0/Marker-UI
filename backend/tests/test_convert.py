@@ -375,12 +375,22 @@ async def test_cancel_job_marks_cancelled_without_deleting_row(
 async def test_delete_job_removes_from_db(
     client: AsyncClient, db_session
 ):
-    """Create a job, delete it via API, verify it's gone from DB."""
+    """Create a terminal job, delete it via API, verify it's gone from DB."""
     from sqlalchemy import select
 
-    upload_resp = await _upload_file(client)
-    assert upload_resp.status_code == 200
-    job_id = upload_resp.json()["job_id"]
+    job_id = "rest-delete-completed-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="done.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            progress=100,
+        )
+    )
+    await db_session.commit()
 
     del_resp = await client.delete(
         f"/api/convert/{job_id}",
@@ -391,6 +401,58 @@ async def test_delete_job_removes_from_db(
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     result = await db_session.execute(stmt)
     assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_delete_job_rejects_live_job_without_force(
+    client: AsyncClient, db_session
+):
+    job_id = "rest-delete-running-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="running.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.delete(f"/api/convert/{job_id}")
+
+    assert resp.status_code == 409
+    assert "cancel it first or pass force=true" in resp.json()["detail"]
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_delete_job_force_deletes_live_job(
+    client: AsyncClient, db_session
+):
+    job_id = "rest-force-delete-running-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="running.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.delete(f"/api/convert/{job_id}", params={"force": "true"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "deleted", "job_id": job_id}
+    assert await db_session.get(ConversionJob, job_id) is None
 
 
 # ---------------------------------------------------------------------------

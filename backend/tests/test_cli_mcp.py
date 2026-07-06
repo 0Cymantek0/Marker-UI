@@ -524,6 +524,80 @@ async def test_agent_cancel_job_does_not_cancel_completed_job(
     assert cancelled_calls == []
 
 
+@pytest.mark.asyncio
+async def test_agent_delete_job_rejects_live_job_without_force(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    job_id = "55555555-5555-4555-8555-555555555555"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="running.csv",
+            original_name="running.csv",
+            status="processing",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    with pytest.raises(agent_api.UsageError) as exc_info:
+        await agent_api.delete_job(job_id)
+
+    assert "cancel it first or pass force=true" in str(exc_info.value)
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_agent_delete_job_force_deletes_live_job(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+    cancelled_calls: list[str] = []
+
+    async def fake_cancel(job_id: str) -> None:
+        cancelled_calls.append(job_id)
+
+    monkeypatch.setattr(agent_api, "_cancel_job_best_effort", fake_cancel)
+
+    job_id = "66666666-6666-4666-8666-666666666666"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="running.csv",
+            original_name="running.csv",
+            status="processing",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.delete_job(job_id, force=True, delete_files=False)
+
+    assert result == {"status": "deleted", "job_id": job_id, "files_removed": []}
+    assert await db_session.get(ConversionJob, job_id) is None
+    assert cancelled_calls == [job_id]
+
+
 def test_mcp_streamable_http_refuses_non_loopback_without_auth_token():
     from app.mcp_server import run
 

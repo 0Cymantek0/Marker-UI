@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "delete-job":
             return _print_result(
-                asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files)),
+                asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files, force=args.force)),
                 args.json,
             )
         if args.command == "settings":
@@ -287,6 +287,7 @@ def _build_parser() -> argparse.ArgumentParser:
     jobs_delete = jobs_sub.add_parser("delete", help="Delete one conversion job")
     jobs_delete.add_argument("job_id")
     jobs_delete.add_argument("--keep-files", action="store_true", help="Keep upload/output files")
+    jobs_delete.add_argument("--force", action="store_true", help="Cancel and delete a pending/running job")
     jobs_delete.add_argument("--yes", action="store_true", help="Confirm deletion")
     jobs_delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     jobs_cancel = jobs_sub.add_parser("cancel", help="Cancel one job best-effort without deleting its record")
@@ -299,9 +300,10 @@ def _build_parser() -> argparse.ArgumentParser:
     status.add_argument("--max-chars", type=int, default=20_000)
     status.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
-    delete = sub.add_parser("delete-job", help="Cancel/delete one conversion job")
+    delete = sub.add_parser("delete-job", help="Delete one terminal conversion job")
     delete.add_argument("job_id")
     delete.add_argument("--keep-files", action="store_true", help="Keep upload/output files")
+    delete.add_argument("--force", action="store_true", help="Cancel and delete a pending/running job")
     delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     output = sub.add_parser("output", help="Read converted outputs")
@@ -487,7 +489,7 @@ def _handle_jobs(args: argparse.Namespace) -> int:
         return asyncio.run(_watch_job(args))
     if command == "delete":
         return _print_result(
-            asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files)),
+            asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files, force=args.force)),
             args.json,
         )
     if command == "cancel":

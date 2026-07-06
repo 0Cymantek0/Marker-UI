@@ -1088,11 +1088,12 @@ async def marker_cancel_job(
 async def marker_delete_job(
     job_id: JobIdParam,
     delete_files: Annotated[bool, Field(description="Also delete upload/output files associated with job.", examples=[True])] = True,
+    force: Annotated[bool, Field(description="Explicitly cancel and delete a pending/running job. Leave false to delete terminal history only.", examples=[False])] = False,
 ) -> DeleteJobOutput:
-    """Cancel/delete one job and optionally remove its upload/output files."""
+    """Delete one terminal job, or force-delete a live job explicitly."""
 
     require_mcp_scopes(SCOPE_JOBS_WRITE)
-    return await delete_job(job_id, delete_files=delete_files)
+    return await delete_job(job_id, delete_files=delete_files, force=force)
 
 
 @mcp.tool(

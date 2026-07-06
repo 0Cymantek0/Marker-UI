@@ -1214,9 +1214,10 @@ async def cancel_job(
 @router.delete("/{job_id}")
 async def delete_job(
     job_id: str,
+    force: bool = Query(False, description="Explicitly cancel and delete a non-terminal live job."),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Cancel (if running) and delete a conversion job."""
+    """Delete a terminal conversion job, or force-delete a live job explicitly."""
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     result = await db.execute(stmt)
     job = result.scalar_one_or_none()
@@ -1224,10 +1225,15 @@ async def delete_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Cancel if still processing
-    from app.main import _app_state
+    if job.status not in {"completed", "failed", "cancelled"} and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job {job_id} is {job.status}; cancel it first or pass force=true to delete a live job.",
+        )
+    if job.status not in {"completed", "failed", "cancelled"}:
+        from app.main import _app_state
 
-    await _app_state.task_manager.cancel_job(job_id)
+        await _app_state.task_manager.cancel_job(job_id)
 
     # Clean up uploaded file
     upload_path = UPLOAD_DIR / job.filename

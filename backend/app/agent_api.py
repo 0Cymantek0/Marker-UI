@@ -804,7 +804,12 @@ async def get_job_status(
     return data
 
 
-async def delete_job(job_id: str, *, delete_files: bool = True) -> dict[str, Any]:
+async def delete_job(
+    job_id: str,
+    *,
+    delete_files: bool = True,
+    force: bool = False,
+) -> dict[str, Any]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
@@ -813,8 +818,14 @@ async def delete_job(job_id: str, *, delete_files: bool = True) -> dict[str, Any
                 f"Job not found: {job_id}",
                 details={"job_id": job_id},
             )
+        if job.status not in {"completed", "failed", "cancelled"} and not force:
+            raise UsageError(
+                f"Job {job_id} is {job.status}; cancel it first or pass force=true to delete a live job.",
+                details={"job_id": job_id, "status": job.status},
+            )
         cleanup_paths = _job_cleanup_paths(job) if delete_files else []
-        await _cancel_job_best_effort(job_id)
+        if job.status not in {"completed", "failed", "cancelled"}:
+            await _cancel_job_best_effort(job_id)
         await session.delete(job)
         await session.commit()
     removed = _remove_paths(cleanup_paths) if delete_files else []
