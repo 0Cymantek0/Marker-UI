@@ -8,6 +8,7 @@ import tempfile
 import uuid
 import zipfile
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -45,6 +46,7 @@ from app.services.format_store import (
     parse_formats as parse_cached_formats,
 )
 from app.services.output_format_policy import require_supported_output_formats
+from app.services.job_artifacts import job_artifact_paths, remove_paths
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +207,7 @@ def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | No
             "video",
             "assets",
             "manifest_path",
+            "purged_artifacts",
         )
         if key in parsed and parsed[key]
     }
@@ -1364,6 +1367,52 @@ async def delete_job(
     await db.delete(job)
 
     return {"status": "deleted", "job_id": job_id}
+
+
+@router.post("/{job_id}/purge-files")
+async def purge_job_files(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Remove upload/output files for a terminal job while keeping its history row."""
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in {"completed", "failed", "cancelled"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job {job_id} is {job.status}; cancel or wait for terminal status before purging files.",
+        )
+
+    cleanup_paths = job_artifact_paths(job)
+    removed = remove_paths(cleanup_paths)
+    try:
+        metadata = json.loads(job.result_metadata_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata["purged_artifacts"] = {
+        "files_removed": removed,
+        "purged_at": datetime.now(timezone.utc).isoformat(),
+    }
+    job.result_metadata_json = json.dumps(metadata)
+    if job.result_path and not Path(job.result_path).exists():
+        job.result_path = None
+    await record_audit_event(
+        db,
+        event_type="job.files_purged",
+        surface="rest",
+        resource_type="job",
+        resource_id=job_id,
+        status="success",
+        payload={"files_removed": removed},
+    )
+    await db.commit()
+    return {"status": "purged", "job_id": job_id, "files_removed": removed}
 
 
 # ------------------------------------------------------------------

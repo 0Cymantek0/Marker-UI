@@ -30,6 +30,7 @@ from app.agent_api import (
     list_jobs,
     list_settings,
     plan_conversion,
+    purge_job_files,
     read_output,
     set_setting,
     self_test,
@@ -287,6 +288,9 @@ def _build_parser() -> argparse.ArgumentParser:
     jobs_cancel = jobs_sub.add_parser("cancel", help="Cancel one job best-effort without deleting its record")
     jobs_cancel.add_argument("job_id")
     jobs_cancel.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+    jobs_purge = jobs_sub.add_parser("purge-files", help="Delete job files but keep conversion history")
+    jobs_purge.add_argument("job_id")
+    jobs_purge.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     status = sub.add_parser("job-status", help="Show one conversion job")
     status.add_argument("job_id")
@@ -519,6 +523,11 @@ def _handle_jobs(args: argparse.Namespace) -> int:
     if command == "delete":
         return _print_result(
             asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files, force=args.force)),
+            args.json,
+        )
+    if command == "purge-files":
+        return _print_result(
+            asyncio.run(purge_job_files(args.job_id)),
             args.json,
         )
     if command == "cancel":

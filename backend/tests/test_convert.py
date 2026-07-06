@@ -455,6 +455,80 @@ async def test_delete_job_force_deletes_live_job(
     assert await db_session.get(ConversionJob, job_id) is None
 
 
+@pytest.mark.asyncio
+async def test_purge_job_files_removes_artifacts_but_keeps_history(
+    client: AsyncClient,
+    db_session,
+    tmp_path: Path,
+):
+    job_id = "rest-purge-completed-job"
+    result_file = tmp_path / "rest-purge.md"
+    manifest_file = tmp_path / "rest-purge.marker.json"
+    result_file.write_text("# retained in db", encoding="utf-8")
+    manifest_file.write_text("{}", encoding="utf-8")
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.csv",
+            original_name="purge.csv",
+            status="completed",
+            input_format="csv",
+            output_format="markdown",
+            result_text="# retained in db",
+            result_path=str(result_file),
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/purge-files")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "purged"
+    assert {Path(path).name for path in body["files_removed"]} == {
+        "rest-purge.md",
+        "rest-purge.marker.json",
+    }
+    assert not result_file.exists()
+    assert not manifest_file.exists()
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "completed"
+    assert row.result_text == "# retained in db"
+    assert row.result_path is None
+    metadata = json.loads(row.result_metadata_json or "{}")
+    assert metadata["purged_artifacts"]["files_removed"] == body["files_removed"]
+
+
+@pytest.mark.asyncio
+async def test_purge_job_files_rejects_live_job(
+    client: AsyncClient,
+    db_session,
+):
+    job_id = "rest-purge-running-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.csv",
+            original_name="running.csv",
+            status="processing",
+            input_format="csv",
+            output_format="markdown",
+            progress=25,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/purge-files")
+
+    assert resp.status_code == 409
+    assert "cancel or wait for terminal status" in resp.json()["detail"]
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "processing"
+
+
 # ---------------------------------------------------------------------------
 # History
 # ---------------------------------------------------------------------------

@@ -753,6 +753,73 @@ async def test_mcp_delete_job_output_schema_is_files_removed_list(
 
 
 @pytest.mark.asyncio
+async def test_agent_purge_job_files_preserves_row_and_removes_manifest(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    result_file = tmp_path / "purged.md"
+    manifest_file = tmp_path / "purged.marker.json"
+    result_file.write_text("# keep history", encoding="utf-8")
+    manifest_file.write_text("{}", encoding="utf-8")
+    job_id = "22222222-2222-4222-8222-222222222223"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="purged.csv",
+            original_name="purged.csv",
+            status="completed",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            result_text="# keep history",
+            result_path=str(result_file),
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.purge_job_files(job_id)
+
+    assert result["status"] == "purged"
+    assert {Path(path).name for path in result["files_removed"]} == {
+        "purged.md",
+        "purged.marker.json",
+    }
+    assert not result_file.exists()
+    assert not manifest_file.exists()
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "completed"
+    assert row.result_text == "# keep history"
+    assert row.result_path is None
+    metadata = json.loads(row.result_metadata_json or "{}")
+    assert metadata["purged_artifacts"]["files_removed"] == result["files_removed"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_purge_job_files_is_admin_tool_with_files_removed_schema():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+    purge_tool = next(tool for tool in tools if tool.name == "marker_purge_job_files")
+    files_removed_schema = purge_tool.outputSchema["properties"]["files_removed"]
+    assert files_removed_schema["type"] == "array"
+    assert files_removed_schema["items"]["type"] == "string"
+
+
+@pytest.mark.asyncio
 async def test_agent_cancel_job_marks_cancelled_without_deleting_row(
     db_session,
     monkeypatch: pytest.MonkeyPatch,

@@ -71,6 +71,7 @@ MCP_V1_TOOL_NAMES: tuple[str, ...] = (
     "marker_get_job_status",
     "marker_cancel_job",
     "marker_delete_job",
+    "marker_purge_job_files",
     "marker_list_settings",
     "marker_get_setting",
     "marker_set_setting",
@@ -86,7 +87,7 @@ MCP_SETTINGS_WRITE_TOOL_NAMES: frozenset[str] = frozenset(
     {"marker_set_setting", "marker_delete_setting"}
 )
 MCP_ADMIN_ONLY_TOOL_NAMES: frozenset[str] = frozenset(
-    {"marker_delete_job", *MCP_SETTINGS_WRITE_TOOL_NAMES}
+    {"marker_delete_job", "marker_purge_job_files", *MCP_SETTINGS_WRITE_TOOL_NAMES}
 )
 MCP_FULL_TOOL_NAMES: tuple[str, ...] = tuple(
     name for name in MCP_ALL_TOOL_NAMES if name not in MCP_ADMIN_ONLY_TOOL_NAMES
@@ -146,6 +147,7 @@ def _tool_scopes(name: str) -> tuple[str, ...]:
         "marker_submit",
         "marker_cancel_job",
         "marker_delete_job",
+        "marker_purge_job_files",
     }:
         return (SCOPE_JOBS_WRITE,)
     if name in {

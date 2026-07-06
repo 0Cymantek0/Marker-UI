@@ -44,6 +44,7 @@ from app.agent_api import (
     list_settings,
     parse_extra_options_json,
     plan_conversion,
+    purge_job_files,
     read_output,
     read_output_chunk,
     set_setting,
@@ -179,6 +180,15 @@ class DeleteJobOutput(MarkerOutputModel):
     job_id: str = Field(description="Deleted job id.", examples=["11111111-1111-4111-8111-111111111111"])
     files_removed: list[str] = Field(
         description="Resolved paths of files/directories removed during deletion. Empty when none were removed.",
+        examples=[["C:\\path\\to\\output.md"]],
+    )
+
+
+class PurgeJobFilesOutput(MarkerOutputModel):
+    status: str = Field(description="Purge status.", examples=["purged"])
+    job_id: str = Field(description="Purged job id.", examples=["11111111-1111-4111-8111-111111111111"])
+    files_removed: list[str] = Field(
+        description="Resolved paths of upload/output artifacts removed while keeping the job row.",
         examples=[["C:\\path\\to\\output.md"]],
     )
 
@@ -1411,6 +1421,25 @@ async def marker_delete_job(
 
     require_mcp_scopes(SCOPE_JOBS_WRITE)
     return await delete_job(job_id, delete_files=delete_files, force=force)
+
+
+@mcp.tool(
+    name="marker_purge_job_files",
+    title="Purge Marker Job Files",
+    annotations={
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": False,
+        "openWorldHint": False,
+    },
+)
+async def marker_purge_job_files(
+    job_id: JobIdParam,
+) -> PurgeJobFilesOutput:
+    """Remove upload/output files for a terminal job without deleting history."""
+
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
+    return await purge_job_files(job_id)
 
 
 @mcp.tool(

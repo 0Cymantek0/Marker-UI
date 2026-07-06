@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +49,7 @@ from app.routes.convert import (
     _validate_page_range,
 )
 from app.services.conversion_service import ConversionService
+from app.services.job_artifacts import job_artifact_paths, remove_paths
 from app.services.marker_service import MarkerService, build_marker_options
 from app.services.output_format_policy import require_supported_output_formats
 from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION, write_conversion_output
@@ -896,13 +897,52 @@ async def delete_job(
                 f"Job {job_id} is {job.status}; cancel it first or pass force=true to delete a live job.",
                 details={"job_id": job_id, "status": job.status},
             )
-        cleanup_paths = _job_cleanup_paths(job) if delete_files else []
+        cleanup_paths = job_artifact_paths(job) if delete_files else []
         if job.status not in {"completed", "failed", "cancelled"}:
             await _cancel_job_best_effort(job_id)
         await session.delete(job)
         await session.commit()
-    removed = _remove_paths(cleanup_paths) if delete_files else []
+    removed = remove_paths(cleanup_paths) if delete_files else []
     return {"status": "deleted", "job_id": job_id, "files_removed": removed}
+
+
+async def purge_job_files(job_id: str) -> dict[str, Any]:
+    """Remove upload/output artifacts for a terminal job while preserving history."""
+
+    await _ensure_db_tables()
+    async with _db_session_factory() as session:
+        job = await session.get(ConversionJob, job_id)
+        if not job:
+            raise InputNotFoundError(
+                f"Job not found: {job_id}",
+                details={"job_id": job_id},
+            )
+        if job.status not in {"completed", "failed", "cancelled"}:
+            raise UsageError(
+                f"Job {job_id} is {job.status}; cancel or wait for terminal status before purging files.",
+                details={"job_id": job_id, "status": job.status},
+            )
+        cleanup_paths = job_artifact_paths(job)
+        removed = remove_paths(cleanup_paths)
+        metadata = _json_obj(job.result_metadata_json)
+        metadata["purged_artifacts"] = {
+            "files_removed": removed,
+            "purged_at": datetime.now(timezone.utc).isoformat(),
+        }
+        job.result_metadata_json = json.dumps(metadata)
+        if job.result_path and not Path(job.result_path).exists():
+            job.result_path = None
+        await record_audit_event(
+            session,
+            event_type="job.files_purged",
+            surface="agent",
+            resource_type="job",
+            resource_id=job_id,
+            status="success",
+            payload={"files_removed": removed},
+        )
+        await session.commit()
+    return {"status": "purged", "job_id": job_id, "files_removed": removed}
 
 
 async def cancel_job(job_id: str) -> dict[str, Any]:
@@ -1087,6 +1127,7 @@ def _job_to_dict(
                 "image_understanding",
                 "assets",
                 "manifest_path",
+                "purged_artifacts",
             )
             if key in metadata and metadata[key]
         },
@@ -1177,16 +1218,6 @@ def _iso(value: Any) -> str | None:
     return value.isoformat() if value else None
 
 
-def _job_cleanup_paths(job: ConversionJob) -> list[Path]:
-    paths: list[Path] = []
-    upload_path = UPLOAD_DIR / job.filename
-    if upload_path.exists():
-        paths.append(upload_path)
-    if job.result_path:
-        paths.append(Path(job.result_path))
-    return paths
-
-
 def _assert_output_read_permitted(path: Path) -> None:
     """Allow output reads only from policy roots or Marker-owned output manifests."""
 
@@ -1228,20 +1259,6 @@ def _same_resolved_path(path: Path, raw: Any) -> bool:
         return path == Path(str(raw)).expanduser().resolve(strict=False)
     except (OSError, ValueError):
         return False
-
-
-def _remove_paths(paths: list[Path]) -> list[str]:
-    removed: list[str] = []
-    for path in paths:
-        try:
-            if path.is_dir():
-                shutil.rmtree(path)
-            elif path.exists():
-                path.unlink()
-            removed.append(str(path.resolve()))
-        except FileNotFoundError:
-            continue
-    return removed
 
 
 async def _cancel_job_best_effort(job_id: str) -> None:
