@@ -1,23 +1,9 @@
 import { cn } from '@/lib/utils'
 import { Cpu, AlertTriangle, ShieldCheck, Info, ChevronRight, Gauge, GitBranch } from 'lucide-react'
-import type { ConverterPlanResponse } from '@/lib/api'
-
-type RoutingMetadata = {
-  engine?: ConverterPlanResponse | null
-  probe_result?: Record<string, any> | null
-  mixed_engine_segments?: MixedEngineSegment[] | null
-}
-
-type MixedEngineSegment = {
-  page_range?: string | null
-  requested_engine?: string | null
-  actual_engine?: string | null
-  fallback_reason?: string | null
-  pages?: number[] | null
-}
+import type { ConversionMetadata, ConverterPlanResponse, MixedEngineSegment } from '@/lib/api'
 
 interface RoutingAnalysisProps {
-  plan: ConverterPlanResponse | RoutingMetadata | null
+  plan: ConverterPlanResponse | ConversionMetadata | null
   title?: string
   className?: string
 }
@@ -32,7 +18,7 @@ function isScoreUnsafe(key: string, value: number): boolean {
   return false
 }
 
-export function toRoutingPlan(plan: ConverterPlanResponse | RoutingMetadata | null): ConverterPlanResponse | null {
+export function toRoutingPlan(plan: ConverterPlanResponse | ConversionMetadata | null): ConverterPlanResponse | null {
   if (!plan) return null
   if ('engine' in plan && typeof plan.engine === 'object' && plan.engine) {
     return {
@@ -182,7 +168,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
             {Object.entries(SCORE_LABELS).map(([key, label]) => {
               const val = routingPlan.probe_result?.[key]
-              if (val === undefined || val === null) return null
+              if (typeof val !== 'number') return null
               const isUnsafe = isScoreUnsafe(key, val)
               const formattedVal = `${(val * 100).toFixed(0)}%`
 

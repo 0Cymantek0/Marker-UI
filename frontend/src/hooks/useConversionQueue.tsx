@@ -12,7 +12,7 @@ import {
   type JobStatus,
   type ImageUnderstandingMeta,
   type RetryJobRequestBody,
-  type ConverterPlanResponse,
+  type ConversionMetadata,
 } from '@/lib/api'
 import { filenameForDownload } from '@/lib/download'
 
@@ -70,20 +70,6 @@ export interface SourceEngineOverrides {
   fileKeys?: string[]
   fileEngineOverrides?: Record<string, string>
   localPathEngineOverrides?: Record<string, string>
-}
-
-export interface ConversionMetadata {
-  engine?: ConverterPlanResponse | null
-  probe_result?: Record<string, unknown> | null
-  audio?: Record<string, unknown> | null
-  audio_batch?: Record<string, unknown> | null
-  mixed_engine_segments?: {
-    page_range?: string | null
-    requested_engine?: string | null
-    actual_engine?: string | null
-    fallback_reason?: string | null
-    pages?: number[] | null
-  }[] | null
 }
 
 interface ConversionContextType {
@@ -218,7 +204,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           const status = await getJobStatus(jobId)
           imageUnderstanding = status.image_understanding ?? null
           resultText = status.result_text ?? null
-          conversionMetadata = status.conversion_metadata as ConversionMetadata | null
+          conversionMetadata = status.conversion_metadata ?? null
           formats = status.formats ?? null
           availableFormats = status.available_formats ?? undefined
         } catch {

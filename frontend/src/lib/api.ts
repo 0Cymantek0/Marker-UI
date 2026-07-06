@@ -187,6 +187,23 @@ export interface ImageUnderstandingMeta {
   cost_usd?: number
 }
 
+export interface MixedEngineSegment {
+  page_range?: string | null
+  requested_engine?: string | null
+  actual_engine?: string | null
+  fallback_reason?: string | null
+  pages?: number[] | null
+}
+
+export interface ConversionMetadata {
+  engine?: ConverterPlanResponse | null
+  probe_result?: Record<string, unknown> | null
+  audio?: Record<string, unknown> | null
+  audio_batch?: Record<string, unknown> | null
+  mixed_engine_segments?: MixedEngineSegment[] | null
+  [key: string]: unknown
+}
+
 export interface JobStatus {
   id: string
   job_id: string
@@ -202,7 +219,7 @@ export interface JobStatus {
   formats?: Record<string, string> | null
   available_formats?: string[] | null
   image_understanding?: ImageUnderstandingMeta[] | null
-  conversion_metadata?: Record<string, any> | null
+  conversion_metadata?: ConversionMetadata | null
 }
 
 export interface SSEEvent {
@@ -294,7 +311,7 @@ export interface BackendJobStatus {
   error_message: string | null
   result_text: string | null
   image_understanding?: ImageUnderstandingMeta[] | null
-  conversion_metadata?: Record<string, any> | null
+  conversion_metadata?: ConversionMetadata | null
   filename: string
   message?: string | null
   logs?: string | null
@@ -894,8 +911,8 @@ export interface ConverterPlanResponse {
   fallback_chain: string[]
   warnings: string[]
   preliminary: boolean
-  probe_result?: Record<string, any> | null
-  mixed_engine_segments?: Array<Record<string, any>> | null
+  probe_result?: Record<string, unknown> | null
+  mixed_engine_segments?: MixedEngineSegment[] | null
 }
 
 export async function getCapabilities(): Promise<CapabilitiesResponse> {
