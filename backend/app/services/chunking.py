@@ -108,6 +108,9 @@ def chunk_markdown(
                 "token_estimate": max(1, (len(text) + 3) // 4),
             }
         )
+    for index, chunk in enumerate(chunks):
+        chunk["previous_id"] = chunks[index - 1]["id"] if index > 0 else None
+        chunk["next_id"] = chunks[index + 1]["id"] if index + 1 < len(chunks) else None
     return {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",

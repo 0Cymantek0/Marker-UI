@@ -49,6 +49,22 @@ def test_chunk_markdown_keeps_oversized_section_heading_with_first_content() -> 
     assert all(text.strip() != "# Long Section" for text in texts)
 
 
+def test_chunk_markdown_adds_neighbor_links_for_semantic_navigation() -> None:
+    payload = chunk_markdown(
+        "# One\n\n" + ("alpha " * 60) + "\n\n## Two\n\n" + ("beta " * 60),
+        source_name="linked.md",
+        max_chars=200,
+    )
+
+    chunks = payload["chunks"]
+
+    assert len(chunks) >= 3
+    assert chunks[0]["previous_id"] is None
+    assert chunks[0]["next_id"] == chunks[1]["id"]
+    assert chunks[1]["previous_id"] == chunks[0]["id"]
+    assert chunks[-1]["next_id"] is None
+
+
 def test_chunk_markdown_keeps_fenced_code_with_blank_lines_together() -> None:
     payload = chunk_markdown(
         "# Notes\n\n```python\nprint('first')\n\nprint('second')\n```\n\nDone.",

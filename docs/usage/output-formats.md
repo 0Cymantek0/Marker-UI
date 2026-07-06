@@ -28,6 +28,15 @@ Generates structured HTML5 markup with semantic layout tags.
 ## 4. Chunks
 Segments the document text into smaller, overlapping chunks.
 - Optimized for creating vector embeddings in Retrieval-Augmented Generation (RAG) applications.
+- Native Markdown-only converters use the deterministic `marker.chunks.v1`
+  semantic chunker. It preserves heading paths, line spans, chunk IDs,
+  `previous_id` / `next_id` links, character counts, and token estimates.
+- Large prose blocks split on sentence and character boundaries with bounded
+  overlap. Markdown tables split by rows and repeat the header. Fenced code
+  blocks stay fenced, even when split.
+- Read semantic chunks by index through `marker_read_output_chunk` with
+  `mode="semantic"` instead of loading the whole chunks JSON into agent
+  context.
 
 ---
 

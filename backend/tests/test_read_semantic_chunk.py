@@ -57,6 +57,8 @@ def test_read_semantic_chunk_returns_chunk_by_index(tmp_path: Path) -> None:
     assert result["chunk_count"] >= 1
     assert "heading_path" in result
     assert "id" in result
+    assert "previous_id" in result["chunk"]
+    assert "next_id" in result["chunk"]
 
 
 def test_read_semantic_chunk_out_of_range_raises(tmp_path: Path) -> None:

@@ -656,8 +656,9 @@ def read_semantic_chunk(path: str, *, chunk_index: int = 0) -> dict[str, Any]:
           "chunks": [
             {"id": "chunk_0000_...", "index": 0, "text": "...",
              "heading_path": ["Title"], "start_line": 1, "end_line": 3,
-             "char_count": 42, "token_estimate": 11},
-            ...
+             "char_count": 42, "token_estimate": 11,
+             "previous_id": null, "next_id": "chunk_0001_..."},
+             ...
           ]
         }
 

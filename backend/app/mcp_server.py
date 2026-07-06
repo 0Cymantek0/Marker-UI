@@ -137,7 +137,7 @@ class ReadOutputResult(MarkerOutputModel):
     chunk_count: int | None = Field(default=None, description="Total semantic chunks in the envelope (semantic mode).", examples=[12])
     next_chunk_index: int | None = Field(default=None, description="Next chunk index, or null if this was the last (semantic mode).", examples=[1])
     schema_version: str | None = Field(default=None, description="Chunk envelope schema version (semantic mode).", examples=["marker.chunks.v1"])
-    chunk: dict[str, Any] | None = Field(default=None, description="Full semantic chunk object with id, heading_path, start_line, end_line, char_count, token_estimate (semantic mode).", examples=[{"id": "chunk_0000_abc123", "heading_path": ["Title"]}])
+    chunk: dict[str, Any] | None = Field(default=None, description="Full semantic chunk object with id, heading_path, start_line, end_line, char_count, token_estimate, previous_id, and next_id (semantic mode).", examples=[{"id": "chunk_0000_abc123", "heading_path": ["Title"]}])
 
 
 class ManifestToolOutput(MarkerOutputModel):
