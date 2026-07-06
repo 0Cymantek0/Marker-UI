@@ -50,6 +50,13 @@ Scopes:
 | `settings:write` | Settings writes and deletes. |
 | `*` | All scopes. |
 
+When REST bearer auth is enabled, route groups enforce matching scopes:
+capabilities/version/model reads use `capabilities:read`; job planning/status
+uses `jobs:read` or `capabilities:read`; upload, cancel, retry, regenerate, and
+delete use `jobs:write`; downloads use `outputs:read`; settings reads use
+`settings:read`; settings writes and model-management mutations use
+`settings:write`.
+
 `settings:write` scope is not enough to expose MCP settings write/delete tools.
 Set `MARKER_MCP_ENABLE_SETTINGS_WRITE=true` and use `--tool-profile admin` only
 for trusted agents that should be able to modify stored configuration.

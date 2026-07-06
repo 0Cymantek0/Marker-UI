@@ -11,9 +11,16 @@ from mcp.server.auth.provider import AccessToken
 from app.security.auth import (
     principal_from_authorization,
     require_mcp_scopes,
+    rest_scopes_for_request,
     validate_oidc_jwt_skeleton,
 )
-from app.security.scopes import SCOPE_OUTPUTS_READ, SCOPE_SETTINGS_READ, SCOPE_SETTINGS_WRITE
+from app.security.scopes import (
+    SCOPE_CAPABILITIES_READ,
+    SCOPE_JOBS_WRITE,
+    SCOPE_OUTPUTS_READ,
+    SCOPE_SETTINGS_READ,
+    SCOPE_SETTINGS_WRITE,
+)
 from app.services.output_writer import write_conversion_output
 
 
@@ -45,6 +52,14 @@ def test_mcp_scope_check_denies_missing_scope(monkeypatch):
 
     with pytest.raises(PermissionError):
         require_mcp_scopes(SCOPE_SETTINGS_WRITE)
+
+
+def test_rest_scope_mapping_covers_core_surfaces():
+    assert rest_scopes_for_request("GET", "/api/capabilities") == {SCOPE_CAPABILITIES_READ}
+    assert rest_scopes_for_request("POST", "/api/convert/upload") == {SCOPE_JOBS_WRITE}
+    assert rest_scopes_for_request("GET", "/api/convert/download/job-1") == {SCOPE_OUTPUTS_READ}
+    assert rest_scopes_for_request("GET", "/api/settings/") == {SCOPE_SETTINGS_READ}
+    assert rest_scopes_for_request("PUT", "/api/settings/") == {SCOPE_SETTINGS_WRITE}
 
 
 @pytest.mark.asyncio
@@ -98,5 +113,21 @@ async def test_rest_middleware_requires_bearer_when_configured(monkeypatch):
         )
 
     assert missing.status_code == 401
-    assert allowed.status_code == 200
+    assert allowed.status_code == 403
     assert denied_write.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_rest_middleware_allows_matching_scope_when_configured(monkeypatch):
+    from app.main import app
+
+    monkeypatch.setenv("MARKER_REST_AUTH_TOKEN", "rest-token")
+    monkeypatch.setenv("MARKER_REST_AUTH_SCOPES", SCOPE_CAPABILITIES_READ)
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        allowed = await client.get("/api/capabilities", headers={"Authorization": "Bearer rest-token"})
+        denied_settings = await client.get("/api/settings/", headers={"Authorization": "Bearer rest-token"})
+
+    assert allowed.status_code == 200
+    assert denied_settings.status_code == 403

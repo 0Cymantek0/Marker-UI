@@ -13,7 +13,17 @@ from mcp.server.auth.provider import AccessToken
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from app.security.scopes import DEFAULT_MCP_SCOPES, DEFAULT_REST_SCOPES, has_scopes
+from app.security.scopes import (
+    DEFAULT_MCP_SCOPES,
+    DEFAULT_REST_SCOPES,
+    SCOPE_CAPABILITIES_READ,
+    SCOPE_JOBS_READ,
+    SCOPE_JOBS_WRITE,
+    SCOPE_OUTPUTS_READ,
+    SCOPE_SETTINGS_READ,
+    SCOPE_SETTINGS_WRITE,
+    has_scopes,
+)
 from app.services.audit import record_audit_event
 
 
@@ -155,7 +165,11 @@ class ScopedStaticTokenVerifier:
 
 class RestAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        if not rest_auth_enabled() or request.url.path in {"/api/health", "/api/healthz", "/api/readyz", "/api/version"}:
+        if (
+            request.method == "OPTIONS"
+            or not rest_auth_enabled()
+            or request.url.path in {"/api/health", "/api/healthz", "/api/readyz", "/api/version"}
+        ):
             return await call_next(request)
         principal = principal_from_authorization(request.headers.get("Authorization"), surface="rest")
         if principal is None:
@@ -173,8 +187,65 @@ class RestAuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Missing or invalid bearer token"},
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        required = rest_scopes_for_request(request.method, request.url.path)
+        try:
+            require_principal_scopes(principal, required)
+        except HTTPException as exc:
+            await record_audit_event(
+                None,
+                event_type="auth.denied",
+                actor=principal.client_id,
+                surface="rest",
+                resource_type="http_request",
+                resource_id=request.url.path,
+                status="denied",
+                payload={
+                    "path": request.url.path,
+                    "method": request.method,
+                    "required_scopes": sorted(required),
+                },
+            )
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=exc.detail if isinstance(exc.detail, dict) else {"detail": exc.detail},
+            )
         request.state.principal = principal
         return await call_next(request)
+
+
+def rest_scopes_for_request(method: str, path: str) -> set[str]:
+    """Return required REST scopes for an API path.
+
+    Local/no-auth mode bypasses this in middleware. Once bearer auth is enabled,
+    every non-health REST request gets at least one explicit scope so static
+    tokens behave like the documented RBAC surface instead of only proving token
+    possession.
+    """
+
+    method = method.upper()
+    if path.startswith("/api/capabilities"):
+        return {SCOPE_CAPABILITIES_READ}
+    if path.startswith("/api/metrics"):
+        return {SCOPE_CAPABILITIES_READ}
+    if path.startswith("/api/models"):
+        return {SCOPE_CAPABILITIES_READ} if method == "GET" else {SCOPE_SETTINGS_WRITE}
+    if path.startswith("/api/settings"):
+        return {SCOPE_SETTINGS_READ} if method == "GET" else {SCOPE_SETTINGS_WRITE}
+    if path.startswith("/api/convert/download"):
+        return {SCOPE_OUTPUTS_READ}
+    if path.startswith("/api/convert/plan"):
+        return {SCOPE_CAPABILITIES_READ}
+    if path.startswith("/api/convert/status") or path.startswith("/api/convert/history"):
+        return {SCOPE_JOBS_READ}
+    if path.startswith("/api/convert/events") or path.endswith("/llm-traces"):
+        return {SCOPE_JOBS_READ}
+    if path.startswith("/api/convert/browse-"):
+        return {SCOPE_JOBS_WRITE}
+    if path.startswith("/api/convert/upload"):
+        return {SCOPE_JOBS_WRITE}
+    if path.startswith("/api/convert/"):
+        return {SCOPE_JOBS_WRITE} if method in {"POST", "PUT", "PATCH", "DELETE"} else {SCOPE_JOBS_READ}
+    return {SCOPE_CAPABILITIES_READ}
 
 
 def _parse_token_map(raw: str) -> list[tuple[str, list[str]]]:
