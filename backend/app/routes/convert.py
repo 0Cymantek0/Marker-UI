@@ -290,6 +290,60 @@ def _parse_formats_json(formats_json: str | None) -> dict[str, str] | None:
     return parse_cached_formats(formats_json)
 
 
+def _safe_asset_request_path(asset_path: str) -> str | None:
+    raw = str(asset_path or "").replace("\\", "/").strip()
+    if not raw or raw.startswith("/"):
+        return None
+    parts = [part for part in raw.split("/") if part]
+    if not parts or any(part in {".", ".."} for part in parts):
+        return None
+    return "/".join(parts)
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _manifest_candidates_for_result(result_path: Path) -> list[Path]:
+    if result_path.is_dir():
+        return [
+            result_path / f"{result_path.name}.marker.json",
+            *sorted(result_path.glob("*.marker.json")),
+        ]
+    return [result_path.with_name(f"{result_path.stem}.marker.json")]
+
+
+def _load_result_manifest(result_path: Path) -> dict[str, Any] | None:
+    for candidate in _manifest_candidates_for_result(result_path):
+        if not candidate.is_file():
+            continue
+        try:
+            parsed = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _asset_entry_for_request(manifest: dict[str, Any], asset_path: str) -> dict[str, Any] | None:
+    output = manifest.get("output") if isinstance(manifest, dict) else None
+    assets = output.get("assets") if isinstance(output, dict) else None
+    if not isinstance(assets, list):
+        return None
+    for entry in assets:
+        if not isinstance(entry, dict):
+            continue
+        name = _safe_asset_request_path(str(entry.get("relative_path") or entry.get("name") or ""))
+        if name == asset_path:
+            return entry
+    return None
+
+
 def _planned_mixed_segments(probe_data: Any) -> list[dict[str, Any]] | None:
     if not isinstance(probe_data, dict) or not probe_data.get("page_results"):
         return None
@@ -1107,6 +1161,59 @@ async def download_result(
             media_type=media_types.get(ext, "text/plain"),
             background=BackgroundTask(tmp_path.unlink, missing_ok=True),
         )
+
+
+@router.get("/assets/{job_id}/{asset_path:path}")
+async def get_output_asset(
+    job_id: str,
+    asset_path: str,
+    db: AsyncSession = Depends(get_db),
+) -> FileResponse:
+    """Serve one manifest-listed sidecar asset for a completed job.
+
+    The browser preview uses this route for local images referenced by Markdown.
+    Only assets recorded in the job's output manifest are reachable, and the
+    resolved file must stay under the job result directory.
+    """
+
+    safe_asset_path = _safe_asset_request_path(asset_path)
+    if safe_asset_path is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Job not yet completed")
+    if not job.result_path:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    result_path = Path(job.result_path)
+    manifest = _load_result_manifest(result_path)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="Asset manifest not found")
+    entry = _asset_entry_for_request(manifest, safe_asset_path)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    asset_file = Path(str(entry.get("path") or ""))
+    if not asset_file.is_absolute():
+        asset_file = (result_path if result_path.is_dir() else result_path.parent) / safe_asset_path
+    try:
+        asset_resolved = asset_file.resolve(strict=True)
+    except OSError:
+        raise HTTPException(status_code=404, detail="Asset not found") from None
+
+    root = (result_path if result_path.is_dir() else result_path.parent).resolve()
+    if not _path_is_within(asset_resolved, root):
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return FileResponse(
+        path=str(asset_resolved),
+        media_type=str(entry.get("media_type") or "application/octet-stream"),
+        filename=asset_resolved.name,
+    )
 
 
 # ------------------------------------------------------------------

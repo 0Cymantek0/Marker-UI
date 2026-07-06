@@ -855,6 +855,7 @@ export function ConvertPage() {
                     imageUnderstanding={selectedJob.imageUnderstanding}
                     audioMetadata={selectedJob.conversionMetadata?.audio ?? selectedJob.conversionMetadata?.audio_batch ?? null}
                     filename={selectedJob.filename}
+                    jobId={selectedJob.id}
                   />
                 </div>
               </div>

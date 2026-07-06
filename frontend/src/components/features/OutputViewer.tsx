@@ -29,6 +29,7 @@ interface OutputViewerProps {
   imageUnderstanding?: ImageUnderstandingMeta[] | null
   audioMetadata?: JsonRecord | null
   filename?: string
+  jobId?: string
 }
 
 export function OutputViewer({
@@ -39,7 +40,8 @@ export function OutputViewer({
   onRegenerate,
   onDownload,
   imageUnderstanding,
-  audioMetadata
+  audioMetadata,
+  jobId,
 }: OutputViewerProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>('markdown')
   const [copied, setCopied] = useState(false)
@@ -82,11 +84,12 @@ export function OutputViewer({
           </span>
         )
       }
-      const imageFilename = safeSrc.split('/').pop() ?? ''
+      const imageSrc = markdownAssetSrc(safeSrc, jobId)
+      const imageFilename = (safeSrc.split(/[?#]/, 1)[0] ?? '').split('/').pop() ?? ''
       const entry = metaByFilename.get(imageFilename)
       return (
         <span className="relative inline-block align-middle my-1">
-          <img src={safeSrc} alt={alt} {...props} />
+          <img src={imageSrc} alt={alt} {...props} />
           {entry && (
             <ImageUnderstandingBadge
               meta={entry.meta}
@@ -97,7 +100,7 @@ export function OutputViewer({
         </span>
       )
     },
-  }), [metaByFilename, metaTotal])
+  }), [jobId, metaByFilename, metaTotal])
 
   const regeneratableFormatSet = useMemo(
     () => new Set(regeneratableFormats),
@@ -325,6 +328,24 @@ function safeMarkdownImageSrc(src: unknown): string | null {
   if (parts.some((part) => part === '' || part === '.' || part === '..')) return null
   if (!/\.(?:png|jpe?g|gif|webp|bmp|tiff?)$/i.test(parts[parts.length - 1] ?? '')) return null
   return raw
+}
+
+function markdownAssetSrc(src: string, jobId?: string): string {
+  const raw = String(src ?? '').trim()
+  if (!jobId) return raw
+  const pathPart = raw.split(/[?#]/, 1)[0] ?? ''
+  if (!pathPart) return raw
+  const encodedPath = pathPart
+    .split('/')
+    .map((part) => {
+      try {
+        return encodeURIComponent(decodeURIComponent(part))
+      } catch {
+        return encodeURIComponent(part)
+      }
+    })
+    .join('/')
+  return `/api/convert/assets/${encodeURIComponent(jobId)}/${encodedPath}`
 }
 
 function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {

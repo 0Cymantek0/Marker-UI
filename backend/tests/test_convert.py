@@ -1373,6 +1373,93 @@ async def test_download_specific_format_does_not_zip_assets(client: AsyncClient,
 
 
 @pytest.mark.asyncio
+async def test_output_asset_endpoint_serves_manifest_listed_asset(client: AsyncClient, db_session, tmp_path: Path):
+    result_dir = tmp_path / "job-assets"
+    result_dir.mkdir()
+    asset = result_dir / "assets" / "chart.png"
+    asset.parent.mkdir()
+    asset.write_bytes(b"png-bytes")
+    manifest = {
+        "schema_version": "marker.output_manifest.v1",
+        "output": {
+            "assets": [
+                {
+                    "name": "assets/chart.png",
+                    "relative_path": "assets/chart.png",
+                    "path": str(asset),
+                    "media_type": "image/png",
+                }
+            ]
+        },
+    }
+    (result_dir / "job-assets.marker.json").write_text(json.dumps(manifest), encoding="utf-8")
+    job_id = "job-asset-preview"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="source.pdf",
+            original_name="source.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            result_text="![chart](assets/chart.png)",
+            result_path=str(result_dir),
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/assets/{job_id}/assets/chart.png")
+
+    assert resp.status_code == 200
+    assert resp.content == b"png-bytes"
+    assert resp.headers["content-type"].startswith("image/png")
+
+
+@pytest.mark.asyncio
+async def test_output_asset_endpoint_rejects_unlisted_and_outside_assets(client: AsyncClient, db_session, tmp_path: Path):
+    result_dir = tmp_path / "job-assets"
+    result_dir.mkdir()
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"outside")
+    manifest = {
+        "schema_version": "marker.output_manifest.v1",
+        "output": {
+            "assets": [
+                {
+                    "name": "safe.png",
+                    "relative_path": "safe.png",
+                    "path": str(outside),
+                    "media_type": "image/png",
+                }
+            ]
+        },
+    }
+    (result_dir / "job-assets.marker.json").write_text(json.dumps(manifest), encoding="utf-8")
+    job_id = "job-asset-denied"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="source.pdf",
+            original_name="source.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            result_text="![safe](safe.png)",
+            result_path=str(result_dir),
+        )
+    )
+    await db_session.commit()
+
+    outside_resp = await client.get(f"/api/convert/assets/{job_id}/safe.png")
+    unlisted_resp = await client.get(f"/api/convert/assets/{job_id}/missing.png")
+    traversal_resp = await client.get(f"/api/convert/assets/{job_id}/assets/%2e%2e/safe.png")
+
+    assert outside_resp.status_code == 404
+    assert unlisted_resp.status_code == 404
+    assert traversal_resp.status_code in {404, 405}
+
+
+@pytest.mark.asyncio
 async def test_download_chunks_format_uses_json_extension(client: AsyncClient, db_session):
     """Marker chunks are JSON payloads and should download as .json."""
     import json as _json

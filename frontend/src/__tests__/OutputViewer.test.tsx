@@ -120,6 +120,18 @@ describe('OutputViewer component', () => {
     expect(screen.queryByRole('note', { name: /external image blocked for privacy/i })).not.toBeInTheDocument()
   })
 
+  it('rewrites safe markdown images through the job-scoped asset endpoint', () => {
+    const md = '![safe](assets/page%201.png?cache=1#figure)'
+
+    render(<OutputViewer content={md} onDownload={vi.fn()} jobId="job-123" />)
+
+    expect(screen.getByRole('img', { name: /safe/i })).toHaveAttribute(
+      'src',
+      '/api/convert/assets/job-123/assets/page%201.png',
+    )
+    expect(screen.queryByRole('note', { name: /external image blocked for privacy/i })).not.toBeInTheDocument()
+  })
+
   it('clicking a badge opens the detail modal with type and confidence', () => {
     const md = '![photo](img.jpeg)'
     const meta = [
