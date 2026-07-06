@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
+from app.agent_surface import DEFAULT_AGENT_TOOL_NAMES
 from app.audio.providers.registry import validate_provider_selection
 from app.conversion.engine_policy import validate_engine_override as _validate_engine_override
 from app.conversion.formats import OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
@@ -59,22 +60,7 @@ ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
 AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
     {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".avi"}
 )
-TOOL_NAMES = [
-    "marker_list_capabilities",
-    "marker_plan_conversion",
-    "marker_submit_job",
-    "marker_convert_file",
-    "marker_read_output",
-    "marker_list_jobs",
-    "marker_get_job_status",
-    "marker_cancel_job",
-    "marker_delete_job",
-    "marker_list_settings",
-    "marker_get_setting",
-    "marker_set_setting",
-    "marker_delete_setting",
-    "marker_self_test",
-]
+TOOL_NAMES = list(DEFAULT_AGENT_TOOL_NAMES)
 
 DEFAULT_PREVIEW_CHARS = 20_000
 MAX_READ_CHARS = 100_000

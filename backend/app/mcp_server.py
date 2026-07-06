@@ -15,6 +15,17 @@ from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.agent_surface import (
+    MCP_ADMIN_TOOL_NAMES as SURFACE_MCP_ADMIN_TOOL_NAMES,
+    MCP_FULL_TOOL_NAMES as SURFACE_MCP_FULL_TOOL_NAMES,
+    MCP_MINIMAL_TOOL_NAMES as SURFACE_MCP_MINIMAL_TOOL_NAMES,
+    MCP_PROMPT_NAMES as SURFACE_MCP_PROMPT_NAMES,
+    MCP_RESOURCE_URIS as SURFACE_MCP_RESOURCE_URIS,
+    MCP_SETTINGS_WRITE_TOOL_NAMES,
+    MCP_TOOL_PROFILES,
+    MCP_V1_TOOL_NAMES as SURFACE_MCP_V1_TOOL_NAMES,
+    tool_names_for_profile as surface_tool_names_for_profile,
+)
 from app.conversion.formats import OUTPUT_FORMATS_DESCRIPTION
 from app.agent_api import (
     AgentConversionOptions,
@@ -255,82 +266,16 @@ mcp = FastMCP(
     stateless_http=True,
 )
 
-MCP_V1_TOOL_NAMES = [
-    "marker_list_capabilities",
-    "marker_get_capabilities",
-    "marker_self_test",
-    "marker_get_health",
-    "marker_get_version",
-    "marker_plan_conversion",
-    "marker_plan_local_file",
-    "marker_plan_url",
-    "marker_convert_file",
-    "marker_convert_local_file",
-    "marker_convert_url",
-    "marker_submit_job",
-    "marker_submit_local_job",
-    "marker_submit_url_job",
-    "marker_read_output",
-    "marker_read_output_chunk",
-    "marker_get_output_manifest",
-    "marker_list_output_assets",
-    "marker_list_jobs",
-    "marker_get_job_status",
-    "marker_cancel_job",
-    "marker_delete_job",
-    "marker_list_settings",
-    "marker_get_setting",
-    "marker_set_setting",
-    "marker_delete_setting",
-]
-
-MCP_TOOL_PROFILES = ("minimal", "full", "admin")
-MCP_MINIMAL_TOOL_NAMES = [
-    "marker_list_capabilities",
-    "marker_plan_conversion",
-    "marker_convert_file",
-    "marker_submit_job",
-    "marker_get_job_status",
-    "marker_cancel_job",
-    "marker_read_output",
-    "marker_get_output_manifest",
-]
-MCP_FULL_TOOL_NAMES = [
-    name
-    for name in MCP_V1_TOOL_NAMES
-    if name not in {"marker_delete_job", "marker_set_setting", "marker_delete_setting"}
-]
-MCP_ADMIN_TOOL_NAMES = list(MCP_V1_TOOL_NAMES)
-MCP_SETTINGS_WRITE_TOOL_NAMES = {"marker_set_setting", "marker_delete_setting"}
+MCP_V1_TOOL_NAMES = list(SURFACE_MCP_V1_TOOL_NAMES)
+MCP_MINIMAL_TOOL_NAMES = list(SURFACE_MCP_MINIMAL_TOOL_NAMES)
+MCP_FULL_TOOL_NAMES = list(SURFACE_MCP_FULL_TOOL_NAMES)
+MCP_ADMIN_TOOL_NAMES = list(SURFACE_MCP_ADMIN_TOOL_NAMES)
 MCP_ACTIVE_TOOL_PROFILE = "minimal"
 MCP_ACTIVE_TOOL_NAMES = list(MCP_MINIMAL_TOOL_NAMES)
 _ALL_MCP_TOOLS: dict[str, Any] | None = None
 
-MCP_RESOURCE_URIS = [
-    "marker://capabilities",
-    "marker://health",
-    "marker://version",
-    "marker://jobs",
-    "marker://jobs/{job_id}",
-    "marker://jobs/{job_id}/manifest",
-    "marker://jobs/{job_id}/output",
-    "marker://jobs/{job_id}/assets",
-    "marker://outputs/{output_id}/manifest",
-    "marker://docs/agent-guide",
-    "marker://docs/options",
-    "marker://settings",
-]
-
-MCP_PROMPT_NAMES = [
-    "convert_for_rag",
-    "extract_tables_from_document",
-    "summarize_converted_document_with_citations",
-    "convert_and_compare_two_documents",
-    "batch_convert_folder",
-    "inspect_conversion_quality",
-    "convert_audio_to_meeting_notes",
-    "extract_figures_and_diagrams",
-]
+MCP_RESOURCE_URIS = list(SURFACE_MCP_RESOURCE_URIS)
+MCP_PROMPT_NAMES = list(SURFACE_MCP_PROMPT_NAMES)
 
 register_mcp_resources(
     mcp,
@@ -1267,18 +1212,10 @@ async def marker_self_test(
 
 def tool_names_for_profile(profile: str | None = None) -> list[str]:
     normalized = (profile or os.getenv("MARKER_MCP_TOOL_PROFILE") or "minimal").strip().lower()
-    if normalized not in MCP_TOOL_PROFILES:
-        raise ValueError(
-            f"Unknown MCP tool profile '{normalized}'. Expected one of: {', '.join(MCP_TOOL_PROFILES)}"
-        )
-    if normalized == "minimal":
-        return list(MCP_MINIMAL_TOOL_NAMES)
-    if normalized == "full":
-        return list(MCP_FULL_TOOL_NAMES)
-    names = list(MCP_ADMIN_TOOL_NAMES)
-    if not mcp_settings_write_enabled():
-        names = [name for name in names if name not in MCP_SETTINGS_WRITE_TOOL_NAMES]
-    return names
+    return surface_tool_names_for_profile(
+        normalized,
+        settings_write_enabled=mcp_settings_write_enabled(),
+    )
 
 
 def mcp_settings_write_enabled() -> bool:

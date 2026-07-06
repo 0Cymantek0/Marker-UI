@@ -129,11 +129,29 @@ def test_agent_build_conversion_config_preserves_advanced_audio_options():
     assert config["audio_compare_providers"] == ["local_faster_whisper"]
 
 
-def test_agent_capabilities_include_cancel_and_delete_tools():
+def test_agent_capabilities_expose_minimal_non_admin_tools():
     caps = agent_api.capabilities()
 
     assert "marker_cancel_job" in caps["tools"]
-    assert "marker_delete_job" in caps["tools"]
+    assert "marker_delete_job" not in caps["tools"]
+
+
+def test_agent_surface_registry_drives_agent_capabilities_and_mcp_profiles():
+    import app.agent_surface as agent_surface
+    import app.mcp_server as mcp_server
+
+    caps = agent_api.capabilities()
+
+    assert caps["tools"] == list(agent_surface.DEFAULT_AGENT_TOOL_NAMES)
+    assert mcp_server.MCP_V1_TOOL_NAMES == list(agent_surface.MCP_V1_TOOL_NAMES)
+    assert mcp_server.MCP_MINIMAL_TOOL_NAMES == list(agent_surface.MCP_MINIMAL_TOOL_NAMES)
+    assert mcp_server.MCP_FULL_TOOL_NAMES == list(agent_surface.MCP_FULL_TOOL_NAMES)
+    assert mcp_server.MCP_ADMIN_TOOL_NAMES == list(agent_surface.MCP_ADMIN_TOOL_NAMES)
+    assert set(agent_surface.DEFAULT_AGENT_TOOL_NAMES).issubset(agent_surface.MCP_V1_TOOL_NAMES)
+    assert set(agent_surface.MCP_TOOL_SPEC_BY_NAME) == set(agent_surface.MCP_V1_TOOL_NAMES)
+    assert all(spec.scopes for spec in agent_surface.MCP_TOOL_SPECS)
+    assert set(agent_surface.MCP_RESOURCE_SPEC_BY_URI) == set(agent_surface.MCP_RESOURCE_URIS)
+    assert all(spec.scopes for spec in agent_surface.MCP_RESOURCE_SPECS)
 
 
 @pytest.mark.asyncio

@@ -13,12 +13,16 @@ import pytest
 async def test_mcp_registers_v1_tools_resources_templates_and_prompts():
     import app.mcp_server as mcp_server
 
-    tools = {tool.name for tool in await mcp_server.mcp.list_tools()}
-    resources = {str(resource.uri) for resource in await mcp_server.mcp.list_resources()}
-    templates = {str(template.uriTemplate) for template in await mcp_server.mcp.list_resource_templates()}
-    prompts = {prompt.name for prompt in await mcp_server.mcp.list_prompts()}
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        tools = {tool.name for tool in await mcp_server.mcp.list_tools()}
+        resources = {str(resource.uri) for resource in await mcp_server.mcp.list_resources()}
+        templates = {str(template.uriTemplate) for template in await mcp_server.mcp.list_resource_templates()}
+        prompts = {prompt.name for prompt in await mcp_server.mcp.list_prompts()}
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
 
-    assert set(mcp_server.MCP_V1_TOOL_NAMES).issubset(tools)
+    assert set(mcp_server.MCP_FULL_TOOL_NAMES).issubset(tools)
     assert set(mcp_server.MCP_PROMPT_NAMES) == prompts
     assert "marker://capabilities" in resources
     assert "marker://jobs" in resources
@@ -40,7 +44,7 @@ async def test_mcp_static_resources_are_readable():
     assert options_payload["schema_version"] == "marker.agent_contract.v1"
     assert any(item["name"] == "output_format" for item in options_payload["options"])
     capabilities_payload = json.loads(capabilities[0].content)
-    assert "marker_convert_url" in capabilities_payload["tools"]
+    assert "marker_convert_file" in capabilities_payload["tools"]
     assert "marker://docs/agent-guide" in capabilities_payload["resources"]
     assert "convert_for_rag" in capabilities_payload["prompts"]
 
