@@ -992,6 +992,41 @@ async def test_mcp_convert_schema_has_rich_descriptions_and_nullable_booleans():
     assert {item.get("type") for item in properties["archive_recursive"].get("anyOf", [])} == {"boolean", "null"}
 
 
+@pytest.mark.asyncio
+async def test_mcp_open_world_annotations_match_url_capability():
+    """URL-capable tools must advertise open-world access to MCP hosts."""
+
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+    by_name = {tool.name: tool for tool in tools}
+
+    for name in {
+        "marker_plan",
+        "marker_plan_url",
+        "marker_convert",
+        "marker_convert_file",
+        "marker_convert_url",
+        "marker_submit",
+        "marker_submit_job",
+        "marker_submit_url_job",
+    }:
+        assert by_name[name].annotations.openWorldHint is True, name
+
+    for name in {
+        "marker_plan_local_file",
+        "marker_convert_local_file",
+        "marker_submit_local_job",
+        "marker_read_output",
+        "marker_read_output_chunk",
+    }:
+        assert by_name[name].annotations.openWorldHint is False, name
+
+
 
 def test_mcp_extra_options_omit_unspecified_booleans():
     import app.mcp_server as mcp_server

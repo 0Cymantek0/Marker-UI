@@ -344,7 +344,7 @@ async def marker_capabilities() -> CapabilitiesOutput:
         "readOnlyHint": True,
         "destructiveHint": False,
         "idempotentHint": True,
-        "openWorldHint": False,
+        "openWorldHint": True,
     },
 )
 async def marker_plan(
