@@ -6,8 +6,8 @@ controls to render and which to disable. The audio converter reads it to know
 whether to honour a given option for a given provider.
 
 Capabilities must reflect the *real* wire-level behaviour documented by each
-provider, not aspirations. Unknown providers degrade to the local-default
-capability set so a typo in a saved preset never crashes a job.
+provider, not aspirations. Unknown provider ids fail early instead of silently
+changing to the local default.
 """
 
 from __future__ import annotations
@@ -201,14 +201,15 @@ DEFAULT_PROVIDER_ID = "local_faster_whisper"
 
 
 def get_capability(provider_id: str | None) -> ProviderCapability:
-    """Return capability for a provider, falling back to the local default.
+    """Return capability for a provider.
 
-    A mistyped or unknown id must never crash a conversion; it falls back to the
-    local default provider so the job still produces output.
+    ``None`` means the local default. A non-empty unknown id is a configuration
+    error; callers must not silently change the provider the user requested.
     """
-    if provider_id and provider_id in PROVIDER_CAPABILITIES:
-        return PROVIDER_CAPABILITIES[provider_id]
-    return PROVIDER_CAPABILITIES[DEFAULT_PROVIDER_ID]
+    key = (provider_id or DEFAULT_PROVIDER_ID).strip().lower()
+    if key not in PROVIDER_CAPABILITIES:
+        raise ValueError(f"Unknown audio provider {key!r}.")
+    return PROVIDER_CAPABILITIES[key]
 
 
 def list_capabilities() -> list[ProviderCapability]:

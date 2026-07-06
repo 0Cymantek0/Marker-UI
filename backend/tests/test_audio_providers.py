@@ -27,9 +27,14 @@ from app.audio.vocabulary import (
 )
 
 
-def test_get_capability_returns_local_default_for_unknown_provider() -> None:
-    cap = get_capability("nonexistent")
+def test_get_capability_returns_local_default_for_none_provider() -> None:
+    cap = get_capability(None)
     assert cap.provider_id == "local_faster_whisper"
+
+
+def test_get_capability_rejects_unknown_provider() -> None:
+    with pytest.raises(ValueError, match="Unknown audio provider"):
+        get_capability("nonexistent")
 
 
 def test_all_providers_in_capability_matrix() -> None:
