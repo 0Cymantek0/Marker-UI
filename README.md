@@ -95,6 +95,7 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Image Understanding](docs/usage/image-understanding.md)
 - [Vision Model Provider Configuration](docs/configuration/vlm-providers.md)
 - [History & Storage Lifecycle](docs/usage/history-and-downloads.md)
+- [Known Limitations & Maturity](docs/limitations.md)
 
 ### Technical Architecture & Reference
 - [High-Level Technical Architecture](docs/development/architecture.md)
