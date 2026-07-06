@@ -19,7 +19,10 @@ from sqlalchemy import delete, func, select
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
 from app.agent_surface import DEFAULT_AGENT_TOOL_NAMES
-from app.audio.providers.registry import validate_provider_selection
+from app.audio.providers.registry import (
+    validate_audio_benchmark_selection,
+    validate_provider_selection,
+)
 from app.conversion.engine_policy import validate_engine_override as _validate_engine_override
 from app.conversion.formats import OUTPUT_FORMATS, UPLOAD_ALLOWED_EXTENSIONS
 from app.conversion.probe import probe_pdf
@@ -434,6 +437,7 @@ async def submit_conversion_job(
     _validate_engine_override(config, suffix)
     if suffix in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
         try:
+            validate_audio_benchmark_selection(config)
             validate_provider_selection(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
@@ -541,6 +545,15 @@ async def _convert_resolved_path(
 ) -> dict[str, Any]:
     config = build_conversion_config(options, original_name=original_name, output_dir=str(output_base))
     _validate_engine_override(config, path.suffix)
+    if path.suffix.lower() in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
+        try:
+            validate_audio_benchmark_selection(config)
+            validate_provider_selection(
+                config.get("audio_provider"),
+                allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
+            )
+        except (NotImplementedError, PermissionError) as exc:
+            raise UsageError(str(exc)) from exc
     if source_url:
         config["source_url"] = source_url
     if path.suffix.lower() == ".pdf":

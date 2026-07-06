@@ -18,6 +18,7 @@ from typing import Any
 from app.audio.ingest import probe_audio
 from app.audio.pipeline import AudioTranscript, normalize_transcript, slug_source_id
 from app.audio.providers import build_provider, get_capability
+from app.audio.providers.registry import validate_audio_benchmark_selection
 from app.audio.speakers import apply_speaker_aliases
 from app.audio.vocabulary import compile_vocabulary_prompt, resolve_vocabulary_terms
 from app.conversion.converters.audio import _resolve_provider, _truthy
@@ -44,6 +45,7 @@ def transcribe_audio_file(
     ``audio_allow_cloud_stt`` is explicitly enabled (plan §3.1).
     """
 
+    validate_audio_benchmark_selection(config)
     provider_id = _resolve_provider(config)
     capability = get_capability(provider_id)
     media_info = probe_audio(filepath)

@@ -9,6 +9,7 @@ from app.audio.providers.capabilities import (
     list_capabilities,
 )
 from app.audio.providers.registry import validate_provider_selection
+from app.audio.providers.registry import validate_audio_benchmark_selection
 from app.audio.pipeline import normalize_transcript
 from app.audio.speakers import (
     apply_speaker_aliases,
@@ -61,6 +62,7 @@ def test_capabilities_payload_serializes_all_fields() -> None:
             assert key in entry
     by_id = {entry["provider_id"]: entry for entry in payload}
     assert by_id["local_faster_whisper"]["implementation_state"] == "implemented"
+    assert by_id["local_faster_whisper"]["supports_batch_compare"] is False
     assert by_id["openai"]["implementation_state"] == "deferred"
     assert by_id["openai"]["available"] is False
 
@@ -68,6 +70,11 @@ def test_capabilities_payload_serializes_all_fields() -> None:
 def test_validate_provider_selection_rejects_deferred_provider() -> None:
     with pytest.raises(NotImplementedError, match="not shipped yet"):
         validate_provider_selection("openai", allow_cloud_stt=True)
+
+
+def test_validate_audio_benchmark_selection_rejects_unshipped_comparison() -> None:
+    with pytest.raises(NotImplementedError, match="comparison is not shipped"):
+        validate_audio_benchmark_selection({"audio_benchmark_compare": True})
 
 
 def test_cloud_providers_require_api_key() -> None:

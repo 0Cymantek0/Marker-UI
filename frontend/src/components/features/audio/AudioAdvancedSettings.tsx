@@ -80,8 +80,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
   const selectableCapabilities = capabilities.filter(
     (c) => c.available !== false && (c.implementation_state ?? 'implemented') === 'implemented'
   )
-  const comparableProviderCount = selectableCapabilities.filter((c) => c.supports_batch_compare).length
-  const canCompareProviders = comparableProviderCount > 1
+  const audioBenchmarkAvailable = false
   const cloudEnhancementAvailable = false
   const providerOptions = selectableCapabilities.length > 0
     ? selectableCapabilities.map((c) => ({
@@ -520,13 +519,11 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 label="Compare Providers"
                 checked={config.audio_benchmark_compare ?? false}
                 onChange={(v) => onChange('audio_benchmark_compare', v)}
-                disabled={disabled || !canCompareProviders}
+                disabled={disabled || !audioBenchmarkAvailable}
               />
-              {!canCompareProviders && (
-                <ProviderWarning message="Provider comparison requires at least two shipped transcription adapters. This build only has one usable adapter." />
-              )}
+              <ProviderWarning message="Provider comparison is not shipped in this build. The backend rejects this option until a benchmark runner and at least two adapters ship." />
               <p className="text-[10px] text-muted-foreground/70 leading-snug">
-                When enabled, the primary and comparison providers both transcribe the same audio. A comparison report (latency, confidence, vocabulary hits, segment count) is attached to job metadata.
+                Reserved for future latency, confidence, vocabulary-hit, and segment-count comparison reports.
               </p>
             </div>
           </CollapsibleSection>

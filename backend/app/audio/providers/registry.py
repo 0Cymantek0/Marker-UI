@@ -28,6 +28,7 @@ __all__ = [
     "available_provider_ids",
     "build_provider",
     "get_capability",
+    "validate_audio_benchmark_selection",
     "validate_provider_selection",
 ]
 
@@ -122,6 +123,23 @@ def validate_provider_selection(
     return capability
 
 
+def validate_audio_benchmark_selection(config: dict[str, object]) -> None:
+    """Reject provider comparison until the comparison runner ships.
+
+    Provider capabilities describe STT adapters, not a full benchmark executor.
+    Keeping this explicit prevents CLI/MCP/REST callers from enabling a flag
+    that would otherwise pass through conversion without changing output.
+    """
+
+    if not _truthy(config.get("audio_benchmark_compare")):
+        return
+    raise NotImplementedError(
+        "Audio provider comparison is not shipped in this build. "
+        "It requires a benchmark runner plus at least two shipped STT adapters; "
+        "disable audio_benchmark_compare."
+    )
+
+
 def _deferred_provider_message(provider_id: str) -> str:
     return (
         f"Audio provider {provider_id!r} ({_DEFERRED_PROVIDERS[provider_id]}) is not shipped yet. "
@@ -129,3 +147,11 @@ def _deferred_provider_message(provider_id: str) -> str:
         "landing together. Configure it as a provider record and enable cloud STT "
         "once its adapter ships."
     )
+
+
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}

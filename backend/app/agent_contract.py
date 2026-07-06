@@ -132,9 +132,8 @@ class ConversionOptionsModel(ContractModel):
     # require explicit opt-in before any audio leaves the machine.
     audio_allow_cloud_stt: bool = False
 
-    # Benchmark (plan §13). When enabled, the configured provider and each
-    # comparison provider transcribe the same audio and a comparison report is
-    # attached to job metadata.
+    # Benchmark (plan §13). Reserved until the benchmark runner and at least two
+    # shipped STT adapters exist; current builds reject this flag early.
     audio_benchmark_compare: bool = False
     audio_compare_providers: list[str] = Field(default_factory=list)
     audio_compare_metrics: list[str] = Field(default_factory=list)
@@ -374,7 +373,7 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="audio_fusion_mode", cli_flag="--audio-fusion-mode", type="enum", category="audio", description="Fuse transcript with context documents: audio_first, meeting_followup, lecture_study, research_memo, contradiction_audit, qna_extraction."),
     OptionMetadataModel(name="audio_contradiction_detection", cli_flag="--audio-contradiction-detection", type="boolean", default=False, category="audio", description="Detect contradictory claims across the transcript."),
     OptionMetadataModel(name="audio_allow_cloud_stt", cli_flag="--audio-allow-cloud-stt", type="boolean", default=False, category="audio", description="Explicit opt-in to send audio to a cloud STT provider."),
-    OptionMetadataModel(name="audio_benchmark_compare", cli_flag="--audio-benchmark-compare", type="boolean", default=False, category="audio", description="Compare providers/models on the same audio."),
+    OptionMetadataModel(name="audio_benchmark_compare", cli_flag="--audio-benchmark-compare", type="boolean", default=False, category="audio", description="Reserved for provider/model comparison; current builds reject it because no benchmark runner ships."),
     OptionMetadataModel(name="audio_config", type="object", category="audio", description="REST JSON blob of advanced audio controls; CLI callers can use --options-json or --option."),
     OptionMetadataModel(name="disable_multiprocessing", cli_flag="--disable-multiprocessing", type="boolean", default=False, category="runtime", description="Run conversion single-threaded where supported."),
     OptionMetadataModel(name="strip_existing_ocr", cli_flag="--strip-existing-ocr", type="boolean", default=False, category="pdf", description="Strip existing OCR text before re-OCR."),

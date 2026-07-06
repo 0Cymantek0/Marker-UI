@@ -42,7 +42,7 @@ class ProviderCapability:
     supports_custom_vocabulary: bool = True
     supports_prompt_context: bool = True
     supports_translation: bool = False
-    supports_batch_compare: bool = True
+    supports_batch_compare: bool = False
 
     max_file_size_hint_mb: int | None = None
     default_model: str | None = None

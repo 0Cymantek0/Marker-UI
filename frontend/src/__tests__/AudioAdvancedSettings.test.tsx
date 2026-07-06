@@ -209,7 +209,7 @@ describe('AudioAdvancedSettings', () => {
     expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_strength', 1)
   })
 
-  it('disables provider comparison when only one adapter is shipped', async () => {
+  it('disables provider comparison because the benchmark runner is not shipped', async () => {
     const onChange = vi.fn()
     mockGetAudioCapabilities.mockResolvedValue([
       mockCapabilities[0],
@@ -227,7 +227,7 @@ describe('AudioAdvancedSettings', () => {
 
     const compare = screen.getByRole('button', { name: /compare providers/i })
     expect(compare).toBeDisabled()
-    expect(screen.getByText(/requires at least two shipped transcription adapters/i)).toBeInTheDocument()
+    expect(screen.getByText(/provider comparison is not shipped/i)).toBeInTheDocument()
   })
 
   it('disables cloud enhancement because no cloud enhancement adapter ships', async () => {

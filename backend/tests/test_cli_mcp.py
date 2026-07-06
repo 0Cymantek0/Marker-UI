@@ -82,6 +82,23 @@ async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
     assert result["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
 
 
+@pytest.mark.asyncio
+async def test_agent_api_rejects_unshipped_audio_benchmark_compare(tmp_path: Path):
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"RIFF fake wav")
+
+    with pytest.raises(UsageError, match="Audio provider comparison is not shipped"):
+        await convert_document(
+            local_file_path=str(source),
+            output_dir=str(tmp_path / "out"),
+            options=AgentConversionOptions(
+                output_format="markdown",
+                audio_benchmark_compare=True,
+                audio_compare_providers=["local_faster_whisper"],
+            ),
+        )
+
+
 def test_agent_capabilities_and_config_include_frontend_audio_modes():
     caps = agent_api.capabilities()
 
