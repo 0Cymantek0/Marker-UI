@@ -31,6 +31,7 @@ const mockCapabilities = [
   {
     provider_id: 'local_faster_whisper',
     provider_label: 'Local faster-whisper',
+    implementation_state: 'implemented',
     runtime_type: 'local',
     cloud: false,
     requires_api_key: false,
@@ -51,6 +52,8 @@ const mockCapabilities = [
   {
     provider_id: 'deepgram',
     provider_label: 'Deepgram Nova',
+    implementation_state: 'deferred',
+    available: false,
     runtime_type: 'cloud',
     cloud: true,
     requires_api_key: true,
@@ -127,7 +130,7 @@ describe('AudioAdvancedSettings', () => {
     expect(screen.getByText('Speakers')).toBeInTheDocument()
   })
 
-  it('shows cloud warning when cloud provider selected', async () => {
+  it('shows deferred provider warning when saved cloud provider is selected', async () => {
     const onChange = vi.fn()
     const cloudConfig: ConversionConfig = {
       ...baseConfig,
@@ -140,9 +143,20 @@ describe('AudioAdvancedSettings', () => {
       expect(mockGetAudioCapabilities).toHaveBeenCalled()
     })
 
+    expect(await screen.findByText(/deferred in this build/i)).toBeInTheDocument()
+    expect(screen.getByText(/Cloud provider/)).toBeInTheDocument()
+  })
+
+  it('does not offer deferred providers in provider picker', async () => {
+    const onChange = vi.fn()
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
     await waitFor(() => {
-      expect(screen.getByText(/Cloud provider/)).toBeInTheDocument()
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
     })
+
+    expect(screen.getByText(/Local faster-whisper/)).toBeInTheDocument()
+    expect(screen.queryByText(/Deepgram Nova/)).not.toBeInTheDocument()
   })
 
   it('calls onChange when output style selected', async () => {
@@ -199,7 +213,7 @@ describe('AudioAdvancedSettings', () => {
     const onChange = vi.fn()
     mockGetAudioCapabilities.mockResolvedValue([
       mockCapabilities[0],
-      { ...mockCapabilities[1], available: false },
+      { ...mockCapabilities[1], implementation_state: 'deferred', available: false },
     ])
 
     render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)

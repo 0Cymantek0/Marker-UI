@@ -52,12 +52,17 @@ def test_capabilities_payload_serializes_all_fields() -> None:
     for entry in payload:
         for key in (
             "provider_id",
+            "implementation_state",
             "cloud",
             "supports_diarization",
             "supports_word_timestamps",
             "requires_api_key",
         ):
             assert key in entry
+    by_id = {entry["provider_id"]: entry for entry in payload}
+    assert by_id["local_faster_whisper"]["implementation_state"] == "implemented"
+    assert by_id["openai"]["implementation_state"] == "deferred"
+    assert by_id["openai"]["available"] is False
 
 
 def test_validate_provider_selection_rejects_deferred_provider() -> None:

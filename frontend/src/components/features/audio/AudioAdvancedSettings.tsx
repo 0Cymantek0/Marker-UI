@@ -77,7 +77,9 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
   const cap = capabilities.find((c) => c.provider_id === activeProvider)
   const isCloud = cap?.cloud ?? false
 
-  const selectableCapabilities = capabilities.filter((c) => c.available !== false)
+  const selectableCapabilities = capabilities.filter(
+    (c) => c.available !== false && (c.implementation_state ?? 'implemented') === 'implemented'
+  )
   const comparableProviderCount = selectableCapabilities.filter((c) => c.supports_batch_compare).length
   const canCompareProviders = comparableProviderCount > 1
   const cloudEnhancementAvailable = false
@@ -128,8 +130,8 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             {isCloud && (
               <CloudBadge />
             )}
-            {cap?.available === false && (
-              <ProviderWarning message={`${cap.provider_label} is listed for future support but its adapter is not shipped in this build.`} />
+            {(cap?.available === false || cap?.implementation_state === 'deferred') && (
+              <ProviderWarning message={`${cap.provider_label} is ${cap.implementation_state ?? 'deferred'} in this build; its transcription adapter is not shipped.`} />
             )}
           </div>
 

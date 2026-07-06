@@ -53,6 +53,7 @@ export type AudioEnhancementPreset =
 export interface AudioProviderCapability {
   provider_id: AudioProviderType
   provider_label: string
+  implementation_state?: 'implemented' | 'beta' | 'deferred' | 'unsupported'
   available?: boolean
   runtime_type: 'local' | 'cloud' | 'local_optional'
   cloud: boolean

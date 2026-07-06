@@ -13,6 +13,7 @@ capability set so a typo in a saved preset never crashes a job.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class ProviderCapability:
     requires_api_key: bool
     requires_model_license_acceptance: bool
     privacy_level: str  # local | cloud | hybrid
+    implementation_state: Literal["implemented", "beta", "deferred", "unsupported"] = "implemented"
 
     supports_word_timestamps: bool = True
     supports_segment_timestamps: bool = True
@@ -67,6 +69,7 @@ _LOCAL_WHISPERX = ProviderCapability(
     requires_api_key=False,
     requires_model_license_acceptance=True,
     privacy_level="local",
+    implementation_state="deferred",
     supports_diarization=True,
     supports_speaker_confidence=True,
     supports_translation=False,
@@ -81,6 +84,7 @@ _OPENAI = ProviderCapability(
     requires_api_key=True,
     requires_model_license_acceptance=False,
     privacy_level="cloud",
+    implementation_state="deferred",
     supports_confidence=False,
     supports_diarization=False,
     supports_speaker_confidence=False,
@@ -97,6 +101,7 @@ _GROQ = ProviderCapability(
     requires_api_key=True,
     requires_model_license_acceptance=False,
     privacy_level="cloud",
+    implementation_state="deferred",
     supports_confidence=True,
     supports_diarization=False,
     supports_speaker_confidence=False,
@@ -113,6 +118,7 @@ _DEEPGRAM = ProviderCapability(
     requires_api_key=True,
     requires_model_license_acceptance=False,
     privacy_level="cloud",
+    implementation_state="deferred",
     supports_diarization=True,
     supports_speaker_confidence=True,
     supports_prompt_context=False,
@@ -129,6 +135,7 @@ _ASSEMBLYAI = ProviderCapability(
     requires_api_key=True,
     requires_model_license_acceptance=False,
     privacy_level="cloud",
+    implementation_state="deferred",
     supports_confidence=False,
     supports_diarization=True,
     supports_speaker_confidence=False,
@@ -146,6 +153,7 @@ _AZURE = ProviderCapability(
     requires_api_key=True,
     requires_model_license_acceptance=False,
     privacy_level="cloud",
+    implementation_state="deferred",
     supports_confidence=False,
     supports_diarization=True,
     supports_speaker_confidence=False,
@@ -163,6 +171,7 @@ _CUSTOM_OPENAI_COMPATIBLE = ProviderCapability(
     requires_api_key=True,
     requires_model_license_acceptance=False,
     privacy_level="cloud",
+    implementation_state="deferred",
     supports_confidence=False,
     supports_diarization=False,
     supports_speaker_confidence=False,
@@ -221,5 +230,7 @@ def capabilities_payload() -> list[dict[str, object]]:
     for cap in list_capabilities():
         row = cap_to_dict(cap)
         row["available"] = cap.provider_id in available
+        if row["available"] and row["implementation_state"] == "deferred":
+            row["implementation_state"] = "implemented"
         payload.append(row)
     return payload
