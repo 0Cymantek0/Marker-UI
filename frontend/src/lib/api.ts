@@ -896,20 +896,22 @@ export async function resetModels(deleteUserData: boolean): Promise<{ success: b
 
 // ─── Capabilities & Conversion Planning ───────────────────────────────
 
+export interface InputFormatCapability {
+  extensions: string[]
+  engine: string
+  label: string
+  category: string
+  needs_marker_models: boolean
+  needs_gpu: boolean
+  upload_allowed: boolean
+  url_allowed: boolean
+}
+
 export interface CapabilitiesResponse {
   engines: Record<string, string>
   output_formats?: OutputFormat[]
   marker_multi_format_extensions?: string[]
-  input_formats?: Array<{
-    extensions: string[]
-    engine: string
-    label: string
-    category: string
-    needs_marker_models: boolean
-    needs_gpu: boolean
-    upload_allowed: boolean
-    url_allowed: boolean
-  }>
+  input_formats?: InputFormatCapability[]
 }
 
 export interface ConverterPlanResponse {

@@ -11,7 +11,7 @@ import { OutputViewer } from '@/components/features/OutputViewer'
 import { ModelSwapDialog } from '@/components/features/conversion/ModelSwapDialog'
 import { LlmTraceViewer } from '@/components/features/conversion/LlmTraceViewer'
 import { useConversionQueue } from '@/hooks/useConversionQueue'
-import type { ConversionConfig, OutputFormat } from '@/lib/api'
+import type { ConversionConfig, InputFormatCapability, OutputFormat } from '@/lib/api'
 import { useNavigate } from 'react-router-dom'
 import { planConversion, getCapabilities } from '@/lib/api'
 import type { ConverterPlanResponse } from '@/lib/api'
@@ -99,30 +99,26 @@ function regeneratableFormatsFor(
   return ['chunks']
 }
 
-function engineOptionsFor(filename: string | undefined, plan: ConverterPlanResponse | null): SelectOption[] {
+function engineOptionsFor(
+  filename: string | undefined,
+  plan: ConverterPlanResponse | null,
+  inputFormats: InputFormatCapability[] | null,
+): SelectOption[] {
   const ext = extensionFor(filename)
-  let engines: string[]
-  if (ext === '.pdf') engines = ['liteparse_pdf', 'marker_pdf']
-  else if (['.wav', '.mp3', '.m4a', '.flac', '.ogg', '.aac'].includes(ext)) engines = ['audio']
-  else if (['.mp4', '.mov', '.mkv', '.webm', '.avi'].includes(ext)) engines = ['video']
-  else if (['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(ext)) engines = ['marker_pdf']
-  else if (ext === '.docx') engines = ['office_docx']
-  else if (ext === '.pptx') engines = ['office_pptx']
-  else if (ext === '.msg') engines = ['outlook_msg']
-  else if (['.xlsx', '.xls'].includes(ext)) engines = ['spreadsheet']
-  else if (['.csv', '.tsv', '.json', '.jsonl', '.txt', '.md', '.rst', '.log'].includes(ext)) engines = ['text_data']
-  else if (['.xml', '.rss', '.atom'].includes(ext)) engines = ['xml_rss']
-  else if (['.html', '.htm'].includes(ext)) engines = ['html']
-  else if (ext === '.ipynb') engines = ['notebook']
-  else if (ext === '.zip') engines = ['archive']
-  else engines = plan ? [plan.engine] : []
+  const labelByEngine = new Map<string, string>()
+  const engines: string[] = []
+
+  for (const spec of inputFormats ?? []) {
+    if (!spec.extensions.includes(ext)) continue
+    engines.push(spec.engine)
+    labelByEngine.set(spec.engine, spec.label)
+  }
+  if (ext === '.pdf') engines.unshift('liteparse_pdf')
 
   if (plan && !engines.includes(plan.engine)) engines.unshift(plan.engine)
-  const engineOptions = engines.map((engine) => ({
+  const engineOptions = Array.from(new Set(engines)).map((engine) => ({
     value: engine,
-    label: engine === 'marker_pdf' && ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif'].includes(ext)
-      ? 'Marker Image OCR'
-      : ENGINE_LABELS[engine] ?? engine,
+    label: labelByEngine.get(engine) ?? ENGINE_LABELS[engine] ?? engine,
   }))
   return [{ value: AUTO_ENGINE, label: 'Auto' }, ...engineOptions]
 }
@@ -171,6 +167,7 @@ export function ConvertPage() {
   const [engineOverrides, setEngineOverrides] = useState<Record<string, string>>({})
   const [capabilities, setCapabilities] = useState<Record<string, string>>({})
   const [markerMultiFormatExtensions, setMarkerMultiFormatExtensions] = useState<string[] | null>(null)
+  const [inputFormats, setInputFormats] = useState<InputFormatCapability[] | null>(null)
 
   // Fetch capabilities on mount and poll
   useEffect(() => {
@@ -181,6 +178,7 @@ export function ConvertPage() {
         if (active) {
           setCapabilities(data.engines)
           setMarkerMultiFormatExtensions(data.marker_multi_format_extensions ?? null)
+          setInputFormats(data.input_formats ?? null)
         }
       } catch (err) {
         console.error('Failed to fetch capabilities:', err)
@@ -410,7 +408,7 @@ export function ConvertPage() {
     return {
       key: entry.id,
       value,
-      options: engineOptionsFor(entry.file.name, planState?.plan ?? null),
+      options: engineOptionsFor(entry.file.name, planState?.plan ?? null, inputFormats),
       status: sourcePlanStatus(planState, value),
       title: planState?.plan?.reasons.join(' | '),
       onChange: (engine: string) => setSourceEngine(entry.id, engine),
@@ -427,7 +425,7 @@ export function ConvertPage() {
     return {
       key,
       value,
-      options: engineOptionsFor(path, planState?.plan ?? null),
+      options: engineOptionsFor(path, planState?.plan ?? null, inputFormats),
       status: sourcePlanStatus(planState, value),
       title: path,
       onChange: (engine: string) => setSourceEngine(key, engine),

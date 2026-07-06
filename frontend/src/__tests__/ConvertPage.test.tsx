@@ -153,6 +153,78 @@ const mockGetLLMProviders = vi.fn().mockResolvedValue([
     ],
   },
 ])
+const mockInputFormats = [
+  {
+    extensions: ['.pdf'],
+    engine: 'marker_pdf',
+    label: 'Marker PDF',
+    category: 'document',
+    needs_marker_models: true,
+    needs_gpu: true,
+    upload_allowed: true,
+    url_allowed: true,
+  },
+  {
+    extensions: ['.docx'],
+    engine: 'office_docx',
+    label: 'Fast Office (Word)',
+    category: 'office',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+  },
+  {
+    extensions: ['.tsv'],
+    engine: 'text_data',
+    label: 'Text / Data',
+    category: 'data',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+  },
+  {
+    extensions: ['.xls'],
+    engine: 'spreadsheet',
+    label: 'Fast Spreadsheet',
+    category: 'office',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+  },
+  {
+    extensions: ['.msg'],
+    engine: 'outlook_msg',
+    label: 'Outlook MSG',
+    category: 'email',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+  },
+  {
+    extensions: ['.wav'],
+    engine: 'audio',
+    label: 'Local Audio Transcript',
+    category: 'audio',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+  },
+  {
+    extensions: ['.mp4'],
+    engine: 'video',
+    label: 'Local Video Timeline',
+    category: 'video',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+  },
+]
 const mockGetCapabilities = vi.fn().mockResolvedValue({
   engines: {
     marker_pdf: 'ready',
@@ -164,7 +236,7 @@ const mockGetCapabilities = vi.fn().mockResolvedValue({
   },
   output_formats: ['markdown', 'json', 'html', 'chunks'],
   marker_multi_format_extensions: ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'],
-  input_formats: [],
+  input_formats: mockInputFormats,
 })
 const mockPlanConversion = vi.fn().mockResolvedValue({
   engine: 'marker_pdf',
@@ -729,6 +801,57 @@ describe('ConvertPage component', () => {
       const control = await screen.findByLabelText('Engine for file 1')
       expect(within(control).queryByRole('option', { name: 'Marker PDF' })).not.toBeInTheDocument()
       expect(within(control).getByRole('option', { name: 'Fast Office (Word)' })).toBeInTheDocument()
+    })
+
+    it('uses backend input format labels for engine options', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+      mockGetCapabilities.mockResolvedValueOnce({
+        engines: { office_docx: 'ready' },
+        output_formats: ['markdown', 'json', 'html', 'chunks'],
+        marker_multi_format_extensions: ['.pdf'],
+        input_formats: [
+          {
+            extensions: ['.docx'],
+            engine: 'office_docx',
+            label: 'Backend Word Engine',
+            category: 'office',
+            needs_marker_models: false,
+            needs_gpu: false,
+            upload_allowed: true,
+            url_allowed: true,
+          },
+        ],
+      })
+      mockPlanConversion.mockResolvedValueOnce({
+        engine: 'office_docx',
+        label: 'Fast Office (Word)',
+        confidence: 0.95,
+        reasons: [],
+        needs_marker_models: false,
+        needs_gpu: false,
+        execution_backend: 'cpu_thread',
+        needs_cloud: false,
+        optional_dependencies: [],
+        fallback_chain: [],
+        warnings: [],
+        preliminary: true,
+      })
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock select DOCX'))
+
+      const control = await screen.findByLabelText('Engine for file 1')
+      expect(within(control).getByRole('option', { name: 'Backend Word Engine' })).toBeInTheDocument()
     })
 
     it('requires every selected source to support multi-format rendering', async () => {
