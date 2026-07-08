@@ -52,7 +52,7 @@ def test_maturity_tables_mark_partial_and_deferred_systems() -> None:
     roadmap = (REPO_ROOT / "docs" / "roadmap.md").read_text(encoding="utf-8")
 
     required_rows = (
-        "| Semantic chunking | Working alpha with deterministic source refs; retrieval-quality benchmark still planned |",
+        "| Semantic chunking | Working alpha with deterministic source refs and lightweight retrieval gate; larger benchmark corpus still planned |",
         "| Audio / voice notes | Partial alpha: local faster-whisper route only; cloud STT, real diarization, and provider comparison are deferred |",
         "| Database migrations | Startup creates tables and additive column repairs; Alembic upgrades are developer-managed |",
     )

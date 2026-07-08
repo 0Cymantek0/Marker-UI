@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -327,6 +328,53 @@ def test_chunk_markdown_emits_rag_ready_context_and_char_spans() -> None:
     assert code_chunk["source_refs"][0]["char_start"] == code_chunk["char_start"]
 
 
+def test_chunk_markdown_supports_basic_retrieval_quality_gate() -> None:
+    markdown = (
+        "# Operations Handbook\n\n"
+        "This handbook collects operational facts for agents.\n\n"
+        "## Installation\n\n"
+        "Install Marker UI with start.ps1 on Windows. For source setup, run pnpm install "
+        "and start the backend with uvicorn.\n\n"
+        "## Security\n\n"
+        "Set MARKER_REST_AUTH_TOKEN before shared use. Public URL conversion should use "
+        "MARKER_SOURCE_URL_REQUIRE_ALLOWLIST=true in production.\n\n"
+        "## Archive Conversion\n\n"
+        "ZIP recursion enforces file count, child size, total uncompressed bytes, depth, "
+        "and compression ratio limits before converting children.\n\n"
+        "## Audio Notes\n\n"
+        "Local faster-whisper transcribes mp3 and wav. Cloud STT remains deferred until "
+        "provider adapters ship.\n\n"
+        "## Troubleshooting\n\n"
+        "Backend readiness waits on /api/health. The launcher keeps waiting past the soft "
+        "timeout while the backend process stays alive.\n"
+    )
+    payload = chunk_markdown(markdown, source_name="ops.md", max_chars=260, overlap_chars=0)
+
+    cases = [
+        ("how does launcher decide backend ready", ["Operations Handbook", "Troubleshooting"], "/api/health"),
+        ("what limits protect zip recursion", ["Operations Handbook", "Archive Conversion"], "compression ratio"),
+        ("cloud stt status", ["Operations Handbook", "Audio Notes"], "Cloud STT remains deferred"),
+        ("rest token setting for shared use", ["Operations Handbook", "Security"], "MARKER_REST_AUTH_TOKEN"),
+    ]
+
+    for query, expected_heading, expected_fact in cases:
+        ranked = sorted(
+            payload["chunks"],
+            key=lambda chunk: _lexical_retrieval_score(query, chunk),
+            reverse=True,
+        )
+        top = ranked[0]
+
+        assert top["heading_path"] == expected_heading
+        assert expected_fact in top["text"]
+        assert top["contextual_text"].startswith(" > ".join(expected_heading))
+        assert top["source_refs"], "retrieved chunk must remain citeable"
+        for ref in top["source_refs"]:
+            source_slice = markdown[ref["char_start"] : ref["char_end"]]
+            assert source_slice.strip()
+            assert source_slice in markdown
+
+
 def test_chunk_markdown_respects_size_budget_when_table_header_is_oversized() -> None:
     long_header = "| " + ("Column " * 40) + "|"
     payload = chunk_markdown(
@@ -453,6 +501,16 @@ def test_chunk_markdown_stable_ids_do_not_depend_on_source_name() -> None:
     assert first["chunks"][0]["id"] != second["chunks"][0]["id"]
     assert first["chunks"][0]["stable_id"] == second["chunks"][0]["stable_id"]
     assert first["chunks"][0]["metadata"]["stable_id"] == first["chunks"][0]["stable_id"]
+
+
+def _lexical_retrieval_score(query: str, chunk: dict[str, object]) -> int:
+    haystack = " ".join(
+        str(chunk.get(key) or "")
+        for key in ("contextual_text", "text")
+    )
+    haystack_tokens = set(re.findall(r"[a-z0-9_/-]+", haystack.lower()))
+    query_tokens = set(re.findall(r"[a-z0-9_/-]+", query.lower()))
+    return len(query_tokens & haystack_tokens)
 
 
 def test_chunk_markdown_uses_page_markers_as_metadata_not_chunk_text() -> None:

@@ -11,7 +11,7 @@ so contributors can see where help is useful.
 | CLI, MCP, output manifests, and paged output reads | Working alpha |
 | PDF/image conversion with Marker-backed Markdown, HTML, JSON, and chunks | Working alpha |
 | Native Office/data/archive conversion to Markdown and chunks | Working alpha |
-| Semantic chunking | Working alpha with deterministic source refs; retrieval-quality benchmark still planned |
+| Semantic chunking | Working alpha with deterministic source refs and lightweight retrieval gate; larger benchmark corpus still planned |
 | Audio / voice notes | Partial alpha: local faster-whisper route only; cloud STT, real diarization, and provider comparison are deferred |
 | Video | Experimental local demux, transcription, keyframe/OCR provenance |
 | VLM image understanding | Opt-in alpha; cloud calls require explicit consent |
