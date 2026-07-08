@@ -7,8 +7,9 @@ Marker-backed PDF/image/EPUB routes can also render HTML and JSON; native
 deterministic routes expose only formats they can actually render.
 
 Run it as a browser app, a scriptable CLI, or a small MCP server for coding
-agents. Local parsers and local neural models are the default; cloud VLM/STT
-paths require explicit opt-in. Every conversion writes a `.marker.json`
+agents. Local parsers and local neural models are the default. Cloud VLM paths
+require explicit opt-in; cloud STT providers are listed as planned/deferred
+until their adapters ship. Every conversion writes a `.marker.json`
 manifest with source metadata, output paths, media type, hashes, assets, and
 conversion settings so long outputs can be audited and paged safely.
 
@@ -146,11 +147,12 @@ The application will be served at `http://localhost:3000` via Nginx.
 
 ## Testing & Code Quality
 
-The backend includes a comprehensive suite of over 540 automated tests validating API endpoints, database operations, worker pool IPC scheduling, and encryption integrity:
+The repository currently collects over 1,300 automated backend and frontend tests, covering API endpoints, database operations, worker scheduling, conversion routing, output integrity, manifests, security controls, and UI behavior:
 
 ```bash
-cd backend
-python -m pytest tests/ -v
+python -m pytest backend/tests -v
+cd frontend
+npm test
 ```
 
 ---
