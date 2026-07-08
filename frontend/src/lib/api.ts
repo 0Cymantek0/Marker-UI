@@ -227,6 +227,10 @@ export interface JobStatus {
   available_formats?: string[] | null
   image_understanding?: ImageUnderstandingMeta[] | null
   conversion_metadata?: ConversionMetadata | null
+  message?: string | null
+  logs?: string[] | null
+  elapsed?: number | null
+  eta?: number | null
 }
 
 export interface SSEEvent {
@@ -322,7 +326,7 @@ export interface BackendJobStatus {
   conversion_metadata?: ConversionMetadata | null
   filename: string
   message?: string | null
-  logs?: string | null
+  logs?: string[] | null
   elapsed?: number | null
   eta?: number | null
 }
@@ -596,11 +600,19 @@ export async function regenerateFormat(jobId: string, format: string): Promise<R
   })
 }
 
-export async function getHistory(page = 1, limit = 20): Promise<{ jobs: JobStatus[]; total: number }> {
-  // Backend returns HistoryResponse: { jobs: JobStatus[], total: number }
-  const res = await request<{ jobs: BackendJobStatus[]; total: number }>(
-    `/convert/history?page=${page}&page_size=${limit}`
-  )
+export async function getHistory(
+  page = 1,
+  limit = 20,
+  search?: string,
+  status?: string,
+  converter?: string
+): Promise<{ jobs: JobStatus[]; total: number }> {
+  let url = `/convert/history?page=${page}&page_size=${limit}`
+  if (search) url += `&search=${encodeURIComponent(search)}`
+  if (status && status !== 'all') url += `&status=${encodeURIComponent(status)}`
+  if (converter && converter !== 'all') url += `&converter=${encodeURIComponent(converter)}`
+
+  const res = await request<{ jobs: BackendJobStatus[]; total: number }>(url)
   return {
     jobs: res.jobs.map((j) => ({
       ...j,

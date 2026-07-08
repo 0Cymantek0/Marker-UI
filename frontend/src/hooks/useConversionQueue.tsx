@@ -46,7 +46,7 @@ export interface JobState {
   availableFormats: string[]
   outputDir?: string
   elapsed?: number
-  eta?: number
+  eta?: number | null
   isBunch?: boolean
   // Per-image understanding metadata for the badge UI.
   imageUnderstanding?: ImageUnderstandingMeta[] | null
@@ -95,6 +95,7 @@ interface ConversionContextType {
 }
 
 const ConversionContext = createContext<ConversionContextType | null>(null)
+const JOB_STATUS_POLL_MS = import.meta.env.MODE === 'test' ? 50 : 5000
 
 interface ConversionSsePayload {
   status?: JobStatus['status']
@@ -103,7 +104,7 @@ interface ConversionSsePayload {
   logs?: string[]
   progress?: number
   elapsed?: number
-  eta?: number
+  eta?: number | null
 }
 
 type RecoveredJobStatus = JobStatus & {
@@ -260,6 +261,61 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     }))
   }, [updateJob])
 
+  const reconcileJobStatus = useCallback(async (id: string, jobId: string, source: 'poll' | 'watchdog' = 'watchdog') => {
+    const status = await getJobStatus(jobId)
+    if (status.status === 'completed') {
+      stopJobObservers(id)
+      handleJobCompleted(id, jobId)
+      return
+    }
+
+    if (status.status === 'failed') {
+      stopJobObservers(id)
+      handleJobFailed(id, status.error_message ?? 'Conversion failed')
+      return
+    }
+
+    if (status.status === 'cancelled') {
+      stopJobObservers(id)
+      handleJobCancelled(id, '[SYSTEM] Job was cancelled on the backend.')
+      return
+    }
+
+    updateJob(id, (prev) => {
+      if (prev.phase !== 'uploading' && prev.phase !== 'processing') return prev
+      const nextLogs = [...prev.logs]
+      if (source === 'poll' && nextLogs[nextLogs.length - 1] !== '[SYSTEM] Polling backend status...') {
+        nextLogs.push('[SYSTEM] Polling backend status...')
+      }
+      return {
+        ...prev,
+        phase: 'processing',
+        progress: Math.max(prev.progress, status.progress ?? prev.progress),
+        statusText: status.message ?? prev.statusText,
+        logs: nextLogs,
+        elapsed: status.elapsed ?? prev.elapsed,
+        eta: status.eta ?? prev.eta,
+      }
+    })
+  }, [handleJobCancelled, handleJobCompleted, handleJobFailed, stopJobObservers, updateJob])
+
+  const startJobStatusPolling = useCallback((id: string, jobId: string, source: 'poll' | 'watchdog' = 'watchdog') => {
+    if (pollIntervalsRef.current[id]) {
+      return
+    }
+
+    const pollInterval = setInterval(() => {
+      void reconcileJobStatus(id, jobId, source).catch((err: unknown) => {
+        const is404 = err instanceof Error && err.message.includes('404')
+        if (is404) {
+          stopJobObservers(id)
+          handleJobCancelled(id, '[SYSTEM] Job not found on backend.')
+        }
+      })
+    }, JOB_STATUS_POLL_MS)
+    pollIntervalsRef.current[id] = pollInterval
+  }, [handleJobCancelled, reconcileJobStatus, stopJobObservers])
+
   const handleJobSSEDisconnected = useCallback((id: string, jobId: string) => {
     updateJob(id, (prev) => ({
       ...prev,
@@ -267,81 +323,8 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       logs: [...prev.logs, '[WARN] SSE socket disconnected. Falling back to polling...'],
     }))
 
-    if (pollIntervalsRef.current[id]) {
-      clearInterval(pollIntervalsRef.current[id])
-    }
-
-    const pollInterval = setInterval(async () => {
-      const stopPolling = () => {
-        clearInterval(pollInterval)
-        if (pollIntervalsRef.current[id] === pollInterval) {
-          delete pollIntervalsRef.current[id]
-        }
-      }
-      try {
-        const status = await getJobStatus(jobId)
-        if (status.status === 'completed') {
-          stopPolling()
-          const imageUnderstanding = status.image_understanding ?? null
-          const resultText = status.result_text ?? null
-          const conversionMetadata = status.conversion_metadata ?? null
-          const formats = status.formats ?? null
-          const availFmts = status.available_formats
-          downloadResult(jobId)
-            .then(({ blob, filename }) => {
-              updateJob(id, (prev) => ({
-                ...prev,
-                phase: 'completed',
-                progress: 100,
-                statusText: 'Conversion complete',
-                error: null,
-                resultBlob: blob,
-                resultFilename: filename,
-                resultText,
-                imageUnderstanding,
-                conversionMetadata,
-                formats,
-                availableFormats: availFmts ?? prev.availableFormats,
-                logs: [...prev.logs, '[SUCCESS] SSE disconnected, recovered via polling.'],
-              }))
-            })
-            .catch(() => {
-              updateJob(id, (prev) => ({
-                ...prev,
-                phase: 'completed',
-                progress: 100,
-                statusText: 'Conversion complete',
-                error: null,
-                resultBlob: null,
-                resultText,
-                imageUnderstanding,
-                conversionMetadata,
-                logs: [...prev.logs, '[WARN] SSE disconnected. Polling recovered but download failed.'],
-              }))
-            })
-        } else if (status.status === 'failed') {
-          stopPolling()
-          updateJob(id, (prev) => ({
-            ...prev,
-            phase: 'failed',
-            error: status.error_message ?? 'Conversion failed',
-            statusText: 'Conversion failed',
-            logs: [...prev.logs, `[ERROR] SSE disconnected, polling detected failure: ${status.error_message ?? 'Unknown'}`],
-          }))
-        } else if (status.status === 'cancelled') {
-          stopPolling()
-          handleJobCancelled(id, '[SYSTEM] Job was cancelled on the backend.')
-        }
-      } catch (err: unknown) {
-        const is404 = err instanceof Error && err.message.includes('404')
-        if (is404) {
-          stopPolling()
-          handleJobCancelled(id, '[SYSTEM] Job not found on backend.')
-        }
-      }
-    }, 3000)
-    pollIntervalsRef.current[id] = pollInterval
-  }, [handleJobCancelled, updateJob])
+    startJobStatusPolling(id, jobId, 'poll')
+  }, [startJobStatusPolling, updateJob])
 
   const attachJobEvents = useCallback((id: string, jobId: string) => {
     if (eventSourcesRef.current[id]) {
@@ -350,6 +333,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
 
     const es = getJobEvents(jobId)
     eventSourcesRef.current[id] = es
+    startJobStatusPolling(id, jobId, 'watchdog')
 
     const closeES = () => {
       es.close()
@@ -361,19 +345,19 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       const messageStr = data.message || 'Executing conversion pipelines...'
 
       if (data.status === 'completed') {
-        closeES()
+        stopJobObservers(id)
         handleJobCompleted(id, jobId)
         return
       }
 
       if (data.status === 'failed') {
-        closeES()
+        stopJobObservers(id)
         handleJobFailed(id, data.error ?? 'Conversion failed')
         return
       }
 
       if (data.status === 'cancelled') {
-        closeES()
+        stopJobObservers(id)
         handleJobCancelled(id)
         return
       }
@@ -417,13 +401,13 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
     es.addEventListener('status', (e) => {
       const data = parseSsePayload(e.data)
       if (data.status === 'completed') {
-        closeES()
+        stopJobObservers(id)
         handleJobCompleted(id, jobId)
       } else if (data.status === 'failed') {
-        closeES()
+        stopJobObservers(id)
         handleJobFailed(id, data.error ?? 'Conversion failed')
       } else if (data.status === 'cancelled') {
-        closeES()
+        stopJobObservers(id)
         handleJobCancelled(id)
       }
     })
@@ -432,7 +416,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       closeES()
       handleJobSSEDisconnected(id, jobId)
     }
-  }, [handleJobCancelled, handleJobCompleted, handleJobFailed, handleJobSSEDisconnected, updateJob])
+  }, [handleJobCancelled, handleJobCompleted, handleJobFailed, handleJobSSEDisconnected, startJobStatusPolling, stopJobObservers, updateJob])
 
   useEffect(() => {
     if (hydratedRef.current) return
@@ -520,6 +504,20 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       ]
     })
 
+    const slowSubmissionTimer = setTimeout(() => {
+      updateJob(job.id, (prev) => {
+        if (prev.jobId || prev.phase !== 'uploading') return prev
+        return {
+          ...prev,
+          statusText: 'Preparing document on backend...',
+          logs: [
+            ...prev.logs,
+            '[SYSTEM] Backend still preparing the job; large PDFs may spend time in upload/probe before live progress opens.',
+          ],
+        }
+      })
+    }, 8000)
+
     try {
       const response = await uploadFile(
         job.file,
@@ -527,6 +525,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
         job.localPath || undefined,
         outputDir || undefined
       )
+      clearTimeout(slowSubmissionTimer)
 
       updateJob(job.id, (prev) => ({
         ...prev,
@@ -546,6 +545,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       attachJobEvents(job.id, response.job_id)
 
     } catch (err) {
+      clearTimeout(slowSubmissionTimer)
       const errMsg = err instanceof Error ? err.message : 'Upload failed'
       updateJob(job.id, (prev) => ({
         ...prev,
