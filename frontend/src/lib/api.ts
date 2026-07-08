@@ -950,6 +950,7 @@ export interface ConverterPlanResponse {
   optional_dependencies: string[]
   fallback_chain: string[]
   warnings: string[]
+  output_formats?: OutputFormat[]
   preliminary: boolean
   probe_result?: Record<string, unknown> | null
   mixed_engine_segments?: MixedEngineSegment[] | null

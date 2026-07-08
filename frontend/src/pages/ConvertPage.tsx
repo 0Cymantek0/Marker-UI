@@ -93,7 +93,9 @@ function sourceOutputFormats(
   filename: string | undefined,
   inputFormats: InputFormatCapability[] | null,
   markerMultiFormatExtensions: string[] | null,
+  plan?: ConverterPlanResponse | null,
 ): OutputFormat[] {
+  if (plan?.output_formats?.length) return plan.output_formats
   if (!filename) return ['markdown', 'chunks']
   const ext = extensionFor(filename)
   const spec = inputFormats?.find((item) => item.extensions.includes(ext))
@@ -103,23 +105,6 @@ function sourceOutputFormats(
   return sourceSupportsMarkerFormats(filename, markerMultiFormatExtensions)
     ? ['markdown', 'json', 'html', 'chunks']
     : ['markdown', 'chunks']
-}
-
-function commonOutputFormatsForSources(
-  filenames: string[],
-  inputFormats: InputFormatCapability[] | null,
-  markerMultiFormatExtensions: string[] | null,
-): OutputFormat[] {
-  if (filenames.length === 0) return ['markdown', 'json', 'html', 'chunks']
-  const perSourceFormats = filenames.map((name) => (
-    sourceOutputFormats(name, inputFormats, markerMultiFormatExtensions)
-  ))
-  const first = perSourceFormats[0] ?? ['markdown', 'chunks']
-  const rest = perSourceFormats.slice(1)
-  return rest.reduce(
-    (common, formats) => common.filter((fmt) => formats.includes(fmt)),
-    first,
-  )
 }
 
 function regeneratableFormatsFor(
@@ -239,12 +224,31 @@ export function ConvertPage() {
   )
 
   const supportedOutputFormats = useMemo(() => {
-    const sourceNames = [
-      ...selectedFiles.map((entry) => entry.file.name),
-      ...parsedLocalPaths,
+    const perSourceFormats = [
+      ...selectedFiles.map((entry) => (
+        sourceOutputFormats(
+          entry.file.name,
+          inputFormats,
+          markerMultiFormatExtensions,
+          sourcePlans[entry.id]?.plan,
+        )
+      )),
+      ...parsedLocalPaths.map((path) => (
+        sourceOutputFormats(
+          path,
+          inputFormats,
+          markerMultiFormatExtensions,
+          sourcePlans[`local:${path}`]?.plan,
+        )
+      )),
     ]
-    return commonOutputFormatsForSources(sourceNames, inputFormats, markerMultiFormatExtensions)
-  }, [selectedFiles, parsedLocalPaths, inputFormats, markerMultiFormatExtensions])
+    if (perSourceFormats.length === 0) return ['markdown', 'json', 'html', 'chunks'] as OutputFormat[]
+    const first = perSourceFormats[0] ?? ['markdown', 'chunks']
+    return perSourceFormats.slice(1).reduce(
+      (common, formats) => common.filter((fmt) => formats.includes(fmt)),
+      first,
+    )
+  }, [selectedFiles, parsedLocalPaths, inputFormats, markerMultiFormatExtensions, sourcePlans])
 
   const supportsMultiFormat = supportedOutputFormats.includes('json') || supportedOutputFormats.includes('html')
 

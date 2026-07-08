@@ -25,8 +25,10 @@ vi.mock('@/components/features/FileUpload', () => ({
   FileUpload: ({
     onFilesSelect,
     fileEngineControls = [],
+    onLocalPathsChange,
   }: {
     onFilesSelect: (files: File[]) => void
+    onLocalPathsChange?: (value: string) => void
     fileEngineControls?: Array<{
       value: string
       status: string
@@ -86,6 +88,12 @@ vi.mock('@/components/features/FileUpload', () => ({
         onClick={() => onFilesSelect([new File(['mp4'], 'clip.mp4', { type: 'video/mp4' })])}
       >
         Mock select MP4
+      </button>
+      <button
+        type="button"
+        onClick={() => onLocalPathsChange?.('C:\\docs\\sample.pdf')}
+      >
+        Mock local PDF
       </button>
       {fileEngineControls.map((control, index) => (
         <div data-testid={`file-engine-${index}`} key={index}>
@@ -232,7 +240,7 @@ const mockInputFormats = [
     output_formats: ['markdown', 'chunks'],
   },
 ]
-const mockGetCapabilities = vi.fn().mockResolvedValue({
+const defaultCapabilities = {
   engines: {
     marker_pdf: 'ready',
     office_docx: 'ready',
@@ -244,8 +252,9 @@ const mockGetCapabilities = vi.fn().mockResolvedValue({
   output_formats: ['markdown', 'json', 'html', 'chunks'],
   marker_multi_format_extensions: ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'],
   input_formats: mockInputFormats,
-})
-const mockPlanConversion = vi.fn().mockResolvedValue({
+}
+const mockGetCapabilities = vi.fn().mockResolvedValue(defaultCapabilities)
+const defaultPlanConversion = {
   engine: 'marker_pdf',
   label: 'Marker PDF',
   confidence: 1.0,
@@ -258,7 +267,8 @@ const mockPlanConversion = vi.fn().mockResolvedValue({
   fallback_chain: [],
   warnings: [],
   preliminary: true,
-})
+}
+const mockPlanConversion = vi.fn().mockResolvedValue(defaultPlanConversion)
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
   return {
@@ -274,6 +284,17 @@ vi.mock('@/lib/api', async (importOriginal) => {
 })
 
 describe('ConvertPage component', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear()
+    mockUseConversionQueue.mockReset()
+    mockGetCapabilities.mockReset()
+    mockGetCapabilities.mockResolvedValue(defaultCapabilities)
+    mockPlanConversion.mockReset()
+    mockPlanConversion.mockResolvedValue(defaultPlanConversion)
+    mockApplyLiveOverride.mockClear()
+    mockGetLLMProviders.mockClear()
+  })
+
   it('renders initial state with empty queue and console closed by default', () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [],
@@ -817,6 +838,45 @@ describe('ConvertPage component', () => {
 
       render(<ConvertPage />)
       fireEvent.click(screen.getByText('Mock select TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('markdown')
+      })
+    })
+
+    it('uses backend local PDF plan output formats over broad PDF capability guesses', async () => {
+      mockPlanConversion.mockResolvedValueOnce({
+        engine: 'liteparse_pdf',
+        label: 'Fast PDF',
+        confidence: 0.95,
+        reasons: ['PDF has selectable text'],
+        needs_marker_models: false,
+        needs_gpu: false,
+        execution_backend: 'cpu_thread',
+        needs_cloud: false,
+        optional_dependencies: [],
+        fallback_chain: ['marker_pdf'],
+        warnings: [],
+        output_formats: ['markdown', 'chunks'],
+        preliminary: true,
+      })
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['html'] }))
+
+      render(<ConvertPage />)
+      fireEvent.click(screen.getByText('Mock local PDF'))
 
       await waitFor(() => {
         expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')

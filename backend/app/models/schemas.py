@@ -387,6 +387,7 @@ class ConverterPlanResponse(BaseModel):
     optional_dependencies: list[str]
     fallback_chain: list[str]
     warnings: list[str]
+    output_formats: list[str] = Field(default_factory=list)
     preliminary: bool = False
     probe_result: Optional[dict] = None
     mixed_engine_segments: Optional[list[dict]] = None

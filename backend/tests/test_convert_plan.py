@@ -34,6 +34,7 @@ async def test_convert_plan_docx_without_registration_stays_native(client: Async
         assert plan["needs_marker_models"] is False
         assert plan["fallback_chain"] == []
         assert "office_docx" in plan["warnings"][0]
+        assert plan["output_formats"] == ["markdown", "chunks"]
 
 
 @pytest.mark.asyncio
@@ -85,6 +86,7 @@ async def test_convert_plan_pdf(client: AsyncClient):
     assert plan["needs_marker_models"] is True
     assert plan["needs_gpu"] is True
     assert plan["preliminary"] is True
+    assert plan["output_formats"] == ["markdown", "json", "html", "chunks"]
     assert any("Preliminary" in warning for warning in plan["warnings"])
 
 
@@ -105,7 +107,9 @@ async def test_convert_plan_local_pdf_applies_phase5_backend_knobs(
         },
     )
     assert fast_resp.status_code == 200
-    assert fast_resp.json()["engine"] == "liteparse_pdf"
+    fast_plan = fast_resp.json()
+    assert fast_plan["engine"] == "liteparse_pdf"
+    assert fast_plan["output_formats"] == ["markdown", "chunks"]
 
     accurate_resp = await client.post(
         "/api/convert/plan",

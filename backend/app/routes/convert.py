@@ -23,7 +23,12 @@ import aiofiles
 from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
 from app.agent_contract import AUDIO_OUTPUT_MODES
 from app.conversion.engine_policy import validate_engine_override
-from app.conversion.formats import OUTPUT_FORMAT_SET, OUTPUT_FORMATS_DESCRIPTION, UPLOAD_ALLOWED_EXTENSIONS
+from app.conversion.formats import (
+    OUTPUT_FORMAT_SET,
+    OUTPUT_FORMATS_DESCRIPTION,
+    UPLOAD_ALLOWED_EXTENSIONS,
+    renderable_output_formats_for_engine,
+)
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
 from app.errors import InputNotAllowedError, UnsupportedFormatError, UsageError
@@ -984,6 +989,7 @@ async def plan_conversion(
         optional_dependencies=plan.optional_dependencies,
         fallback_chain=plan.fallback_chain,
         warnings=plan.warnings,
+        output_formats=renderable_output_formats_for_engine(plan.engine, (plan_suffix.lower(),)),
         preliminary=preliminary,
         probe_result=config.get("probe_result"),
         mixed_engine_segments=(
