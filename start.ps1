@@ -183,7 +183,7 @@ Write-Host ""
 Write-Host "[4/6] Installing Node.js dependencies..." -ForegroundColor Yellow
 
 Push-Location frontend
-$nodeDepsSignature = Get-DependencySignature @("package.json", "..\pnpm-lock.yaml")
+$nodeDepsSignature = Get-DependencySignature @("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml")
 $nodeDepsSignatureFile = Join-Path "node_modules" ".marker-ui-deps.sha256"
 $nodeDepsInstalled = (Test-Path "node_modules") -and (Test-Path $nodeDepsSignatureFile) -and ((Get-Content $nodeDepsSignatureFile -Raw).Trim() -eq $nodeDepsSignature.Trim())
 if (-not $nodeDepsInstalled) {
@@ -437,12 +437,12 @@ if (-not (Wait-ServiceReady -Process $backendJob -Name "Backend" -Url "http://12
 }
 Write-Host "  Backend health check passed on port $backendPort." -ForegroundColor Green
 
-# Frontend - use cmd.exe because npm is a .cmd file on Windows, not a real .exe
+# Frontend - use cmd.exe because pnpm is a .cmd file on Windows, not a real .exe
 Write-Host "  Starting frontend on http://${frontendHost}:$frontendPort ..." -ForegroundColor Cyan
 if ($isWindowsPlatform) {
-    $frontendJob = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "set BACKEND_PORT=$backendPort&& npm run dev -- --host $frontendHost --port $frontendPort" -WorkingDirectory "$PWD\frontend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $frontendOutLog -RedirectStandardError $frontendErrLog
+    $frontendJob = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "set BACKEND_PORT=$backendPort&& pnpm run dev -- --host $frontendHost --port $frontendPort" -WorkingDirectory "$PWD\frontend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $frontendOutLog -RedirectStandardError $frontendErrLog
 } else {
-    $frontendJob = Start-Process -FilePath "npm" -ArgumentList "run", "dev", "--", "--host", "$frontendHost", "--port", "$frontendPort" -WorkingDirectory "$PWD/frontend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $frontendOutLog -RedirectStandardError $frontendErrLog
+    $frontendJob = Start-Process -FilePath "pnpm" -ArgumentList "run", "dev", "--", "--host", "$frontendHost", "--port", "$frontendPort" -WorkingDirectory "$PWD/frontend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $frontendOutLog -RedirectStandardError $frontendErrLog
 }
 
 $frontendReadyTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_FRONTEND_READY_TIMEOUT_SECONDS" -Default 60 -Minimum 1
