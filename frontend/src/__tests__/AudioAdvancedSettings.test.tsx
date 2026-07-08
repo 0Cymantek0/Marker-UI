@@ -159,6 +159,63 @@ describe('AudioAdvancedSettings', () => {
     expect(screen.queryByText(/Deepgram Nova/)).not.toBeInTheDocument()
   })
 
+  it('does not auto-enable cloud STT when selecting an implemented cloud provider', async () => {
+    const onChange = vi.fn()
+    mockGetAudioCapabilities.mockResolvedValue([
+      mockCapabilities[0],
+      {
+        ...mockCapabilities[1],
+        provider_id: 'openai',
+        provider_label: 'OpenAI Speech-to-Text',
+        implementation_state: 'implemented',
+        available: true,
+        supports_diarization: false,
+        default_model: 'gpt-4o-mini-transcribe',
+      },
+    ])
+
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /local faster-whisper/i }))
+    fireEvent.click(screen.getByText(/OpenAI Speech-to-Text \(cloud\)/i))
+
+    expect(onChange).toHaveBeenCalledWith('audio_provider', 'openai')
+    expect(onChange).not.toHaveBeenCalledWith('audio_allow_cloud_stt', true)
+  })
+
+  it('warns when a cloud provider is selected without cloud STT consent', async () => {
+    const onChange = vi.fn()
+    mockGetAudioCapabilities.mockResolvedValue([
+      mockCapabilities[0],
+      {
+        ...mockCapabilities[1],
+        provider_id: 'openai',
+        provider_label: 'OpenAI Speech-to-Text',
+        implementation_state: 'implemented',
+        available: true,
+        supports_diarization: false,
+        default_model: 'gpt-4o-mini-transcribe',
+      },
+    ])
+
+    render(
+      <AudioAdvancedSettings
+        config={{ ...baseConfig, audio_provider: 'openai', audio_allow_cloud_stt: false }}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    expect(screen.getByText(/Cloud STT is selected but not allowed yet/i)).toBeInTheDocument()
+  })
+
   it('calls onChange when output style selected', async () => {
     const onChange = vi.fn()
     render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)

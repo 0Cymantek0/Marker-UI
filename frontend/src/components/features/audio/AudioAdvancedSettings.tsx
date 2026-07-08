@@ -82,6 +82,8 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
   )
   const audioBenchmarkAvailable = false
   const cloudEnhancementAvailable = false
+  const cloudEnhancementEnabled = config.audio_enhancement_allow_cloud ?? false
+  const benchmarkCompareEnabled = config.audio_benchmark_compare ?? false
   const providerOptions = selectableCapabilities.length > 0
     ? selectableCapabilities.map((c) => ({
         value: c.provider_id,
@@ -117,10 +119,6 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               value={activeProvider}
               onChange={(val) => {
                 onChange('audio_provider', val as AudioProviderType)
-                const selected = capabilities.find((c) => c.provider_id === val)
-                if (selected?.cloud && !config.audio_allow_cloud_stt) {
-                  onChange('audio_allow_cloud_stt', true)
-                }
               }}
               options={providerOptions}
               disabled={disabled}
@@ -128,6 +126,9 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             />
             {isCloud && (
               <CloudBadge />
+            )}
+            {isCloud && !config.audio_allow_cloud_stt && (
+              <ProviderWarning message="Cloud STT is selected but not allowed yet. Enable Allow Cloud STT in Privacy & Providers before running this job." />
             )}
             {(cap?.available === false || cap?.implementation_state === 'deferred') && (
               <ProviderWarning message={`${cap.provider_label} is ${cap.implementation_state ?? 'deferred'} in this build; its transcription adapter is not shipped.`} />
@@ -482,9 +483,9 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               />
               <ToggleChip
                 label="Allow Cloud Enhancement"
-                checked={config.audio_enhancement_allow_cloud ?? false}
+                checked={cloudEnhancementEnabled}
                 onChange={(v) => onChange('audio_enhancement_allow_cloud', v)}
-                disabled={disabled || !cloudEnhancementAvailable}
+                disabled={disabled || (!cloudEnhancementAvailable && !cloudEnhancementEnabled)}
               />
               {!cloudEnhancementAvailable && (
                 <ProviderWarning message="Cloud transcript enhancement is not shipped in this build. Enhancement uses local deterministic source-bound notes only." />
@@ -517,9 +518,9 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             <div className="space-y-3">
               <ToggleChip
                 label="Compare Providers"
-                checked={config.audio_benchmark_compare ?? false}
+                checked={benchmarkCompareEnabled}
                 onChange={(v) => onChange('audio_benchmark_compare', v)}
-                disabled={disabled || !audioBenchmarkAvailable}
+                disabled={disabled || (!audioBenchmarkAvailable && !benchmarkCompareEnabled)}
               />
               <ProviderWarning message="Provider comparison is not shipped in this build. The backend rejects this option until a benchmark runner and at least two adapters ship." />
               <p className="text-xs text-muted-foreground/70 leading-snug">
