@@ -69,6 +69,9 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
         return loop
 
 SSE_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+DB_METADATA_AUDIO_SEGMENT_LIMIT = 200
+DB_METADATA_WORDS_PER_SEGMENT_LIMIT = 20
+DB_METADATA_VIDEO_FRAME_LIMIT = 50
 
 
 def _resolve_requested_formats(config: dict[str, Any]) -> list[str]:
@@ -154,6 +157,121 @@ def _resolved_asset_entries_for_metadata(
             item["path"] = str(asset_paths[index].resolve())
         resolved.append(item)
     return resolved
+
+
+def _result_metadata_for_db(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Build bounded status metadata for the database row.
+
+    Full converter metadata is preserved in the output manifest. The DB row is
+    used for job/status UI, so large per-word transcripts and video frame lists
+    must be capped to keep history queries cheap.
+    """
+    result_metadata = {
+        "image_understanding": metadata.get("image_understanding") or [],
+    }
+    if metadata.get("engine"):
+        result_metadata["engine"] = metadata["engine"]
+    if metadata.get("probe_result"):
+        result_metadata["probe_result"] = metadata["probe_result"]
+    if metadata.get("mixed_engine_segments"):
+        result_metadata["mixed_engine_segments"] = metadata["mixed_engine_segments"]
+    if metadata.get("audio"):
+        result_metadata["audio"] = _compact_audio_metadata(metadata["audio"])
+    if metadata.get("audio_batch"):
+        result_metadata["audio_batch"] = _compact_audio_batch_metadata(metadata["audio_batch"])
+    if metadata.get("video"):
+        result_metadata["video"] = _compact_video_metadata(metadata["video"])
+    if metadata.get("chunking"):
+        result_metadata["chunking"] = metadata["chunking"]
+    return result_metadata
+
+
+def _compact_audio_metadata(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = {
+        key: item
+        for key, item in value.items()
+        if key != "raw_provider_metadata"
+    }
+    if "transcript" in compact:
+        compact["transcript"] = _compact_transcript_payload(compact["transcript"])
+    if "raw_provider_metadata" in value:
+        compact["raw_provider_metadata_omitted"] = True
+    return compact
+
+
+def _compact_audio_batch_metadata(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    sources = value.get("sources")
+    if isinstance(sources, list):
+        remaining = DB_METADATA_AUDIO_SEGMENT_LIMIT
+        compact_sources: list[Any] = []
+        for source in sources:
+            if not isinstance(source, dict):
+                compact_sources.append(source)
+                continue
+            next_source = _compact_transcript_payload(source, max_segments=max(0, remaining))
+            compact_sources.append(next_source)
+            remaining -= min(len(source.get("segments") or []), max(0, remaining))
+        compact["sources"] = compact_sources
+        source_segment_count = sum(
+            len(source.get("segments") or [])
+            for source in sources
+            if isinstance(source, dict)
+        )
+        if source_segment_count > DB_METADATA_AUDIO_SEGMENT_LIMIT:
+            compact["segments_truncated"] = True
+            compact["db_segment_limit"] = DB_METADATA_AUDIO_SEGMENT_LIMIT
+    return compact
+
+
+def _compact_video_metadata(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    if "transcript" in compact:
+        compact["transcript"] = _compact_transcript_payload(compact["transcript"])
+    frames = compact.get("frames")
+    if isinstance(frames, list) and len(frames) > DB_METADATA_VIDEO_FRAME_LIMIT:
+        compact["frames"] = frames[:DB_METADATA_VIDEO_FRAME_LIMIT]
+        compact["frame_count"] = len(frames)
+        compact["frames_truncated"] = True
+        compact["db_frame_limit"] = DB_METADATA_VIDEO_FRAME_LIMIT
+    return compact
+
+
+def _compact_transcript_payload(value: Any, *, max_segments: int = DB_METADATA_AUDIO_SEGMENT_LIMIT) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    segments = value.get("segments")
+    if isinstance(segments, list):
+        compact_segments = [
+            _compact_audio_segment_payload(segment)
+            for segment in segments[:max_segments]
+        ]
+        compact["segments"] = compact_segments
+        compact["segment_count"] = len(segments)
+        if len(segments) > max_segments:
+            compact["segments_truncated"] = True
+            compact["db_segment_limit"] = max_segments
+    return compact
+
+
+def _compact_audio_segment_payload(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    words = value.get("words")
+    if isinstance(words, list) and len(words) > DB_METADATA_WORDS_PER_SEGMENT_LIMIT:
+        compact["words"] = words[:DB_METADATA_WORDS_PER_SEGMENT_LIMIT]
+        compact["word_count"] = len(words)
+        compact["words_truncated"] = True
+        compact["db_words_per_segment_limit"] = DB_METADATA_WORDS_PER_SEGMENT_LIMIT
+    return compact
 
 
 # Registry of thread ID to job ID (ThreadExecutorBackend only).
@@ -1358,25 +1476,7 @@ class TaskManager:
 
         result_text = result.get("text", "")
         metadata = result.get("metadata") or {}
-        # Only persist the image-understanding sidecar (a small list); drop any
-        # large/binary metadata the renderer may have returned.
-        result_metadata = {
-            "image_understanding": metadata.get("image_understanding") or [],
-        }
-        if metadata.get("engine"):
-            result_metadata["engine"] = metadata["engine"]
-        if metadata.get("probe_result"):
-            result_metadata["probe_result"] = metadata["probe_result"]
-        if metadata.get("mixed_engine_segments"):
-            result_metadata["mixed_engine_segments"] = metadata["mixed_engine_segments"]
-        if metadata.get("audio"):
-            result_metadata["audio"] = metadata["audio"]
-        if metadata.get("audio_batch"):
-            result_metadata["audio_batch"] = metadata["audio_batch"]
-        if metadata.get("video"):
-            result_metadata["video"] = metadata["video"]
-        if metadata.get("chunking"):
-            result_metadata["chunking"] = metadata["chunking"]
+        result_metadata = _result_metadata_for_db(metadata)
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
         requested_output_format = config.get("output_format", "markdown")
         output_format = _actual_output_format_for_finalize(result, requested_output_format)

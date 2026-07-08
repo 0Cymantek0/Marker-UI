@@ -12,6 +12,9 @@ import pytest
 import pytest_asyncio
 
 from app.services.task_manager import (
+    DB_METADATA_AUDIO_SEGMENT_LIMIT,
+    DB_METADATA_VIDEO_FRAME_LIMIT,
+    DB_METADATA_WORDS_PER_SEGMENT_LIMIT,
     TaskManager,
     _actual_output_format_for_finalize,
     _formats_payload_for_finalize,
@@ -37,6 +40,29 @@ def active_event_loop():
             asyncio.set_event_loop(prev_loop)
         else:
             asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+def _segment_payload(index: int, *, word_count: int) -> dict:
+    return {
+        "segment_id": f"seg_{index:04d}",
+        "source_id": "long_audio",
+        "source_label": "long-audio.mp4",
+        "start_ms": index * 1000,
+        "end_ms": index * 1000 + 900,
+        "speaker": "speaker_0",
+        "text": f"segment {index}",
+        "confidence": 0.95,
+        "warnings": [],
+        "words": [
+            {
+                "word": f"word_{word_index}",
+                "start": word_index / 10,
+                "end": (word_index + 1) / 10,
+                "confidence": 0.9,
+            }
+            for word_index in range(word_count)
+        ],
+    }
 
 
 @pytest.fixture
@@ -779,6 +805,119 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
         assert asset_entry["name"] == "sheets/Sheet1.csv"
         assert asset_entry["media_type"] == "text/csv"
         assert Path(asset_entry["path"]).read_bytes() == b"col\nval\n"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_bounds_large_audio_video_metadata_in_db(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Long media metadata stays in the manifest; DB status metadata is bounded."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'media-metadata.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "66666666-6666-4666-8666-666666666666"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="long-audio.mp4",
+            original_name="long-audio.mp4",
+            status="pending",
+            input_format="mp4",
+            output_format="markdown",
+            config_json=json.dumps(
+                {
+                    "output_format": "markdown",
+                    "original_name": "long-audio.mp4",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    segments = [_segment_payload(index, word_count=DB_METADATA_WORDS_PER_SEGMENT_LIMIT + 5) for index in range(DB_METADATA_AUDIO_SEGMENT_LIMIT + 7)]
+    audio = {
+        "transcript": {
+            "source_id": "long_audio",
+            "source_label": "long-audio.mp4",
+            "provider": "local_faster_whisper",
+            "segments": segments,
+        },
+        "raw_provider_metadata": {"segments": segments, "verbose": "x" * 4096},
+        "quality": {"review_required": False},
+    }
+    audio_batch = {
+        "source_count": 2,
+        "segment_count": len(segments) * 2,
+        "sources": [
+            {"source_id": "a", "source_label": "a.wav", "segments": segments},
+            {"source_id": "b", "source_label": "b.wav", "segments": segments},
+        ],
+    }
+    video = {
+        "transcript": {"segments": segments},
+        "frames": [{"timestamp_ms": index * 1000, "ocr_text": f"frame {index}"} for index in range(DB_METADATA_VIDEO_FRAME_LIMIT + 3)],
+        "provenance": {"audio": True, "frames": True},
+    }
+
+    tm = TaskManager(max_workers=1)
+    try:
+        await tm._finalize_job(
+            job_id,
+            {
+                "text": "# Media\n\nbody",
+                "extension": "md",
+                "images": {},
+                "metadata": {"audio": audio, "audio_batch": audio_batch, "video": video},
+            },
+            {
+                "output_format": "markdown",
+                "original_name": "long-audio.mp4",
+                "output_dir": str(tmp_path / "out"),
+            },
+        )
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        metadata = json.loads(row.result_metadata_json)
+        db_audio = metadata["audio"]
+        db_segments = db_audio["transcript"]["segments"]
+        assert len(db_segments) == DB_METADATA_AUDIO_SEGMENT_LIMIT
+        assert db_audio["transcript"]["segment_count"] == len(segments)
+        assert db_audio["transcript"]["segments_truncated"] is True
+        assert len(db_segments[0]["words"]) == DB_METADATA_WORDS_PER_SEGMENT_LIMIT
+        assert db_segments[0]["word_count"] == DB_METADATA_WORDS_PER_SEGMENT_LIMIT + 5
+        assert db_segments[0]["words_truncated"] is True
+        assert db_audio["raw_provider_metadata_omitted"] is True
+        assert "raw_provider_metadata" not in db_audio
+        assert metadata["audio_batch"]["segments_truncated"] is True
+        assert len(metadata["audio_batch"]["sources"][0]["segments"]) == DB_METADATA_AUDIO_SEGMENT_LIMIT
+        assert metadata["audio_batch"]["sources"][1]["segments"] == []
+        assert len(metadata["video"]["frames"]) == DB_METADATA_VIDEO_FRAME_LIMIT
+        assert metadata["video"]["frames_truncated"] is True
+        manifest = json.loads(Path(metadata["manifest_path"]).read_text(encoding="utf-8"))
+
+    manifest_audio = manifest["conversion"]["metadata"]["audio"]
+    assert len(manifest_audio["transcript"]["segments"]) == len(segments)
+    assert "raw_provider_metadata" in manifest_audio
+    assert len(manifest["conversion"]["metadata"]["video"]["frames"]) == DB_METADATA_VIDEO_FRAME_LIMIT + 3
 
     await engine.dispose()
 
