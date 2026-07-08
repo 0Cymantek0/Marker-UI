@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import type { ConversionConfig } from '@/lib/api'
 import '@testing-library/jest-dom'
@@ -283,6 +283,19 @@ vi.mock('@/lib/api', async (importOriginal) => {
   }
 })
 
+async function settleReactUpdates() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+async function renderConvertPage() {
+  const result = render(<ConvertPage />)
+  await settleReactUpdates()
+  return result
+}
+
 describe('ConvertPage component', () => {
   beforeEach(() => {
     mockNavigate.mockClear()
@@ -295,7 +308,7 @@ describe('ConvertPage component', () => {
     mockGetLLMProviders.mockClear()
   })
 
-  it('renders initial state with empty queue and console closed by default', () => {
+  it('renders initial state with empty queue and console closed by default', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [],
       start: vi.fn(),
@@ -308,7 +321,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // Check headers and uploads
     expect(screen.getByRole('heading', { name: 'Convert Document' })).toBeInTheDocument()
@@ -348,7 +361,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select PDF'))
 
     expect(await screen.findByText('Auto: backend will probe on upload')).toBeInTheDocument()
@@ -371,7 +384,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select PDF'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -380,7 +393,8 @@ describe('ConvertPage component', () => {
     await waitFor(() => expect(convertButton).not.toBeDisabled())
     fireEvent.click(convertButton)
 
-    expect(start).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1))
+    await settleReactUpdates()
     const call = start.mock.calls[0]!
     expect(call[0]).toHaveLength(1)
     expect(call[4].fileKeys).toHaveLength(1)
@@ -414,7 +428,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select TSV'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -448,7 +462,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select XLS'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -482,7 +496,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select MSG'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -516,7 +530,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select WAV'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -550,14 +564,14 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select MP4'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
     expect(within(select).getByRole('option', { name: 'Local Video Timeline' })).toHaveValue('video')
   })
 
-  it('renders queue items and overall progress without crash', () => {
+  it('renders queue items and overall progress without crash', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [
         {
@@ -585,7 +599,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // Queue list should show 1 job
     expect(screen.getByText('Conversion Queue (1)')).toBeInTheDocument()
@@ -637,7 +651,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // The clean heading renders (ReactMarkdown turns it into an <h1>).
     expect(
@@ -679,7 +693,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     const image = await screen.findByAltText('diagram')
     expect(image).toHaveAttribute(
@@ -692,7 +706,7 @@ describe('ConvertPage component', () => {
     )
   })
 
-  it('renders failed job and displays failure status without download button', () => {
+  it('renders failed job and displays failure status without download button', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [
         {
@@ -719,14 +733,14 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     expect(screen.getByText('failed_doc.pdf')).toBeInTheDocument()
     expect(screen.getByText('Conversion failed')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument()
   })
 
-  it('toggles console visibility when clicking the console buttons', () => {
+  it('toggles console visibility when clicking the console buttons', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [],
       start: vi.fn(),
@@ -739,7 +753,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // Initially console is closed
     expect(screen.queryByTestId('terminal-log')).not.toBeInTheDocument()
@@ -764,7 +778,7 @@ describe('ConvertPage component', () => {
       localStorage.clear()
     })
 
-    it('loads config from localStorage if present', () => {
+    it('loads config from localStorage if present', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [],
         start: vi.fn(),
@@ -785,7 +799,7 @@ describe('ConvertPage component', () => {
       }
       localStorage.setItem('marker-conversion-config', JSON.stringify(customConfig))
 
-      render(<ConvertPage />)
+      await renderConvertPage()
 
       expect(screen.getByTestId('config-format')).toHaveTextContent('json')
       expect(screen.getByTestId('config-ocr')).toHaveTextContent('ocr-enabled')
@@ -806,7 +820,7 @@ describe('ConvertPage component', () => {
 
       localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['json'] }))
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock select TSV'))
 
       await waitFor(() => {
@@ -836,7 +850,7 @@ describe('ConvertPage component', () => {
 
       localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['html'] }))
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock select TSV'))
 
       await waitFor(() => {
@@ -875,7 +889,7 @@ describe('ConvertPage component', () => {
 
       localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['html'] }))
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock local PDF'))
 
       await waitFor(() => {
@@ -899,7 +913,7 @@ describe('ConvertPage component', () => {
 
       localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['chunks'] }))
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock select TSV'))
 
       await waitFor(() => {
@@ -935,7 +949,7 @@ describe('ConvertPage component', () => {
         preliminary: true,
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock select DOCX'))
 
       const control = await screen.findByLabelText('Engine for file 1')
@@ -987,7 +1001,7 @@ describe('ConvertPage component', () => {
         preliminary: true,
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock select DOCX'))
 
       const control = await screen.findByLabelText('Engine for file 1')
@@ -1007,7 +1021,7 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock select PDF and TSV'))
 
       await waitFor(() => {
@@ -1035,7 +1049,7 @@ describe('ConvertPage component', () => {
       })
       localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['json'] }))
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByText('Mock select DOCX'))
 
       await waitFor(() => {
@@ -1044,7 +1058,7 @@ describe('ConvertPage component', () => {
       })
     })
 
-    it('saves config to localStorage when changes are applied', () => {
+    it('saves config to localStorage when changes are applied', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [],
         start: vi.fn(),
@@ -1057,7 +1071,7 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
 
       // Verify initial load saves the default config
       expect(localStorage.getItem('marker-conversion-config')).not.toBeNull()
@@ -1092,7 +1106,7 @@ describe('ConvertPage component', () => {
       ...overrides,
     })
 
-    it('shows a Switch Model button on a running LLM job', () => {
+    it('shows a Switch Model button on a running LLM job', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [runningLLMJob()],
         start: vi.fn(),
@@ -1105,7 +1119,7 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(screen.getByRole('button', { name: /Switch Model/i })).toBeInTheDocument()
     })
 
@@ -1122,7 +1136,7 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByRole('button', { name: /Switch Model/i }))
 
       const dialog = await screen.findByRole('dialog')
@@ -1144,12 +1158,12 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(await screen.findByRole('dialog')).toBeInTheDocument()
       expect(screen.getByText(/Hitting Rate Limits/i)).toBeInTheDocument()
     })
 
-    it('does not auto-surface once the prompt was dismissed', () => {
+    it('does not auto-surface once the prompt was dismissed', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [runningLLMJob({ rateLimited: true, swapPromptDismissed: true })],
         start: vi.fn(),
@@ -1162,11 +1176,11 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
-    it('shows a rate-limited banner on a running job that is rateLimited', () => {
+    it('shows a rate-limited banner on a running job that is rateLimited', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [runningLLMJob({ rateLimited: true, swapPromptDismissed: true })],
         start: vi.fn(),
@@ -1180,11 +1194,11 @@ describe('ConvertPage component', () => {
         retryJob: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(screen.getByText(/Rate-limited — swap model or retry/i)).toBeInTheDocument()
     })
 
-    it('shows a partial-failure banner on a completed job with partialFailure', () => {
+    it('shows a partial-failure banner on a completed job with partialFailure', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [
           runningLLMJob({
@@ -1206,13 +1220,13 @@ describe('ConvertPage component', () => {
         retryJob: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(screen.getByText(/Some LLM steps skipped/i)).toBeInTheDocument()
-      // Both the banner and the action button carry "Retry" — assert at least one.
+      // Both the banner and the action button carry "Retry"; assert at least one.
       expect(screen.getAllByRole('button', { name: /Retry/i }).length).toBeGreaterThan(0)
     })
 
-    it('does not show the rate-limited banner when rateLimited is false', () => {
+    it('does not show the rate-limited banner when rateLimited is false', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [runningLLMJob({ rateLimited: false })],
         start: vi.fn(),
@@ -1226,7 +1240,7 @@ describe('ConvertPage component', () => {
         retryJob: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(screen.queryByText(/Rate-limited — swap model or retry/i)).not.toBeInTheDocument()
     })
   })

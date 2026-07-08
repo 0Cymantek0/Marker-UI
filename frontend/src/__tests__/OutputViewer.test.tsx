@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { OutputViewer } from '@/components/features/OutputViewer'
+
+async function settleReactUpdates() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
 
 describe('OutputViewer component', () => {
   it('renders the empty state when content is null', () => {
@@ -186,8 +193,8 @@ describe('OutputViewer component', () => {
     expect(screen.queryByRole('button', { name: /chunks/i })).not.toBeInTheDocument()
   })
 
-  it('allows native files to regenerate derived chunks but not marker-only html/json', () => {
-    const onRegenerate = vi.fn()
+  it('allows native files to regenerate derived chunks but not marker-only html/json', async () => {
+    const onRegenerate = vi.fn().mockResolvedValue(undefined)
     render(
       <OutputViewer
         content="# Hello"
@@ -204,6 +211,7 @@ describe('OutputViewer component', () => {
     expect(screen.queryByRole('button', { name: /json/i })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /chunks/i }))
+    await settleReactUpdates()
     expect(onRegenerate).toHaveBeenCalledWith('chunks')
   })
 
@@ -241,8 +249,8 @@ describe('OutputViewer component', () => {
     expect(screen.queryByRole('button', { name: /chunks/i })).not.toBeInTheDocument()
   })
 
-  it('calls onRegenerate when a non-cached format tab is clicked', () => {
-    const onRegenerate = vi.fn()
+  it('calls onRegenerate when a non-cached format tab is clicked', async () => {
+    const onRegenerate = vi.fn().mockResolvedValue(undefined)
     render(
       <OutputViewer
         content="# Hello"
@@ -256,11 +264,12 @@ describe('OutputViewer component', () => {
 
     // Click HTML tab
     fireEvent.click(screen.getByRole('button', { name: /html/i }))
+    await settleReactUpdates()
     expect(onRegenerate).toHaveBeenCalledWith('html')
   })
 
-  it('calls onRegenerate when the Chunks tab is clicked', () => {
-    const onRegenerate = vi.fn()
+  it('calls onRegenerate when the Chunks tab is clicked', async () => {
+    const onRegenerate = vi.fn().mockResolvedValue(undefined)
     render(
       <OutputViewer
         content="# Hello"
@@ -273,6 +282,7 @@ describe('OutputViewer component', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /chunks/i }))
+    await settleReactUpdates()
     expect(onRegenerate).toHaveBeenCalledWith('chunks')
   })
 
