@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { HistoryPage } from '@/pages/HistoryPage'
 import * as api from '@/lib/api'
 import '@testing-library/jest-dom'
@@ -138,5 +138,18 @@ describe('HistoryPage component delete confirmation flow', () => {
     createElement.mockRestore()
     createObjectURL.mockRestore()
     revokeObjectURL.mockRestore()
+  })
+
+  it('sends pending status when queued filter is selected', async () => {
+    render(<HistoryPage />)
+
+    await screen.findByText('test_file.pdf')
+
+    fireEvent.click(screen.getByRole('button', { name: /All Statuses/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Queued' }))
+
+    await waitFor(() => {
+      expect(api.getHistory).toHaveBeenLastCalledWith(1, 10, undefined, 'pending', 'all')
+    })
   })
 })
