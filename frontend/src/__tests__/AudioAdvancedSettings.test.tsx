@@ -193,7 +193,7 @@ describe('AudioAdvancedSettings', () => {
     expect(screen.getByText('Strength')).toBeInTheDocument()
   })
 
-  it('sets minimal strength when enabling transcript wording improvement', async () => {
+  it('sets minimal strength when enabling transcript wording cleanup', async () => {
     const onChange = vi.fn()
     render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
 
@@ -203,10 +203,30 @@ describe('AudioAdvancedSettings', () => {
 
     fireEvent.click(screen.getByText('Show Advanced Controls'))
     fireEvent.click(screen.getByText('Enhancement & Correction'))
-    fireEvent.click(screen.getByRole('button', { name: /improve transcript wording/i }))
+    fireEvent.click(screen.getByRole('button', { name: /clean transcript wording/i }))
 
     expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_enabled', true)
     expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_strength', 1)
+  })
+
+  it('describes enhancement as local source-bound cleanup, not unrestricted rewriting', async () => {
+    const onChange = vi.fn()
+    const enhancedConfig: ConversionConfig = {
+      ...baseConfig,
+      audio_text_enhancement_enabled: true,
+      audio_text_enhancement_strength: 5,
+    }
+    render(<AudioAdvancedSettings config={enhancedConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Enhancement & Correction'))
+
+    expect(screen.getByText(/Most aggressive local cleanup; no new claims/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Full rewrite/i)).not.toBeInTheDocument()
   })
 
   it('disables provider comparison because the benchmark runner is not shipped', async () => {

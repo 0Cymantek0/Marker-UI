@@ -36,11 +36,11 @@ interface AudioAdvancedSettingsProps {
 
 const ENHANCEMENT_LABELS: Record<number, { label: string; desc: string }> = {
   0: { label: 'Off', desc: 'Raw STT output. Best for legal/audit.' },
-  1: { label: 'Minimal', desc: 'Punctuation, casing, spacing only.' },
-  2: { label: 'Conservative', desc: 'Fix likely ASR errors with vocabulary.' },
-  3: { label: 'Balanced', desc: 'Readable notes, filler cleanup, paragraphs.' },
-  4: { label: 'Strong', desc: 'Polished written notes with source refs.' },
-  5: { label: 'Editorial', desc: 'Full rewrite with strict evidence binding.' },
+  1: { label: 'Minimal', desc: 'Punctuation, casing, and spacing cleanup only.' },
+  2: { label: 'Vocabulary', desc: 'Vocabulary-aware cleanup for likely ASR slips.' },
+  3: { label: 'Structured', desc: 'Readable source-bound notes and paragraphs.' },
+  4: { label: 'Polished', desc: 'More polished notes while preserving source refs.' },
+  5: { label: 'Max Local', desc: 'Most aggressive local cleanup; no new claims.' },
 }
 
 const OUTPUT_STYLE_OPTIONS: { value: AudioOutputMode; label: string; desc: string }[] = [
@@ -372,7 +372,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             <div className="space-y-4">
               <div className="space-y-2">
                 <ToggleChip
-                  label="Improve Transcript Wording"
+                  label="Clean Transcript Wording"
                   checked={config.audio_text_enhancement_enabled ?? false}
                   onChange={(v) => {
                     onChange('audio_text_enhancement_enabled', v)
@@ -405,7 +405,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                     </p>
                     {(config.audio_text_enhancement_strength ?? 0) >= 4 && (
                       <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug">
-                        Higher levels may paraphrase speech. Raw transcript and source refs preserved for audit.
+                        Higher levels may rephrase for readability. Raw transcript and source refs remain preserved for audit.
                       </div>
                     )}
                   </div>
