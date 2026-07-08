@@ -391,6 +391,10 @@ class TaskManager:
         # job_id -> backend that owns its Future, so cleanup/cancel works for
         # both marker and CPU pools.
         self._job_backends: dict[str, ExecutorBackend] = {}
+        # ThreadPoolExecutor cannot kill a running Python thread. This flag
+        # makes cancellation sticky so a worker that finishes later cannot
+        # overwrite a cancelled DB row with completed/failed.
+        self._cancel_requested: set[str] = set()
         self._durable_queue = durable_queue
         # Lease TTL for durable jobs. Long enough that a healthy conversion is
         # never wrongly flagged as stuck, short enough that a crashed worker is
@@ -862,8 +866,12 @@ class TaskManager:
             status = "completed" if progress >= 100 else "pending"
         elif future is not None:
             if future.done():
-                exc = future.exception()
-                status = "failed" if exc else "completed"
+                if future.cancelled() is True:
+                    status = "cancelled"
+                    exc = None
+                else:
+                    exc = future.exception()
+                    status = "failed" if exc else "completed"
             else:
                 status = "processing"
         else:
@@ -936,20 +944,28 @@ class TaskManager:
         cancelled = False
 
         if future and not future.done():
-            cancelled = future.cancel()
-            self._progress.pop(job_id, None)
-            self._tasks.pop(job_id, None)
-            backend = self._job_backends.pop(job_id, None)
-            if isinstance(backend, ThreadExecutorBackend):
-                backend.pop(job_id)
+            self._cancel_requested.add(job_id)
+            self._job_status_text[job_id] = "Cancellation requested..."
+            was_started = self._job_started.get(job_id, False)
+            future_cancelled = future.cancel()
+            cancelled = True
+            if future_cancelled and not was_started:
+                self._progress.pop(job_id, None)
+                self._tasks.pop(job_id, None)
+                backend = self._job_backends.pop(job_id, None)
+                if isinstance(backend, ThreadExecutorBackend):
+                    backend.pop(job_id)
+                self._cancel_requested.discard(job_id)
             self._job_has_real_progress.pop(job_id, None)
-            self._job_started.pop(job_id, None)
-            self._job_queued_message.pop(job_id, None)
+            if future_cancelled and not was_started:
+                self._job_started.pop(job_id, None)
+                self._job_queued_message.pop(job_id, None)
             smooth = self._smooth_tasks.pop(job_id, None)
             if smooth is not None:
                 smooth.cancel()
         elif proc_state is not None:
             cancelled = True
+            self._cancel_requested.add(job_id)
             with self._lock:
                 self._proc_jobs.pop(job_id, None)
                 self._proc_configs.pop(job_id, None)
@@ -966,6 +982,7 @@ class TaskManager:
             if pid is not None:
                 self._kill_pid(pid)
             await self._update_job_status(job_id, "cancelled")
+            await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
         return cancelled
 
     def shutdown(self, wait: bool = False) -> None:
@@ -1111,6 +1128,19 @@ class TaskManager:
             else:
                 result = conversion_service.convert_file(filepath, dict(config))
 
+            if job_id in self._cancel_requested:
+                self._progress[job_id] = 0
+                self._job_status_text[job_id] = "Conversion cancelled."
+                self._run_async(self._update_job_status(job_id, "cancelled"))
+                self._run_async(
+                    self._mark_job_terminal_durable(
+                        job_id,
+                        status="cancelled",
+                        message="Cancelled by user",
+                    )
+                )
+                return {"cancelled": True}
+
             self._progress[job_id] = 90
             self._job_status_text[job_id] = "Finalizing results..."
 
@@ -1128,10 +1158,26 @@ class TaskManager:
                     )
                 finally:
                     loop.close()
+            if job_id in self._cancel_requested:
+                self._progress[job_id] = 0
+                self._job_status_text[job_id] = "Conversion cancelled."
+                return {"cancelled": True}
             self._progress[job_id] = 100
             self._job_status_text[job_id] = "Conversion completed successfully."
             return result
         except Exception as exc:
+            if job_id in self._cancel_requested:
+                self._progress[job_id] = 0
+                self._job_status_text[job_id] = "Conversion cancelled."
+                self._run_async(self._update_job_status(job_id, "cancelled"))
+                self._run_async(
+                    self._mark_job_terminal_durable(
+                        job_id,
+                        status="cancelled",
+                        message="Cancelled by user",
+                    )
+                )
+                return {"cancelled": True}
             logger.exception("Conversion failed for job %s", job_id)
             self._progress[job_id] = 0
             self._job_status_text[job_id] = f"Conversion failed: {exc}"
@@ -1150,6 +1196,7 @@ class TaskManager:
         finally:
             active_conversion_threads.pop(thread_ident, None)
             self._pids.pop(job_id, None)
+            self._cancel_requested.discard(job_id)
             # Drop any live model hot-swap for this job's provider so it never
             # bleeds into an unrelated later job.
             provider_id = config.get("llm_provider")
@@ -1268,6 +1315,12 @@ class TaskManager:
         config: dict[str, Any],
         formats_payload: dict[str, dict[str, Any]] | None = None,
     ) -> None:
+        if job_id in self._cancel_requested:
+            logger.info("Job %s was cancelled. Skipping finalization.", job_id)
+            await self._update_job_status(job_id, "cancelled")
+            await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
+            return
+
         # Check if job still exists and is not cancelled. Tolerate the
         # commit-before-submit race: the request transaction may still be
         # flushing when a fast converter reaches us in a worker thread.
@@ -1341,7 +1394,7 @@ class TaskManager:
         async with async_session_factory() as session:
             from sqlalchemy import update
 
-            await session.execute(
+            update_result = await session.execute(
                 update(ConversionJob)
                 .where(ConversionJob.id == job_id)
                 .where(ConversionJob.status != "cancelled")
@@ -1361,9 +1414,18 @@ class TaskManager:
                 )
             )
             await session.commit()
+            if (update_result.rowcount or 0) < 1:
+                logger.info("Job %s was cancelled during finalization. Skipping completed terminal mark.", job_id)
+                return
         await self._mark_job_terminal_durable(job_id, status="completed")
 
     async def _fail_job(self, job_id: str, error_message: str) -> None:
+        if job_id in self._cancel_requested:
+            logger.info("Job %s was cancelled. Skipping failure recording.", job_id)
+            await self._update_job_status(job_id, "cancelled")
+            await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
+            return
+
         # Same commit-race tolerance as _finalize_job: a fast converter can
         # reach the failure path before the request session commits the row.
         status = await self._read_job_status_with_commit_race_retry(
@@ -1378,7 +1440,7 @@ class TaskManager:
         # Only mark as failed if not already in a terminal state (e.g. cancelled)
         async with async_session_factory() as session:
             from sqlalchemy import update
-            await session.execute(
+            update_result = await session.execute(
                 update(ConversionJob)
                 .where(ConversionJob.id == job_id)
                 .where(ConversionJob.status != "cancelled")
@@ -1393,5 +1455,8 @@ class TaskManager:
                 )
             )
             await session.commit()
+            if (update_result.rowcount or 0) < 1:
+                logger.info("Job %s was cancelled during failure recording. Skipping failed terminal mark.", job_id)
+                return
         await self._mark_job_terminal_durable(job_id, status="failed", message=error_message)
 

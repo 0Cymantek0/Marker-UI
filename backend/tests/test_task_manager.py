@@ -813,6 +813,74 @@ async def test_finalize_job_relabels_markdown_only_result_as_markdown(
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_finalize_job_honors_in_memory_cancel_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """A running thread that finishes after cancel must not complete the job."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'cancel-finalize.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "55555555-5555-4555-8555-555555555555"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="cancel.pdf",
+            original_name="cancel.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=42,
+            config_json=json.dumps(
+                {
+                    "output_format": "markdown",
+                    "original_name": "cancel.pdf",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    tm = TaskManager(max_workers=1)
+    tm._cancel_requested.add(job_id)
+    try:
+        await tm._finalize_job(
+            job_id,
+            {"text": "# Should not persist", "extension": "md", "images": {}, "metadata": {}},
+            {
+                "output_format": "markdown",
+                "original_name": "cancel.pdf",
+                "output_dir": str(tmp_path / "out"),
+            },
+        )
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row.status == "cancelled"
+        assert row.result_text is None
+        assert row.result_path is None
+        assert row.progress == 42
+    assert not (tmp_path / "out").exists()
+
+    await engine.dispose()
+
+
 # ---------------------------------------------------------------------------
 # MUI-003: commit-before-submit race condition
 #
