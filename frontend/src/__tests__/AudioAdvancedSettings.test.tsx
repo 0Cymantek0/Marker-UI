@@ -130,6 +130,39 @@ describe('AudioAdvancedSettings', () => {
     expect(screen.getByText('Speakers')).toBeInTheDocument()
   })
 
+  it('lets users map anonymous speaker labels to confirmed names', async () => {
+    let config: ConversionConfig = {
+      ...baseConfig,
+      audio_max_speakers: 3,
+      audio_speaker_aliases: { speaker_2: 'Charlie' },
+    }
+    const onChange = vi.fn((key: keyof ConversionConfig, value: unknown) => {
+      config = { ...config, [key]: value }
+      rerender(<AudioAdvancedSettings config={config} onChange={onChange} />)
+    })
+    const { rerender } = render(<AudioAdvancedSettings config={config} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Speakers'))
+
+    expect(screen.getByText('Speaker Names')).toBeInTheDocument()
+    expect(screen.getByLabelText('speaker_2 name')).toHaveValue('Charlie')
+
+    fireEvent.change(screen.getByLabelText('speaker_0 name'), { target: { value: ' Alice ' } })
+    expect(onChange).toHaveBeenCalledWith('audio_speaker_aliases', {
+      speaker_0: 'Alice',
+      speaker_2: 'Charlie',
+    })
+    expect(screen.getByLabelText('speaker_0 name')).toHaveValue('Alice')
+
+    fireEvent.click(screen.getByRole('button', { name: /remove speaker_2 alias/i }))
+    expect(onChange).toHaveBeenCalledWith('audio_speaker_aliases', { speaker_0: 'Alice' })
+  })
+
   it('shows deferred provider warning when saved cloud provider is selected', async () => {
     const onChange = vi.fn()
     const cloudConfig: ConversionConfig = {

@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Cloud,
   HardDrive,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -62,6 +64,9 @@ const STRUCTURAL_MODE_OPTIONS: { value: AudioStructuralMode; label: string }[] =
   { value: 'action_decision_log', label: 'Action + Decision Log' },
   { value: 'timeline', label: 'Timeline' },
 ]
+
+const DEFAULT_SPEAKER_ALIAS_ROWS = 2
+const MAX_SPEAKER_ALIAS_ROWS = 12
 
 export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvancedSettingsProps) {
   const [capabilities, setCapabilities] = useState<AudioProviderCapability[]>([])
@@ -313,6 +318,13 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 </div>
               </div>
             )}
+            <SpeakerAliasEditor
+              aliases={config.audio_speaker_aliases ?? {}}
+              minSpeakers={config.audio_min_speakers}
+              maxSpeakers={config.audio_max_speakers}
+              disabled={disabled}
+              onChange={(aliases) => onChange('audio_speaker_aliases', aliases)}
+            />
             <p className="text-xs text-muted-foreground/70 mt-2 leading-snug">
               Speaker labels are anonymous by default. Only labels you explicitly map to names are renamed.
             </p>
@@ -648,6 +660,140 @@ function ToggleChip({
 }
 
 // ─── Warning Badges ────────────────────────────────────────────────
+
+function SpeakerAliasEditor({
+  aliases,
+  minSpeakers,
+  maxSpeakers,
+  disabled,
+  onChange,
+}: {
+  aliases: Record<string, string>
+  minSpeakers?: number
+  maxSpeakers?: number
+  disabled?: boolean
+  onChange: (aliases: Record<string, string>) => void
+}) {
+  const [extraRows, setExtraRows] = useState(0)
+  const labels = buildSpeakerAliasLabels(aliases, minSpeakers, maxSpeakers, extraRows)
+
+  const updateAlias = (label: string, value: string) => {
+    const next = { ...aliases }
+    const trimmed = value.trim()
+    if (trimmed) {
+      next[label] = trimmed
+    } else {
+      delete next[label]
+    }
+    onChange(next)
+  }
+
+  const removeAlias = (label: string) => {
+    const next = { ...aliases }
+    delete next[label]
+    onChange(next)
+  }
+
+  const canAdd = labels.length < MAX_SPEAKER_ALIAS_ROWS
+
+  return (
+    <div className="mt-4 space-y-2">
+      <SectionLabel
+        label="Speaker Names"
+        help="Optional local aliases. speaker_0 remains anonymous unless you enter a name."
+      />
+      <div className="space-y-2">
+        {labels.map((label) => (
+          <div key={label} className="grid grid-cols-[minmax(6.5rem,0.8fr)_minmax(0,1.2fr)_2rem] gap-2 items-center">
+            <Input
+              value={label}
+              readOnly
+              disabled={disabled}
+              aria-label={`${label} label`}
+              className="bg-background/50 h-9 text-xs font-mono"
+            />
+            <Input
+              value={aliases[label] ?? ''}
+              onChange={(e) => updateAlias(label, e.target.value)}
+              placeholder="confirmed name"
+              disabled={disabled}
+              aria-label={`${label} name`}
+              className="bg-background/50 h-9 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => removeAlias(label)}
+              disabled={disabled || !aliases[label]}
+              aria-label={`Remove ${label} alias`}
+              className={cn(
+                'inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+                'hover:bg-muted/30 hover:text-foreground',
+                (disabled || !aliases[label]) && 'opacity-40 pointer-events-none'
+              )}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => setExtraRows((count) => Math.min(count + 1, MAX_SPEAKER_ALIAS_ROWS - labels.length))}
+        disabled={disabled || !canAdd}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground',
+          'hover:bg-muted/30 hover:text-foreground',
+          (disabled || !canAdd) && 'opacity-50 pointer-events-none'
+        )}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add Speaker Label
+      </button>
+    </div>
+  )
+}
+
+function buildSpeakerAliasLabels(
+  aliases: Record<string, string>,
+  minSpeakers?: number,
+  maxSpeakers?: number,
+  extraRows = 0,
+) {
+  const labels = new Set<string>()
+  for (let index = 0; index < DEFAULT_SPEAKER_ALIAS_ROWS; index += 1) {
+    labels.add(`speaker_${index}`)
+  }
+  Object.keys(aliases).forEach((label) => labels.add(label))
+
+  const requestedCount = Math.max(
+    DEFAULT_SPEAKER_ALIAS_ROWS,
+    minSpeakers ?? 0,
+    maxSpeakers ?? 0,
+    highestSpeakerIndex([...labels]) + 1,
+  )
+  const totalRows = Math.min(requestedCount + extraRows, MAX_SPEAKER_ALIAS_ROWS)
+  for (let index = 0; index < totalRows; index += 1) {
+    labels.add(`speaker_${index}`)
+  }
+
+  return [...labels].sort(compareSpeakerLabels).slice(0, MAX_SPEAKER_ALIAS_ROWS)
+}
+
+function highestSpeakerIndex(labels: string[]) {
+  return labels.reduce((max, label) => {
+    const match = /^speaker_(\d+)$/.exec(label)
+    return match ? Math.max(max, Number(match[1])) : max
+  }, -1)
+}
+
+function compareSpeakerLabels(left: string, right: string) {
+  const leftMatch = /^speaker_(\d+)$/.exec(left)
+  const rightMatch = /^speaker_(\d+)$/.exec(right)
+  if (leftMatch && rightMatch) return Number(leftMatch[1]) - Number(rightMatch[1])
+  if (leftMatch) return -1
+  if (rightMatch) return 1
+  return left.localeCompare(right)
+}
 
 function ProviderWarning({ message }: { message: string }) {
   return (
