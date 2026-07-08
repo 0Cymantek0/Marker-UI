@@ -510,7 +510,48 @@ async def test_delete_job_force_deletes_live_job(
     resp = await client.delete(f"/api/convert/{job_id}", params={"force": "true"})
 
     assert resp.status_code == 200
-    assert resp.json() == {"status": "deleted", "job_id": job_id}
+    assert resp.json()["status"] == "deleted"
+    assert resp.json()["job_id"] == job_id
+    assert resp.json()["files_removed"] == []
+    assert await db_session.get(ConversionJob, job_id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_job_removes_output_manifest_sidecar(
+    client: AsyncClient,
+    db_session,
+    tmp_path: Path,
+):
+    job_id = "rest-delete-with-manifest"
+    result_file = tmp_path / "rest-delete.md"
+    manifest_file = tmp_path / "rest-delete.marker.json"
+    result_file.write_text("# delete me", encoding="utf-8")
+    manifest_file.write_text("{}", encoding="utf-8")
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="done.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            result_path=str(result_file),
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.delete(f"/api/convert/{job_id}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "deleted"
+    assert {Path(path).name for path in body["files_removed"]} == {
+        "rest-delete.md",
+        "rest-delete.marker.json",
+    }
+    assert not result_file.exists()
+    assert not manifest_file.exists()
     assert await db_session.get(ConversionJob, job_id) is None
 
 

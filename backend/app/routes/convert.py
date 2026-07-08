@@ -1394,7 +1394,7 @@ async def delete_job(
     job_id: str,
     force: bool = Query(False, description="Explicitly cancel and delete a non-terminal live job."),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Delete a terminal conversion job, or force-delete a live job explicitly."""
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     result = await db.execute(stmt)
@@ -1413,24 +1413,21 @@ async def delete_job(
 
         await _app_state.task_manager.cancel_job(job_id)
 
-    # Clean up uploaded file
-    upload_path = UPLOAD_DIR / job.filename
-    if upload_path.exists():
-        upload_path.unlink()
-
-    # Clean up result file
-    if job.result_path:
-        result_path = Path(job.result_path)
-        if result_path.exists():
-            if result_path.is_dir():
-                import shutil
-                shutil.rmtree(result_path)
-            else:
-                result_path.unlink()
+    cleanup_paths = job_artifact_paths(job)
+    removed = remove_paths(cleanup_paths)
 
     await db.delete(job)
+    await record_audit_event(
+        db,
+        event_type="job.deleted",
+        surface="rest",
+        resource_type="job",
+        resource_id=job_id,
+        status="success",
+        payload={"force": force, "files_removed": removed},
+    )
 
-    return {"status": "deleted", "job_id": job_id}
+    return {"status": "deleted", "job_id": job_id, "files_removed": removed}
 
 
 @router.post("/{job_id}/purge-files")
