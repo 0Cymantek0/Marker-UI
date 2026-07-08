@@ -65,6 +65,7 @@ async def download_source_url(
                 require_allowlist=require_allowlist,
             )
             async with client.stream("GET", current_url) as response:
+                peer_ip = _assert_response_peer_safe(response, resolved_ips)
                 if response.status_code in {301, 302, 303, 307, 308}:
                     location = response.headers.get("location")
                     if not location:
@@ -88,6 +89,7 @@ async def download_source_url(
                             "url": _safe_source_url(current_url),
                             "redirect_index": redirect_index + 1,
                             "resolved_ips": resolved_ips,
+                            "peer_ip": peer_ip,
                         },
                     )
                     continue
@@ -130,7 +132,13 @@ async def download_source_url(
                 await _audit(
                     audit_hook,
                     "url_fetch.completed",
-                    {"url": safe_url, "bytes": total, "suffix": suffix, "resolved_ips": resolved_ips},
+                    {
+                        "url": safe_url,
+                        "bytes": total,
+                        "suffix": suffix,
+                        "resolved_ips": resolved_ips,
+                        "peer_ip": peer_ip,
+                    },
                 )
                 return DownloadedSource(original_name=original_name, suffix=suffix, safe_url=safe_url)
     raise SafeUrlFetchError("source_url exceeded redirect limit", category="blocked")
@@ -194,6 +202,54 @@ def extension_for_download(
     stem = Path(filename).stem or "download"
     safe_stem = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in stem)[:80] or "download"
     return f"{safe_stem}{suffix}", suffix
+
+
+def _assert_response_peer_safe(response: httpx.Response, resolved_ips: list[str]) -> str:
+    """Ensure the established peer matches the pre-vetted DNS answer.
+
+    httpx/httpcore exposes the active network stream after connection. Checking
+    it closes the DNS-rebinding gap where a host resolves safely during the
+    preflight check but connects to a private/local address during fetch.
+    """
+
+    peer_host = _response_peer_host(response)
+    if not peer_host:
+        raise SafeUrlFetchError("source_url peer address unavailable for safety check", category="unsafe")
+    try:
+        peer_ip = ipaddress.ip_address(peer_host)
+    except ValueError as exc:
+        raise SafeUrlFetchError("source_url connected to an invalid peer address", category="unsafe") from exc
+    if _is_blocked_ip(peer_ip):
+        raise SafeUrlFetchError("source_url connected to a private or local network address", category="unsafe")
+    allowed_ips = {ipaddress.ip_address(value) for value in resolved_ips}
+    if peer_ip not in allowed_ips:
+        raise SafeUrlFetchError(
+            "source_url peer address changed after DNS safety check",
+            category="unsafe",
+        )
+    return str(peer_ip)
+
+
+def _response_peer_host(response: httpx.Response) -> str | None:
+    stream = getattr(response, "extensions", {}).get("network_stream")
+    if stream is None or not hasattr(stream, "get_extra_info"):
+        return None
+    server_addr = stream.get_extra_info("server_addr")
+    if isinstance(server_addr, (tuple, list)) and server_addr:
+        return str(server_addr[0])
+    if isinstance(server_addr, str):
+        return server_addr
+    sock = stream.get_extra_info("socket")
+    if sock is not None and hasattr(sock, "getpeername"):
+        try:
+            peer = sock.getpeername()
+        except OSError:
+            return None
+        if isinstance(peer, (tuple, list)) and peer:
+            return str(peer[0])
+        if isinstance(peer, str):
+            return peer
+    return None
 
 
 def _filename_from_content_disposition(value: str | None) -> str | None:

@@ -126,6 +126,67 @@ async def test_download_source_url_writes_file_and_audits(monkeypatch, tmp_path:
     assert [event for event, _payload in events] == ["url_fetch.started", "url_fetch.completed"]
     assert events[0][1]["url"] == "https://example.com/doc.pdf"
     assert events[-1][1]["resolved_ips"] == ["93.184.216.34"]
+    assert events[-1][1]["peer_ip"] == "93.184.216.34"
+
+
+@pytest.mark.asyncio
+async def test_download_source_url_rejects_peer_ip_rebinding_to_private_network(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "app.services.safe_url_fetcher.socket.getaddrinfo",
+        lambda *args, **kwargs: [(0, 0, 0, "", ("93.184.216.34", 443))],
+    )
+    fake_client = _FakeClient(
+        [
+            _FakeResponse(
+                200,
+                {"content-type": "application/pdf"},
+                [b"%PDF"],
+                peer_ip="127.0.0.1",
+            ),
+        ]
+    )
+    monkeypatch.setattr("app.services.safe_url_fetcher.httpx.AsyncClient", lambda **kwargs: fake_client)
+
+    with pytest.raises(SafeUrlFetchError) as exc_info:
+        await download_source_url(
+            "https://example.com/doc.pdf",
+            tmp_path / "download",
+            allowed_extensions={".pdf"},
+        )
+
+    assert exc_info.value.category == "unsafe"
+    assert "private or local network" in exc_info.value.detail
+    assert not (tmp_path / "download").exists()
+
+
+@pytest.mark.asyncio
+async def test_download_source_url_rejects_peer_ip_not_in_dns_precheck(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "app.services.safe_url_fetcher.socket.getaddrinfo",
+        lambda *args, **kwargs: [(0, 0, 0, "", ("93.184.216.34", 443))],
+    )
+    fake_client = _FakeClient(
+        [
+            _FakeResponse(
+                200,
+                {"content-type": "application/pdf"},
+                [b"%PDF"],
+                peer_ip="93.184.216.35",
+            ),
+        ]
+    )
+    monkeypatch.setattr("app.services.safe_url_fetcher.httpx.AsyncClient", lambda **kwargs: fake_client)
+
+    with pytest.raises(SafeUrlFetchError) as exc_info:
+        await download_source_url(
+            "https://example.com/doc.pdf",
+            tmp_path / "download",
+            allowed_extensions={".pdf"},
+        )
+
+    assert exc_info.value.category == "unsafe"
+    assert "changed after DNS safety check" in exc_info.value.detail
+    assert not (tmp_path / "download").exists()
 
 
 @pytest.mark.asyncio
@@ -253,10 +314,18 @@ async def test_download_source_url_allows_cross_host_redirect_when_explicit(monk
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, headers: dict[str, str], chunks: list[bytes]) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        headers: dict[str, str],
+        chunks: list[bytes],
+        *,
+        peer_ip: str = "93.184.216.34",
+    ) -> None:
         self.status_code = status_code
         self.headers = Headers(headers)
         self._chunks = chunks
+        self.extensions = {"network_stream": _FakeNetworkStream(peer_ip)}
 
     async def __aenter__(self):
         return self
@@ -267,6 +336,16 @@ class _FakeResponse:
     async def aiter_bytes(self, chunk_size: int):
         for chunk in self._chunks:
             yield chunk
+
+
+class _FakeNetworkStream:
+    def __init__(self, peer_ip: str) -> None:
+        self.peer_ip = peer_ip
+
+    def get_extra_info(self, info: str):
+        if info == "server_addr":
+            return (self.peer_ip, 443)
+        return None
 
 
 class _FakeClient:
