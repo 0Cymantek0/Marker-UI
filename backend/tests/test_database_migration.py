@@ -7,12 +7,17 @@ every query against that table fails (the production bug:
 
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.database as db
 import app.models.job  # noqa: F401 — registers ConversionJob on Base.metadata
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 # A conversion_jobs table that predates the result_metadata_json column.
@@ -57,6 +62,7 @@ async def test_create_tables_adds_missing_column_to_stale_table(tmp_path, monkey
     async with engine.begin() as conn:
         cols = {r[1] for r in (await conn.exec_driver_sql("PRAGMA table_info(conversion_jobs)")).fetchall()}
         assert "result_metadata_json" in cols
+        assert "formats_json" in cols
         assert "retry_count" in cols
         assert "max_retries" in cols
         rows = (await conn.execute(text("SELECT result_metadata_json FROM conversion_jobs"))).fetchall()
@@ -65,6 +71,23 @@ async def test_create_tables_adds_missing_column_to_stale_table(tmp_path, monkey
         assert queue_rows == [(0, 0)]
 
     await engine.dispose()
+
+
+def test_alembic_versions_cover_conversion_job_columns() -> None:
+    """Alembic history must not drift behind additive runtime self-heal columns."""
+
+    version_dir = REPO_ROOT / "backend" / "alembic" / "versions"
+    migration_text = "\n".join(path.read_text(encoding="utf-8") for path in version_dir.glob("*.py"))
+    model_columns = set(db.Base.metadata.tables["conversion_jobs"].columns.keys())
+
+    initial_columns = _migration_columns_from_stale_ddl(_STALE_DDL)
+    additive_columns = model_columns - initial_columns
+
+    assert additive_columns
+    for column in additive_columns:
+        assert column in migration_text
+
+    assert _migration_heads(version_dir) == {"20260709_0003"}
 
 
 @pytest.mark.asyncio
@@ -79,3 +102,30 @@ async def test_create_tables_is_idempotent(tmp_path, monkeypatch):
     await db.create_tables()
 
     await engine.dispose()
+
+
+def _migration_columns_from_stale_ddl(ddl: str) -> set[str]:
+    columns: set[str] = set()
+    for raw_line in ddl.splitlines():
+        line = raw_line.strip().rstrip(",")
+        if not line or line.startswith("CREATE TABLE") or line == ")":
+            continue
+        columns.add(line.split(maxsplit=1)[0])
+    return columns
+
+
+def _migration_heads(version_dir: Path) -> set[str]:
+    revisions: set[str] = set()
+    parents: set[str] = set()
+    for path in version_dir.glob("*.py"):
+        spec = importlib.util.spec_from_file_location(path.stem, path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        revisions.add(module.revision)
+        down_revision = module.down_revision
+        if isinstance(down_revision, str):
+            parents.add(down_revision)
+        elif down_revision:
+            parents.update(down_revision)
+    return revisions - parents
