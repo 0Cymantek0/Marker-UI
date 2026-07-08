@@ -1593,6 +1593,13 @@ def test_marker_pyproject_exposes_console_entrypoint():
 
     data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
 
+    project = data["project"]
+    assert project["license"] == "GPL-3.0-only"
+    assert project["license-files"] == ["LICENSE"]
+    assert project["authors"] == [{"name": "Marker UI contributors"}]
+    assert not any(item.startswith("License ::") for item in project["classifiers"])
+    assert "mcp" in project["keywords"]
+    assert data["project"]["urls"]["Source"] == "https://github.com/0Cymantek0/Marker-UI"
     assert data["project"]["scripts"]["marker"] == "app.cli:main"
     packages = data["tool"]["setuptools"]["packages"]["find"]
     assert packages["where"] == ["backend"]

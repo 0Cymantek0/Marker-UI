@@ -1,14 +1,43 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "marker-ui"
 version = "0.1.0"
-description = "Headless CLI and MCP server for Marker UI"
+description = "Local-first document conversion UI, CLI, and MCP server"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [
+  {name = "Marker UI contributors"},
+]
+keywords = [
+  "document-conversion",
+  "markdown",
+  "mcp",
+  "ocr",
+  "rag",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Framework :: FastAPI",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Office/Business",
+  "Topic :: Text Processing :: Markup :: Markdown",
+]
 dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/0Cymantek0/Marker-UI"
+Documentation = "https://github.com/0Cymantek0/Marker-UI/tree/master/docs"
+Issues = "https://github.com/0Cymantek0/Marker-UI/issues"
+Source = "https://github.com/0Cymantek0/Marker-UI"
 
 [project.scripts]
 marker = "app.cli:main"
