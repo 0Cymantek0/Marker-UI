@@ -8,16 +8,24 @@ every query against that table fails (the production bug:
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+import sqlite3
+import subprocess
+import sys
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.database as db
+import app.models.audit  # noqa: F401 - registers AuditEvent on Base.metadata
 import app.models.job  # noqa: F401 — registers ConversionJob on Base.metadata
+import app.models.job_event  # noqa: F401 - registers JobEvent on Base.metadata
+import app.models.settings  # noqa: F401 - registers Setting on Base.metadata
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ALEMBIC_TABLES = {"conversion_jobs", "settings", "audit_events", "job_events"}
 
 
 # A conversion_jobs table that predates the result_metadata_json column.
@@ -90,6 +98,50 @@ def test_alembic_versions_cover_conversion_job_columns() -> None:
     assert _migration_heads(version_dir) == {"20260709_0003"}
 
 
+def test_fresh_alembic_upgrade_from_repo_root_creates_model_schema(tmp_path) -> None:
+    db_path = tmp_path / "fresh-alembic.db"
+    env = os.environ.copy()
+    env["MARKER_DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path.as_posix()}"
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "alembic", "-c", "backend/alembic.ini", "upgrade", "head"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert db_path.exists()
+
+    with sqlite3.connect(db_path) as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        assert ALEMBIC_TABLES <= tables
+        assert _sqlite_columns(conn, "conversion_jobs") >= set(
+            db.Base.metadata.tables["conversion_jobs"].columns.keys()
+        )
+        assert _sqlite_columns(conn, "settings") >= set(
+            db.Base.metadata.tables["settings"].columns.keys()
+        )
+        assert _sqlite_columns(conn, "audit_events") >= set(
+            db.Base.metadata.tables["audit_events"].columns.keys()
+        )
+        assert _sqlite_columns(conn, "job_events") >= set(
+            db.Base.metadata.tables["job_events"].columns.keys()
+        )
+        assert "result_metadata_json" in _sqlite_columns(conn, "conversion_jobs")
+        assert "formats_json" in _sqlite_columns(conn, "conversion_jobs")
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20260709_0003",
+        )
+
+
 @pytest.mark.asyncio
 async def test_create_tables_is_idempotent(tmp_path, monkeypatch):
     db_path = tmp_path / "idem.db"
@@ -129,3 +181,7 @@ def _migration_heads(version_dir: Path) -> set[str]:
         elif down_revision:
             parents.update(down_revision)
     return revisions - parents
+
+
+def _sqlite_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}

@@ -325,6 +325,115 @@ describe('OutputViewer component', () => {
     expect(screen.getByText(/Hits: Marker/i)).toBeInTheDocument()
   })
 
+  it('jumps from audio review warnings to the matching timeline segment', () => {
+    render(
+      <OutputViewer
+        content="# Audio"
+        onDownload={vi.fn()}
+        filename="voice.wav"
+        audioMetadata={{
+          transcript: {
+            provider: 'local_faster_whisper',
+            model: 'tiny.en',
+            segments: [
+              {
+                segment_id: 'voice_seg_0001',
+                start_ms: 0,
+                end_ms: 900,
+                speaker: 'speaker_0',
+                text: 'clean segment',
+                confidence: 0.92,
+                warnings: [],
+              },
+              {
+                segment_id: 'voice_seg_0002',
+                start_ms: 1000,
+                end_ms: 1800,
+                speaker: 'speaker_1',
+                text: 'review this segment',
+                confidence: 0.41,
+                warnings: ['low_confidence'],
+              },
+            ],
+          },
+          quality: { review_required: true, low_confidence_count: 1 },
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /audio/i }))
+    fireEvent.click(screen.getByRole('button', { name: /jump 00:01\.000 low_confidence/i }))
+
+    expect(screen.getByText('review this segment').closest('[id^="audio-segment-"]')).toHaveFocus()
+  })
+
+  it('renders multi-audio batch relationship metadata and flattens source timelines', () => {
+    render(
+      <OutputViewer
+        content="# Batch Audio"
+        onDownload={vi.fn()}
+        filename="batch.zip"
+        audioMetadata={{
+          relationship: {
+            label: 'related_or_follow_up',
+            strategy: 'merged_chronological_with_source_refs',
+            evidence: 'max pairwise word overlap 0.42',
+          },
+          source_count: 2,
+          risk_summary: { review_sources: 1 },
+          sources: [
+            {
+              source_label: 'standup-1.wav',
+              provider: 'local_faster_whisper',
+              model: 'tiny.en',
+              risk_summary: { low_confidence_count: 0, unknown_confidence_count: 0 },
+              vocabulary_hits: ['Marker'],
+              segments: [
+                {
+                  segment_id: 'standup_1_seg_0001',
+                  start_ms: 0,
+                  end_ms: 1200,
+                  speaker: 'speaker_0',
+                  text: 'first source note',
+                  confidence: 0.9,
+                  warnings: [],
+                },
+              ],
+            },
+            {
+              source_label: 'standup-2.wav',
+              provider: 'local_faster_whisper',
+              model: 'tiny.en',
+              risk_summary: { low_confidence_count: 1, unknown_confidence_count: 0, level: 'review' },
+              segments: [
+                {
+                  segment_id: 'standup_2_seg_0001',
+                  start_ms: 2000,
+                  end_ms: 3200,
+                  speaker: 'speaker_1',
+                  text: 'follow up action',
+                  confidence: 0.5,
+                  warnings: ['low_confidence'],
+                },
+              ],
+            },
+          ],
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /audio/i }))
+
+    expect(screen.getByText('Relationship')).toBeInTheDocument()
+    expect(screen.getByText('related_or_follow_up')).toBeInTheDocument()
+    expect(screen.getByText('Sources')).toBeInTheDocument()
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('first source note')).toBeInTheDocument()
+    expect(screen.getByText('follow up action')).toBeInTheDocument()
+    expect(screen.getByText('standup-2.wav')).toBeInTheDocument()
+    expect(screen.getByText(/Hits: Marker/i)).toBeInTheDocument()
+  })
+
   it('keeps the audio inspection tab usable when backend metadata is partial or malformed', () => {
     render(
       <OutputViewer

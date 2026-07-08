@@ -105,6 +105,20 @@ def test_chunk_markdown_default_overlap_keeps_source_spans_exact() -> None:
         ]
 
 
+def test_chunk_markdown_trims_source_spans_to_visible_block_text() -> None:
+    markdown = "   Intro with padding.   \n\n- item one   \n  detail two   "
+
+    payload = chunk_markdown(markdown, source_name="padded.md", max_chars=260, overlap_chars=0)
+    chunk = payload["chunks"][0]
+    ref_texts = [markdown[ref["char_start"] : ref["char_end"]] for ref in chunk["source_refs"]]
+
+    assert chunk["text"] == "Intro with padding.\n\n- item one   \n  detail two"
+    assert ref_texts == ["Intro with padding.", "- item one   \n  detail two"]
+    assert "\n\n".join(ref_texts) == chunk["text"]
+    assert chunk["source_refs"][0]["char_start"] == 3
+    assert chunk["source_refs"][-1]["char_end"] == len(markdown) - 3
+
+
 def test_build_chunks_envelope_falls_back_when_optional_strategy_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_import(name: str):
         if name.startswith("unstructured."):

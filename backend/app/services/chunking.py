@@ -562,6 +562,20 @@ def _html_attr(tag: str, name: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def _trimmed_block_char_span(
+    char_start: int,
+    char_end: int,
+    *,
+    raw_text: str,
+    kind: str,
+) -> tuple[int, int]:
+    leading_trim = 0 if _preserves_leading_space(kind) else len(raw_text) - len(raw_text.lstrip())
+    trailing_trim = len(raw_text) - len(raw_text.rstrip())
+    start = char_start + leading_trim
+    end = max(start, char_end - trailing_trim)
+    return start, end
+
+
 def _html_block_end_pattern(line: str):
     stripped = line.strip()
     if not stripped.startswith("<"):
@@ -667,13 +681,23 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
 
     def flush(end_line: int, *, kind: str = "text") -> None:
         nonlocal buffer, block_start
-        text = _trim_block_text("\n".join(buffer), kind)
+        raw_text = "\n".join(buffer)
+        text = _trim_block_text(raw_text, kind)
         if text:
-            char_start, char_end = _line_char_span(
+            raw_char_start, raw_char_end = _line_char_span(
                 line_offsets,
                 start_line=block_start,
                 end_line=end_line,
             )
+            char_start, char_end = _trimmed_block_char_span(
+                raw_char_start,
+                raw_char_end,
+                raw_text=raw_text,
+                kind=kind,
+            )
+            source_spans: tuple[SourceSpan, ...] = ()
+            if (char_start, char_end) != (raw_char_start, raw_char_end):
+                source_spans = (SourceSpan(block_start, end_line, char_start, char_end, current_page_numbers),)
             blocks.append(
                 MarkdownBlock(
                     text=text,
@@ -685,6 +709,7 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
                     kind=kind,
                     content_types=_block_content_types(text, kind),
                     asset_refs=_asset_refs(text),
+                    source_spans=source_spans,
                     page_numbers=current_page_numbers,
                 )
             )

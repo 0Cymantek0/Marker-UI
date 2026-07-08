@@ -361,29 +361,77 @@ function markdownAssetSrc(src: string, jobId?: string): string {
 
 function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
   const transcript = asRecord(audio.transcript)
+  const batchSources = asRecordArray(audio.sources)
+  const transcripts = Object.keys(transcript).length > 0 ? [transcript] : batchSources
   const providerCapability = asRecord(audio.provider_capability)
-  const quality = asRecord(audio.quality ?? transcript.risk_summary)
-  const segments = asRecordArray(transcript.segments)
+  const quality = asRecord(audio.quality ?? transcript.risk_summary ?? audio.risk_summary)
+  const relationship = asRecord(audio.relationship)
+  const sourceCount = numberValue(audio.source_count) ?? transcripts.length
+  const segments: JsonRecord[] = transcripts.flatMap((item, sourceIndex) => {
+    const sourceLabel = displayValue(item.source_label, `source_${sourceIndex + 1}`)
+    return asRecordArray(item.segments).map((segment): JsonRecord => ({
+      ...segment,
+      source_label: segment.source_label ?? sourceLabel,
+      provider: segment.provider ?? item.provider,
+      model: segment.model ?? item.model,
+    }))
+  })
   const speakersMeta = asRecord(audio.speakers)
   const speakers = asRecordArray(speakersMeta.timeline)
   const vocabulary = asRecord(audio.vocabulary)
-  const transcriptWarnings = stringList(transcript.warnings)
-  const lowConfidenceCount = numberValue(quality.low_confidence_count) ?? 0
-  const unknownConfidenceCount = numberValue(quality.unknown_confidence_count) ?? 0
-  const reviewRequired = quality.review_required === true
+  const transcriptWarnings = transcripts.flatMap((item) => stringList(item.warnings))
+  const lowConfidenceCount = numberValue(quality.low_confidence_count) ?? sumTranscriptRisk(transcripts, 'low_confidence_count')
+  const unknownConfidenceCount = numberValue(quality.unknown_confidence_count) ?? sumTranscriptRisk(transcripts, 'unknown_confidence_count')
+  const reviewRequired = quality.review_required === true || transcripts.some((item) => asRecord(item.risk_summary).level === 'review')
   const requestedVocabularyCount = numberValue(vocabulary.requested_count) ?? 0
-  const detectedVocabularyCount = numberValue(vocabulary.detected_count) ?? 0
-  const detectedVocabulary = stringList(vocabulary.detected)
+  const vocabularyHits = uniqueStrings(transcripts.flatMap((item) => stringList(item.vocabulary_hits)))
+  const detectedVocabulary = stringList(vocabulary.detected).length > 0 ? stringList(vocabulary.detected) : vocabularyHits
+  const detectedVocabularyCount = numberValue(vocabulary.detected_count) ?? detectedVocabulary.length
   const missedVocabulary = stringList(vocabulary.likely_missed)
+  const reviewSegments = segments
+    .map((segment, index) => {
+      const segmentWarnings = stringList(segment.warnings)
+      const confidence = numberValue(segment.confidence)
+      const tone = confidenceTone(confidence, segmentWarnings)
+      return {
+        segment,
+        index,
+        segmentId: displayValue(segment.segment_id, `segment_${index + 1}`),
+        warnings: segmentWarnings,
+        confidence,
+        tone,
+      }
+    })
+    .filter((item) => item.tone !== 'ok')
+  const providerValue = sourceCount > 1
+    ? 'multiple'
+    : displayValue(transcript.provider ?? providerCapability.provider_id ?? segments[0]?.provider)
+  const modelValue = sourceCount > 1
+    ? 'multiple'
+    : displayValue(transcript.model ?? segments[0]?.model)
 
   return (
     <div className="space-y-4 font-sans text-xs">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <AudioMetric label="Provider" value={displayValue(transcript.provider ?? providerCapability.provider_id)} />
-        <AudioMetric label="Model" value={displayValue(transcript.model)} />
+        <AudioMetric label="Provider" value={providerValue} />
+        <AudioMetric label="Model" value={modelValue} />
+        {sourceCount > 1 && <AudioMetric label="Sources" value={String(sourceCount)} />}
         <AudioMetric label="Segments" value={String(segments.length)} />
         <AudioMetric label="Review" value={reviewRequired ? 'required' : 'not required'} tone={reviewRequired ? 'warn' : 'ok'} />
       </div>
+
+      {Object.keys(relationship).length > 0 && (
+        <section className="space-y-2">
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Relationship</h4>
+          <div className="rounded-lg border border-border/40 bg-card/30 p-3">
+            <div className="font-semibold text-foreground">{displayValue(relationship.label)}</div>
+            <div className="mt-1 text-muted-foreground">Strategy: {displayValue(relationship.strategy)}</div>
+            {relationship.evidence != null && (
+              <div className="mt-1 text-muted-foreground">Evidence: {displayValue(relationship.evidence)}</div>
+            )}
+          </div>
+        </section>
+      )}
 
       {(lowConfidenceCount > 0 || unknownConfidenceCount > 0 || transcriptWarnings.length > 0) && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-300">
@@ -393,6 +441,20 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
             <div className="mt-0.5 text-xs">
               Low confidence: {lowConfidenceCount}; unknown confidence: {unknownConfidenceCount}
             </div>
+            {reviewSegments.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {reviewSegments.map((item) => (
+                  <button
+                    key={`${item.segmentId}-${item.index}`}
+                    type="button"
+                    onClick={() => focusAudioSegment(item.segmentId, item.index)}
+                    className="rounded-md border border-amber-500/25 bg-background/70 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-background dark:text-amber-300"
+                  >
+                    Jump {formatMs(item.segment.start_ms)} {item.warnings[0] ?? item.tone}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -441,9 +503,11 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
             const segmentId = displayValue(segment.segment_id, `segment_${index + 1}`)
             return (
               <div
+                id={audioSegmentElementId(segmentId, index)}
+                tabIndex={-1}
                 key={`${segmentId}-${index}`}
                 className={cn(
-                  'rounded-lg border p-3 bg-card/30',
+                  'rounded-lg border p-3 bg-card/30 outline-none focus:ring-2 focus:ring-primary/50',
                   tone === 'low'
                     ? 'border-red-500/35'
                     : tone === 'unknown'
@@ -453,6 +517,7 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
               >
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <code>{formatMs(segment.start_ms)}-{formatMs(segment.end_ms)}</code>
+                  {sourceCount > 1 && <span>{displayValue(segment.source_label)}</span>}
                   <span>{displayValue(segment.speaker, 'speaker_0')}</span>
                   <span>{segmentId}</span>
                   <span>confidence {confidence == null ? 'unknown' : confidence.toFixed(2)}</span>
@@ -493,6 +558,17 @@ function asRecordArray(value: unknown): JsonRecord[] {
   return Array.isArray(value) ? value.filter(isRecord) : []
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)]
+}
+
+function sumTranscriptRisk(transcripts: JsonRecord[], key: string): number {
+  return transcripts.reduce((total, item) => {
+    const value = numberValue(asRecord(item.risk_summary)[key])
+    return total + (value ?? 0)
+  }, 0)
+}
+
 function stringList(value: unknown): string[] {
   return Array.isArray(value)
     ? value
@@ -521,6 +597,17 @@ function confidenceTone(confidence: unknown, warnings: unknown): 'ok' | 'low' | 
   if (Array.isArray(warnings) && warnings.length > 0) return 'low'
   if (confidence == null) return 'unknown'
   return Number(confidence) < 0.65 ? 'low' : 'ok'
+}
+
+function audioSegmentElementId(segmentId: string, index: number): string {
+  return `audio-segment-${index}-${segmentId.replace(/[^A-Za-z0-9_-]/g, '-')}`
+}
+
+function focusAudioSegment(segmentId: string, index: number) {
+  const element = document.getElementById(audioSegmentElementId(segmentId, index))
+  if (!element) return
+  element.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  element.focus({ preventScroll: true })
 }
 
 function formatMs(raw: unknown): string {
