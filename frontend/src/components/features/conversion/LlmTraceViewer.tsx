@@ -395,14 +395,13 @@ function SafeTable({ rows, className }: { rows: SafeTableRow[]; className?: stri
           <tr key={rowIndex}>
             {row.map((cell, cellIndex) => {
               const props = {
-                key: cellIndex,
                 colSpan: cell.colSpan,
                 rowSpan: cell.rowSpan,
                 className: 'border border-border/40 px-2 py-1 align-top',
               }
               return cell.tag === 'th'
-                ? <th {...props} scope="col">{cell.text}</th>
-                : <td {...props}>{cell.text}</td>
+                ? <th key={cellIndex} {...props} scope="col">{cell.text}</th>
+                : <td key={cellIndex} {...props}>{cell.text}</td>
             })}
           </tr>
         ))}
