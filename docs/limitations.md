@@ -4,6 +4,19 @@ Marker UI is local-first and intentionally conservative about what it claims.
 This page documents current boundaries so users can choose the right route and
 so contributors can see where help is useful.
 
+## Feature Maturity Snapshot
+
+| Area | Status |
+| --- | --- |
+| CLI, MCP, output manifests, and paged output reads | Working alpha |
+| PDF/image conversion with Marker-backed Markdown, HTML, JSON, and chunks | Working alpha |
+| Native Office/data/archive conversion to Markdown and chunks | Working alpha |
+| Semantic chunking | Working alpha with deterministic source refs; retrieval-quality benchmark still planned |
+| Audio / voice notes | Partial alpha: local faster-whisper route only; cloud STT, real diarization, and provider comparison are deferred |
+| Video | Experimental local demux, transcription, keyframe/OCR provenance |
+| VLM image understanding | Opt-in alpha; cloud calls require explicit consent |
+| Database migrations | Startup creates tables and additive column repairs; Alembic upgrades are developer-managed |
+
 ## Output Formats
 
 - Markdown is the universal output format.

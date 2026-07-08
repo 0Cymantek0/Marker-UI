@@ -36,6 +36,7 @@ def test_readme_first_screen_documents_agent_entrypoints() -> None:
 
     for text in (
         "local-first document-to-agent-context engine",
+        "## Current Maturity",
         "python -m app.cli self-test --json",
         'python -m app.cli convert ".\\paper.pdf" --output-dir ".\\out" --json',
         "python -m app.cli mcp start --tool-profile minimal",
@@ -43,6 +44,24 @@ def test_readme_first_screen_documents_agent_entrypoints() -> None:
         "semantic chunks",
     ):
         assert text in readme
+
+
+def test_maturity_tables_mark_partial_and_deferred_systems() -> None:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    limitations = (REPO_ROOT / "docs" / "limitations.md").read_text(encoding="utf-8")
+    roadmap = (REPO_ROOT / "docs" / "roadmap.md").read_text(encoding="utf-8")
+
+    required_rows = (
+        "| Semantic chunking | Working alpha with deterministic source refs; retrieval-quality benchmark still planned |",
+        "| Audio / voice notes | Partial alpha: local faster-whisper route only; cloud STT, real diarization, and provider comparison are deferred |",
+        "| Database migrations | Startup creates tables and additive column repairs; Alembic upgrades are developer-managed |",
+    )
+    for row in required_rows:
+        assert row in readme
+        assert row in limitations
+
+    assert "Roadmap items are forward-looking" in roadmap
+    assert "[Known Limitations & Maturity](limitations.md)" in roadmap
 
 
 def test_markdown_links_point_to_existing_local_files() -> None:
