@@ -42,15 +42,6 @@ export type AudioStructuralMode =
   | 'action_decision_log'
   | 'timeline'
 
-export type AudioEnhancementPreset =
-  | 'raw_transcript'
-  | 'clean_transcript'
-  | 'corrected_transcript'
-  | 'readable_notes'
-  | 'evidence_meeting_notes'
-  | 'polished_minutes'
-  | 'strict_structural'
-
 export interface AudioProviderCapability {
   provider_id: AudioProviderType
   provider_label: string
