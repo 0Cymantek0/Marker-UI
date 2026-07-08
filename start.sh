@@ -130,15 +130,34 @@ echo ""
 echo -e "${YELLOW}[6/6] Starting services...${NC}"
 echo ""
 
+kill_tree() {
+    local pid="${1:-}"
+    [ -n "$pid" ] || return 0
+    kill -0 "$pid" 2>/dev/null || return 0
+
+    if command -v pgrep &>/dev/null; then
+        local child
+        for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+            kill_tree "$child"
+        done
+    fi
+
+    kill "$pid" 2>/dev/null || true
+}
+
 cleanup() {
+    local exit_code=$?
+    trap - EXIT SIGINT SIGTERM
     echo ""
     warn "Stopping services..."
-    [ -n "${BACKEND_PID:-}" ] && kill "${BACKEND_PID}" 2>/dev/null || true
-    [ -n "${FRONTEND_PID:-}" ] && kill "${FRONTEND_PID}" 2>/dev/null || true
+    kill_tree "${FRONTEND_PID:-}"
+    kill_tree "${BACKEND_PID:-}"
     ok "Services stopped."
-    exit 0
+    exit "$exit_code"
 }
-trap cleanup SIGINT SIGTERM
+trap cleanup EXIT
+trap 'exit 130' SIGINT
+trap 'exit 143' SIGTERM
 
 port_in_use() {
     local port=$1
