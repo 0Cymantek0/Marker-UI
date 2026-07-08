@@ -61,6 +61,10 @@ describe('ConvertPage Integration with real hook', () => {
       status: 'pending',
       filename: 'test.pdf'
     })
+    mockDownloadResult.mockResolvedValue({
+      blob: new Blob(['# Converted'], { type: 'text/markdown' }),
+      filename: 'converted.md',
+    })
     mockCancelJob.mockResolvedValue({ status: 'cancelled', job_id: 'job-uuid-123', cancelled: true })
     mockGetJobEvents.mockReturnValue(createMockEventSource())
     mockGetHistory.mockResolvedValue({ jobs: [], total: 0 })
@@ -280,6 +284,58 @@ describe('ConvertPage Integration with real hook', () => {
     expect(screen.queryByText('Conversion failed')).not.toBeInTheDocument()
   })
 
+  it('recovers completion by polling when SSE stays open but stops emitting', async () => {
+    const eventSource = createMockEventSource()
+    mockGetJobEvents.mockReturnValue(eventSource)
+    mockGetJobStatus
+      .mockResolvedValueOnce({
+        id: 'job-uuid-123',
+        job_id: 'job-uuid-123',
+        status: 'processing',
+        progress: 33,
+        message: 'Performing OCR and text recognition...',
+        output_format: 'markdown',
+        available_formats: ['markdown'],
+      })
+      .mockResolvedValue({
+        id: 'job-uuid-123',
+        job_id: 'job-uuid-123',
+        status: 'completed',
+        progress: 100,
+        message: null,
+        result_text: '# Converted',
+        output_format: 'markdown',
+        available_formats: ['markdown'],
+      })
+
+    const { container } = render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /local paths/i }))
+    fireEvent.change(container.querySelector('textarea')!, { target: { value: 'C:\\stale-sse.pdf' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Convert 1 Document/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('stale-sse.pdf')).toBeInTheDocument()
+    })
+    expect(mockGetJobEvents).toHaveBeenCalledWith('job-uuid-123')
+
+    await waitFor(() => {
+      expect(screen.getByText('Performing OCR and text recognition...')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Conversion complete')).toBeInTheDocument()
+    })
+    expect(mockDownloadResult).toHaveBeenCalledWith('job-uuid-123')
+    expect(eventSource.close).toHaveBeenCalled()
+  })
+
   it('clears fallback polling when a disconnected job is removed locally', async () => {
     const eventSource = createMockEventSource()
     mockGetJobEvents.mockReturnValue(eventSource)
@@ -314,22 +370,15 @@ describe('ConvertPage Integration with real hook', () => {
       expect(screen.getByText('disconnecting.pdf')).toBeInTheDocument()
     })
 
-    vi.useFakeTimers()
-    try {
-      act(() => {
-        eventSource.onerror?.()
-      })
+    act(() => {
+      eventSource.onerror?.()
+    })
 
-      fireEvent.click(screen.getByRole('button', { name: /remove from list/i }))
+    fireEvent.click(screen.getByRole('button', { name: /remove from list/i }))
 
-      act(() => {
-        vi.advanceTimersByTime(9000)
-      })
+    await new Promise((resolve) => setTimeout(resolve, 100))
 
-      expect(screen.queryByText('disconnecting.pdf')).not.toBeInTheDocument()
-      expect(mockGetJobStatus).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(screen.queryByText('disconnecting.pdf')).not.toBeInTheDocument()
+    expect(mockGetJobStatus).not.toHaveBeenCalled()
   })
 })
