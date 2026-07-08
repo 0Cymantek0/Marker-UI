@@ -39,22 +39,6 @@ def active_event_loop():
             asyncio.set_event_loop(asyncio.new_event_loop())
 
 
-@pytest.fixture(autouse=True)
-def ensure_current_event_loop():
-    created_loop = None
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError
-    except RuntimeError:
-        created_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(created_loop)
-    yield
-    if created_loop is not None and not created_loop.is_closed():
-        created_loop.close()
-        asyncio.set_event_loop(None)
-
-
 @pytest.fixture
 def task_manager():
     tm = TaskManager(max_workers=1)
