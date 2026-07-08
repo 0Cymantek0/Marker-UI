@@ -479,9 +479,6 @@ def setup_monkeypatch() -> None:
         logger.warning("surya package not installed yet, skipping download monkeypatch.")
         return
 
-    original_download_file = surya_s3.download_file
-    original_download_directory = surya_s3.download_directory
-
     def custom_check_manifest(local_dir: str) -> bool:
         local_dir_path = Path(local_dir)
         manifest_path = local_dir_path / "manifest.json"
@@ -792,7 +789,7 @@ def trigger_retry() -> None:
 def self_heal_check() -> Dict[str, Any]:
     """Verify integrity of all model checkpoints, clean corrupt files, and re-download."""
     try:
-        from surya.common.s3 import S3DownloaderMixin, check_manifest
+        from surya.common.s3 import S3DownloaderMixin
         from surya.settings import settings as surya_settings
         import shutil
         import json
@@ -1020,4 +1017,3 @@ async def reset_models_and_data(delete_user_data: bool = False, db_session: Opti
         "user_data_reset": db_reset,
         "message": "System reset completed successfully."
     }
-

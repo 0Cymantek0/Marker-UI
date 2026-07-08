@@ -66,8 +66,8 @@ class OfficePptxConverter(BaseConverter):
                 return 0 if t is None else t
 
             def get_left(s: Any) -> int:
-                l = getattr(s, "left", 0)
-                return 0 if l is None else l
+                left = getattr(s, "left", 0)
+                return 0 if left is None else left
 
             sorted_by_top = sorted(shapes, key=get_top)
             lines: list[tuple[int, list[Any]]] = []

@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict, List, Optional
 from app.database import async_session_factory
 from app.models.settings import Setting
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 logger = logging.getLogger(__name__)
 

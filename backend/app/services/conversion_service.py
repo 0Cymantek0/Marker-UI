@@ -427,7 +427,7 @@ class ConversionService:
                     label=f"{plan.label} -> Marker PDF (short-output fallback)",
                     confidence=min(plan.confidence, 0.5),
                     reasons=plan.reasons + [
-                        f"LiteParse returned suspiciously short output (<100 chars/page); falling back to marker_pdf"
+                        "LiteParse returned suspiciously short output (<100 chars/page); falling back to marker_pdf"
                     ],
                     needs_marker_models=True,
                     needs_gpu=True,

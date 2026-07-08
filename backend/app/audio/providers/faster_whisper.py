@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.audio.providers.base import AudioTranscriptionProvider, RawTranscript
+from app.audio.providers.base import RawTranscript
 
 logger = logging.getLogger(__name__)
 

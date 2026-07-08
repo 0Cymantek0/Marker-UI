@@ -3,28 +3,28 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-
-load_dotenv()  # Load .env file if present
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import UPLOAD_DIR, OUTPUT_DIR
-from app.database import create_tables
-from app.models.audit import AuditEvent  # noqa: F401 - register table metadata
-from app.models.job_event import JobEvent  # noqa: F401 - register table metadata
-from app.routes import convert, settings, models, capabilities, diagnostics
-from app.security.auth import RestAuthMiddleware
-from app.security.headers import SecurityHeadersMiddleware
-from app.services.telemetry import RequestContextMiddleware
-from app.services.marker_service import MarkerService
-from app.services.queue_backends import queue_backend_from_env
-from app.services.task_manager import TaskManager
-from app.services.conversion_service import ConversionService
+load_dotenv()  # Load .env file if present
+
+from app.core.config import OUTPUT_DIR, UPLOAD_DIR  # noqa: E402
+from app.database import create_tables  # noqa: E402
+from app.models.audit import AuditEvent  # noqa: E402, F401 - register table metadata
+from app.models.job_event import JobEvent  # noqa: E402, F401 - register table metadata
+from app.routes import capabilities, convert, diagnostics, models, settings  # noqa: E402
+from app.security.auth import RestAuthMiddleware  # noqa: E402
+from app.security.headers import SecurityHeadersMiddleware  # noqa: E402
+from app.services.conversion_service import ConversionService  # noqa: E402
+from app.services.marker_service import MarkerService  # noqa: E402
+from app.services.queue_backends import queue_backend_from_env  # noqa: E402
+from app.services.task_manager import TaskManager  # noqa: E402
+from app.services.telemetry import RequestContextMiddleware  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,6 @@ class _AppState:
 
 
 _app_state = _AppState()
-
-
-import threading
 
 _bg_load_thread: threading.Thread | None = None
 _bg_load_thread_lock = threading.Lock()
@@ -121,7 +118,6 @@ def _configure_task_manager_backend() -> None:
             return
 
         import asyncio
-        from app.models.schemas import GPUWorkerMode
 
         async def _read() -> None:
             async with async_session_factory() as session:

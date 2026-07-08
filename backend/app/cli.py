@@ -39,7 +39,7 @@ from app.agent_api import (
 )
 from app.agent_contract import AUDIO_OUTPUT_MODES, ConvertRequestModel, export_json_schemas
 from app.conversion.formats import OUTPUT_FORMATS
-from app.errors import ERROR_SCHEMA_VERSION, MarkerError, UsageError, from_exception
+from app.errors import ERROR_SCHEMA_VERSION, UsageError, from_exception
 from app.eval.runner import run_eval
 
 

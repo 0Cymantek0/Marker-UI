@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,8 +41,6 @@ from app.security.auth import Principal, require_rest_scopes
 from app.security.scopes import SCOPE_SETTINGS_WRITE
 from app.services.audit import record_audit_event
 from app.utils.secrets import (
-    decrypt_value,
-    encrypt_value,
     is_masked,
     is_sensitive_key,
     mask_value,
@@ -320,7 +318,7 @@ async def get_llm_config(
         "llm_service": "no_llm" if active.provider_id == "none" else active.provider_id,
         "timeout": 60,
         "max_retries": 3,
-        "max_output_tokens": 4096
+        "max_output_tokens": 4096,
     }
 
     if active_prov:
@@ -330,9 +328,12 @@ async def get_llm_config(
 
         model_cfg = next((m for m in active_prov.models if m.model_id == model_id), None)
         if model_cfg:
-            if model_cfg.timeout: data["timeout"] = model_cfg.timeout
-            if model_cfg.max_retries: data["max_retries"] = model_cfg.max_retries
-            if model_cfg.max_output_tokens: data["max_output_tokens"] = model_cfg.max_output_tokens
+            if model_cfg.timeout:
+                data["timeout"] = model_cfg.timeout
+            if model_cfg.max_retries:
+                data["max_retries"] = model_cfg.max_retries
+            if model_cfg.max_output_tokens:
+                data["max_output_tokens"] = model_cfg.max_output_tokens
 
         p_type = active_prov.type
         if p_type == "gemini":
@@ -376,30 +377,39 @@ async def save_llm_config(
     if provider_id == "gemini":
         model_id = body.gemini_model_name or ""
         if active_prov:
-            if body.gemini_api_key: active_prov.api_key = body.gemini_api_key
+            if body.gemini_api_key:
+                active_prov.api_key = body.gemini_api_key
     elif provider_id == "claude":
         model_id = body.claude_model_name or ""
         if active_prov:
-            if body.claude_api_key: active_prov.api_key = body.claude_api_key
+            if body.claude_api_key:
+                active_prov.api_key = body.claude_api_key
     elif provider_id == "openai":
         model_id = body.openai_model or ""
         if active_prov:
-            if body.openai_api_key: active_prov.api_key = body.openai_api_key
-            if body.openai_base_url: active_prov.base_url = body.openai_base_url
+            if body.openai_api_key:
+                active_prov.api_key = body.openai_api_key
+            if body.openai_base_url:
+                active_prov.base_url = body.openai_base_url
     elif provider_id == "ollama":
         model_id = body.ollama_model or ""
         if active_prov:
-            if body.ollama_base_url: active_prov.base_url = body.ollama_base_url
+            if body.ollama_base_url:
+                active_prov.base_url = body.ollama_base_url
     elif provider_id == "azure":
         model_id = body.azure_deployment_name or ""
         if active_prov:
-            if body.azure_api_key: active_prov.api_key = body.azure_api_key
-            if body.azure_endpoint: active_prov.base_url = body.azure_endpoint
+            if body.azure_api_key:
+                active_prov.api_key = body.azure_api_key
+            if body.azure_endpoint:
+                active_prov.base_url = body.azure_endpoint
     elif provider_id == "vertex":
         model_id = body.gemini_model_name or ""
         if active_prov:
-            if body.vertex_project_id: active_prov.api_key = body.vertex_project_id
-            if body.vertex_location: active_prov.base_url = body.vertex_location
+            if body.vertex_project_id:
+                active_prov.api_key = body.vertex_project_id
+            if body.vertex_location:
+                active_prov.base_url = body.vertex_location
 
     if active_prov:
         model_cfg = next((m for m in active_prov.models if m.model_id == model_id), None)
@@ -857,10 +867,6 @@ async def init_llm_providers_if_missing(db: AsyncSession) -> None:
         if key in _LLM_SENSITIVE_KEYS and val:
             val = decrypt_value(val)
         return val
-
-    timeout = int(get_old("timeout", 60) or 60)
-    max_retries = int(get_old("max_retries", 3) or 3)
-    max_output = int(get_old("max_output_tokens", 4096) or 4096)
 
     default_providers = [
         {

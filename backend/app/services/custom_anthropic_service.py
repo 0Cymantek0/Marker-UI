@@ -15,7 +15,7 @@ Claude service when a custom Anthropic provider is selected.
 
 from __future__ import annotations
 
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 
 import anthropic
 from marker.schema.blocks import Block
