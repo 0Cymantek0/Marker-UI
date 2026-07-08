@@ -179,7 +179,6 @@ describe('OutputViewer component', () => {
       <OutputViewer
         content="# Hello"
         onDownload={vi.fn()}
-        filename="document.docx"
       />
     )
 
@@ -201,7 +200,6 @@ describe('OutputViewer component', () => {
         onDownload={vi.fn()}
         onRegenerate={onRegenerate}
         regeneratableFormats={['chunks']}
-        filename="document.docx"
         formats={{ markdown: '# Hello' }}
       />
     )
@@ -222,7 +220,6 @@ describe('OutputViewer component', () => {
         formats={{ markdown: '# Hello', html: '<h1>Hello</h1>', chunks: '{"chunks":[]}' }}
         availableFormats={['markdown', 'html', 'chunks']}
         onDownload={vi.fn()}
-        filename="document.docx"
       />
     )
 
@@ -240,7 +237,6 @@ describe('OutputViewer component', () => {
         content="# Hello"
         formats={{ markdown: '# Hello' }}
         onDownload={vi.fn()}
-        filename="document.pdf"
       />
     )
 
@@ -257,7 +253,6 @@ describe('OutputViewer component', () => {
         onDownload={vi.fn()}
         onRegenerate={onRegenerate}
         regeneratableFormats={['html', 'json', 'chunks']}
-        filename="document.pdf"
         formats={{ markdown: '# Hello' }}
       />
     )
@@ -276,7 +271,6 @@ describe('OutputViewer component', () => {
         onDownload={vi.fn()}
         onRegenerate={onRegenerate}
         regeneratableFormats={['html', 'json', 'chunks']}
-        filename="document.pdf"
         formats={{ markdown: '# Hello' }}
       />
     )
@@ -291,7 +285,6 @@ describe('OutputViewer component', () => {
       <OutputViewer
         content="# Audio"
         onDownload={vi.fn()}
-        filename="voice.wav"
         audioMetadata={{
           transcript: {
             provider: 'local_faster_whisper',
@@ -331,7 +324,6 @@ describe('OutputViewer component', () => {
         content={null}
         formats={null}
         onDownload={vi.fn()}
-        filename="voice.wav"
         audioMetadata={{
           transcript: {
             provider: 'local_faster_whisper',
@@ -361,7 +353,6 @@ describe('OutputViewer component', () => {
       <OutputViewer
         content="# Audio"
         onDownload={vi.fn()}
-        filename="voice.wav"
         audioMetadata={{
           transcript: {
             provider: 'local_faster_whisper',
@@ -403,7 +394,6 @@ describe('OutputViewer component', () => {
       <OutputViewer
         content="# Batch Audio"
         onDownload={vi.fn()}
-        filename="batch.zip"
         audioMetadata={{
           relationship: {
             label: 'related_or_follow_up',
@@ -470,7 +460,6 @@ describe('OutputViewer component', () => {
       <OutputViewer
         content="# Audio"
         onDownload={vi.fn()}
-        filename="voice.wav"
         audioMetadata={{
           transcript: {
             provider: 'local_faster_whisper',

@@ -889,7 +889,6 @@ export function ConvertPage() {
                     onDownload={(fmt) => download(selectedJob.id, fmt)}
                     imageUnderstanding={selectedJob.imageUnderstanding}
                     audioMetadata={selectedJob.conversionMetadata?.audio ?? selectedJob.conversionMetadata?.audio_batch ?? null}
-                    filename={selectedJob.filename}
                     jobId={selectedJob.jobId ?? undefined}
                   />
                 </div>

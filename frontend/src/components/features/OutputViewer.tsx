@@ -28,7 +28,6 @@ interface OutputViewerProps {
   onDownload: (format: string) => void
   imageUnderstanding?: ImageUnderstandingMeta[] | null
   audioMetadata?: JsonRecord | null
-  filename?: string
   jobId?: string
 }
 
