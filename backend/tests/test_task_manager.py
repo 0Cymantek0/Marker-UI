@@ -25,13 +25,34 @@ def active_event_loop():
         prev_loop = asyncio.get_event_loop()
     except RuntimeError:
         prev_loop = None
+    if prev_loop is not None and prev_loop.is_closed():
+        prev_loop = None
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         yield loop
     finally:
         loop.close()
-        asyncio.set_event_loop(prev_loop)
+        if prev_loop is not None:
+            asyncio.set_event_loop(prev_loop)
+        else:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+@pytest.fixture(autouse=True)
+def ensure_current_event_loop():
+    created_loop = None
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError
+    except RuntimeError:
+        created_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(created_loop)
+    yield
+    if created_loop is not None and not created_loop.is_closed():
+        created_loop.close()
+        asyncio.set_event_loop(None)
 
 
 @pytest.fixture
