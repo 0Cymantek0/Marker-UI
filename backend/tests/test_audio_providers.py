@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 
 from app.audio.providers.capabilities import (
@@ -93,6 +96,48 @@ def test_build_provider_rejects_unknown_provider_without_local_fallback() -> Non
 def test_validate_audio_benchmark_selection_rejects_unshipped_comparison() -> None:
     with pytest.raises(NotImplementedError, match="comparison is not shipped"):
         validate_audio_benchmark_selection({"audio_benchmark_compare": True})
+
+
+def test_faster_whisper_adapter_preserves_segment_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.audio.providers.faster_whisper import FasterWhisperProvider
+
+    class _Word:
+        word = "hello"
+        start = 0.0
+        end = 0.5
+        probability = 0.81
+
+    class _Segment:
+        start = 0.0
+        end = 1.0
+        text = " hello "
+        no_speech_prob = 0.2
+        avg_logprob = -0.4
+        compression_ratio = 1.3
+        words = [_Word()]
+
+    class _Info:
+        language = "en"
+        duration = 1.0
+
+    class _WhisperModel:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def transcribe(self, *args, **kwargs):
+            return [_Segment()], _Info()
+
+    fake_module = types.SimpleNamespace(WhisperModel=_WhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+
+    raw = FasterWhisperProvider().transcribe("audio.wav", {"audio_word_timestamps": True})
+    segment = raw.segments[0]
+
+    assert segment.confidence == 0.8
+    assert segment.no_speech_probability == 0.2
+    assert segment.avg_logprob == -0.4
+    assert segment.compression_ratio == 1.3
+    assert segment.words[0].confidence == 0.81
 
 
 def test_cloud_providers_require_api_key() -> None:

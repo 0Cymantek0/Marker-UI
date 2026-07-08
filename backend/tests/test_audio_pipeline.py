@@ -50,6 +50,63 @@ def test_normalize_transcript_sorts_segments_tracks_words_and_risk() -> None:
     assert transcript.risk_summary["word_count"] == 7
 
 
+def test_normalize_transcript_preserves_provider_diagnostics_and_warnings() -> None:
+    transcript = normalize_transcript(
+        {
+            "language": "en",
+            "duration": 2.0,
+            "model": "tiny.en",
+            "warnings": ["diarization_requested_but_unsupported_by_provider"],
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "uncertain audio",
+                    "confidence": 0.3,
+                    "confidence_source": "provider_probability",
+                    "speaker": "speaker_1",
+                    "speaker_confidence": 0.62,
+                    "no_speech_prob": 0.72,
+                    "avg_logprob": -1.2,
+                    "compression_ratio": 2.6,
+                    "overlap_warning": True,
+                    "words": [
+                        {
+                            "word": "uncertain",
+                            "punctuated_word": "Uncertain",
+                            "start": 0.0,
+                            "end": 0.5,
+                            "confidence": 0.44,
+                            "speaker": "speaker_1",
+                            "speaker_confidence": 0.66,
+                        }
+                    ],
+                }
+            ],
+        },
+        source_label="diagnostics.wav",
+    )
+
+    assert transcript.warnings == ("diarization_requested_but_unsupported_by_provider",)
+    segment = transcript.segments[0]
+    assert segment.confidence_source == "provider_probability"
+    assert segment.speaker_confidence == 0.62
+    assert segment.no_speech_probability == 0.72
+    assert segment.avg_logprob == -1.2
+    assert segment.compression_ratio == 2.6
+    assert segment.overlap_warning is True
+    assert "high_no_speech_probability" in segment.warnings
+    assert "low_avg_logprob" in segment.warnings
+    assert "high_compression_ratio" in segment.warnings
+    assert segment.words[0]["punctuated_word"] == "Uncertain"
+    assert segment.words[0]["speaker"] == "speaker_1"
+    assert segment.words[0]["speaker_confidence"] == 0.66
+    assert transcript.risk_summary["provider_warning_count"] == 1
+    assert transcript.risk_summary["no_speech_probability_flags"] == 1
+    assert transcript.risk_summary["avg_logprob_flags"] == 1
+    assert transcript.risk_summary["compression_ratio_flags"] == 1
+
+
 def test_enhanced_markdown_builds_extractively_with_source_refs() -> None:
     transcript = normalize_transcript(
         {
@@ -239,7 +296,7 @@ def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
     try:
         transcript = transcribe_audio_file(
             "/tmp/fake.wav",
-            {"audio_speaker_aliases": {"speaker_0": "Alice"}},
+            {"audio_speaker_aliases": {"speaker_0": "Alice"}, "audio_diarization": True},
             source_label="video.mp4",
             source_id="video_audio",
         )
@@ -250,4 +307,5 @@ def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
     assert transcript.segments[1].speaker == "speaker_1"
     assert transcript.source_id == "video_audio"
     assert transcript.segments[0].confidence == 0.9
+    assert "diarization_requested_but_unsupported_by_provider" in transcript.warnings
 

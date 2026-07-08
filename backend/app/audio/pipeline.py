@@ -90,6 +90,12 @@ class AudioSegment:
     text: str
     speaker: str = "speaker_0"
     confidence: float | None = None
+    confidence_source: str | None = None
+    speaker_confidence: float | None = None
+    no_speech_probability: float | None = None
+    avg_logprob: float | None = None
+    compression_ratio: float | None = None
+    overlap_warning: bool = False
     warnings: tuple[str, ...] = ()
     words: tuple[dict[str, Any], ...] = ()
 
@@ -114,6 +120,12 @@ class AudioSegment:
             "speaker": self.speaker,
             "text": self.text,
             "confidence": self.confidence,
+            "confidence_source": self.confidence_source,
+            "speaker_confidence": self.speaker_confidence,
+            "no_speech_probability": self.no_speech_probability,
+            "avg_logprob": self.avg_logprob,
+            "compression_ratio": self.compression_ratio,
+            "overlap_warning": self.overlap_warning,
             "warnings": list(self.warnings),
             "words": [dict(word) for word in self.words],
         }
@@ -177,7 +189,7 @@ def normalize_transcript(
     threshold = float(config.get("audio_low_confidence_threshold", 0.65))
     language = raw.get("language")
     duration_ms = int(round(float(raw.get("duration") or 0.0) * 1000))
-    warnings: list[str] = []
+    warnings: list[str] = _normalize_warning_list(raw.get("warnings"))
     segments: list[AudioSegment] = []
     previous_end = 0
     raw_segments = sorted(
@@ -189,6 +201,10 @@ def normalize_transcript(
         end_ms = max(start_ms, int(round(float(item.get("end") or 0.0) * 1000)))
         text = str(item.get("text") or "").strip()
         confidence = _coerce_confidence(item.get("confidence"))
+        no_speech_probability = _coerce_confidence(item.get("no_speech_prob"))
+        avg_logprob = _coerce_float(item.get("avg_logprob"))
+        compression_ratio = _coerce_float(item.get("compression_ratio"))
+        overlap_warning = bool(item.get("overlap_warning"))
         segment_warnings: list[str] = []
         if not text:
             segment_warnings.append("empty_text")
@@ -198,8 +214,20 @@ def normalize_transcript(
             segment_warnings.append("low_confidence")
         if start_ms < previous_end:
             segment_warnings.append("overlaps_previous")
+        if overlap_warning and "overlaps_previous" not in segment_warnings:
+            segment_warnings.append("overlap_warning")
         if start_ms > previous_end + int(config.get("audio_gap_warning_ms", 30_000)):
             segment_warnings.append("long_gap_before_segment")
+        if no_speech_probability is not None and no_speech_probability >= float(
+            config.get("audio_no_speech_warning_threshold", 0.6)
+        ):
+            segment_warnings.append("high_no_speech_probability")
+        if avg_logprob is not None and avg_logprob <= float(config.get("audio_avg_logprob_warning_threshold", -1.0)):
+            segment_warnings.append("low_avg_logprob")
+        if compression_ratio is not None and compression_ratio >= float(
+            config.get("audio_compression_ratio_warning_threshold", 2.4)
+        ):
+            segment_warnings.append("high_compression_ratio")
         previous_end = max(previous_end, end_ms)
         segments.append(
             AudioSegment(
@@ -211,6 +239,12 @@ def normalize_transcript(
                 text=text,
                 speaker=str(item.get("speaker") or "speaker_0"),
                 confidence=confidence,
+                confidence_source=_confidence_source(item, confidence),
+                speaker_confidence=_coerce_confidence(item.get("speaker_confidence")),
+                no_speech_probability=no_speech_probability,
+                avg_logprob=avg_logprob,
+                compression_ratio=compression_ratio,
+                overlap_warning=overlap_warning,
                 warnings=tuple(segment_warnings),
                 words=tuple(_normalize_words(item.get("words"))),
             )
@@ -617,12 +651,36 @@ def _normalize_words(value: Any) -> list[dict[str, Any]]:
         words.append(
             {
                 "word": word,
+                "punctuated_word": str(item.get("punctuated_word") or word).strip(),
                 "start_ms": int(round(float(item.get("start") or 0.0) * 1000)),
                 "end_ms": int(round(float(item.get("end") or 0.0) * 1000)),
                 "confidence": _coerce_confidence(item.get("confidence")),
+                "speaker": str(item["speaker"]) if item.get("speaker") is not None else None,
+                "speaker_confidence": _coerce_confidence(item.get("speaker_confidence")),
             }
         )
     return words
+
+
+def _normalize_warning_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(warning) for warning in value if warning]
+
+
+def _confidence_source(item: dict[str, Any], confidence: float | None) -> str | None:
+    explicit = item.get("confidence_source")
+    if explicit:
+        return str(explicit)
+    if confidence is None:
+        return None
+    if item.get("no_speech_prob") is not None:
+        return "no_speech_probability"
+    if item.get("avg_logprob") is not None:
+        return "avg_logprob"
+    return "provider"
 
 
 def _coerce_confidence(value: Any) -> float | None:
@@ -634,15 +692,43 @@ def _coerce_confidence(value: Any) -> float | None:
         return None
 
 
+def _coerce_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if result != result or result in (float("inf"), float("-inf")):
+        return None
+    return result
+
+
 def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str, Any]:
     segment_warning_count = sum(1 for segment in segments if segment.warnings)
     low_confidence_count = sum(1 for segment in segments if "low_confidence" in segment.warnings)
     empty_count = sum(1 for segment in segments if "empty_text" in segment.warnings)
-    overlap_count = sum(1 for segment in segments if "overlaps_previous" in segment.warnings)
+    overlap_count = sum(
+        1
+        for segment in segments
+        if "overlaps_previous" in segment.warnings or "overlap_warning" in segment.warnings
+    )
     long_gap_count = sum(1 for segment in segments if "long_gap_before_segment" in segment.warnings)
+    no_speech_probability_flags = sum(
+        1 for segment in segments if "high_no_speech_probability" in segment.warnings
+    )
+    avg_logprob_flags = sum(1 for segment in segments if "low_avg_logprob" in segment.warnings)
+    compression_ratio_flags = sum(1 for segment in segments if "high_compression_ratio" in segment.warnings)
     if not segments:
         level = "no_speech"
-    elif warnings or low_confidence_count or empty_count:
+    elif (
+        warnings
+        or low_confidence_count
+        or empty_count
+        or no_speech_probability_flags
+        or avg_logprob_flags
+        or compression_ratio_flags
+    ):
         level = "review"
     else:
         level = "clean"
@@ -665,6 +751,9 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
         or overlap_count
         or long_gap_count
         or empty_count
+        or no_speech_probability_flags
+        or avg_logprob_flags
+        or compression_ratio_flags
         or (unknown_confidence_count and unknown_confidence_count > len(segments) // 2)
     )
     return {
@@ -675,6 +764,10 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
         "empty_segment_count": empty_count,
         "overlap_count": overlap_count,
         "long_gap_count": long_gap_count,
+        "no_speech_probability_flags": no_speech_probability_flags,
+        "avg_logprob_flags": avg_logprob_flags,
+        "compression_ratio_flags": compression_ratio_flags,
+        "provider_warning_count": len(warnings),
         "mean_confidence": mean_confidence,
         "word_count": word_count,
         "speech_seconds": round(speech_ms / 1000.0, 3),
