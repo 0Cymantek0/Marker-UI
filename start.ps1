@@ -41,6 +41,7 @@ function Get-PythonCmd {
     return $null
 }
 
+$isWindowsPlatform = [System.IO.Path]::DirectorySeparatorChar -eq "\"
 
 # ── Check prerequisites ──────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ if (-not (Test-Path ".venv")) {
 }
 
 # Activate venv
-$venvPython = if ($IsWindows -or $env:OS -match "Windows") {
+$venvPython = if ($isWindowsPlatform) {
     ".venv\Scripts\python.exe"
 } else {
     ".venv/bin/python"
@@ -88,7 +89,7 @@ if (-not (Test-Path $venvPython)) {
 }
 
 $venvPip = $venvPython -replace "python\.exe$", "pip.exe"
-if ($IsWindows -or $env:OS -match "Windows") {
+if ($isWindowsPlatform) {
     $venvPip = ".venv\Scripts\pip.exe"
 } else {
     $venvPip = ".venv/bin/pip"
@@ -166,6 +167,9 @@ Write-Host "[5/6] Creating data directories..." -ForegroundColor Yellow
         New-Item -ItemType Directory -Path $_ -Force | Out-Null
     }
 }
+if (-not (Test-Path "data/logs")) {
+    New-Item -ItemType Directory -Path "data/logs" -Force | Out-Null
+}
 Write-Host "  Data directories ready" -ForegroundColor Green
 
 # ── Start services ───────────────────────────────────────────────────
@@ -215,6 +219,38 @@ function Wait-BackendReady {
     return $false
 }
 
+function Stop-ProcessTree {
+    param([System.Diagnostics.Process]$Process)
+
+    if (-not $Process -or $Process.HasExited) {
+        return
+    }
+
+    if ($isWindowsPlatform) {
+        taskkill.exe /PID $Process.Id /T /F > $null 2>&1
+    } else {
+        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Write-LogTail {
+    param(
+        [string]$Label,
+        [string[]]$Paths
+    )
+
+    foreach ($path in $Paths) {
+        if (Test-Path $path) {
+            $lines = Get-Content $path -Tail 20 -ErrorAction SilentlyContinue
+            if ($lines) {
+                Write-Host ""
+                Write-Host "  Last $Label log lines ($path):" -ForegroundColor DarkGray
+                $lines | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+            }
+        }
+    }
+}
+
 $backendPort = Find-FreePort -StartPort 8000
 if (-not $backendPort) {
     Write-Host "  ERROR: No free port found for backend." -ForegroundColor Red
@@ -226,6 +262,7 @@ if ($backendPort -ne 8000) {
 }
 
 $env:BACKEND_PORT = $backendPort
+$frontendHost = "127.0.0.1"
 
 $frontendPort = Find-FreePort -StartPort 5173
 if (-not $frontendPort) {
@@ -238,25 +275,34 @@ if ($frontendPort -ne 5173) {
 }
 
 # Backend
-Write-Host "  Starting backend on http://localhost:$backendPort ..." -ForegroundColor Cyan
+Write-Host "  Starting backend on http://127.0.0.1:$backendPort ..." -ForegroundColor Cyan
 $venvPythonFull = (Resolve-Path $venvPython).Path
-$backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", $backendPort, "--app-dir", "backend" -PassThru -WindowStyle Hidden
+$backendOutLog = Join-Path $PSScriptRoot "data\logs\backend.out.log"
+$backendErrLog = Join-Path $PSScriptRoot "data\logs\backend.err.log"
+$frontendOutLog = Join-Path $PSScriptRoot "data\logs\frontend.out.log"
+$frontendErrLog = Join-Path $PSScriptRoot "data\logs\frontend.err.log"
+
+"" | Set-Content $backendOutLog
+"" | Set-Content $backendErrLog
+"" | Set-Content $frontendOutLog
+"" | Set-Content $frontendErrLog
+
+$backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", $backendPort, "--app-dir", "backend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $backendOutLog -RedirectStandardError $backendErrLog
 
 Write-Host "  Waiting for backend health check (up to 120 seconds)..." -ForegroundColor DarkGray
 if (-not (Wait-BackendReady -Process $backendJob -Port $backendPort -TimeoutSeconds 120)) {
-    if (-not $backendJob.HasExited) {
-        Stop-Process -Id $backendJob.Id -Force -ErrorAction SilentlyContinue
-    }
+    Write-LogTail -Label "backend" -Paths @($backendOutLog, $backendErrLog)
+    Stop-ProcessTree -Process $backendJob
     exit 1
 }
 Write-Host "  Backend health check passed on port $backendPort." -ForegroundColor Green
 
 # Frontend - use cmd.exe because npm is a .cmd file on Windows, not a real .exe
-Write-Host "  Starting frontend on http://localhost:$frontendPort ..." -ForegroundColor Cyan
-if ($IsWindows -or $env:OS -match "Windows") {
-    $frontendJob = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "set BACKEND_PORT=$backendPort&& npm run dev -- --port $frontendPort" -WorkingDirectory "$PWD\frontend" -PassThru -WindowStyle Hidden
+Write-Host "  Starting frontend on http://${frontendHost}:$frontendPort ..." -ForegroundColor Cyan
+if ($isWindowsPlatform) {
+    $frontendJob = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "set BACKEND_PORT=$backendPort&& npm run dev -- --host $frontendHost --port $frontendPort" -WorkingDirectory "$PWD\frontend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $frontendOutLog -RedirectStandardError $frontendErrLog
 } else {
-    $frontendJob = Start-Process -FilePath "npm" -ArgumentList "run", "dev", "--", "--port", "$frontendPort" -WorkingDirectory "$PWD/frontend" -PassThru -WindowStyle Hidden
+    $frontendJob = Start-Process -FilePath "npm" -ArgumentList "run", "dev", "--", "--host", "$frontendHost", "--port", "$frontendPort" -WorkingDirectory "$PWD/frontend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $frontendOutLog -RedirectStandardError $frontendErrLog
 }
 
 Start-Sleep -Seconds 3
@@ -267,11 +313,12 @@ Write-Host ""
 Write-Host "  ===================================================" -ForegroundColor Green
 Write-Host "  Marker UI is running!" -ForegroundColor Green
 Write-Host ""
-Write-Host "    Frontend:  http://localhost:$frontendPort" -ForegroundColor White
-Write-Host "    Backend:   http://localhost:$backendPort" -ForegroundColor White
-Write-Host "    API Docs:  http://localhost:$backendPort/docs" -ForegroundColor White
+Write-Host "    Frontend:  http://${frontendHost}:$frontendPort" -ForegroundColor White
+Write-Host "    Backend:   http://127.0.0.1:$backendPort" -ForegroundColor White
+Write-Host "    API Docs:  http://127.0.0.1:$backendPort/docs" -ForegroundColor White
+Write-Host "    Logs:      $PSScriptRoot\data\logs" -ForegroundColor White
 Write-Host ""
-Write-Host "  Press Ctrl+C to stop both services." -ForegroundColor DarkGray
+Write-Host "  Leave this window open. Press Ctrl+C to stop both services." -ForegroundColor DarkGray
 Write-Host "  ===================================================" -ForegroundColor Green
 Write-Host ""
 
@@ -281,10 +328,12 @@ try {
     while ($true) {
         if ($backendJob.HasExited) {
             Write-Host "  Backend process exited unexpectedly." -ForegroundColor Red
+            Write-LogTail -Label "backend" -Paths @($backendOutLog, $backendErrLog)
             break
         }
         if ($frontendJob.HasExited) {
             Write-Host "  Frontend process exited unexpectedly." -ForegroundColor Red
+            Write-LogTail -Label "frontend" -Paths @($frontendOutLog, $frontendErrLog)
             break
         }
         Start-Sleep -Seconds 2
@@ -292,7 +341,7 @@ try {
 } finally {
     Write-Host ""
     Write-Host "  Stopping services..." -ForegroundColor Yellow
-    if (-not $backendJob.HasExited) { Stop-Process -Id $backendJob.Id -Force -ErrorAction SilentlyContinue }
-    if (-not $frontendJob.HasExited) { Stop-Process -Id $frontendJob.Id -Force -ErrorAction SilentlyContinue }
+    Stop-ProcessTree -Process $frontendJob
+    Stop-ProcessTree -Process $backendJob
     Write-Host "  Services stopped." -ForegroundColor Green
 }
