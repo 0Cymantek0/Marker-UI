@@ -170,7 +170,7 @@ def register_mcp_resources(
             "2. Plan local files with `marker_plan_local_file` or URLs with `marker_plan_url`.\n"
             "3. Convert locally with `marker_convert_local_file` or public URLs with `marker_convert_url`.\n"
             "4. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.\n"
-            "5. Read long outputs as bounded offset pages with `marker_read_output_chunk` and inspect manifests/assets before summarizing.\n"
+            "5. Read long outputs as bounded offset pages with `marker_read_output`; request `output_format='chunks'` when semantic RAG chunks are needed.\n"
         )
 
     @mcp.resource(

@@ -47,6 +47,9 @@ async def test_mcp_static_resources_are_readable():
     assert "marker_convert" in capabilities_payload["tools"]
     assert "marker://docs/agent-guide" in capabilities_payload["resources"]
     assert "convert_for_rag" in capabilities_payload["prompts"]
+    assert "marker_read_output`" in guide[0].content
+    assert "output_format='chunks'" in guide[0].content
+    assert "marker_read_output_chunk" not in guide[0].content
 
 
 @pytest.mark.asyncio
