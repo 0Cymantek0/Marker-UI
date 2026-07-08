@@ -2,7 +2,7 @@
 .SYNOPSIS
     Marker UI - One-click launcher (PowerShell)
 .DESCRIPTION
-    Checks Python 3.10+ and Node 18+, installs dependencies,
+    Checks Python 3.11+ and Node 18+, installs dependencies,
     creates a virtual environment, and starts both backend and frontend.
 .EXAMPLE
     .\start.ps1
@@ -67,7 +67,7 @@ function Get-PythonCmd {
             $ver = & $cmd --version 2>&1
             if ($ver -match "3\.(\d+)") {
                 $minor = [int]$Matches[1]
-                if ($minor -ge 10) { return $cmd }
+                if ($minor -ge 11) { return $cmd }
             }
         }
     }
@@ -82,7 +82,7 @@ Write-Host "[1/6] Checking prerequisites..." -ForegroundColor Yellow
 
 $pythonCmd = Get-PythonCmd
 if (-not $pythonCmd) {
-    Write-Host "  ERROR: Python 3.10+ not found. Install from https://python.org" -ForegroundColor Red
+    Write-Host "  ERROR: Python 3.11+ not found. Install from https://python.org" -ForegroundColor Red
     exit 1
 }
 $pyVer = & $pythonCmd --version 2>&1

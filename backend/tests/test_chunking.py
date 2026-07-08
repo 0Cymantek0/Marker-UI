@@ -467,6 +467,34 @@ def test_chunk_markdown_tags_structural_blocks_and_extracts_assets() -> None:
     assert body_chunk["metadata"]["asset_refs"] == body_chunk["asset_refs"]
 
 
+def test_chunk_markdown_extracts_parenthesized_markdown_asset_targets() -> None:
+    markdown = (
+        "# Assets\n\n"
+        'See ![Revenue chart](assets/figures/q4(revised).png "Q4 revised") '
+        "and [appendix](docs/appendix(v2).md)."
+    )
+
+    payload = chunk_markdown(markdown, source_name="assets.md", max_chars=300)
+    refs = payload["chunks"][0]["asset_refs"]
+
+    assert refs == [
+        {
+            "type": "image",
+            "target": "assets/figures/q4(revised).png",
+            "url": "assets/figures/q4(revised).png",
+            "alt": "Revenue chart",
+            "title": "Q4 revised",
+        },
+        {
+            "type": "link",
+            "target": "docs/appendix(v2).md",
+            "href": "docs/appendix(v2).md",
+            "label": "appendix",
+        },
+    ]
+    assert payload["chunks"][0]["metadata"]["asset_refs"] == refs
+
+
 def test_chunk_markdown_does_not_treat_unclosed_front_matter_as_document() -> None:
     payload = chunk_markdown("---\n# Title\n\nBody.", source_name="not-front-matter.md", max_chars=200)
 

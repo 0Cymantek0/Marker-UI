@@ -522,12 +522,9 @@ def _asset_refs(text: str) -> tuple[dict[str, Any], ...]:
             ref["title"] = title
         refs.append(ref)
 
-    for match in re.finditer(r"!\[([^\]]*)\]\(([^)]*)\)", text):
-        target, title = _parse_markdown_link_destination(match.group(2))
-        add_ref("image", target, label=match.group(1).strip(), title=title)
-    for match in re.finditer(r"(?<!!)\[([^\]]+)\]\(([^)]*)\)", text):
-        target, title = _parse_markdown_link_destination(match.group(2))
-        add_ref("link", target, label=match.group(1).strip(), title=title)
+    for kind, label, raw_destination in _markdown_inline_refs(text):
+        target, title = _parse_markdown_link_destination(raw_destination)
+        add_ref(kind, target, label=label, title=title)
     for match in re.finditer(r"<(https?://[^>\s]+)>", text):
         add_ref("link", match.group(1))
     for match in re.finditer(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"'][^>]*>", text, flags=re.IGNORECASE):
@@ -538,6 +535,91 @@ def _asset_refs(text: str) -> tuple[dict[str, Any], ...]:
         label = re.sub(r"<[^>]+>", "", match.group(2)).strip()
         add_ref("html_link", match.group(1), label=label, title=_html_attr(match.group(0), "title"))
     return tuple(refs)
+
+
+def _markdown_inline_refs(text: str) -> tuple[tuple[str, str, str], ...]:
+    refs: list[tuple[str, str, str]] = []
+    index = 0
+    while index < len(text):
+        kind = ""
+        label_start = -1
+        if text.startswith("![", index):
+            kind = "image"
+            label_start = index + 2
+        elif text[index] == "[" and (index == 0 or text[index - 1] != "!"):
+            kind = "link"
+            label_start = index + 1
+        else:
+            index += 1
+            continue
+
+        label_end = _find_closing_markdown_bracket(text, label_start)
+        if label_end < 0:
+            index += 1
+            continue
+        destination_start = label_end + 1
+        if destination_start >= len(text) or text[destination_start] != "(":
+            index = label_end + 1
+            continue
+        destination_end = _find_closing_markdown_destination(text, destination_start + 1)
+        if destination_end < 0:
+            index = label_end + 1
+            continue
+        refs.append((kind, text[label_start:label_end].strip(), text[destination_start + 1 : destination_end]))
+        index = destination_end + 1
+    return tuple(refs)
+
+
+def _find_closing_markdown_bracket(text: str, start: int) -> int:
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "]":
+            return index
+    return -1
+
+
+def _find_closing_markdown_destination(text: str, start: int) -> int:
+    depth = 0
+    quote: str | None = None
+    in_angle = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            continue
+        if in_angle:
+            if char == ">":
+                in_angle = False
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char == "<":
+            in_angle = True
+            continue
+        if char == "(":
+            depth += 1
+            continue
+        if char == ")":
+            if depth == 0:
+                return index
+            depth -= 1
+    return -1
 
 
 def _parse_markdown_link_destination(raw: str) -> tuple[str, str]:

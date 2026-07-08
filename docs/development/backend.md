@@ -1,6 +1,6 @@
 # FastAPI Backend Architecture
 
-The backend of Marker UI is implemented in Python 3.10+ using **FastAPI** to achieve high concurrency and clear routing.
+The backend of Marker UI is implemented in Python 3.11+ using **FastAPI** to achieve high concurrency and clear routing.
 
 ---
 

@@ -8,7 +8,7 @@ FROM node:22-slim AS frontend-build
 
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 WORKDIR /app
-COPY frontend/package.json frontend/pnpm-lock.yaml frontend/.npmrc ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile \
     && pnpm approve-builds esbuild
 COPY frontend/ .

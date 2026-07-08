@@ -94,9 +94,11 @@ async def test_convert_plan_pdf(client: AsyncClient):
 async def test_convert_plan_local_pdf_applies_phase5_backend_knobs(
     client: AsyncClient,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     pdf = tmp_path / "clean.pdf"
     _write_digital_pdf(pdf)
+    monkeypatch.setenv("MARKER_WORKSPACE_ROOTS", str(tmp_path))
 
     fast_resp = await client.post(
         "/api/convert/plan",
@@ -136,6 +138,7 @@ async def test_convert_plan_local_pdf_reports_mixed_segments(
 ):
     pdf = tmp_path / "mixed.pdf"
     pdf.write_bytes(b"%PDF")
+    monkeypatch.setenv("MARKER_WORKSPACE_ROOTS", str(tmp_path))
     probe_payload = {
         "page_count": 3,
         "text_layer_score": 0.5,

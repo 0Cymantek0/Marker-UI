@@ -34,7 +34,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 If you prefer to configure components manually:
 
 ### 1. Prerequisites
-- **Python 3.10+** (Ensure "Add Python to PATH" is checked during installation).
+- **Python 3.11+** (Ensure "Add Python to PATH" is checked during installation).
 - **Node.js 18+** (LTS version recommended, with Corepack/pnpm available).
 - **C++ Build Tools** (Sometimes required by Python packages compiling C extensions: e.g. [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)).
 

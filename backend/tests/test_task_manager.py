@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
 from app.services.task_manager import (
     DB_METADATA_AUDIO_SEGMENT_LIMIT,
@@ -599,7 +598,7 @@ class TestExecutionBackendRouting:
 
     def test_cpu_plan_routes_to_cpu_backend_on_process_config(self):
         from app.conversion.result import ConverterPlan
-        from app.services.task_manager import TaskManager, ProcessExecutorBackend
+        from app.services.task_manager import TaskManager
 
         tm = TaskManager(max_workers=1)
         # Force the primary backend to look like a process backend without
@@ -987,6 +986,80 @@ async def test_finalize_job_relabels_markdown_only_result_as_markdown(
         assert row.output_format == "markdown"
         assert json.loads(row.formats_json) == {"markdown": "# Report\n\nNative Markdown output"}
         assert Path(row.result_path).suffix == ".md"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_persists_primary_chunks_with_chunks_json_suffix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Primary chunk artifacts need a distinct suffix and JSON media type."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'final-chunks.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "66666666-6666-4666-8666-666666666666"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="scores.tsv",
+            original_name="scores.tsv",
+            status="pending",
+            input_format="tsv",
+            output_format="chunks",
+            config_json=json.dumps(
+                {
+                    "output_format": "chunks",
+                    "original_name": "scores.tsv",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    chunk_text = '{"schema_version":"marker.chunks.v1","chunks":[]}'
+    result_payload = {
+        "text": chunk_text,
+        "extension": "json",
+        "images": {},
+        "metadata": {"chunking": {"schema_version": "marker.chunks.v1"}},
+    }
+    config = {
+        "output_format": "chunks",
+        "original_name": "scores.tsv",
+        "output_dir": str(tmp_path / "out"),
+    }
+
+    tm = TaskManager(max_workers=1)
+    try:
+        await tm._finalize_job(job_id, result_payload, config)
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row.status == "completed"
+        assert row.output_format == "chunks"
+        assert json.loads(row.formats_json) == {"chunks": chunk_text}
+        result_path = Path(row.result_path)
+        assert result_path.name == "scores.chunks.json"
+        manifest = json.loads(result_path.with_name("scores.chunks.marker.json").read_text(encoding="utf-8"))
+        assert manifest["output"]["text_path"] == "scores.chunks.json"
+        assert manifest["output"]["media_type"] == "application/json"
 
     await engine.dispose()
 

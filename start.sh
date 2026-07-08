@@ -45,7 +45,7 @@ echo -e "${YELLOW}[1/6] Checking prerequisites...${NC}"
 PYTHON=""
 for cmd in python3 python; do
     if command -v "$cmd" &>/dev/null; then
-        if "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" &>/dev/null; then
+        if "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" &>/dev/null; then
             PYTHON="$cmd"
             break
         fi
@@ -53,7 +53,7 @@ for cmd in python3 python; do
 done
 
 if [ -z "$PYTHON" ]; then
-    err "ERROR: Python 3.10+ not found. Install from https://python.org"
+    err "ERROR: Python 3.11+ not found. Install from https://python.org"
     exit 1
 fi
 ok "Python: $($PYTHON --version 2>&1)"

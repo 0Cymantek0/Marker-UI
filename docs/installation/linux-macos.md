@@ -28,7 +28,7 @@ The launcher binds both backend and frontend to `127.0.0.1` by default so the lo
 If you prefer to configure components manually:
 
 ### 1. Prerequisites
-- **Python 3.10+** (with `python3-venv` package on Linux).
+- **Python 3.11+** (with `python3-venv` package on Linux).
 - **Node.js 18+** (LTS version recommended).
 - **Poppler & Tesseract** (Common document parsing libraries, recommended for general PDF OCR).
   - **macOS (via Homebrew)**: `brew install poppler tesseract`

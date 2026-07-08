@@ -204,3 +204,27 @@ def test_write_conversion_output_uses_result_media_type_for_chunks_explicit_path
     assert written.media_type == "application/json"
     manifest = json.loads(written.manifest_path.read_text(encoding="utf-8"))
     assert manifest["output"]["media_type"] == "application/json"
+
+
+def test_write_conversion_output_names_primary_chunks_artifact_distinctly(tmp_path: Path):
+    result = {
+        "text": '{"schema_version":"marker.chunks.v1","chunks":[]}',
+        "extension": "json",
+        "images": {},
+        "metadata": {"chunking": {"schema_version": "marker.chunks.v1"}},
+    }
+
+    written = write_conversion_output(
+        result,
+        source_name="source.tsv",
+        output_base=tmp_path,
+        output_format="chunks",
+        conversion_config={"output_format": "chunks"},
+    )
+
+    assert written.text_path.name == "source.chunks.json"
+    assert written.manifest_path.name == "source.chunks.marker.json"
+    assert written.media_type == "application/json"
+    manifest = json.loads(written.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["output"]["text_path"] == "source.chunks.json"
+    assert manifest["output"]["media_type"] == "application/json"

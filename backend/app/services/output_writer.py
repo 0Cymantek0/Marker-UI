@@ -138,6 +138,8 @@ def write_conversion_output(
 
 def _extension_from_result(result: dict[str, Any], output_format: str | None) -> str:
     ext = str(result.get("extension") or "").lstrip(".")
+    if output_format == "chunks" and (not ext or ext == "json"):
+        return "chunks.json"
     if not ext and output_format:
         ext = {
             "markdown": "md",
@@ -151,6 +153,7 @@ def _extension_from_result(result: dict[str, Any], output_format: str | None) ->
 def _media_type_from_result(result: dict[str, Any], output_format: str | None, text_path: Path) -> str:
     ext = _extension_from_result(result, output_format).lower()
     media_by_ext = {
+        "chunks.json": "application/json",
         "md": "text/markdown",
         "markdown": "text/markdown",
         "html": "text/html",

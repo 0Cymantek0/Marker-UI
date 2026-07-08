@@ -277,10 +277,24 @@ class TestUploadLocalFile:
         assert "Local file not found" in resp.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_valid_local_path_accepted(self, upload_client: AsyncClient, tmp_path):
+    async def test_local_path_requires_workspace_roots(self, upload_client: AsyncClient, tmp_path):
+        temp_file = tmp_path / "valid.pdf"
+        temp_file.write_bytes(b"%PDF-1.4 fake")
+
+        resp = await upload_client.post(
+            "/api/convert/upload",
+            params={"local_filepath": str(temp_file.resolve())},
+        )
+
+        assert resp.status_code == 400
+        assert "MARKER_WORKSPACE_ROOTS" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_valid_local_path_accepted(self, upload_client: AsyncClient, tmp_path, monkeypatch):
         # Create a temp file on disk
         temp_file = tmp_path / "valid.pdf"
         temp_file.write_bytes(b"%PDF-1.4 fake")
+        monkeypatch.setenv("MARKER_WORKSPACE_ROOTS", str(tmp_path))
 
         resp = await upload_client.post(
             "/api/convert/upload",
@@ -290,6 +304,36 @@ class TestUploadLocalFile:
         body = resp.json()
         assert body["status"] == "pending"
         assert body["filename"] == "valid.pdf"
+
+    @pytest.mark.asyncio
+    async def test_output_dir_requires_output_root(self, upload_client: AsyncClient, tmp_path):
+        data = io.BytesIO(b"%PDF-1.4 fake")
+        files = {"file": ("document.pdf", data, "application/pdf")}
+
+        resp = await upload_client.post(
+            "/api/convert/upload",
+            files=files,
+            params={"output_dir": str(tmp_path / "out")},
+        )
+
+        assert resp.status_code == 400
+        assert "MARKER_OUTPUT_ROOT" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_output_dir_under_output_root_accepted(self, upload_client: AsyncClient, tmp_path, monkeypatch):
+        output_root = tmp_path / "outputs"
+        output_root.mkdir()
+        data = io.BytesIO(b"%PDF-1.4 fake")
+        files = {"file": ("document.pdf", data, "application/pdf")}
+        monkeypatch.setenv("MARKER_OUTPUT_ROOT", str(output_root))
+
+        resp = await upload_client.post(
+            "/api/convert/upload",
+            files=files,
+            params={"output_dir": str(output_root / "nested")},
+        )
+
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +373,6 @@ class TestUploadCommitsBeforeSubmit:
         from app.database import Base, get_db
         from app.main import app
         from app.models.job import ConversionJob  # noqa: F401
-        from app.models.settings import Setting  # noqa: F401
 
         db_path = tmp_path / "commit_race.db"
         engine = create_async_engine(

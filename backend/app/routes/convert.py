@@ -20,7 +20,7 @@ from starlette.background import BackgroundTask
 
 import aiofiles
 
-from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
+from app.core.config import MAX_UPLOAD_SIZE, UPLOAD_DIR
 from app.agent_contract import AUDIO_OUTPUT_MODES
 from app.conversion.engine_policy import validate_engine_override
 from app.conversion.formats import (
@@ -39,7 +39,10 @@ from app.audio.providers.registry import (
     validate_audio_fusion_selection,
     validate_provider_selection,
 )
-from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
+from app.services.policy import (
+    assert_rest_local_input_allowed,
+    assert_rest_output_write_allowed,
+)
 from app.services.audit import record_audit_event
 from app.services.safe_url_fetcher import (
     SafeUrlFetchError,
@@ -576,7 +579,7 @@ async def upload_file(
                 detail=f"Local file not found: {local_filepath}",
             )
         try:
-            assert_local_input_allowed(path)
+            assert_rest_local_input_allowed(path)
         except InputNotAllowedError as exc:
             await record_audit_event(
                 db,
@@ -854,7 +857,7 @@ async def upload_file(
         config["source_url"] = source_url_safe
     if output_dir:
         try:
-            assert_output_write_allowed(Path(output_dir))
+            assert_rest_output_write_allowed(Path(output_dir))
         except InputNotAllowedError as exc:
             await record_audit_event(
                 db,
@@ -997,7 +1000,7 @@ async def plan_conversion(
         if path.is_absolute() and path.is_file():
             plan_suffix = path.suffix
             try:
-                assert_local_input_allowed(path)
+                assert_rest_local_input_allowed(path)
             except InputNotAllowedError as exc:
                 raise HTTPException(status_code=400, detail=exc.message) from exc
         if path.is_absolute() and path.is_file() and path.suffix.lower() == ".pdf":
