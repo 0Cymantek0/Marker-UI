@@ -251,6 +251,37 @@ function Write-LogTail {
     }
 }
 
+function Write-NewLogLines {
+    param(
+        [string]$Label,
+        [string]$Path,
+        [string]$Color = "DarkGray"
+    )
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    $lines = @(Get-Content $Path -ErrorAction SilentlyContinue)
+    $last = 0
+    if ($script:LogOffsets.ContainsKey($Path)) {
+        $last = [int]$script:LogOffsets[$Path]
+    }
+    if ($lines.Count -lt $last) {
+        $last = 0
+    }
+
+    for ($i = $last; $i -lt $lines.Count; $i++) {
+        $line = $lines[$i]
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+        Write-Host "  [$Label] $line" -ForegroundColor $Color
+    }
+
+    $script:LogOffsets[$Path] = $lines.Count
+}
+
 $backendPort = Find-FreePort -StartPort 8000
 if (-not $backendPort) {
     Write-Host "  ERROR: No free port found for backend." -ForegroundColor Red
@@ -282,12 +313,13 @@ $backendErrLog = Join-Path $PSScriptRoot "data\logs\backend.err.log"
 $frontendOutLog = Join-Path $PSScriptRoot "data\logs\frontend.out.log"
 $frontendErrLog = Join-Path $PSScriptRoot "data\logs\frontend.err.log"
 
-"" | Set-Content $backendOutLog
-"" | Set-Content $backendErrLog
-"" | Set-Content $frontendOutLog
-"" | Set-Content $frontendErrLog
+Set-Content -Path $backendOutLog -Value $null
+Set-Content -Path $backendErrLog -Value $null
+Set-Content -Path $frontendOutLog -Value $null
+Set-Content -Path $frontendErrLog -Value $null
+$script:LogOffsets = @{}
 
-$backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", $backendPort, "--app-dir", "backend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $backendOutLog -RedirectStandardError $backendErrLog
+$backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-u", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", $backendPort, "--app-dir", "backend", "--log-level", "info" -PassThru -WindowStyle Hidden -RedirectStandardOutput $backendOutLog -RedirectStandardError $backendErrLog
 
 Write-Host "  Waiting for backend health check (up to 120 seconds)..." -ForegroundColor DarkGray
 if (-not (Wait-BackendReady -Process $backendJob -Port $backendPort -TimeoutSeconds 120)) {
@@ -326,6 +358,11 @@ Write-Host ""
 try {
     # Monitor processes - if either dies, report it
     while ($true) {
+        Write-NewLogLines -Label "backend" -Path $backendOutLog -Color "DarkGray"
+        Write-NewLogLines -Label "backend!" -Path $backendErrLog -Color "DarkYellow"
+        Write-NewLogLines -Label "frontend" -Path $frontendOutLog -Color "DarkGray"
+        Write-NewLogLines -Label "frontend!" -Path $frontendErrLog -Color "DarkYellow"
+
         if ($backendJob.HasExited) {
             Write-Host "  Backend process exited unexpectedly." -ForegroundColor Red
             Write-LogTail -Label "backend" -Paths @($backendOutLog, $backendErrLog)
