@@ -628,6 +628,49 @@ describe('ConvertPage component', () => {
     expect(screen.queryByText(/PK/)).not.toBeInTheDocument()
   })
 
+  it('rewrites markdown asset URLs with the backend job id', async () => {
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [
+        {
+          id: 'local-queue-id',
+          filename: 'assets.pdf',
+          file: null,
+          localPath: '',
+          phase: 'completed',
+          progress: 100,
+          statusText: 'Conversion complete',
+          jobId: 'backend-job-id',
+          error: null,
+          resultBlob: new Blob(),
+          resultText: '![diagram](assets/page%201.png)',
+          logs: [],
+          outputFormat: 'markdown',
+          imageUnderstanding: null,
+        }
+      ],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    render(<ConvertPage />)
+
+    const image = await screen.findByAltText('diagram')
+    expect(image).toHaveAttribute(
+      'src',
+      '/api/convert/assets/backend-job-id/assets/page%201.png'
+    )
+    expect(image).not.toHaveAttribute(
+      'src',
+      expect.stringContaining('local-queue-id')
+    )
+  })
+
   it('renders failed job and displays failure status without download button', () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [
