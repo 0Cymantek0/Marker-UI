@@ -4,6 +4,10 @@ import {
   downloadResult,
   uploadFile,
   normalizeOcrEngine,
+  getAudioProviders,
+  saveAudioProviders,
+  getActiveAudioProvider,
+  setActiveAudioProvider,
 } from '@/lib/api'
 
 const eventSourceUrls: string[] = []
@@ -177,5 +181,68 @@ describe('normalizeOcrEngine', () => {
     expect(normalizeOcrEngine('paddleocr_vl')).toBe('hybrid_ocr')
     expect(normalizeOcrEngine('mistral_ocr')).toBe('surya')
     expect(normalizeOcrEngine(undefined)).toBe('surya')
+  })
+})
+
+describe('audio provider settings API', () => {
+  it('lists configured audio providers', async () => {
+    mockFetchOnce(200, [
+      {
+        id: 'openai',
+        type: 'openai',
+        label: 'OpenAI',
+        api_key: '********',
+        models: ['gpt-4o-transcribe'],
+        enabled: true,
+        cloud: true,
+      },
+    ], true)
+
+    const providers = await getAudioProviders()
+
+    expect(providers[0]?.id).toBe('openai')
+    expect(global.fetch).toHaveBeenCalledWith('/api/settings/audio/providers', expect.any(Object))
+  })
+
+  it('saves configured audio providers', async () => {
+    const body = [
+      {
+        id: 'deepgram',
+        type: 'deepgram',
+        label: 'Deepgram',
+        api_key: 'secret',
+        base_url: '',
+        region: '',
+        deployment: '',
+        concurrency: 2,
+        timeout: 30,
+        max_retries: 1,
+        default_model: 'nova-2',
+        models: ['nova-2'],
+        enabled: true,
+        cloud: true,
+      },
+    ]
+    mockFetchOnce(200, body, true)
+
+    await saveAudioProviders(body)
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/settings/audio/providers', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }))
+  })
+
+  it('gets and sets active audio provider', async () => {
+    mockFetchOnce(200, { provider_id: 'local_faster_whisper', model_id: '' }, true)
+    await expect(getActiveAudioProvider()).resolves.toEqual({ provider_id: 'local_faster_whisper', model_id: '' })
+
+    mockFetchOnce(200, { provider_id: 'openai', model_id: 'gpt-4o-transcribe' }, true)
+    await setActiveAudioProvider({ provider_id: 'openai', model_id: 'gpt-4o-transcribe' })
+
+    expect(global.fetch).toHaveBeenLastCalledWith('/api/settings/audio/active', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ provider_id: 'openai', model_id: 'gpt-4o-transcribe' }),
+    }))
   })
 })

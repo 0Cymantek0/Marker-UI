@@ -27,11 +27,34 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/select'
-import { getSettings, getGPUStatus, installGPU, toggleGPU, getGPUWorkersResolved, setGPUWorkers, getLLMProviders, saveLLMProviders, getActiveLLM, setActiveLLM, fetchAvailableModels, selfHealModels, resetModels, updateSetting, type BackendLLMConfig, type LLMProvider, type ModelConfig, type ActiveLLM, type GPUStatus, type GPUWorkerMode, type GPUWorkersResolved } from '@/lib/api'
+import {
+  getSettings,
+  getGPUStatus,
+  installGPU,
+  toggleGPU,
+  getGPUWorkersResolved,
+  setGPUWorkers,
+  getLLMProviders,
+  saveLLMProviders,
+  getActiveLLM,
+  setActiveLLM,
+  fetchAvailableModels,
+  selfHealModels,
+  resetModels,
+  updateSetting,
+  type BackendLLMConfig,
+  type LLMProvider,
+  type ModelConfig,
+  type ActiveLLM,
+  type GPUStatus,
+  type GPUWorkerMode,
+  type GPUWorkersResolved,
+} from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { messageFromUnknownError } from '@/lib/errors'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TestConnectionButton } from '@/components/features/settings/TestConnectionButton'
+import { AudioProviderSettings } from '@/components/features/settings/AudioProviderSettings'
 
 export function SettingsPage() {
   const [providers, setProviders] = useState<LLMProvider[]>([])
@@ -677,6 +700,8 @@ export function SettingsPage() {
           })}
         </div>
       </div>
+
+      <AudioProviderSettings />
 
       {/* GPU Acceleration Section */}
       <div className="space-y-4 pt-6 border-t border-border/20">

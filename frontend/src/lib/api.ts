@@ -74,6 +74,28 @@ export interface VocabularyPack {
   created_at: string
 }
 
+export interface AudioProviderConfig {
+  id: string
+  type: AudioProviderType | string
+  label: string
+  api_key?: string | null
+  base_url?: string | null
+  region?: string | null
+  deployment?: string | null
+  concurrency?: number | null
+  timeout?: number | null
+  max_retries?: number | null
+  default_model?: string | null
+  models: string[]
+  enabled: boolean
+  cloud: boolean
+}
+
+export interface ActiveAudioProvider {
+  provider_id: string
+  model_id: string
+}
+
 /**
  * Migrate any stored/legacy ocr_engine value to a currently-valid one.
  *
@@ -1014,6 +1036,28 @@ export async function deletePreset(presetId: string): Promise<{ success: boolean
 export async function getAudioCapabilities(): Promise<AudioProviderCapability[]> {
   const res = await request<{ providers: AudioProviderCapability[] }>('/settings/audio/capabilities')
   return res.providers
+}
+
+export async function getAudioProviders(): Promise<AudioProviderConfig[]> {
+  return request<AudioProviderConfig[]>('/settings/audio/providers')
+}
+
+export async function saveAudioProviders(providers: AudioProviderConfig[]): Promise<AudioProviderConfig[]> {
+  return request<AudioProviderConfig[]>('/settings/audio/providers', {
+    method: 'PUT',
+    body: JSON.stringify(providers),
+  })
+}
+
+export async function getActiveAudioProvider(): Promise<ActiveAudioProvider> {
+  return request<ActiveAudioProvider>('/settings/audio/active')
+}
+
+export async function setActiveAudioProvider(active: ActiveAudioProvider): Promise<ActiveAudioProvider> {
+  return request<ActiveAudioProvider>('/settings/audio/active', {
+    method: 'PUT',
+    body: JSON.stringify(active),
+  })
 }
 
 export async function getVocabularyPacks(): Promise<VocabularyPack[]> {
