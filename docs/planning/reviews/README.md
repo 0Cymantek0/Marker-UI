@@ -1,9 +1,18 @@
-# Review Status Ledger
+# Active Review Plans
 
-This ledger records the current status of the July 2026 planning/code-review
-findings after checking the local repository. Full privacy-safe copies of the
-external review plans live in `docs/planning/reviews/`. Keep future summaries
-here using generic paths only.
+Use these documents as recurring audit inputs while fixing Marker UI. They are
+historical static-review inputs from 2026-07-03, not a live statement of the
+current repository. Re-open them before each remediation slice and update this
+status ledger when a finding is verified, fixed, deferred, or rejected.
+
+- `marker_ui_extreme_code_review_and_remediation_plan.md`
+- `marker_ui_deep_architecture_review_research_backed_plan.md`
+
+## Current Status Ledger
+
+Verified against the local repository on 2026-07-09. External copies requested
+from `Downloads` were not present; these repo copies are the privacy-safe
+planning source of record.
 
 | Finding | Current repo status | Evidence |
 | --- | --- | --- |
@@ -13,9 +22,9 @@ here using generic paths only.
 | Frontend Markdown preview auto-loads remote images | Fixed for unsafe Markdown image sources | `frontend/src/components/features/OutputViewer.tsx`; `frontend/src/__tests__/OutputViewer.test.tsx` |
 | Cancel/delete lifecycle conflated | Fixed across REST, agent API, MCP, CLI, and frontend queue | `backend/app/routes/convert.py`; `backend/app/agent_api.py`; `frontend/src/lib/api.ts`; `backend/tests/test_convert.py`; `backend/tests/test_cli_mcp.py` |
 | Cloud STT/provider comparison and real diarization | Still deferred/partial | `README.md`; `docs/limitations.md`; `docs/usage/output-formats.md` |
-| Native converter quality vs Docling/MarkItDown/Pandoc target | Still strategic gap | `docs/planning/markitdown-integration.md` |
+| Native converter quality vs Docling/MarkItDown/Pandoc target | Still strategic gap | review plans and `docs/planning/markitdown-integration.md` |
 
-Recurring checks:
+Primary recurring checks:
 
 - Output format truthfulness across REST, CLI, MCP, frontend, and output manifests.
 - Semantic chunking and RAG-ready chunk artifacts, not only file paging.
