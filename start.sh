@@ -278,6 +278,7 @@ if [ "$BACKEND_PORT" -ne 8000 ]; then
 fi
 
 export BACKEND_PORT
+BACKEND_HOST="127.0.0.1"
 FRONTEND_HOST="127.0.0.1"
 
 FRONTEND_PORT=$(find_free_port 5173)
@@ -287,14 +288,14 @@ if [ "$FRONTEND_PORT" -ne 5173 ]; then
 fi
 
 # Backend
-info "Starting backend on http://localhost:$BACKEND_PORT ..."
-uvicorn app.main:app --host 0.0.0.0 --port $BACKEND_PORT --app-dir backend &
+info "Starting backend on http://$BACKEND_HOST:$BACKEND_PORT ..."
+uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" --app-dir backend &
 BACKEND_PID=$!
 
 BACKEND_READY_TIMEOUT_SECONDS=$(get_int_env MARKER_BACKEND_READY_TIMEOUT_SECONDS 120 1)
 BACKEND_READY_HARD_TIMEOUT_SECONDS=$(get_int_env MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS 0 0)
 info "Waiting for backend health check (soft timeout $BACKEND_READY_TIMEOUT_SECONDS seconds)..."
-if ! wait_service_ready "backend" "http://127.0.0.1:$BACKEND_PORT/api/health" "$BACKEND_PID" "$BACKEND_READY_TIMEOUT_SECONDS" "$BACKEND_READY_HARD_TIMEOUT_SECONDS"; then
+if ! wait_service_ready "backend" "http://$BACKEND_HOST:$BACKEND_PORT/api/health" "$BACKEND_PID" "$BACKEND_READY_TIMEOUT_SECONDS" "$BACKEND_READY_HARD_TIMEOUT_SECONDS"; then
     exit 1
 fi
 ok "Backend health check passed on port $BACKEND_PORT."
@@ -325,8 +326,8 @@ ok "========================================================"
 ok "Marker UI is running!"
 echo ""
 info "  Frontend:  ${CYAN}http://$FRONTEND_HOST:$FRONTEND_PORT${NC}"
-info "  Backend:   ${CYAN}http://localhost:$BACKEND_PORT${NC}"
-info "  API Docs:  ${CYAN}http://localhost:$BACKEND_PORT/docs${NC}"
+info "  Backend:   ${CYAN}http://$BACKEND_HOST:$BACKEND_PORT${NC}"
+info "  API Docs:  ${CYAN}http://$BACKEND_HOST:$BACKEND_PORT/docs${NC}"
 echo ""
 warn "  Press Ctrl+C to stop both services."
 ok "========================================================"

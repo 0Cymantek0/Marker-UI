@@ -19,6 +19,8 @@ Using the quick-start launcher script is the recommended method to run Marker UI
    ```
 3. Open the frontend URL printed by the launcher. It is usually `http://127.0.0.1:5173`.
 
+The launcher binds both backend and frontend to `127.0.0.1` by default so the local REST API is not exposed on your LAN.
+
 ---
 
 ## Manual Installation
