@@ -28,6 +28,26 @@ def test_assert_safe_source_url_rejects_private_network_resolution(monkeypatch):
     assert "private or local network" in exc_info.value.detail
 
 
+@pytest.mark.parametrize(
+    "blocked_ip",
+    [
+        "169.254.169.254",
+        "100.64.0.1",
+    ],
+)
+def test_assert_safe_source_url_rejects_non_global_networks(monkeypatch, blocked_ip):
+    monkeypatch.setattr(
+        "app.services.safe_url_fetcher.socket.getaddrinfo",
+        lambda *args, **kwargs: [(0, 0, 0, "", (blocked_ip, 80))],
+    )
+
+    with pytest.raises(SafeUrlFetchError) as exc_info:
+        assert_safe_source_url("https://example.com/file.pdf")
+
+    assert exc_info.value.category == "unsafe"
+    assert "private or local network" in exc_info.value.detail
+
+
 def test_assert_safe_source_url_enforces_allowlist(monkeypatch):
     monkeypatch.setattr(
         "app.services.safe_url_fetcher.socket.getaddrinfo",

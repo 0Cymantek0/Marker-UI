@@ -66,13 +66,18 @@ class ArchiveConverter(BaseConverter):
         max_child_bytes = int(config.get("archive_max_child_bytes", 2 * 1024 * 1024))
         max_depth = int(config.get("archive_max_depth", 2))
         max_converted_children = int(config.get("archive_max_converted_children", 25))
-        budget = ArchiveBudget(
-            max_files=max_files,
-            max_total_uncompressed_bytes=int(config.get("archive_max_total_uncompressed_bytes", 20 * 1024 * 1024)),
-            max_child_bytes=max_child_bytes,
-            max_depth=max_depth,
-            max_converted_children=max_converted_children,
-            max_compression_ratio=float(config.get("archive_max_compression_ratio", 100.0)),
+        existing_budget = config.get("_archive_budget")
+        budget = (
+            existing_budget
+            if isinstance(existing_budget, ArchiveBudget)
+            else ArchiveBudget(
+                max_files=max_files,
+                max_total_uncompressed_bytes=int(config.get("archive_max_total_uncompressed_bytes", 20 * 1024 * 1024)),
+                max_child_bytes=max_child_bytes,
+                max_depth=max_depth,
+                max_converted_children=max_converted_children,
+                max_compression_ratio=float(config.get("archive_max_compression_ratio", 100.0)),
+            )
         )
         depth = int(config.get("_archive_depth", 0))
         recursive = bool(config.get("archive_recursive", True))
@@ -105,7 +110,7 @@ class ArchiveConverter(BaseConverter):
                 entry, child_result = _convert_child(
                     zf,
                     info,
-                    config,
+                    {**config, "_archive_budget": budget},
                     max_child_bytes=max_child_bytes,
                     max_depth=max_depth,
                     depth=depth,

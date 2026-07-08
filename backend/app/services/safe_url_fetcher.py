@@ -232,7 +232,8 @@ def _host_allowed(hostname: str, allowlist: tuple[str, ...]) -> bool:
 
 def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
     return (
-        ip.is_private
+        not ip.is_global
+        or ip.is_private
         or ip.is_loopback
         or ip.is_link_local
         or ip.is_multicast
