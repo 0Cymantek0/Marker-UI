@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1732,8 +1733,47 @@ async def test_download_chunks_format_uses_json_extension(client: AsyncClient, d
 
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("application/json")
-    assert resp.headers["content-disposition"].endswith('filename="doc.json"')
+    assert resp.headers["content-disposition"].endswith('filename="doc.chunks.json"')
     assert resp.text == chunks_text
+
+
+@pytest.mark.asyncio
+async def test_download_all_keeps_json_and_chunks_as_distinct_files(client: AsyncClient, db_session):
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-download-json-and-chunks"
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# md",
+        config_json=_json.dumps({"output_format": "markdown", "output_formats": ["markdown", "json", "chunks"]}),
+        formats_json=_json.dumps(
+            {
+                "markdown": "# md",
+                "json": '{"document": true}',
+                "chunks": '{"schema_version":"marker.chunks.v1","chunks":[]}',
+            }
+        ),
+        result_path=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
+
+    assert resp.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        assert sorted(zf.namelist()) == ["doc.chunks.json", "doc.json", "doc.md"]
+        assert zf.read("doc.json").decode("utf-8") == '{"document": true}'
+        assert zf.read("doc.chunks.json").decode("utf-8").startswith('{"schema_version"')
 
 
 @pytest.mark.asyncio

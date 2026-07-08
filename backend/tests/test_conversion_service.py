@@ -23,6 +23,7 @@ class _FakeMarkerServiceForConversion:
     def __init__(self) -> None:
         self._initialized = False
         self.convert_calls: list[tuple[str, dict]] = []
+        self.convert_format_calls: list[tuple[str, list[str], dict]] = []
 
     def initialize(self) -> None:
         self._initialized = True
@@ -37,6 +38,36 @@ class _FakeMarkerServiceForConversion:
             "images": {},
             "metadata": {"pages": 2},
         }
+
+    def convert_file_formats(
+        self,
+        filepath: str,
+        options: dict[str, Any],
+        formats: list[str],
+        device: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        self.convert_format_calls.append((filepath, list(formats), dict(options)))
+        payloads = {
+            "markdown": {
+                "text": "# Fake PDF Output\n\nConverted.",
+                "extension": "md",
+                "images": {},
+                "metadata": {"pages": 2},
+            },
+            "json": {
+                "text": '{"document": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            },
+            "chunks": {
+                "text": '{"marker_native_chunks": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            },
+        }
+        return {fmt: payloads[fmt] for fmt in formats if fmt in payloads}
 
 
 class TestConversionService:
@@ -151,6 +182,26 @@ class TestConversionService:
         assert payload["chunking_strategy"] == "unstructured_by_title"
         assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "unstructured_by_title"
         assert result["chunks"]["metadata"]["chunking"]["requested_strategy"] == "unstructured_by_title"
+
+    def test_marker_chunks_honor_explicit_chunking_strategy_by_deriving_from_markdown(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "paper.pdf"
+        source.write_bytes(b"%PDF")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["json", "chunks"],
+            "chunking_strategy": "markdown_heading_blocks_v2",
+        }
+
+        result = svc.convert_file_formats(str(source), config, ["json", "chunks"])
+
+        assert [call[1] for call in fake_ms.convert_format_calls] == [["markdown", "json"]]
+        assert set(result) == {"json", "chunks"}
+        assert result["json"]["text"] == '{"document": true}'
+        payload = json.loads(result["chunks"]["text"])
+        assert payload["schema_version"] == "marker.chunks.v1"
+        assert payload["source"]["name"] == "paper.pdf"
+        assert result["chunks"]["metadata"]["chunking"]["requested_strategy"] == "markdown_heading_blocks_v2"
 
     def test_unknown_extension_does_not_claim_derived_chunks_support(self, tmp_path: Any) -> None:
         """Derived chunks still require a converter that accepts the source."""

@@ -479,7 +479,15 @@ class ConversionService:
             envelope = self.convert_file(filepath, config, device=device)
             return _derived_markdown_formats(envelope, filepath, formats, config=config)
 
-        results = converter.convert_formats(filepath, config, formats, device=device)
+        requested_formats = [fmt for fmt in dict.fromkeys(str(fmt).strip().lower() for fmt in formats) if fmt]
+        derive_chunks = bool(config.get("chunking_strategy") and "chunks" in requested_formats)
+        render_formats = requested_formats
+        if derive_chunks:
+            render_formats = [fmt for fmt in requested_formats if fmt != "chunks"]
+            if "markdown" not in render_formats:
+                render_formats.insert(0, "markdown")
+
+        results = converter.convert_formats(filepath, config, render_formats, device=device)
 
         # Stamp the engine plan + probe into each format's metadata so the routing
         # analysis card renders identically regardless of which format a tab shows.
@@ -490,6 +498,29 @@ class ConversionService:
             if isinstance(probe_data, dict):
                 result.metadata.setdefault("probe_result", probe_data)
             envelopes[fmt] = result.to_legacy_envelope()
+        if derive_chunks:
+            markdown_envelope = envelopes.get("markdown")
+            if markdown_envelope is None:
+                markdown_result = converter.convert_formats(filepath, config, ["markdown"], device=device).get("markdown")
+                if markdown_result is None:
+                    raise RuntimeError("Markdown renderer produced no output for explicit chunking strategy.")
+                markdown_result.metadata.setdefault("engine", plan.to_dict())
+                if isinstance(probe_data, dict):
+                    markdown_result.metadata.setdefault("probe_result", probe_data)
+                markdown_envelope = markdown_result.to_legacy_envelope()
+            derived_chunks = _derived_markdown_formats(
+                markdown_envelope,
+                filepath,
+                ["chunks"],
+                config=config,
+            )["chunks"]
+            ordered: dict[str, dict[str, Any]] = {}
+            for fmt in requested_formats:
+                if fmt == "chunks":
+                    ordered["chunks"] = derived_chunks
+                elif fmt in envelopes:
+                    ordered[fmt] = envelopes[fmt]
+            return ordered
         return envelopes
 
     def _should_use_mixed_pdf_routing(self, filepath: str, config: dict[str, Any]) -> bool:

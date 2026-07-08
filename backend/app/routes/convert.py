@@ -1141,7 +1141,7 @@ async def download_result(
         "markdown": "md",
         "html": "html",
         "json": "json",
-        "chunks": "json",
+        "chunks": "chunks.json",
     }
 
     # Only an explicit all-format download returns an asset package. A specific
@@ -1203,6 +1203,7 @@ async def download_result(
             "md": "text/markdown",
             "html": "text/html",
             "json": "application/json",
+            "chunks.json": "application/json",
             "txt": "text/plain",
         }
         

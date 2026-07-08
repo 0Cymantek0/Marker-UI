@@ -538,6 +538,35 @@ def test_run_conversion_uses_format_renderer_for_single_chunks_request(task_mana
     assert calls == [("scores.tsv", ["chunks"])]
 
 
+def test_finalize_proc_job_preserves_worker_formats_payload(task_manager: TaskManager):
+    captured: dict[str, object] = {}
+
+    async def fake_finalize(job_id, result, config, formats_payload=None):
+        captured["job_id"] = job_id
+        captured["result"] = result
+        captured["config"] = config
+        captured["formats_payload"] = formats_payload
+
+    task_manager._proc_configs["proc-multi"] = {"output_format": "markdown"}
+    task_manager._proc_jobs["proc-multi"] = "running"
+    with patch.object(task_manager, "_finalize_job", new=fake_finalize):
+        task_manager._finalize_proc_job(
+            "proc-multi",
+            {
+                "result": {"text": "# Hi", "extension": "md", "images": {}, "metadata": {}},
+                "formats_payload": {
+                    "markdown": {"text": "# Hi", "extension": "md", "images": {}, "metadata": {}},
+                    "chunks": {"text": '{"chunks":[]}', "extension": "json", "images": {}, "metadata": {}},
+                },
+            },
+        )
+
+    assert captured["job_id"] == "proc-multi"
+    assert captured["result"] == {"text": "# Hi", "extension": "md", "images": {}, "metadata": {}}
+    assert captured["config"] == {"output_format": "markdown"}
+    assert captured["formats_payload"]["chunks"]["extension"] == "json"
+
+
 class TestExecutionBackendRouting:
     """Phase 1 section 15.2: office/text jobs route to the CPU pool, not the
     GPU process workers, when a process backend is configured."""
@@ -708,6 +737,11 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
             "engine": {"engine": "mixed_pdf", "label": "Mixed PDF routing"},
             "probe_result": {"page_count": 3},
             "mixed_engine_segments": segments,
+            "chunking": {
+                "schema_version": "marker.chunks.v1",
+                "chunk_count": 2,
+                "chunking_strategy": "markdown_heading_blocks_v2",
+            },
             "assets": assets,
         },
         "assets": assets,
@@ -731,6 +765,11 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
         assert metadata["mixed_engine_segments"] == segments
         assert metadata["engine"] == {"engine": "mixed_pdf", "label": "Mixed PDF routing"}
         assert metadata["probe_result"] == {"page_count": 3}
+        assert metadata["chunking"] == {
+            "schema_version": "marker.chunks.v1",
+            "chunk_count": 2,
+            "chunking_strategy": "markdown_heading_blocks_v2",
+        }
         assert Path(metadata["manifest_path"]).is_file()
         manifest = json.loads(Path(metadata["manifest_path"]).read_text(encoding="utf-8"))
         assert manifest["schema_version"] == "marker.output_manifest.v1"

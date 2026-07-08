@@ -655,10 +655,14 @@ class TaskManager:
     def _finalize_proc_job(self, job_id: str, result: dict[str, Any]) -> None:
         """Persist a worker-completed job and mark it done (process backend)."""
         config = self._proc_configs.pop(job_id, {})
+        formats_payload = None
+        if isinstance(result, dict) and "result" in result:
+            formats_payload = result.get("formats_payload")
+            result = result.get("result") or {}
         self._progress[job_id] = 90
         self._job_status_text[job_id] = "Finalizing results..."
         try:
-            self._run_async(self._finalize_job(job_id, result, config))
+            self._run_async(self._finalize_job(job_id, result, config, formats_payload))
         except Exception:  # noqa: BLE001
             logger.exception("finalize failed for process job %s", job_id)
         self._progress[job_id] = 100
@@ -1352,6 +1356,8 @@ class TaskManager:
             result_metadata["audio_batch"] = metadata["audio_batch"]
         if metadata.get("video"):
             result_metadata["video"] = metadata["video"]
+        if metadata.get("chunking"):
+            result_metadata["chunking"] = metadata["chunking"]
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
         requested_output_format = config.get("output_format", "markdown")
         output_format = _actual_output_format_for_finalize(result, requested_output_format)

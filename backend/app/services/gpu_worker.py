@@ -35,6 +35,13 @@ _model_dict: dict[str, Any] | None = None
 _current_job_id: str | None = None
 
 
+def _requested_formats(config: dict[str, Any]) -> list[str]:
+    raw = config.get("output_formats")
+    if isinstance(raw, list) and raw:
+        return [str(fmt).strip().lower() for fmt in raw if fmt]
+    return [str(config.get("output_format") or "markdown").strip().lower()]
+
+
 # ---------------------------------------------------------------------------
 # Event helpers
 # ---------------------------------------------------------------------------
@@ -245,18 +252,42 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
 
         conversion_svc = ConversionService(svc)
         device = None if _device_str == "cpu" else _device_str
-        result = conversion_svc.convert_file(envelope.filepath, dict(envelope.config), device=device)
+        config = dict(envelope.config)
+        formats_requested = _requested_formats(config)
+        formats_envelopes: dict[str, dict[str, Any]] | None = None
+        if (
+            (len(formats_requested) > 1 or formats_requested[0] != "markdown")
+            and conversion_svc.supports_multiple_formats(envelope.filepath, config)
+        ):
+            formats_envelopes = conversion_svc.convert_file_formats(
+                envelope.filepath,
+                config,
+                formats_requested,
+                device=device,
+            )
+            result = formats_envelopes.get(formats_requested[0]) or next(
+                iter(formats_envelopes.values())
+            )
+        else:
+            result = conversion_svc.convert_file(envelope.filepath, config, device=device)
 
         # Cache a model dict the lazy fallback may have created for later jobs.
         if _model_dict is None and svc._model_dict is not None:
             _model_dict = svc._model_dict
+
+        payload: dict[str, Any] = result
+        if formats_envelopes is not None:
+            payload = {
+                "result": result,
+                "formats_payload": formats_envelopes,
+            }
 
         _emit(
             WorkerEvent(
                 type=WorkerEventType.result,
                 job_id=envelope.job_id,
                 worker_id=_worker_id,
-                payload=result,
+                payload=payload,
             )
         )
         return envelope.job_id
