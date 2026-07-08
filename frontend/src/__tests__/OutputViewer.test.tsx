@@ -325,6 +325,37 @@ describe('OutputViewer component', () => {
     expect(screen.getByText(/Hits: Marker/i)).toBeInTheDocument()
   })
 
+  it('renders audio inspection when backend returns metadata without inline text', () => {
+    render(
+      <OutputViewer
+        content={null}
+        formats={null}
+        onDownload={vi.fn()}
+        filename="voice.wav"
+        audioMetadata={{
+          transcript: {
+            provider: 'local_faster_whisper',
+            segments: [
+              {
+                segment_id: 'voice_seg_0001',
+                start_ms: 0,
+                end_ms: 900,
+                speaker: 'speaker_0',
+                text: 'metadata-only transcript',
+                confidence: 0.88,
+                warnings: [],
+              },
+            ],
+          },
+        }}
+      />
+    )
+
+    expect(screen.queryByText('Converted output will appear here')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /audio/i }))
+    expect(screen.getByText('metadata-only transcript')).toBeInTheDocument()
+  })
+
   it('jumps from audio review warnings to the matching timeline segment', () => {
     render(
       <OutputViewer

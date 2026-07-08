@@ -159,7 +159,7 @@ export function OutputViewer({
     }
   }, [formats, regenerating, onRegenerate, visibleTabs])
 
-  if (!content && !formats) {
+  if (!content && !formats && !audioMetadata) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center glass-card border border-border/40 min-h-[300px]">
         <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground/40 mb-4 select-none">
