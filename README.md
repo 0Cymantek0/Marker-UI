@@ -125,6 +125,7 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Environment Variables Reference](docs/configuration/environment-variables.md)
 - [Enterprise Security](docs/enterprise/security.md)
 - [Enterprise Deployment](docs/enterprise/deployment.md)
+- [Review Status Ledger](docs/planning/review-status-ledger.md)
 - [Agent JSON Schemas](docs/reference/json-schemas.md)
 - [Agent Error Codes](docs/reference/errors.md)
 - [Output Manifest Reference](docs/reference/output-manifest.md)
