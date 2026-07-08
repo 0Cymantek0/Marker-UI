@@ -1,14 +1,15 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { UploadCloud, FileText, X, FileImage, FileCode, FileSpreadsheet, FolderOpen, Files, Link, ChevronDown, ChevronUp, Loader2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { browseFiles, browseFolder } from '@/lib/api'
-import type { ConverterPlanResponse } from '@/lib/api'
+import type { ConverterPlanResponse, InputFormatCapability } from '@/lib/api'
 import { RoutingAnalysis } from './conversion/RoutingAnalysis'
 import { toast } from 'sonner'
 
-const ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.msg,.epub,.html,.htm,.csv,.tsv,.json,.jsonl,.txt,.md,.rst,.log,.xml,.rss,.atom,.ipynb,.zip,.wav,.mp3,.m4a,.flac,.ogg,.aac,.mp4,.mov,.mkv,.webm,.avi,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
+const DEFAULT_ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.msg,.epub,.html,.htm,.csv,.tsv,.json,.jsonl,.txt,.md,.rst,.log,.xml,.rss,.atom,.ipynb,.zip,.wav,.mp3,.m4a,.flac,.ogg,.aac,.mp4,.mov,.mkv,.webm,.avi,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
+const DEFAULT_SUPPORTED_FORMATS_TEXT = 'Supported: PDF, Word, spreadsheets, slides, email, EPUB, HTML, text/data, archives, audio/video, and images (select multiple)'
 
 interface FileUploadProps {
   onFilesSelect: (files: File[]) => void
@@ -21,6 +22,7 @@ interface FileUploadProps {
   onLocalPathsChange: (paths: string) => void
   outputDir: string
   onOutputDirChange: (dir: string) => void
+  inputFormats?: InputFormatCapability[] | null
   disabled?: boolean
 }
 
@@ -56,6 +58,45 @@ function getFileIcon(name: string) {
   return FileText
 }
 
+function uploadableInputFormats(inputFormats: InputFormatCapability[] | null | undefined): InputFormatCapability[] {
+  return (inputFormats ?? []).filter((format) => format.upload_allowed !== false)
+}
+
+function normalizeExtension(extension: string): string | null {
+  const clean = extension.trim().toLowerCase()
+  if (!clean) return null
+  const withDot = clean.startsWith('.') ? clean : `.${clean}`
+  return /^\.[a-z0-9][a-z0-9.+-]*$/.test(withDot) ? withDot : null
+}
+
+function acceptFromInputFormats(inputFormats: InputFormatCapability[] | null | undefined): string {
+  const extensions = uploadableInputFormats(inputFormats).flatMap((format) => format.extensions)
+  const normalized = extensions
+    .map(normalizeExtension)
+    .filter((extension): extension is string => Boolean(extension))
+  const unique = [...new Set(normalized)]
+  return unique.length > 0 ? unique.join(',') : DEFAULT_ACCEPTED_EXTENSIONS
+}
+
+function supportedFormatsText(inputFormats: InputFormatCapability[] | null | undefined): string {
+  const labels = [
+    ...new Set(
+      uploadableInputFormats(inputFormats)
+        .map((format) => format.label.trim())
+        .filter(Boolean)
+    ),
+  ]
+  if (labels.length === 0) return DEFAULT_SUPPORTED_FORMATS_TEXT
+
+  const visible = labels.slice(0, 6)
+  if (labels.length > visible.length) {
+    return `Supported: ${visible.join(', ')}, and ${labels.length - visible.length} more (select multiple)`
+  }
+  if (visible.length === 1) return `Supported: ${visible[0]} (select multiple)`
+  if (visible.length === 2) return `Supported: ${visible[0]} and ${visible[1]} (select multiple)`
+  return `Supported: ${visible.slice(0, -1).join(', ')}, and ${visible[visible.length - 1]} (select multiple)`
+}
+
 function PlanDetails({ control }: { control: SourceEngineControl }) {
   if (control.loading) {
     return (
@@ -87,12 +128,15 @@ export function FileUpload({
   onLocalPathsChange,
   outputDir,
   onOutputDirChange,
+  inputFormats,
   disabled
 }: FileUploadProps) {
   const [activeTab, setActiveTab] = useState<'upload' | 'local'>('upload')
   const [isDragOver, setIsDragOver] = useState(false)
   const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({})
   const inputRef = useRef<HTMLInputElement>(null)
+  const acceptedExtensions = useMemo(() => acceptFromInputFormats(inputFormats), [inputFormats])
+  const supportedText = useMemo(() => supportedFormatsText(inputFormats), [inputFormats])
 
   const toggleExpandPlan = (key: string) => {
     setExpandedPlans((prev) => ({
@@ -213,7 +257,7 @@ export function FileUpload({
               ref={inputRef}
               type="file"
               multiple
-              accept={ACCEPTED_EXTENSIONS}
+              accept={acceptedExtensions}
               onChange={handleChange}
               className="hidden"
             />
@@ -231,8 +275,8 @@ export function FileUpload({
               <p className="text-sm font-bold text-foreground">
                 {isDragOver ? 'Release to upload your files' : 'Drag & drop files here or click to browse'}
               </p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                PDF, DOCX, XLSX, PPTX, EPUB, HTML, or images (select multiple)
+              <p className="text-xs text-muted-foreground leading-relaxed" title={acceptedExtensions}>
+                {supportedText}
               </p>
             </div>
           </div>

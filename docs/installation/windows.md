@@ -18,7 +18,7 @@ Using the quick-start launcher scripts is the recommended method to run Marker U
    - Boot up the Uvicorn backend on port `8000` and the Vite dev server on port `5173`.
    - Wait for both services to become ready, then print the URLs to open.
 
-If backend startup takes longer than the soft readiness timeout, the launcher keeps waiting while the backend process is still running. Set `MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS` if you need a fixed failure timeout for automation.
+If backend startup takes longer than the soft readiness timeout, the launcher keeps waiting while the backend process is still running. The default backend hard timeout is 300 seconds; set `MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS=0` to disable it or use a larger value on very slow machines.
 
 ### Running with start.ps1
 If you prefer PowerShell, you can run:
@@ -65,7 +65,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ```
 
 ### 2. Slow First Startup
-The first startup can take longer while Python packages, database tables, or model metadata initialize. The launcher prints progress and continues waiting as long as the backend process is alive.
+The first startup can take longer while Python packages, database tables, or model metadata initialize. The launcher prints progress after the soft timeout and continues waiting until the backend becomes healthy, exits, or reaches the hard timeout.
 
 The launcher records hashes for `backend/requirements.txt`, `pyproject.toml`, `frontend/package.json`, and `pnpm-lock.yaml`. If any dependency input changes, it refreshes the matching Python or Node environment instead of blindly reusing the old install.
 

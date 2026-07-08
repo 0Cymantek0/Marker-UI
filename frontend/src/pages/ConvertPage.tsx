@@ -553,6 +553,7 @@ export function ConvertPage() {
               onLocalPathsChange={setLocalPaths}
               outputDir={outputDir}
               onOutputDirChange={setOutputDir}
+              inputFormats={inputFormats}
             />
           </div>
 

@@ -119,6 +119,19 @@ def test_chunk_markdown_trims_source_spans_to_visible_block_text() -> None:
     assert chunk["source_refs"][-1]["char_end"] == len(markdown) - 3
 
 
+def test_chunk_markdown_uses_discrete_source_refs_when_packing_normalizes_blank_gap() -> None:
+    markdown = "First paragraph.\n\n\n\nSecond paragraph."
+
+    payload = chunk_markdown(markdown, source_name="gap.md", max_chars=260, overlap_chars=0)
+    chunk = payload["chunks"][0]
+    ref_texts = [markdown[ref["char_start"] : ref["char_end"]] for ref in chunk["source_refs"]]
+
+    assert chunk["text"] == "First paragraph.\n\nSecond paragraph."
+    assert markdown[chunk["char_start"] : chunk["char_end"]] == "First paragraph.\n\n\n\nSecond paragraph."
+    assert ref_texts == ["First paragraph.", "Second paragraph."]
+    assert "\n\n".join(ref_texts) == chunk["text"]
+
+
 def test_build_chunks_envelope_falls_back_when_optional_strategy_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_import(name: str):
         if name.startswith("unstructured."):

@@ -156,6 +156,7 @@ def chunk_markdown(
         ],
         max_chars=max_chars,
         line_offsets=line_offsets,
+        markdown=markdown,
     )
     for block in chunk_blocks:
         text = block.text.strip()
@@ -903,6 +904,7 @@ def _pack_chunk_blocks(
     *,
     max_chars: int,
     line_offsets: list[tuple[int, int]],
+    markdown: str,
 ) -> list[MarkdownBlock]:
     packed: list[MarkdownBlock] = []
     pending = deque(blocks)
@@ -925,7 +927,7 @@ def _pack_chunk_blocks(
                     kind=current[0].kind if len(current) == 1 else "mixed",
                     content_types=_content_types(current),
                     asset_refs=_asset_refs(text),
-                    source_spans=_source_spans_for_blocks(current),
+                    source_spans=_source_spans_for_blocks(current, markdown=markdown),
                     page_numbers=_page_numbers_for_blocks(current),
                 )
             )
@@ -1011,8 +1013,13 @@ def _page_numbers_for_blocks(blocks: list[MarkdownBlock]) -> tuple[int, ...]:
     return tuple(sorted(values))
 
 
-def _source_spans_for_blocks(blocks: list[MarkdownBlock]) -> tuple[SourceSpan, ...]:
-    if blocks and not any(block.source_spans for block in blocks) and _same_page_numbers(blocks):
+def _source_spans_for_blocks(blocks: list[MarkdownBlock], *, markdown: str) -> tuple[SourceSpan, ...]:
+    if (
+        blocks
+        and not any(block.source_spans for block in blocks)
+        and _same_page_numbers(blocks)
+        and _source_slice_matches_packed_text(blocks, markdown=markdown)
+    ):
         return (
             SourceSpan(
                 blocks[0].start_line,
@@ -1042,6 +1049,14 @@ def _source_spans_for_blocks(blocks: list[MarkdownBlock]) -> tuple[SourceSpan, .
                 )
             )
     return tuple(spans)
+
+
+def _source_slice_matches_packed_text(blocks: list[MarkdownBlock], *, markdown: str) -> bool:
+    if not blocks:
+        return True
+    text = "\n\n".join(block.text for block in blocks).strip()
+    source_slice = markdown[blocks[0].char_start : blocks[-1].char_end].strip()
+    return source_slice == text
 
 
 def _same_page_numbers(blocks: list[MarkdownBlock]) -> bool:

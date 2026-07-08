@@ -422,10 +422,12 @@ $script:LogOffsets = @{}
 $backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-u", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", $backendPort, "--app-dir", "backend", "--log-level", "info" -PassThru -WindowStyle Hidden -RedirectStandardOutput $backendOutLog -RedirectStandardError $backendErrLog
 
 $backendReadyTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_BACKEND_READY_TIMEOUT_SECONDS" -Default 120 -Minimum 1
-$backendReadyHardTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS" -Default 0 -Minimum 0
+$backendReadyHardTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS" -Default 300 -Minimum 0
 Write-Host "  Waiting for backend health check (soft timeout $backendReadyTimeoutSeconds seconds)..." -ForegroundColor DarkGray
 if ($backendReadyHardTimeoutSeconds -gt 0) {
     Write-Host "  Backend hard timeout: $backendReadyHardTimeoutSeconds seconds." -ForegroundColor DarkGray
+} else {
+    Write-Host "  Backend hard timeout disabled." -ForegroundColor DarkGray
 }
 if (-not (Wait-ServiceReady -Process $backendJob -Name "Backend" -Url "http://127.0.0.1:$backendPort/api/health" -SoftTimeoutSeconds $backendReadyTimeoutSeconds -HardTimeoutSeconds $backendReadyHardTimeoutSeconds -LogStreams @(
     @{ Label = "backend"; Path = $backendOutLog; Color = "DarkGray" },

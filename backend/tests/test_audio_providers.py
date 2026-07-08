@@ -5,6 +5,7 @@ import types
 
 import pytest
 
+from app.audio.providers.base import RawTranscript
 from app.audio.providers.capabilities import (
     ProviderCapability,
     capabilities_payload,
@@ -138,6 +139,37 @@ def test_faster_whisper_adapter_preserves_segment_diagnostics(monkeypatch: pytes
     assert segment.avg_logprob == -0.4
     assert segment.compression_ratio == 1.3
     assert segment.words[0].confidence == 0.81
+
+
+def test_provider_dict_preserves_subsecond_word_timestamps() -> None:
+    raw = RawTranscript.from_provider_dict(
+        {
+            "duration": 2.345,
+            "provider": "local_faster_whisper",
+            "segments": [
+                {
+                    "start": 1.234,
+                    "end": 1.987,
+                    "text": "hello world",
+                    "words": [
+                        {"word": "hello", "start": 1.234, "end": 1.456},
+                        {"word": "world", "start": 1.500, "end": 1.987},
+                    ],
+                },
+                {"start": None, "end": "bad", "text": "malformed timestamps"},
+            ],
+        }
+    )
+
+    assert raw.duration_ms == 2345
+    assert raw.segments[0].start_ms == 1234
+    assert raw.segments[0].end_ms == 1987
+    assert [(word.start_ms, word.end_ms) for word in raw.segments[0].words] == [
+        (1234, 1456),
+        (1500, 1987),
+    ]
+    assert raw.segments[1].start_ms == 0
+    assert raw.segments[1].end_ms == 0
 
 
 def test_cloud_providers_require_api_key() -> None:
