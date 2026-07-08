@@ -76,7 +76,10 @@ class CapabilitiesOutput(MarkerOutputModel):
     service: str = Field(description="Service identifier.", examples=[SERVICE_NAME])
     tools: list[str] = Field(description="Available MCP tool names.", examples=[["marker_convert_file"]])
     allowed_extensions: list[str] = Field(description="Supported file extensions.", examples=[[".pdf", ".csv"]])
-    output_formats: list[str] = Field(description="Supported output formats.", examples=[["markdown", "json"]])
+    output_formats: list[str] = Field(
+        description="Public output format ids. Check input_formats/converters for per-input availability.",
+        examples=[["markdown", "json"]],
+    )
     input_formats: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Input format groups with the output formats each group can actually render.",
@@ -139,8 +142,8 @@ class ReadOutputResult(MarkerOutputModel):
     text_chars: int = Field(default=0, description="Total text characters in file (offset mode).", examples=[50000])
     has_more: bool = Field(default=False, description="True when more text/chunks remain.", examples=[True])
     next_offset: int | None = Field(default=None, description="Offset for next page (offset mode).", examples=[20000])
-    chunk_kind: str = Field(description="Chunking mode: offset_text (character-offset paging) or semantic_markdown (structure-aware RAG chunk).", examples=["offset_text"])
-    is_semantic_chunk: bool = Field(description="True when this result is a semantic chunk from a marker.chunks.v1 envelope; false for offset paging.", examples=[False])
+    chunk_kind: str = Field(description="Chunking mode: offset_text (character-offset paging) or semantic_markdown (structure-aware RAG chunk).", examples=["offset_text", "semantic_markdown"])
+    is_semantic_chunk: bool = Field(description="True when this result is a semantic chunk from a marker.chunks.v1 envelope; false for offset paging.", examples=[False, True])
     # Semantic-mode fields (absent in offset mode).
     chunk_index: int | None = Field(default=None, description="Index of the returned semantic chunk (semantic mode).", examples=[0])
     chunk_count: int | None = Field(default=None, description="Total semantic chunks in the envelope (semantic mode).", examples=[12])
@@ -267,7 +270,16 @@ UrlParam = Annotated[str, Field(description="Public http(s) URL. Example: https:
 DirParam = Annotated[str, Field(description="Output directory path. Example: C:\\path\\to\\out.", examples=["C:\\path\\to\\out"])]
 OutputPathParam = Annotated[str, Field(description="Exact output file path. Existing files are refused unless overwrite is true.", examples=["C:\\path\\to\\out\\document.md"])]
 OverwriteParam = Annotated[bool, Field(description="Replace an existing explicit output path and manifest when true.", examples=[False])]
-OutputFormatParam = Annotated[str, Field(description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}.", examples=["markdown"])]
+OutputFormatParam = Annotated[
+    str,
+    Field(
+        description=(
+            f"Requested output format: {OUTPUT_FORMATS_DESCRIPTION}. "
+            "Markdown and chunks are broadly available; json/html require a Marker-backed PDF/image/EPUB route."
+        ),
+        examples=["markdown"],
+    ),
+]
 ConverterParam = Annotated[str, Field(description="Optional converter class override.", examples=["TableConverter"])]
 EngineParam = Annotated[str, Field(description="Optional engine override such as text_data or marker.", examples=["text_data"])]
 ProfileParam = Annotated[str, Field(description="Conversion profile: auto, fast, or high_accuracy.", examples=["auto"])]
@@ -304,9 +316,11 @@ ChunkIndexParam = Annotated[int, Field(ge=0, description="Zero-based semantic ch
 
 INSTRUCTIONS = (
     "Marker converts PDFs, Office files, archives, audio, video, images, and "
-    "text/data files to agent-readable Markdown. Plan before large PDFs. Convert "
-    "with output_dir and bounded max_chars, then page long outputs via "
-    "marker_read_output. Cloud/VLM use is opt-in through allow_cloud_vlm."
+    "text/data files to agent-readable outputs. Markdown/chunks are broadly "
+    "available; json/html require Marker-backed PDF/image/EPUB routes. Plan "
+    "before large PDFs. Convert with output_dir and bounded max_chars, then "
+    "page long outputs via marker_read_output. Cloud/VLM use is opt-in through "
+    "allow_cloud_vlm."
 )
 
 mcp = FastMCP(
@@ -352,11 +366,7 @@ async def marker_capabilities() -> CapabilitiesOutput:
     """Canonical v2 capability tool."""
 
     require_mcp_scopes(SCOPE_CAPABILITIES_READ)
-    data = capabilities()
-    data["tools"] = list(MCP_ACTIVE_TOOL_NAMES)
-    data["resources"] = MCP_RESOURCE_URIS
-    data["prompts"] = MCP_PROMPT_NAMES
-    return data
+    return active_profile_capabilities()
 
 
 @mcp.tool(
@@ -551,11 +561,7 @@ def marker_output_manifest(
 async def marker_list_capabilities() -> CapabilitiesOutput:
     """Return supported extensions, engines, output modes, and tool names."""
 
-    data = capabilities()
-    data["tools"] = list(MCP_ACTIVE_TOOL_NAMES)
-    data["resources"] = MCP_RESOURCE_URIS
-    data["prompts"] = MCP_PROMPT_NAMES
-    return data
+    return active_profile_capabilities()
 
 
 @mcp.tool(
@@ -1632,6 +1638,21 @@ def configure_mcp_tool_profile(profile: str | None = None) -> str:
 
 
 configure_mcp_tool_profile()
+
+
+def active_profile_capabilities() -> dict[str, Any]:
+    """Return capabilities scoped to the currently exposed MCP profile."""
+
+    data = capabilities()
+    data["tools"] = list(MCP_ACTIVE_TOOL_NAMES)
+    data["resources"] = MCP_RESOURCE_URIS
+    data["prompts"] = MCP_PROMPT_NAMES
+    if "marker_read_output_chunk" in MCP_ACTIVE_TOOL_NAMES:
+        data["agent_guidance"] = (
+            f"{data.get('agent_guidance', '')} This MCP profile also exposes "
+            "marker_read_output_chunk with mode='semantic' for chunk-by-index reads."
+        ).strip()
+    return data
 
 
 def run(

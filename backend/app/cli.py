@@ -32,6 +32,7 @@ from app.agent_api import (
     plan_conversion,
     purge_job_files,
     read_output,
+    read_output_chunk,
     set_setting,
     self_test,
     submit_conversion_job,
@@ -102,7 +103,13 @@ def main(argv: list[str] | None = None) -> int:
             return _print_result(result, args.json)
         if args.command == "read-output":
             return _print_result(
-                read_output(args.path, offset=args.offset, limit=args.limit),
+                read_output_chunk(
+                    args.path,
+                    mode=args.mode,
+                    chunk_index=args.chunk_index,
+                    offset=args.offset,
+                    limit=args.limit,
+                ),
                 args.json,
             )
         if args.command == "jobs":
@@ -251,8 +258,10 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_options(submit)
     submit.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
-    read = sub.add_parser("read-output", help="Read a slice of a converted text output")
+    read = sub.add_parser("read-output", help="Read a slice or semantic chunk of a converted output")
     read.add_argument("path", help="Output file path")
+    read.add_argument("--mode", choices=["offset", "semantic"], default="offset")
+    read.add_argument("--chunk-index", type=int, default=0, help="Semantic chunk index when --mode=semantic")
     read.add_argument("--offset", type=int, default=0)
     read.add_argument("--limit", type=int, default=20_000)
     read.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
@@ -311,6 +320,13 @@ def _build_parser() -> argparse.ArgumentParser:
     output_read.add_argument("--offset", type=int, default=0)
     output_read.add_argument("--limit", type=int, default=20_000)
     output_read.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+    output_chunk = output_sub.add_parser("chunk", help="Read offset page or semantic chunk from a converted output")
+    output_chunk.add_argument("path", help="Output file path")
+    output_chunk.add_argument("--mode", choices=["offset", "semantic"], default="offset")
+    output_chunk.add_argument("--chunk-index", type=int, default=0, help="Semantic chunk index when --mode=semantic")
+    output_chunk.add_argument("--offset", type=int, default=0)
+    output_chunk.add_argument("--limit", type=int, default=20_000)
+    output_chunk.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     batch = sub.add_parser("batch", help="Convert multiple inputs sequentially")
     batch.add_argument("inputs", nargs="*", help="Local file paths to convert")
@@ -563,6 +579,17 @@ def _handle_output(args: argparse.Namespace) -> int:
     if args.output_command == "read":
         return _print_result(
             read_output(args.path, offset=args.offset, limit=args.limit),
+            args.json,
+        )
+    if args.output_command == "chunk":
+        return _print_result(
+            read_output_chunk(
+                args.path,
+                mode=args.mode,
+                chunk_index=args.chunk_index,
+                offset=args.offset,
+                limit=args.limit,
+            ),
             args.json,
         )
     return 2
@@ -904,8 +931,7 @@ def _handle_mcp(args: argparse.Namespace) -> int:
         from app import mcp_server
 
         profile = mcp_server.configure_mcp_tool_profile(args.tool_profile)
-        result = capabilities()
-        result["tools"] = list(mcp_server.MCP_ACTIVE_TOOL_NAMES)
+        result = mcp_server.active_profile_capabilities()
         result["mcp"] = {
             "transport": "stdio",
             "tool_profile": profile,
@@ -1042,7 +1068,15 @@ def _toml_escape(value: str) -> str:
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--output-format", default="markdown", choices=list(OUTPUT_FORMATS))
+    parser.add_argument(
+        "--output-format",
+        default="markdown",
+        choices=list(OUTPUT_FORMATS),
+        help=(
+            "Requested output format. markdown/chunks are broadly available; "
+            "json/html require a Marker-backed PDF/image/EPUB route."
+        ),
+    )
     parser.add_argument("--converter-cls")
     parser.add_argument("--engine-override")
     parser.add_argument("--conversion-profile", choices=["auto", "fast", "high_accuracy"])

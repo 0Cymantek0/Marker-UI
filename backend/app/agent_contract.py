@@ -315,7 +315,7 @@ class OptionMetadataModel(ContractModel):
 
 
 OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
-    OptionMetadataModel(name="output_format", cli_flag="--output-format", type="enum", default="markdown", category="output", description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}."),
+    OptionMetadataModel(name="output_format", cli_flag="--output-format", type="enum", default="markdown", category="output", description=f"Requested output format: {OUTPUT_FORMATS_DESCRIPTION}. Markdown and chunks are broadly available; json/html require a Marker-backed PDF/image/EPUB route."),
     OptionMetadataModel(name="converter_cls", cli_flag="--converter-cls", type="string", category="routing", description="Optional Marker converter class override."),
     OptionMetadataModel(name="engine_override", cli_flag="--engine-override", type="string", category="routing", description="Optional universal converter engine override."),
     OptionMetadataModel(name="conversion_profile", cli_flag="--conversion-profile", type="enum", category="routing", description="Conversion policy profile."),

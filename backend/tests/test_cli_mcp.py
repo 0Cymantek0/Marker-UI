@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app import agent_api
 from app.errors import OutputExistsError, UnsupportedFormatError, UsageError
 from app.main import _app_state
-from app.agent_api import AgentConversionOptions, convert_document, plan_conversion, read_output, self_test
+from app.agent_api import AgentConversionOptions, convert_document, plan_conversion, read_output, read_output_chunk, self_test
 from app.database import Base
 from app.models.job import ConversionJob
 from app.models.settings import Setting
@@ -80,6 +80,13 @@ async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
     assert payload["chunk_count"] == len(payload["chunks"])
     assert "| alpha | 1 |" in payload["chunks"][-1]["text"]
     assert result["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
+
+    chunk = read_output_chunk(str(output_path), mode="semantic", chunk_index=0)
+    assert chunk["is_semantic_chunk"] is True
+    assert chunk["schema_version"] == "marker.chunks.v1"
+    assert chunk["chunk_kind"] == "semantic_markdown"
+    assert chunk["chunk_index"] == 0
+    assert chunk["chunk_count"] == payload["chunk_count"]
 
 
 @pytest.mark.asyncio
@@ -289,7 +296,8 @@ def test_agent_capabilities_expose_minimal_non_admin_tools():
     assert "marker_delete_job" not in caps["tools"]
     assert "marker_plan before large PDFs" in caps["agent_guidance"]
     assert "marker_plan_conversion" not in caps["agent_guidance"]
-    assert "mode='semantic'" in caps["agent_guidance"]
+    assert "marker_read_output_chunk" not in caps["agent_guidance"]
+    assert "output_format='chunks'" in caps["agent_guidance"]
 
 
 def test_agent_surface_registry_drives_agent_capabilities_and_mcp_profiles():
@@ -309,6 +317,23 @@ def test_agent_surface_registry_drives_agent_capabilities_and_mcp_profiles():
     assert all(spec.scopes for spec in agent_surface.MCP_TOOL_SPECS)
     assert set(agent_surface.MCP_RESOURCE_SPEC_BY_URI) == set(agent_surface.MCP_RESOURCE_URIS)
     assert all(spec.scopes for spec in agent_surface.MCP_RESOURCE_SPECS)
+
+
+def test_mcp_profile_capabilities_do_not_advertise_hidden_chunk_tool():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("minimal")
+    minimal = mcp_server.active_profile_capabilities()
+    assert "marker_read_output_chunk" not in minimal["tools"]
+    assert "marker_read_output_chunk" not in minimal["agent_guidance"]
+
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        full = mcp_server.active_profile_capabilities()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+    assert "marker_read_output_chunk" in full["tools"]
+    assert "marker_read_output_chunk with mode='semantic'" in full["agent_guidance"]
 
 
 @pytest.mark.asyncio
@@ -353,6 +378,59 @@ def test_cli_convert_command_writes_real_output(tmp_path: Path):
     assert "| city | value |" in out_path.read_text(encoding="utf-8")
     assert "Only first 2 rows shown" in out_path.read_text(encoding="utf-8")
     assert data["metadata"]["engine"]["engine"] == "text_data"
+
+
+def test_cli_output_chunk_reads_semantic_chunks(tmp_path: Path):
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\nDhaka,20\n", encoding="utf-8")
+
+    convert = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "convert",
+            str(source),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--output-format",
+            "chunks",
+            "--json",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+    converted = json.loads(convert.stdout)
+
+    read = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "output",
+            "chunk",
+            converted["output"]["text_path"],
+            "--mode",
+            "semantic",
+            "--chunk-index",
+            "0",
+            "--json",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    payload = json.loads(read.stdout)
+    assert payload["is_semantic_chunk"] is True
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert payload["chunk_kind"] == "semantic_markdown"
+    assert "city" in payload["text"]
 
 
 @pytest.mark.asyncio
@@ -1132,8 +1210,11 @@ async def test_mcp_tools_have_complete_input_metadata_and_output_schemas():
     chunk_reader = tools_by_name["marker_read_output_chunk"]
     assert "offset" in (chunk_reader.description or "").lower()
     assert "semantic" in (chunk_reader.description or "").lower()
-    assert chunk_reader.outputSchema["properties"]["chunk_kind"]["examples"] == ["offset_text"]
-    assert chunk_reader.outputSchema["properties"]["is_semantic_chunk"]["examples"] == [False]
+    assert chunk_reader.outputSchema["properties"]["chunk_kind"]["examples"] == [
+        "offset_text",
+        "semantic_markdown",
+    ]
+    assert chunk_reader.outputSchema["properties"]["is_semantic_chunk"]["examples"] == [False, True]
 
     for tool in tools:
         assert tool.outputSchema["type"] == "object", tool.name

@@ -165,8 +165,8 @@ def capabilities() -> dict[str, Any]:
         "agent_guidance": (
             "Use marker_plan before large PDFs or unknown inputs. Prefer marker_submit "
             "for long conversions, then marker_job_status. Use marker_read_output for "
-            "bounded previews and marker_read_output_chunk with mode='semantic' when "
-            "a chunks artifact is available."
+            "bounded previews. For RAG chunks, request output_format='chunks' and read "
+            "the returned marker.chunks.v1 JSON artifact."
         ),
     }
 
