@@ -1457,20 +1457,14 @@ async def test_upload_accepts_output_formats_param(client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_upload_output_formats_drops_invalid(client: AsyncClient, db_session):
-    """Invalid format names in output_formats are silently dropped."""
+async def test_upload_output_formats_rejects_invalid(client: AsyncClient):
+    """Invalid output_formats entries are rejected instead of silently dropped."""
     resp = await _upload_file(
         client,
         extra_params={"output_formats": "markdown,nonsense,html"},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    job_id = body["job_id"]
-
-    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
-    job = (await db_session.execute(stmt)).scalar_one()
-    config = json.loads(job.config_json)
-    assert config["output_formats"] == ["markdown", "html"]
+    assert resp.status_code == 400
+    assert "Unsupported output_formats value(s): nonsense" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

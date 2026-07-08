@@ -610,7 +610,19 @@ async def upload_file(
         "original_name": original_name,
     }
     if output_formats:
-        fmt_list = normalize_formats(output_formats.split(","))
+        raw_formats = [part.strip().lower() for part in output_formats.split(",") if part.strip()]
+        invalid_formats = [fmt for fmt in raw_formats if fmt not in OUTPUT_FORMAT_SET]
+        if invalid_formats:
+            if not is_local:
+                Path(stored_path).unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unsupported output_formats value(s): {', '.join(invalid_formats)}. "
+                    f"Expected one or more of: {OUTPUT_FORMATS_DESCRIPTION}."
+                ),
+            )
+        fmt_list = normalize_formats(raw_formats)
         if fmt_list:
             config["output_formats"] = fmt_list
             config["output_format"] = fmt_list[0]
