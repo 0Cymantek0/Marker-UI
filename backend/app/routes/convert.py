@@ -1805,20 +1805,3 @@ async def retry_job(
     }
 
 
-@router.get("/browse-folder")
-async def browse_folder() -> dict[str, str]:
-    """Open a native folder selection dialog and return the selected path."""
-    raise HTTPException(
-        status_code=501,
-        detail="Local file/folder browsing is not supported in server/headless environments."
-    )
-
-
-@router.get("/browse-files")
-async def browse_files() -> dict[str, list[str]]:
-    """Open a native file selection dialog and return the selected paths."""
-    raise HTTPException(
-        status_code=501,
-        detail="Local file/folder browsing is not supported in server/headless environments."
-    )
-
