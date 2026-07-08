@@ -93,6 +93,25 @@ def test_text_data_converter_turns_tsv_into_markdown_table(tmp_path: Path) -> No
     }
 
 
+def test_conversion_service_derives_markdown_and_chunks_for_native_converter(tmp_path: Path) -> None:
+    path = tmp_path / "scores.tsv"
+    path.write_text("name\tscore\nAda\t10\nLinus\t9\n", encoding="utf-8")
+    svc = ConversionService(_FakeMarkerService())
+    config = {"output_formats": ["markdown", "chunks"], "output_format": "markdown"}
+
+    assert svc.supports_multiple_formats(str(path), config) is True
+    outputs = svc.convert_file_formats(str(path), config, ["markdown", "chunks"])
+
+    assert list(outputs) == ["markdown", "chunks"]
+    assert outputs["markdown"]["extension"] == "md"
+    payload = json.loads(outputs["chunks"]["text"])
+    assert outputs["chunks"]["extension"] == "json"
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert payload["chunk_kind"] == "semantic_markdown"
+    assert "| Ada | 10 |" in payload["chunks"][-1]["text"]
+    assert outputs["chunks"]["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
+
+
 def test_html_converter_drops_scripts_and_emits_markdown(tmp_path: Path) -> None:
     path = tmp_path / "page.html"
     path.write_text(

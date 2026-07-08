@@ -1736,6 +1736,39 @@ async def test_download_chunks_format_uses_json_extension(client: AsyncClient, d
     assert resp.text == chunks_text
 
 
+@pytest.mark.asyncio
+async def test_download_chunks_unwraps_legacy_nested_format_cache(client: AsyncClient, db_session):
+    """Older cache writes may store a legacy envelope; download must return the JSON text."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-download-legacy-nested-chunks"
+    chunks_text = '{"schema_version":"marker.chunks.v1","chunks":[]}'
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.tsv",
+        original_name="scores.tsv",
+        status="completed",
+        input_format="tsv",
+        output_format="chunks",
+        result_text=chunks_text,
+        config_json=_json.dumps({"output_format": "chunks"}),
+        formats_json=_json.dumps({"chunks": {"text": chunks_text, "extension": "json"}}),
+        result_path=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "chunks"})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.text == chunks_text
+
+
 # ---------------------------------------------------------------------------
 # Advanced audio controls (plan §5.5) — audio_config JSON blob
 # ---------------------------------------------------------------------------

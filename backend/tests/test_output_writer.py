@@ -174,3 +174,26 @@ def test_write_conversion_output_deduplicates_image_and_asset_collision(tmp_path
     assert [entry["name"] for entry in entries] == ["shared-1.bin", "shared.bin"]
     assert [entry["relative_path"] for entry in entries] == ["shared-1.bin", "shared.bin"]
     assert len({entry["path"] for entry in entries}) == 2
+
+
+def test_write_conversion_output_uses_result_media_type_for_chunks_explicit_path(tmp_path: Path):
+    output_path = tmp_path / "fixed"
+    result = {
+        "text": '{"schema_version":"marker.chunks.v1","chunks":[]}',
+        "extension": "json",
+        "images": {},
+        "metadata": {"chunking": {"schema_version": "marker.chunks.v1"}},
+    }
+
+    written = write_conversion_output(
+        result,
+        source_name="source.tsv",
+        output_base=tmp_path,
+        output_path=output_path,
+        output_format="chunks",
+    )
+
+    assert written.text_path == output_path
+    assert written.media_type == "application/json"
+    manifest = json.loads(written.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["output"]["media_type"] == "application/json"

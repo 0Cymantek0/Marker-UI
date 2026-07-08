@@ -55,7 +55,24 @@ def parse_formats(formats_json: str | None) -> dict[str, str] | None:
         return None
     if not isinstance(parsed, dict) or not parsed:
         return None
-    return {str(k): str(v) for k, v in parsed.items() if v is not None}
+    formats: dict[str, str] = {}
+    for key, value in parsed.items():
+        fmt = str(key).strip().lower()
+        text = _format_text(value)
+        if fmt in OUTPUT_FORMAT_SET and text is not None:
+            formats[fmt] = text
+    return formats or None
+
+
+def _format_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        text = value.get("text")
+        return str(text) if text is not None else None
+    return str(value)
 
 
 def merge_formats(

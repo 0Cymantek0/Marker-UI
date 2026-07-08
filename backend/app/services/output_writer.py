@@ -120,7 +120,7 @@ def write_conversion_output(
         asset_entries=asset_entries,
         metadata=metadata,
         conversion_config=conversion_config or {},
-        media_type=mimetypes.guess_type(text_path.name)[0] or "text/markdown",
+        media_type=_media_type_from_result(result, output_format, text_path),
     )
     _write_json_atomic(manifest_path, manifest)
     return WrittenOutput(
@@ -143,6 +143,21 @@ def _extension_from_result(result: dict[str, Any], output_format: str | None) ->
             "chunks": "json",
         }.get(output_format, output_format)
     return (ext or "md").lstrip(".")
+
+
+def _media_type_from_result(result: dict[str, Any], output_format: str | None, text_path: Path) -> str:
+    ext = _extension_from_result(result, output_format).lower()
+    media_by_ext = {
+        "md": "text/markdown",
+        "markdown": "text/markdown",
+        "html": "text/html",
+        "htm": "text/html",
+        "json": "application/json",
+        "txt": "text/plain",
+    }
+    if ext in media_by_ext:
+        return media_by_ext[ext]
+    return mimetypes.guess_type(text_path.name)[0] or "text/markdown"
 
 
 def _safe_stem(name: str) -> str:
