@@ -20,7 +20,6 @@ from app.main import app
 from app.models.job import ConversionJob
 from app.models.settings import Setting
 from app.routes import settings as settings_route
-from app.services.audit import record_audit_event
 
 # Encryption key must be set before importing app.crypto
 os.environ.setdefault("ENCRYPTION_KEY", "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdHRlc3Q=")

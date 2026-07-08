@@ -604,8 +604,6 @@ class TestProviderResolution:
 class TestVertexVLMClientBuilder:
     def test_vertex_build_client_with_project_id_and_adc(self, monkeypatch):
         """Build Vertex client using project_id in api_key and Google default credentials."""
-        from google.auth import default
-        import google.auth.transport.requests
 
         # Mock google auth default credentials
         mock_creds = MagicMock()
@@ -637,7 +635,6 @@ class TestVertexVLMClientBuilder:
 
     def test_vertex_build_client_with_service_account_json(self, monkeypatch):
         """Build Vertex client using a JSON service account key string in api_key."""
-        from google.oauth2 import service_account
 
         # Mock service_account.Credentials.from_service_account_info
         mock_creds = MagicMock()

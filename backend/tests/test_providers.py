@@ -1,7 +1,9 @@
 """Tests for dynamic LLM providers, API key fallback rotation, and model overrides."""
 
+from contextlib import asynccontextmanager
 import json
 from unittest.mock import patch
+
 import pytest
 import pytest_asyncio
 import httpx
@@ -11,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.database import Base, get_db
 from app.main import app
 from app.models.settings import Setting
-from app.models.schemas import LLMProvider, ModelConfig, ActiveLLM
 from app.utils.secrets import decrypt_value, encrypt_value, is_masked
 from app.core.api_manager import (
     load_secrets_from_db,
@@ -22,8 +23,6 @@ from app.core.api_manager import (
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
-
-from contextlib import asynccontextmanager
 
 @pytest_asyncio.fixture
 async def test_engine():

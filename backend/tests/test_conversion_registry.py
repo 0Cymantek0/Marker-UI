@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 
 from app.conversion.registry import BaseConverter, ConverterRegistry
 from app.conversion.result import UniversalConversionResult

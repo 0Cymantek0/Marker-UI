@@ -5,7 +5,7 @@ import queue as _q
 from unittest.mock import MagicMock, patch
 
 from app.services import gpu_worker
-from app.services.job_transport import JobEnvelope, WorkerEvent, WorkerEventType
+from app.services.job_transport import JobEnvelope, WorkerEventType
 
 
 def _drain(qq):

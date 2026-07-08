@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
@@ -10,7 +9,6 @@ import pytest
 from app.conversion.converters.office_pptx import OfficePptxConverter
 from app.conversion.result import UniversalConversionResult
 from app.models.image_understanding import ImageType
-from app.conversion.stream_info import StreamInfo
 from tests.test_embedded_image import FakeVLM
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "conversion"
@@ -221,8 +219,10 @@ def test_office_pptx_merged_table_cells_not_duplicated():
     other_cell.text = "Other"
 
     # Row 0: header cells (distinct)
-    header_a = MagicMock(); header_a.text = "H1"
-    header_b = MagicMock(); header_b.text = "H2"
+    header_a = MagicMock()
+    header_a.text = "H1"
+    header_b = MagicMock()
+    header_b.text = "H2"
 
     row0 = MagicMock()
     row0.cells = [header_a, header_b]
@@ -232,7 +232,8 @@ def test_office_pptx_merged_table_cells_not_duplicated():
     row1.cells = [merged_cell, merged_cell]
 
     # Row 2: two DISTINCT cell objects with the same text must both render.
-    other_cell_b = MagicMock(); other_cell_b.text = "Other"
+    other_cell_b = MagicMock()
+    other_cell_b.text = "Other"
     row2 = MagicMock()
     row2.cells = [other_cell, other_cell_b]
 

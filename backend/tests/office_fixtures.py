@@ -1,6 +1,5 @@
 """Generate synthetic test fixtures for docx/pptx converters."""
 
-import os
 from pathlib import Path
 from docx import Document
 from docx.shared import Inches

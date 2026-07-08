@@ -14,7 +14,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from sqlalchemy import select
 
-from app.database import get_db
 from app.models.job import ConversionJob
 
 # ---------------------------------------------------------------------------
@@ -764,9 +763,6 @@ async def test_cancelled_job_stays_cancelled(
     db_session.add(job)
     await db_session.commit()
 
-    from app.main import _app_state
-
-    tm = _app_state.task_manager
     from sqlalchemy import update
 
     await db_session.execute(
@@ -1134,7 +1130,7 @@ async def test_status_route_surfaces_image_understanding(client: AsyncClient, db
     db_session.add(job)
     await db_session.commit()
 
-    resp = await client.get(f"/api/convert/status/job-meta-1")
+    resp = await client.get("/api/convert/status/job-meta-1")
     assert resp.status_code == 200
     body = resp.json()
     assert body["image_understanding"] is not None
@@ -1162,7 +1158,7 @@ async def test_status_route_omits_image_understanding_for_legacy_jobs(client: As
     db_session.add(job)
     await db_session.commit()
 
-    resp = await client.get(f"/api/convert/status/job-legacy-1")
+    resp = await client.get("/api/convert/status/job-legacy-1")
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("image_understanding") is None
@@ -1179,7 +1175,7 @@ async def test_status_route_serializes_timestamps_with_utc_offset(
     client: AsyncClient, db_session
 ):
     """created_at / completed_at JSON must end with Z or +00:00, never naive."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     naive_utc = datetime(2026, 6, 11, 9, 0, 0)  # what SQLite hands back
     job = ConversionJob(

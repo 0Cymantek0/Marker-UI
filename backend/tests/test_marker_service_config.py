@@ -354,7 +354,6 @@ def test_ocr_converter_renderer_survives_double_resolve(monkeypatch):
 
     import app.services.marker_service as marker_service_mod
     import marker.output as marker_output
-    from marker.renderers.markdown import MarkdownRenderer
 
     OCR_JSON = "marker.renderers.ocr_json.OCRJSONRenderer"
 
@@ -445,7 +444,6 @@ def test_convert_file_formats_parses_once_renders_each(monkeypatch):
     """
     import app.services.marker_service as marker_service_mod
     import marker.output as marker_output
-    import marker.util as marker_util
 
     build_calls = {"n": 0}
     render_calls: list[str] = []

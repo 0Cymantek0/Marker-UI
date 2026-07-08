@@ -13,9 +13,17 @@ from types import SimpleNamespace
 import pytest
 from openpyxl import Workbook
 
+from app.audio.providers.base import RawTranscript
 from app.conversion.converters.archive import ArchiveConverter
 from app.conversion.converters.audio import AudioConverter
-from app.audio.providers.base import RawTranscript
+from app.conversion.converters.html import HtmlConverter
+from app.conversion.converters.notebook import NotebookConverter
+from app.conversion.converters.outlook_msg import OutlookMsgConverter
+from app.conversion.converters.spreadsheet import SpreadsheetConverter
+from app.conversion.converters.text_data import TextDataConverter
+from app.conversion.converters.video import VideoConverter
+from app.conversion.converters.xml_rss import XmlRssConverter
+from app.services.conversion_service import ConversionService
 
 
 def _fake_provider(transcribe_fn):
@@ -34,14 +42,6 @@ def _fake_provider(transcribe_fn):
             return RawTranscript.from_provider_dict(transcribe_fn(filepath, config, device=device))
 
     return _FakeProvider()
-from app.conversion.converters.html import HtmlConverter
-from app.conversion.converters.notebook import NotebookConverter
-from app.conversion.converters.outlook_msg import OutlookMsgConverter
-from app.conversion.converters.spreadsheet import SpreadsheetConverter
-from app.conversion.converters.text_data import TextDataConverter
-from app.conversion.converters.video import VideoConverter
-from app.conversion.converters.xml_rss import XmlRssConverter
-from app.services.conversion_service import ConversionService
 
 
 class _FakeMarkerService:

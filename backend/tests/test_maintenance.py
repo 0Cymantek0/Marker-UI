@@ -1,9 +1,8 @@
 """Tests for system maintenance endpoints (/self-heal and /reset)."""
 
 import json
-import shutil
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from contextlib import asynccontextmanager
 
 import pytest

@@ -1,16 +1,10 @@
 import pytest
-import os
 import json
-import shutil
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 from app.services.model_tracker import (
     ModelTracker,
     MODEL_EXPECTED_SIZES,
-    is_model_downloaded,
-    get_local_model_size,
     setup_monkeypatch,
-    download_all_models_parallel,
     check_and_clean_if_corrupt,
     tracker as global_tracker,
     initialize_all_model_metadata
