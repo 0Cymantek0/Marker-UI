@@ -57,6 +57,16 @@ describe('OutputViewer component', () => {
     expect(onDownload).toHaveBeenCalledTimes(1)
   })
 
+  it('downloads markdown when the Raw Text tab is active', () => {
+    const onDownload = vi.fn()
+    render(<OutputViewer content="# Hi" onDownload={onDownload} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /raw text/i }))
+    fireEvent.click(screen.getByRole('button', { name: /download/i }))
+
+    expect(onDownload).toHaveBeenCalledWith('markdown')
+  })
+
   it('renders an image-understanding badge when metadata matches the image filename', () => {
     const md = '![chart](_page_0_Picture_1.jpeg)'
     const meta = [

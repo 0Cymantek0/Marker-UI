@@ -133,7 +133,7 @@ Marker UI provides unified launchers that automatically prepare a virtual enviro
   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
   .\start.ps1
   ```
-Vite will serve the client at `http://localhost:5173`.
+The launcher waits for backend and frontend readiness before printing the URLs. Vite normally serves the client at `http://localhost:5173`; if a port is occupied, the launcher selects the next available port and prints it.
 
 ### 2. Docker Compose
 Deploy containerized with a single command:

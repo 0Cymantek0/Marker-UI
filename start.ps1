@@ -27,6 +27,27 @@ function Test-Command {
     catch { return $false }
 }
 
+function Get-LauncherIntEnv {
+    param(
+        [string]$Name,
+        [int]$Default,
+        [int]$Minimum = 0
+    )
+
+    $raw = [Environment]::GetEnvironmentVariable($Name)
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return $Default
+    }
+
+    $parsed = 0
+    if ([int]::TryParse($raw, [ref]$parsed) -and $parsed -ge $Minimum) {
+        return $parsed
+    }
+
+    Write-Host "  WARNING: Ignoring invalid $Name='$raw'; using $Default." -ForegroundColor DarkYellow
+    return $Default
+}
+
 function Get-PythonCmd {
     # Prefer python3, fall back to python
     foreach ($cmd in @("python", "python3", "py")) {
@@ -189,68 +210,6 @@ function Find-FreePort {
     return $null
 }
 
-function Wait-BackendReady {
-    param(
-        [System.Diagnostics.Process]$Process,
-        [int]$Port,
-        [int]$TimeoutSeconds = 120
-    )
-
-    $healthUrl = "http://127.0.0.1:$Port/api/health"
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-
-    while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
-        if ($Process.HasExited) {
-            Write-Host "  ERROR: Backend exited before it became healthy." -ForegroundColor Red
-            return $false
-        }
-
-        try {
-            $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri $healthUrl
-            if ($response.StatusCode -eq 200) {
-                return $true
-            }
-        } catch {
-            Start-Sleep -Seconds 1
-        }
-    }
-
-    Write-Host "  ERROR: Backend did not pass health check on port $Port within $TimeoutSeconds seconds." -ForegroundColor Red
-    return $false
-}
-
-function Stop-ProcessTree {
-    param([System.Diagnostics.Process]$Process)
-
-    if (-not $Process -or $Process.HasExited) {
-        return
-    }
-
-    if ($isWindowsPlatform) {
-        taskkill.exe /PID $Process.Id /T /F > $null 2>&1
-    } else {
-        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
-    }
-}
-
-function Write-LogTail {
-    param(
-        [string]$Label,
-        [string[]]$Paths
-    )
-
-    foreach ($path in $Paths) {
-        if (Test-Path $path) {
-            $lines = Get-Content $path -Tail 20 -ErrorAction SilentlyContinue
-            if ($lines) {
-                Write-Host ""
-                Write-Host "  Last $Label log lines ($path):" -ForegroundColor DarkGray
-                $lines | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
-            }
-        }
-    }
-}
-
 function Write-NewLogLines {
     param(
         [string]$Label,
@@ -260,6 +219,10 @@ function Write-NewLogLines {
 
     if (-not (Test-Path $Path)) {
         return
+    }
+
+    if ($null -eq $script:LogOffsets) {
+        $script:LogOffsets = @{}
     }
 
     $lines = @(Get-Content $Path -ErrorAction SilentlyContinue)
@@ -280,6 +243,108 @@ function Write-NewLogLines {
     }
 
     $script:LogOffsets[$Path] = $lines.Count
+}
+
+function Write-LogTail {
+    param(
+        [string]$Label,
+        [string[]]$Paths
+    )
+
+    foreach ($path in $Paths) {
+        if (Test-Path $path) {
+            $lines = Get-Content $path -Tail 20 -ErrorAction SilentlyContinue
+            if ($lines) {
+                Write-Host ""
+                Write-Host "  Last $Label log lines ($path):" -ForegroundColor DarkGray
+                $lines | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+            }
+        }
+    }
+}
+
+function Wait-ServiceReady {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$Name,
+        [string]$Url,
+        [int]$SoftTimeoutSeconds = 120,
+        [int]$HardTimeoutSeconds = 0,
+        [object[]]$LogStreams = @()
+    )
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $warnedAfterSoftTimeout = $false
+    $nextProgressAt = 15
+
+    while ($true) {
+        foreach ($stream in $LogStreams) {
+            Write-NewLogLines -Label $stream.Label -Path $stream.Path -Color $stream.Color
+        }
+
+        if ($Process.HasExited) {
+            Write-Host "  ERROR: $Name exited before it became ready." -ForegroundColor Red
+            return $false
+        }
+
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri $Url
+            if ($response.StatusCode -eq 200) {
+                return $true
+            }
+        } catch {
+            # Service may not have bound its port yet.
+        }
+
+        $elapsedSeconds = [int]$stopwatch.Elapsed.TotalSeconds
+        if ($elapsedSeconds -ge $nextProgressAt) {
+            Write-Host "  Still waiting for $Name ($elapsedSeconds seconds)..." -ForegroundColor DarkGray
+            $nextProgressAt += 15
+        }
+
+        if (-not $warnedAfterSoftTimeout -and $elapsedSeconds -ge $SoftTimeoutSeconds) {
+            Write-Host "  WARNING: $Name is still starting after $SoftTimeoutSeconds seconds." -ForegroundColor DarkYellow
+            Write-Host "  Continuing to wait because the process is still running. Press Ctrl+C to stop." -ForegroundColor DarkYellow
+            $warnedAfterSoftTimeout = $true
+        }
+
+        if ($HardTimeoutSeconds -gt 0 -and $elapsedSeconds -ge $HardTimeoutSeconds) {
+            Write-Host "  ERROR: $Name did not become ready within hard timeout $HardTimeoutSeconds seconds." -ForegroundColor Red
+            return $false
+        }
+
+        Start-Sleep -Seconds 1
+    }
+}
+
+function Stop-WindowsProcessTree {
+    param([int]$ProcessId)
+
+    try {
+        $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue)
+        foreach ($child in $children) {
+            Stop-WindowsProcessTree -ProcessId ([int]$child.ProcessId)
+        }
+    } catch {
+        # Fall back to taskkill below.
+    }
+
+    taskkill.exe /PID $ProcessId /T /F > $null 2>&1
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+function Stop-ProcessTree {
+    param([System.Diagnostics.Process]$Process)
+
+    if (-not $Process) {
+        return
+    }
+
+    if ($isWindowsPlatform) {
+        Stop-WindowsProcessTree -ProcessId $Process.Id
+    } elseif (-not $Process.HasExited) {
+        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    }
 }
 
 $backendPort = Find-FreePort -StartPort 8000
@@ -321,8 +386,16 @@ $script:LogOffsets = @{}
 
 $backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-u", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", $backendPort, "--app-dir", "backend", "--log-level", "info" -PassThru -WindowStyle Hidden -RedirectStandardOutput $backendOutLog -RedirectStandardError $backendErrLog
 
-Write-Host "  Waiting for backend health check (up to 120 seconds)..." -ForegroundColor DarkGray
-if (-not (Wait-BackendReady -Process $backendJob -Port $backendPort -TimeoutSeconds 120)) {
+$backendReadyTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_BACKEND_READY_TIMEOUT_SECONDS" -Default 120 -Minimum 1
+$backendReadyHardTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS" -Default 0 -Minimum 0
+Write-Host "  Waiting for backend health check (soft timeout $backendReadyTimeoutSeconds seconds)..." -ForegroundColor DarkGray
+if ($backendReadyHardTimeoutSeconds -gt 0) {
+    Write-Host "  Backend hard timeout: $backendReadyHardTimeoutSeconds seconds." -ForegroundColor DarkGray
+}
+if (-not (Wait-ServiceReady -Process $backendJob -Name "Backend" -Url "http://127.0.0.1:$backendPort/api/health" -SoftTimeoutSeconds $backendReadyTimeoutSeconds -HardTimeoutSeconds $backendReadyHardTimeoutSeconds -LogStreams @(
+    @{ Label = "backend"; Path = $backendOutLog; Color = "DarkGray" },
+    @{ Label = "backend!"; Path = $backendErrLog; Color = "DarkYellow" }
+))) {
     Write-LogTail -Label "backend" -Paths @($backendOutLog, $backendErrLog)
     Stop-ProcessTree -Process $backendJob
     exit 1
@@ -337,7 +410,19 @@ if ($isWindowsPlatform) {
     $frontendJob = Start-Process -FilePath "npm" -ArgumentList "run", "dev", "--", "--host", "$frontendHost", "--port", "$frontendPort" -WorkingDirectory "$PWD/frontend" -PassThru -WindowStyle Hidden -RedirectStandardOutput $frontendOutLog -RedirectStandardError $frontendErrLog
 }
 
-Start-Sleep -Seconds 3
+$frontendReadyTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_FRONTEND_READY_TIMEOUT_SECONDS" -Default 60 -Minimum 1
+$frontendReadyHardTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_FRONTEND_READY_HARD_TIMEOUT_SECONDS" -Default 180 -Minimum 0
+Write-Host "  Waiting for frontend server (soft timeout $frontendReadyTimeoutSeconds seconds)..." -ForegroundColor DarkGray
+if (-not (Wait-ServiceReady -Process $frontendJob -Name "Frontend" -Url "http://${frontendHost}:$frontendPort/" -SoftTimeoutSeconds $frontendReadyTimeoutSeconds -HardTimeoutSeconds $frontendReadyHardTimeoutSeconds -LogStreams @(
+    @{ Label = "frontend"; Path = $frontendOutLog; Color = "DarkGray" },
+    @{ Label = "frontend!"; Path = $frontendErrLog; Color = "DarkYellow" }
+))) {
+    Write-LogTail -Label "frontend" -Paths @($frontendOutLog, $frontendErrLog)
+    Stop-ProcessTree -Process $frontendJob
+    Stop-ProcessTree -Process $backendJob
+    exit 1
+}
+Write-Host "  Frontend server ready on port $frontendPort." -ForegroundColor Green
 
 # ── Done ─────────────────────────────────────────────────────────────
 

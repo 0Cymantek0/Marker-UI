@@ -125,6 +125,10 @@ export function OutputViewer({
     return content
   }, [activeTab, formats, content, visibleTabs])
 
+  const downloadFormat = useMemo(() => {
+    return visibleTabs.find((t) => t.value === activeTab)?.formatKey ?? 'markdown'
+  }, [activeTab, visibleTabs])
+
   const copyToClipboard = useCallback(async () => {
     if (!activeContent) return
     await navigator.clipboard.writeText(activeContent)
@@ -226,7 +230,7 @@ export function OutputViewer({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onDownload(activeTab === 'audio' ? 'markdown' : activeTab)}
+            onClick={() => onDownload(downloadFormat)}
             className="h-8 px-2.5 rounded-lg text-xs font-semibold hover:bg-muted/50 transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-muted-foreground mr-1.5" />

@@ -109,6 +109,28 @@ def test_chunk_markdown_unstructured_by_title_strategy_when_available() -> None:
     assert payload["chunks"][0]["source_refs"][0]["source"] == "doc.md"
 
 
+def test_chunk_markdown_unstructured_by_title_locates_repeated_sections() -> None:
+    pytest.importorskip("unstructured.partition.md")
+    pytest.importorskip("unstructured.chunking.title")
+    markdown = "# Repeat\n\nSame body.\n\n# Repeat\n\nSame body."
+
+    payload = chunk_markdown_with_strategy(
+        markdown,
+        source_name="repeat.md",
+        max_chars=200,
+        strategy="unstructured_by_title",
+    )
+
+    chunks = payload["chunks"]
+    assert payload["chunking_strategy"] == "unstructured_by_title"
+    assert [chunk["text"] for chunk in chunks] == ["Repeat\n\nSame body.", "Repeat\n\nSame body."]
+    assert [(chunk["start_line"], chunk["end_line"]) for chunk in chunks] == [(1, 3), (5, 7)]
+    assert chunks[0]["char_start"] < chunks[1]["char_start"]
+    assert chunks[0]["stable_id"] != chunks[1]["stable_id"]
+    assert chunks[1]["metadata"]["stable_id"] == chunks[1]["stable_id"]
+    assert markdown[chunks[1]["char_start"] : chunks[1]["char_end"]] == "# Repeat\n\nSame body."
+
+
 def test_chunk_markdown_packs_headings_with_section_text() -> None:
     payload = chunk_markdown(
         "# Title\n\nIntro paragraph.\n\nMore context.\n\n## Details\n\nFirst fact.\n\nSecond fact.",

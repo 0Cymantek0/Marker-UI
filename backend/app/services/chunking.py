@@ -236,7 +236,9 @@ def chunk_markdown_unstructured_by_title(
         combine_text_under_n_chars=0,
     )
     line_offsets = _line_offsets(markdown)
+    source_sha256 = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
     chunks: list[dict[str, Any]] = []
+    search_start_line = 1
     for raw_chunk in raw_chunks:
         text = str(raw_chunk).strip()
         if not text:
@@ -247,16 +249,37 @@ def chunk_markdown_unstructured_by_title(
             markdown,
             text,
             line_offsets=line_offsets,
+            search_start_line=search_start_line,
         )
+        search_start_line = max(search_start_line, end_line + 1)
         metadata = _public_unstructured_metadata(raw_chunk)
         content_types = ["unstructured_composite"]
         if metadata.get("text_as_html"):
             content_types.append("table")
         token_estimate = max(1, (len(text) + 3) // 4)
+        stable_id = _stable_chunk_id(
+            source_sha256,
+            MarkdownBlock(
+                text=text,
+                start_line=start_line,
+                end_line=end_line,
+                char_start=char_start,
+                char_end=char_end,
+                kind="unstructured_composite",
+                content_types=tuple(content_types),
+            ),
+            text,
+        )
+        chunk_metadata = {
+            "schema_version": SCHEMA_VERSION,
+            "stable_id": stable_id,
+            "content_types": content_types,
+        }
         chunks.append(
             {
                 "id": chunk_id,
                 "chunk_id": chunk_id,
+                "stable_id": stable_id,
                 "index": index,
                 "text": text,
                 "contextual_text": text,
@@ -271,6 +294,7 @@ def chunk_markdown_unstructured_by_title(
                 "token_count": token_estimate,
                 "content_types": content_types,
                 "content_hash": f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}",
+                "metadata": chunk_metadata,
                 "element_metadata": metadata,
                 "source_refs": [
                     {
@@ -295,7 +319,7 @@ def chunk_markdown_unstructured_by_title(
         "chunking_strategy": UNSTRUCTURED_CHUNKING_STRATEGY,
         "source": {
             "name": source_name,
-            "sha256": hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            "sha256": source_sha256,
             "char_count": len(markdown),
         },
         "chunk_count": len(chunks),
@@ -360,6 +384,7 @@ def _locate_unstructured_chunk_span(
     text: str,
     *,
     line_offsets: list[tuple[int, int]],
+    search_start_line: int = 1,
 ) -> tuple[int, int, int, int]:
     lines = markdown.splitlines()
     wanted = [_normalize_markdown_line_text(line) for line in text.splitlines() if line.strip()]
@@ -367,7 +392,9 @@ def _locate_unstructured_chunk_span(
     if not wanted:
         return 0, 0, 1, 1
 
-    start_line = _find_normalized_line(lines, wanted[0], start=0)
+    start_line = _find_normalized_line(lines, wanted[0], start=max(search_start_line - 1, 0))
+    if start_line <= 0 and search_start_line > 1:
+        start_line = _find_normalized_line(lines, wanted[0], start=0)
     end_line = _find_normalized_line(lines, wanted[-1], start=max(start_line - 1, 0))
     if start_line <= 0:
         start_line = 1

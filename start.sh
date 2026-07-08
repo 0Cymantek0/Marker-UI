@@ -120,7 +120,7 @@ ok "Node.js dependencies installed"
 # ----------------------------------------------------------------------
 echo ""
 echo -e "${YELLOW}[5/6] Creating data directories...${NC}"
-mkdir -p data/uploads data/output
+mkdir -p data/uploads data/output data/logs
 ok "Data directories ready"
 
 # ----------------------------------------------------------------------
@@ -185,6 +185,92 @@ find_free_port() {
     echo $port
 }
 
+get_int_env() {
+    local name=$1
+    local default=$2
+    local minimum=$3
+    local raw="${!name:-}"
+
+    if [ -z "$raw" ]; then
+        echo "$default"
+        return
+    fi
+
+    if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" -ge "$minimum" ]; then
+        echo "$raw"
+        return
+    fi
+
+    warn "Ignoring invalid $name='$raw'; using $default." >&2
+    echo "$default"
+}
+
+http_ready() {
+    local url=$1
+
+    if command -v curl &>/dev/null; then
+        curl -fsS --max-time 2 "$url" >/dev/null 2>&1
+        return $?
+    fi
+
+    if command -v wget &>/dev/null; then
+        wget -q --timeout=2 -O /dev/null "$url" >/dev/null 2>&1
+        return $?
+    fi
+
+    "$PYTHON" - "$url" <<'PY' >/dev/null 2>&1
+import sys
+import urllib.request
+
+try:
+    with urllib.request.urlopen(sys.argv[1], timeout=2) as response:
+        raise SystemExit(0 if response.status == 200 else 1)
+except Exception:
+    raise SystemExit(1)
+PY
+}
+
+wait_service_ready() {
+    local name=$1
+    local url=$2
+    local pid=$3
+    local soft_timeout=$4
+    local hard_timeout=$5
+    local start=$SECONDS
+    local warned=0
+    local next_progress=15
+
+    while true; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            err "ERROR: $name exited before it became ready."
+            return 1
+        fi
+
+        if http_ready "$url"; then
+            return 0
+        fi
+
+        local elapsed=$((SECONDS - start))
+        if [ "$elapsed" -ge "$next_progress" ]; then
+            info "Still waiting for $name ($elapsed seconds)..."
+            next_progress=$((next_progress + 15))
+        fi
+
+        if [ "$warned" -eq 0 ] && [ "$elapsed" -ge "$soft_timeout" ]; then
+            warn "WARNING: $name is still starting after $soft_timeout seconds."
+            warn "Continuing to wait because the process is still running. Press Ctrl+C to stop."
+            warned=1
+        fi
+
+        if [ "$hard_timeout" -gt 0 ] && [ "$elapsed" -ge "$hard_timeout" ]; then
+            err "ERROR: $name did not become ready within hard timeout $hard_timeout seconds."
+            return 1
+        fi
+
+        sleep 1
+    done
+}
+
 BACKEND_PORT=$(find_free_port 8000)
 
 if [ "$BACKEND_PORT" -ne 8000 ]; then
@@ -192,6 +278,7 @@ if [ "$BACKEND_PORT" -ne 8000 ]; then
 fi
 
 export BACKEND_PORT
+FRONTEND_HOST="127.0.0.1"
 
 FRONTEND_PORT=$(find_free_port 5173)
 
@@ -203,19 +290,32 @@ fi
 info "Starting backend on http://localhost:$BACKEND_PORT ..."
 uvicorn app.main:app --host 0.0.0.0 --port $BACKEND_PORT --app-dir backend &
 BACKEND_PID=$!
-sleep 3
 
-if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-    err "Backend failed to start."
+BACKEND_READY_TIMEOUT_SECONDS=$(get_int_env MARKER_BACKEND_READY_TIMEOUT_SECONDS 120 1)
+BACKEND_READY_HARD_TIMEOUT_SECONDS=$(get_int_env MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS 0 0)
+info "Waiting for backend health check (soft timeout $BACKEND_READY_TIMEOUT_SECONDS seconds)..."
+if ! wait_service_ready "backend" "http://127.0.0.1:$BACKEND_PORT/api/health" "$BACKEND_PID" "$BACKEND_READY_TIMEOUT_SECONDS" "$BACKEND_READY_HARD_TIMEOUT_SECONDS"; then
     exit 1
 fi
+ok "Backend health check passed on port $BACKEND_PORT."
 
 # Frontend
-info "Starting frontend on http://localhost:$FRONTEND_PORT ..."
-cd frontend && BACKEND_PORT=$BACKEND_PORT npm run dev -- --port $FRONTEND_PORT > /dev/null 2>&1 &
+info "Starting frontend on http://$FRONTEND_HOST:$FRONTEND_PORT ..."
+(cd frontend && BACKEND_PORT=$BACKEND_PORT npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT") > data/logs/frontend.out.log 2> data/logs/frontend.err.log &
 FRONTEND_PID=$!
-cd ..
-sleep 3
+
+FRONTEND_READY_TIMEOUT_SECONDS=$(get_int_env MARKER_FRONTEND_READY_TIMEOUT_SECONDS 60 1)
+FRONTEND_READY_HARD_TIMEOUT_SECONDS=$(get_int_env MARKER_FRONTEND_READY_HARD_TIMEOUT_SECONDS 180 0)
+info "Waiting for frontend server (soft timeout $FRONTEND_READY_TIMEOUT_SECONDS seconds)..."
+if ! wait_service_ready "frontend" "http://$FRONTEND_HOST:$FRONTEND_PORT/" "$FRONTEND_PID" "$FRONTEND_READY_TIMEOUT_SECONDS" "$FRONTEND_READY_HARD_TIMEOUT_SECONDS"; then
+    if [ -f data/logs/frontend.out.log ] || [ -f data/logs/frontend.err.log ]; then
+        warn "Last frontend log lines:"
+        [ -f data/logs/frontend.out.log ] && tail -n 20 data/logs/frontend.out.log
+        [ -f data/logs/frontend.err.log ] && tail -n 20 data/logs/frontend.err.log
+    fi
+    exit 1
+fi
+ok "Frontend server ready on port $FRONTEND_PORT."
 
 # ----------------------------------------------------------------------
 # Done
@@ -224,7 +324,7 @@ echo ""
 ok "========================================================"
 ok "Marker UI is running!"
 echo ""
-info "  Frontend:  ${CYAN}http://localhost:$FRONTEND_PORT${NC}"
+info "  Frontend:  ${CYAN}http://$FRONTEND_HOST:$FRONTEND_PORT${NC}"
 info "  Backend:   ${CYAN}http://localhost:$BACKEND_PORT${NC}"
 info "  API Docs:  ${CYAN}http://localhost:$BACKEND_PORT/docs${NC}"
 echo ""
