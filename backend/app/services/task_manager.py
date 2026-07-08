@@ -587,7 +587,7 @@ class TaskManager:
         """
         if self._durable_queue is None:
             return []
-        from sqlalchemy import select, update
+        from sqlalchemy import update
         from app.services.queue_backends import append_job_event
 
         async with async_session_factory() as recover_session:
@@ -1133,6 +1133,8 @@ class TaskManager:
             smooth.cancel()
         self._smooth_tasks.clear()
         self._cpu_backend.shutdown(wait=wait)
+        for logger_name in ("marker", "app"):
+            logging.getLogger(logger_name).removeHandler(self._log_handler)
         # Unblock a blocking drain by pushing the stop sentinel.
         transport = getattr(self._backend, "transport", None)
         if transport is not None:

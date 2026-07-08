@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import time
 import threading
 from contextlib import contextmanager
@@ -69,6 +70,24 @@ def task_manager():
     tm = TaskManager(max_workers=1)
     yield tm
     tm.shutdown(wait=False)
+
+
+def test_shutdown_removes_job_log_handlers():
+    marker_logger = logging.getLogger("marker")
+    app_logger = logging.getLogger("app")
+    before_marker = list(marker_logger.handlers)
+    before_app = list(app_logger.handlers)
+
+    tm = TaskManager(max_workers=1)
+    assert tm._log_handler in marker_logger.handlers
+    assert tm._log_handler in app_logger.handlers
+
+    tm.shutdown(wait=False)
+
+    assert tm._log_handler not in marker_logger.handlers
+    assert tm._log_handler not in app_logger.handlers
+    assert marker_logger.handlers == before_marker
+    assert app_logger.handlers == before_app
 
 
 def test_finalize_format_uses_result_extension_for_markdown_only_converter():
