@@ -35,8 +35,8 @@ def require_supported_output_formats(
     if "output_formats" in config:
         config["output_formats"] = requested
 
-    structured = [fmt for fmt in requested if fmt != "markdown"]
-    if not structured:
+    marker_only_formats = [fmt for fmt in requested if fmt not in {"markdown", "chunks"}]
+    if not marker_only_formats:
         return requested
 
     ext = Path(filepath).suffix.lower()
@@ -52,7 +52,7 @@ def require_supported_output_formats(
 
     plan = service.plan(filepath, config)
     source = source_name or Path(filepath).name
-    formats = ", ".join(structured)
+    formats = ", ".join(marker_only_formats)
     raise UnsupportedFormatError(
         f"Output format(s) {formats} are not supported for engine '{plan.engine}' on '{source}'. "
         "Use markdown/chunks, or choose a Marker-backed PDF/image/EPUB route for json/html.",

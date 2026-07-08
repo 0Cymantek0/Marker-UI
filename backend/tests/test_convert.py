@@ -248,6 +248,27 @@ async def test_pdf_structured_output_forces_marker_route(client: AsyncClient, db
 
 
 @pytest.mark.asyncio
+async def test_pdf_chunks_keeps_liteparse_fast_profile(client: AsyncClient, db_session):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(),
+        extra_params={"output_format": "chunks", "conversion_profile": "fast"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["output_format"] == "chunks"
+
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+
+    assert job.output_format == "chunks"
+    assert config["output_format"] == "chunks"
+    assert config["conversion_profile"] == "fast"
+    assert "engine_override" not in config
+
+
+@pytest.mark.asyncio
 async def test_upload_valid_pptx(client: AsyncClient):
     files = {"file": ("presentation.pptx", io.BytesIO(b"PK pptx content"), "application/vnd.openxmlformats-officedocument.presentationml.presentation")}
     resp = await client.post(
