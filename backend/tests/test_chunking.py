@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -91,9 +92,34 @@ def test_build_chunks_envelope_falls_back_when_optional_strategy_is_missing(monk
     assert "fallback_reason" in envelope["metadata"]["chunking"]
 
 
-def test_chunk_markdown_unstructured_by_title_strategy_when_available() -> None:
-    pytest.importorskip("unstructured.partition.md")
-    pytest.importorskip("unstructured.chunking.title")
+class _FakeUnstructuredChunk:
+    def __init__(self, text: str, metadata: dict[str, object] | None = None) -> None:
+        self.text = text
+        self.metadata = SimpleNamespace(to_dict=lambda: metadata or {})
+
+    def __str__(self) -> str:
+        return self.text
+
+
+def _install_fake_unstructured(monkeypatch: pytest.MonkeyPatch, chunks: list[_FakeUnstructuredChunk]) -> None:
+    def fake_import(name: str):
+        if name == "unstructured.partition.md":
+            return SimpleNamespace(partition_md=lambda text: [text])
+        if name == "unstructured.chunking.title":
+            return SimpleNamespace(chunk_by_title=lambda elements, **kwargs: chunks)
+        raise AssertionError(f"unexpected import: {name}")
+
+    monkeypatch.setattr("app.services.chunking.importlib.import_module", fake_import)
+
+
+def test_chunk_markdown_unstructured_by_title_strategy_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_unstructured(
+        monkeypatch,
+        [
+            _FakeUnstructuredChunk("Title\n\nIntro paragraph."),
+            _FakeUnstructuredChunk("Details\n\nFirst fact. Second fact.", {"category": "CompositeElement"}),
+        ],
+    )
 
     payload = chunk_markdown_with_strategy(
         "# Title\n\nIntro paragraph.\n\n## Details\n\nFirst fact. Second fact.",
@@ -107,12 +133,18 @@ def test_chunk_markdown_unstructured_by_title_strategy_when_available() -> None:
     assert payload["chunks"][0]["text"] == "Title\n\nIntro paragraph."
     assert payload["chunks"][0]["char_start"] == 0
     assert payload["chunks"][0]["source_refs"][0]["source"] == "doc.md"
+    assert payload["chunks"][1]["element_metadata"]["category"] == "CompositeElement"
 
 
-def test_chunk_markdown_unstructured_by_title_locates_repeated_sections() -> None:
-    pytest.importorskip("unstructured.partition.md")
-    pytest.importorskip("unstructured.chunking.title")
+def test_chunk_markdown_unstructured_by_title_locates_repeated_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     markdown = "# Repeat\n\nSame body.\n\n# Repeat\n\nSame body."
+    _install_fake_unstructured(
+        monkeypatch,
+        [
+            _FakeUnstructuredChunk("Repeat\n\nSame body."),
+            _FakeUnstructuredChunk("Repeat\n\nSame body."),
+        ],
+    )
 
     payload = chunk_markdown_with_strategy(
         markdown,
