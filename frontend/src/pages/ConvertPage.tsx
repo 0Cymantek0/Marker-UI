@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat, RotateCw, AlertTriangle, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -174,6 +174,8 @@ export function ConvertPage() {
   })
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [showConsole, setShowConsole] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const submitInFlightRef = useRef(false)
   // Model-swap dialog: which job it targets, and whether it auto-surfaced.
   const [swapJobId, setSwapJobId] = useState<string | null>(null)
   const [swapAuto, setSwapAuto] = useState(false)
@@ -470,11 +472,14 @@ export function ConvertPage() {
   })
 
   const handleConvert = useCallback(async () => {
+    if (submitInFlightRef.current) return
     if (files.length === 0 && parsedLocalPaths.length === 0) {
       toast.error('Please select a file first or specify local paths')
       return
     }
 
+    submitInFlightRef.current = true
+    setIsSubmitting(true)
     try {
       await start(files, parsedLocalPaths, config, outputDir, {
         fileKeys: selectedFiles.map((entry) => entry.id),
@@ -489,6 +494,9 @@ export function ConvertPage() {
       toast.success('Conversion queued successfully!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Conversion failed')
+    } finally {
+      submitInFlightRef.current = false
+      setIsSubmitting(false)
     }
   }, [files, parsedLocalPaths, config, outputDir, start, selectedFiles, engineOverrides])
 
@@ -501,6 +509,7 @@ export function ConvertPage() {
   }, [isModelsMissing, navigate, handleConvert])
 
   const getButtonText = () => {
+    if (isSubmitting) return 'Queuing Conversion...'
     if (checkingPlan) return 'Checking File Type...'
     if (isModelsMissing) {
       return 'Install selected engine models to continue'
@@ -554,6 +563,7 @@ export function ConvertPage() {
               outputDir={outputDir}
               onOutputDirChange={setOutputDir}
               inputFormats={inputFormats}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -568,6 +578,7 @@ export function ConvertPage() {
               config={config}
               onChange={setConfig}
               supportsMultiFormat={supportsMultiFormat}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -578,12 +589,17 @@ export function ConvertPage() {
             onClick={handleConvertClick}
             disabled={
               checkingPlan ||
+              isSubmitting ||
               (!isModelsMissing && files.length === 0 && localPaths.trim().length === 0)
             }
             className="w-full h-12 text-xs font-bold uppercase tracking-wider shadow-md rounded-xl hover:scale-[1.002] active:scale-[0.99] transition-all duration-200"
             size="lg"
           >
-            <Play className="w-3.5 h-3.5 mr-2" />
+            {isSubmitting ? (
+              <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+            ) : (
+              <Play className="w-3.5 h-3.5 mr-2" />
+            )}
             {getButtonText()}
           </Button>
         </div>

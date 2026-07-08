@@ -401,6 +401,42 @@ describe('ConvertPage component', () => {
     expect(call[4].fileEngineOverrides[call[4].fileKeys[0]]).toBe('marker_pdf')
   })
 
+  it('disables submit while queueing so rapid clicks cannot enqueue duplicates', async () => {
+    let resolveStart: (() => void) | undefined
+    const start = vi.fn(() => new Promise<void>((resolve) => {
+      resolveStart = resolve
+    }))
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start,
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    await renderConvertPage()
+    fireEvent.click(screen.getByText('Mock select PDF'))
+
+    const convertButton = await screen.findByRole('button', { name: /Convert 1 Document/i })
+    await waitFor(() => expect(convertButton).not.toBeDisabled())
+
+    fireEvent.click(convertButton)
+    fireEvent.click(convertButton)
+
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(convertButton).toBeDisabled()
+    expect(convertButton).toHaveTextContent(/Queuing Conversion/i)
+
+    await act(async () => {
+      resolveStart?.()
+      await Promise.resolve()
+    })
+  })
+
   it('offers the text data engine for TSV uploads', async () => {
     mockPlanConversion.mockResolvedValueOnce({
       engine: 'text_data',
