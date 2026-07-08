@@ -26,7 +26,9 @@ from app.agent_surface import (
     MCP_TOOL_PROFILES,
     MCP_V1_TOOL_NAMES as SURFACE_MCP_V1_TOOL_NAMES,
     MCP_V2_TOOL_NAMES as SURFACE_MCP_V2_TOOL_NAMES,
+    tool_annotations,
     tool_names_for_profile as surface_tool_names_for_profile,
+    tool_title,
 )
 from app.conversion.formats import OUTPUT_FORMATS_DESCRIPTION
 from app.agent_api import (
@@ -354,13 +356,8 @@ register_mcp_prompts(mcp)
 
 @mcp.tool(
     name="marker_capabilities",
-    title="Marker Capabilities",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_capabilities"),
+    annotations=tool_annotations("marker_capabilities"),
 )
 async def marker_capabilities() -> CapabilitiesOutput:
     """Canonical v2 capability tool."""
@@ -371,13 +368,8 @@ async def marker_capabilities() -> CapabilitiesOutput:
 
 @mcp.tool(
     name="marker_plan",
-    title="Plan Marker Conversion",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_plan"),
+    annotations=tool_annotations("marker_plan"),
 )
 async def marker_plan(
     source: SourceParam,
@@ -413,13 +405,8 @@ async def marker_plan(
 
 @mcp.tool(
     name="marker_convert",
-    title="Convert With Marker",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_convert"),
+    annotations=tool_annotations("marker_convert"),
 )
 async def marker_convert(
     ctx: Context,
@@ -461,13 +448,8 @@ async def marker_convert(
 
 @mcp.tool(
     name="marker_submit",
-    title="Submit Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_submit"),
+    annotations=tool_annotations("marker_submit"),
 )
 async def marker_submit(
     ctx: Context,
@@ -503,13 +485,8 @@ async def marker_submit(
 
 @mcp.tool(
     name="marker_job_status",
-    title="Get Marker Job Status",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_job_status"),
+    annotations=tool_annotations("marker_job_status"),
 )
 async def marker_job_status(
     job_id: JobIdParam,
@@ -530,13 +507,8 @@ async def marker_job_status(
 
 @mcp.tool(
     name="marker_output_manifest",
-    title="Get Marker Output Manifest",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_output_manifest"),
+    annotations=tool_annotations("marker_output_manifest"),
 )
 def marker_output_manifest(
     output_path: Annotated[str, Field(description="Output text path returned by marker_convert.", examples=["C:\\path\\to\\out\\document.md"])]
@@ -550,13 +522,8 @@ def marker_output_manifest(
 
 @mcp.tool(
     name="marker_list_capabilities",
-    title="List Marker Capabilities",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_capabilities"),
+    annotations=tool_annotations("marker_list_capabilities"),
 )
 async def marker_list_capabilities() -> CapabilitiesOutput:
     """Return supported extensions, engines, output modes, and tool names."""
@@ -567,13 +534,8 @@ async def marker_list_capabilities() -> CapabilitiesOutput:
 
 @mcp.tool(
     name="marker_get_capabilities",
-    title="Get Marker Capabilities",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_capabilities"),
+    annotations=tool_annotations("marker_get_capabilities"),
 )
 async def marker_get_capabilities() -> CapabilitiesOutput:
     """Alias for marker_list_capabilities using v1 naming."""
@@ -584,13 +546,8 @@ async def marker_get_capabilities() -> CapabilitiesOutput:
 
 @mcp.tool(
     name="marker_get_health",
-    title="Get Marker Health",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_health"),
+    annotations=tool_annotations("marker_get_health"),
 )
 async def marker_get_health() -> HealthOutput:
     """Return lightweight MCP server health."""
@@ -601,13 +558,8 @@ async def marker_get_health() -> HealthOutput:
 
 @mcp.tool(
     name="marker_get_version",
-    title="Get Marker Version",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_version"),
+    annotations=tool_annotations("marker_get_version"),
 )
 async def marker_get_version() -> VersionOutput:
     """Return package/build and schema version information."""
@@ -622,13 +574,8 @@ async def marker_get_version() -> VersionOutput:
 
 @mcp.tool(
     name="marker_plan_conversion",
-    title="Plan Marker Conversion",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_plan_conversion"),
+    annotations=tool_annotations("marker_plan_conversion"),
 )
 async def marker_plan_conversion(
     ctx: Context,
@@ -667,13 +614,8 @@ async def marker_plan_conversion(
 
 @mcp.tool(
     name="marker_plan_local_file",
-    title="Plan Local File Conversion",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_plan_local_file"),
+    annotations=tool_annotations("marker_plan_local_file"),
 )
 async def marker_plan_local_file(
     ctx: Context,
@@ -701,13 +643,8 @@ async def marker_plan_local_file(
 
 @mcp.tool(
     name="marker_plan_url",
-    title="Plan URL Conversion",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_plan_url"),
+    annotations=tool_annotations("marker_plan_url"),
 )
 async def marker_plan_url(
     source_url: UrlParam,
@@ -740,13 +677,8 @@ async def marker_plan_url(
 
 @mcp.tool(
     name="marker_convert_file",
-    title="Convert File With Marker",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_convert_file"),
+    annotations=tool_annotations("marker_convert_file"),
 )
 async def marker_convert_file(
     ctx: Context,
@@ -942,13 +874,8 @@ async def marker_convert_file(
 
 @mcp.tool(
     name="marker_convert_local_file",
-    title="Convert Local File With Marker",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_convert_local_file"),
+    annotations=tool_annotations("marker_convert_local_file"),
 )
 async def marker_convert_local_file(
     ctx: Context,
@@ -988,13 +915,8 @@ async def marker_convert_local_file(
 
 @mcp.tool(
     name="marker_convert_url",
-    title="Convert URL With Marker",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_convert_url"),
+    annotations=tool_annotations("marker_convert_url"),
 )
 async def marker_convert_url(
     source_url: UrlParam,
@@ -1031,13 +953,8 @@ async def marker_convert_url(
 
 @mcp.tool(
     name="marker_submit_job",
-    title="Submit Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_submit_job"),
+    annotations=tool_annotations("marker_submit_job"),
 )
 async def marker_submit_job(
     ctx: Context,
@@ -1195,13 +1112,8 @@ async def marker_submit_job(
 
 @mcp.tool(
     name="marker_submit_local_job",
-    title="Submit Local Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_submit_local_job"),
+    annotations=tool_annotations("marker_submit_local_job"),
 )
 async def marker_submit_local_job(
     ctx: Context,
@@ -1235,13 +1147,8 @@ async def marker_submit_local_job(
 
 @mcp.tool(
     name="marker_submit_url_job",
-    title="Submit URL Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_submit_url_job"),
+    annotations=tool_annotations("marker_submit_url_job"),
 )
 async def marker_submit_url_job(
     source_url: UrlParam,
@@ -1272,13 +1179,8 @@ async def marker_submit_url_job(
 
 @mcp.tool(
     name="marker_read_output",
-    title="Read Marker Output",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_read_output"),
+    annotations=tool_annotations("marker_read_output"),
 )
 async def marker_read_output(
     output_path: Annotated[str, Field(description="Path returned as output.text_path by marker_convert_file or marker_get_job_status.", examples=["C:\\path\\to\\document.md"])],
@@ -1293,13 +1195,8 @@ async def marker_read_output(
 
 @mcp.tool(
     name="marker_read_output_chunk",
-    title="Read Marker Output Chunk",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_read_output_chunk"),
+    annotations=tool_annotations("marker_read_output_chunk"),
 )
 async def marker_read_output_chunk(
     output_path: Annotated[str, Field(description="Path returned as output.text_path by conversion/job status. For semantic mode, point this at the chunks .json output.", examples=["C:\\path\\to\\document.md"])],
@@ -1331,13 +1228,8 @@ async def marker_read_output_chunk(
 
 @mcp.tool(
     name="marker_get_output_manifest",
-    title="Get Marker Output Manifest",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_output_manifest"),
+    annotations=tool_annotations("marker_get_output_manifest"),
 )
 async def marker_get_output_manifest(
     output_path: Annotated[str, Field(description="Output text path or manifest path.", examples=["C:\\path\\to\\document.md"])],
@@ -1351,13 +1243,8 @@ async def marker_get_output_manifest(
 
 @mcp.tool(
     name="marker_list_output_assets",
-    title="List Marker Output Assets",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_output_assets"),
+    annotations=tool_annotations("marker_list_output_assets"),
 )
 async def marker_list_output_assets(
     output_path: Annotated[str, Field(description="Output text path or manifest path.", examples=["C:\\path\\to\\document.md"])],
@@ -1373,13 +1260,8 @@ async def marker_list_output_assets(
 
 @mcp.tool(
     name="marker_list_jobs",
-    title="List Marker Jobs",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_jobs"),
+    annotations=tool_annotations("marker_list_jobs"),
 )
 async def marker_list_jobs(
     page: PageParam = 1,
@@ -1393,13 +1275,8 @@ async def marker_list_jobs(
 
 @mcp.tool(
     name="marker_get_job_status",
-    title="Get Marker Job Status",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_job_status"),
+    annotations=tool_annotations("marker_get_job_status"),
 )
 async def marker_get_job_status(
     job_id: JobIdParam,
@@ -1419,13 +1296,8 @@ async def marker_get_job_status(
 
 @mcp.tool(
     name="marker_cancel_job",
-    title="Cancel Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_cancel_job"),
+    annotations=tool_annotations("marker_cancel_job"),
 )
 async def marker_cancel_job(
     job_id: JobIdParam,
@@ -1438,13 +1310,8 @@ async def marker_cancel_job(
 
 @mcp.tool(
     name="marker_delete_job",
-    title="Delete Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_delete_job"),
+    annotations=tool_annotations("marker_delete_job"),
 )
 async def marker_delete_job(
     job_id: JobIdParam,
@@ -1459,13 +1326,8 @@ async def marker_delete_job(
 
 @mcp.tool(
     name="marker_purge_job_files",
-    title="Purge Marker Job Files",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_purge_job_files"),
+    annotations=tool_annotations("marker_purge_job_files"),
 )
 async def marker_purge_job_files(
     job_id: JobIdParam,
@@ -1478,13 +1340,8 @@ async def marker_purge_job_files(
 
 @mcp.tool(
     name="marker_list_settings",
-    title="List Marker Settings",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_settings"),
+    annotations=tool_annotations("marker_list_settings"),
 )
 async def marker_list_settings(
     category: CategoryParam = "",
@@ -1497,13 +1354,8 @@ async def marker_list_settings(
 
 @mcp.tool(
     name="marker_get_setting",
-    title="Get Marker Setting",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_setting"),
+    annotations=tool_annotations("marker_get_setting"),
 )
 async def marker_get_setting(
     key: SettingKeyParam,
@@ -1517,13 +1369,8 @@ async def marker_get_setting(
 
 @mcp.tool(
     name="marker_set_setting",
-    title="Set Marker Setting",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_set_setting"),
+    annotations=tool_annotations("marker_set_setting"),
 )
 async def marker_set_setting(
     key: SettingKeyParam,
@@ -1538,13 +1385,8 @@ async def marker_set_setting(
 
 @mcp.tool(
     name="marker_delete_setting",
-    title="Delete Marker Setting",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_delete_setting"),
+    annotations=tool_annotations("marker_delete_setting"),
 )
 async def marker_delete_setting(
     key: SettingKeyParam,
@@ -1558,13 +1400,8 @@ async def marker_delete_setting(
 
 @mcp.tool(
     name="marker_self_test",
-    title="Self-Test Marker MCP",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_self_test"),
+    annotations=tool_annotations("marker_self_test"),
 )
 async def marker_self_test(
     include_conversion: Annotated[bool, Field(description="Run deterministic conversion smoke check.", examples=[True])] = True,

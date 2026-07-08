@@ -339,6 +339,40 @@ def test_agent_surface_registry_drives_agent_capabilities_and_mcp_profiles():
     assert set(agent_surface.DEFAULT_AGENT_TOOL_NAMES).issubset(agent_surface.MCP_ALL_TOOL_NAMES)
     assert mcp_server.MCP_ALL_TOOL_NAMES == list(agent_surface.MCP_ALL_TOOL_NAMES)
     assert set(agent_surface.MCP_TOOL_SPEC_BY_NAME) == set(agent_surface.MCP_ALL_TOOL_NAMES)
+    for spec in agent_surface.MCP_TOOL_SPECS:
+        assert spec.title
+        assert spec.description
+        assert set(spec.annotations) == {
+            "readOnlyHint",
+            "destructiveHint",
+            "idempotentHint",
+            "openWorldHint",
+        }
+        for alias in spec.aliases:
+            assert agent_surface.MCP_TOOL_SPEC_BY_NAME[alias].canonical_name == spec.name
+            assert agent_surface.MCP_TOOL_SPEC_BY_NAME[alias].deprecated is True
+
+
+@pytest.mark.asyncio
+async def test_agent_surface_registry_matches_live_mcp_tool_metadata():
+    import app.agent_surface as agent_surface
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = {tool.name: tool for tool in await mcp_server.mcp.list_tools()}
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+    assert set(tools) == set(agent_surface.tool_names_for_profile("admin"))
+    for name, tool in tools.items():
+        spec = agent_surface.MCP_TOOL_SPEC_BY_NAME[name]
+        assert tool.title == spec.title
+        assert tool.description and tool.description.startswith(spec.description)
+        assert tool.annotations.readOnlyHint is spec.annotations["readOnlyHint"]
+        assert tool.annotations.destructiveHint is spec.annotations["destructiveHint"]
+        assert tool.annotations.idempotentHint is spec.annotations["idempotentHint"]
+        assert tool.annotations.openWorldHint is spec.annotations["openWorldHint"]
     assert all(spec.scopes for spec in agent_surface.MCP_TOOL_SPECS)
     assert set(agent_surface.MCP_RESOURCE_SPEC_BY_URI) == set(agent_surface.MCP_RESOURCE_URIS)
     assert all(spec.scopes for spec in agent_surface.MCP_RESOURCE_SPECS)
