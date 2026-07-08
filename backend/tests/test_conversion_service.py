@@ -32,6 +32,28 @@ class _FakeMarkerServiceForConversion:
         self, filepath: str, options: dict[str, Any], device: str | None = None
     ) -> dict[str, Any]:
         self.convert_calls.append((filepath, options))
+        output_format = str(options.get("output_format") or "markdown").strip().lower()
+        if output_format == "json":
+            return {
+                "text": '{"document": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            }
+        if output_format == "html":
+            return {
+                "text": "<html><body>Converted.</body></html>",
+                "extension": "html",
+                "images": {},
+                "metadata": {"pages": 2},
+            }
+        if output_format == "chunks":
+            return {
+                "text": '{"marker_native_chunks": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            }
         return {
             "text": "# Fake PDF Output\n\nConverted.",
             "extension": "md",
@@ -162,6 +184,74 @@ class TestConversionService:
         assert "| Ada | 10 |" in payload["chunks"][-1]["text"]
         assert result["chunks"]["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
         assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "markdown_heading_blocks_v2"
+
+    def test_native_convert_file_rejects_json_output_format(self, tmp_path: Any) -> None:
+        from app.errors import UnsupportedFormatError
+
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "scores.tsv"
+        source.write_text("name\tscore\nAda\t10\n", encoding="utf-8")
+
+        with pytest.raises(UnsupportedFormatError, match="not supported for engine 'text_data'"):
+            svc.convert_file(str(source), {"output_format": "json"})
+
+        assert len(fake_ms.convert_calls) == 0
+
+    def test_native_convert_file_formats_rejects_fake_json_derivation(self, tmp_path: Any) -> None:
+        from app.errors import UnsupportedFormatError
+
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "scores.tsv"
+        source.write_text("name\tscore\nAda\t10\n", encoding="utf-8")
+
+        with pytest.raises(UnsupportedFormatError, match="Markdown-only converters"):
+            svc.convert_file_formats(
+                str(source),
+                {"output_format": "markdown", "output_formats": ["markdown", "json"]},
+                ["markdown", "json"],
+            )
+
+    def test_marker_renderer_rejects_json_with_markdown_extension(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "paper.pdf"
+        source.write_bytes(b"%PDF")
+
+        def bad_convert_file_formats(filepath, options, formats, device=None):
+            fake_ms.convert_format_calls.append((filepath, list(formats), dict(options)))
+            return {
+                "json": {
+                    "text": '{"document": true}',
+                    "extension": "md",
+                    "images": {},
+                    "metadata": {},
+                }
+            }
+
+        fake_ms.convert_file_formats = bad_convert_file_formats  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="produced .md for output_format 'json'"):
+            svc.convert_file_formats(str(source), {"output_format": "json"}, ["json"])
+
+    def test_marker_renderer_rejects_invalid_json_payload(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "paper.pdf"
+        source.write_bytes(b"%PDF")
+
+        def bad_convert_file_formats(filepath, options, formats, device=None):
+            fake_ms.convert_format_calls.append((filepath, list(formats), dict(options)))
+            return {
+                "json": {
+                    "text": "# not json",
+                    "extension": "json",
+                    "images": {},
+                    "metadata": {},
+                }
+            }
+
+        fake_ms.convert_file_formats = bad_convert_file_formats  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="invalid JSON"):
+            svc.convert_file_formats(str(source), {"output_format": "json"}, ["json"])
 
     def test_native_derived_chunks_honor_explicit_chunking_strategy(self, tmp_path: Any) -> None:
         pytest.importorskip("unstructured.partition.md")

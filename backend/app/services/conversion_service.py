@@ -11,6 +11,7 @@ dict so ``_finalize_job`` is untouched.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -42,8 +43,17 @@ from app.conversion.router import ConversionRouter
 from app.conversion.stream_info import StreamInfo
 from app.services.chunking import build_chunks_envelope
 from app.conversion.table_evidence import attach_table_evidence
+from app.errors import UnsupportedFormatError
 
 logger = logging.getLogger(__name__)
+
+_DERIVABLE_MARKDOWN_FORMATS = frozenset({"markdown", "chunks"})
+_EXPECTED_FORMAT_EXTENSIONS = {
+    "markdown": frozenset({"md", "markdown"}),
+    "html": frozenset({"html", "htm"}),
+    "json": frozenset({"json"}),
+    "chunks": frozenset({"json"}),
+}
 
 
 def _count_page_range(page_range: Any) -> int | None:
@@ -332,6 +342,20 @@ class ConversionService:
                 f"Converter '{plan.engine}' does not accept extension "
                 f"'{stream_info.extension}' (file: {filepath})"
             )
+        requested_format = str(config.get("output_format") or "markdown").strip().lower()
+        if requested_format in {"json", "html"} and not getattr(
+            converter, "supports_multiple_formats", lambda: False
+        )():
+            raise UnsupportedFormatError(
+                f"Output format '{requested_format}' is not supported for engine '{plan.engine}' on '{Path(filepath).name}'. "
+                "Use markdown/chunks, or choose a Marker-backed PDF/image/EPUB route for json/html.",
+                details={
+                    "source": Path(filepath).name,
+                    "engine": plan.engine,
+                    "requested_formats": [requested_format],
+                    "supported_formats": ["markdown", "chunks"],
+                },
+            )
 
         logger.info(
             "Converting '%s' with engine=%s (confidence=%.2f)",
@@ -380,7 +404,12 @@ class ConversionService:
             probe_data = config.get("probe_result") if isinstance(config, dict) else None
             if isinstance(probe_data, dict):
                 result.metadata["probe_result"] = probe_data
-            return result.to_legacy_envelope()
+            return _envelope_for_requested_format(
+                result.to_legacy_envelope(),
+                filepath,
+                requested_format,
+                config,
+            )
 
         if plan.engine == "liteparse_pdf":
             probe_data = config.get("probe_result") if isinstance(config, dict) else None
@@ -413,7 +442,12 @@ class ConversionService:
                 result.metadata["engine"] = fb_plan.to_dict()
                 if isinstance(probe_data, dict):
                     result.metadata["probe_result"] = probe_data
-                return result.to_legacy_envelope()
+                return _envelope_for_requested_format(
+                    result.to_legacy_envelope(),
+                    filepath,
+                    requested_format,
+                    config,
+                )
 
         # Inject the plan into metadata so job status/history can show it.
         result.metadata["engine"] = plan.to_dict()
@@ -421,7 +455,12 @@ class ConversionService:
         if isinstance(probe_data, dict):
             result.metadata["probe_result"] = probe_data
 
-        return result.to_legacy_envelope()
+        return _envelope_for_requested_format(
+            result.to_legacy_envelope(),
+            filepath,
+            requested_format,
+            config,
+        )
 
     # ------------------------------------------------------------------
     # Multi-format output
@@ -479,7 +518,7 @@ class ConversionService:
             envelope = self.convert_file(filepath, config, device=device)
             return _derived_markdown_formats(envelope, filepath, formats, config=config)
 
-        requested_formats = [fmt for fmt in dict.fromkeys(str(fmt).strip().lower() for fmt in formats) if fmt]
+        requested_formats = _normalize_requested_formats(formats)
         derive_chunks = bool(config.get("chunking_strategy") and "chunks" in requested_formats)
         render_formats = requested_formats
         if derive_chunks:
@@ -497,7 +536,15 @@ class ConversionService:
             result.metadata.setdefault("engine", plan.to_dict())
             if isinstance(probe_data, dict):
                 result.metadata.setdefault("probe_result", probe_data)
-            envelopes[fmt] = result.to_legacy_envelope()
+            envelope = result.to_legacy_envelope()
+            _validate_format_artifact(fmt, envelope, source=Path(filepath).name)
+            envelopes[fmt] = envelope
+        missing_formats = [fmt for fmt in render_formats if fmt not in envelopes]
+        if missing_formats:
+            raise RuntimeError(
+                "Renderer did not produce requested output format(s) "
+                f"{', '.join(missing_formats)} for '{Path(filepath).name}'."
+            )
         if derive_chunks:
             markdown_envelope = envelopes.get("markdown")
             if markdown_envelope is None:
@@ -508,6 +555,7 @@ class ConversionService:
                 if isinstance(probe_data, dict):
                     markdown_result.metadata.setdefault("probe_result", probe_data)
                 markdown_envelope = markdown_result.to_legacy_envelope()
+                _validate_format_artifact("markdown", markdown_envelope, source=Path(filepath).name)
             derived_chunks = _derived_markdown_formats(
                 markdown_envelope,
                 filepath,
@@ -725,6 +773,78 @@ def _requested_formats(config: dict[str, Any]) -> list[str]:
     return [str(config.get("output_format") or "markdown").strip().lower()]
 
 
+def _normalize_requested_formats(formats: list[str]) -> list[str]:
+    return [fmt for fmt in dict.fromkeys(str(fmt).strip().lower() for fmt in formats) if fmt]
+
+
+def _raise_unsupported_markdown_derivation(
+    filepath: str,
+    formats: list[str],
+    *,
+    engine: str,
+) -> None:
+    unsupported = [fmt for fmt in formats if fmt not in _DERIVABLE_MARKDOWN_FORMATS]
+    if not unsupported:
+        return
+    requested = ", ".join(unsupported)
+    raise UnsupportedFormatError(
+        f"Output format(s) {requested} are not supported for engine '{engine}' on '{Path(filepath).name}'. "
+        "Markdown-only converters can produce markdown and derived chunks only.",
+        details={
+            "source": Path(filepath).name,
+            "engine": engine,
+            "requested_formats": formats,
+            "supported_formats": sorted(_DERIVABLE_MARKDOWN_FORMATS),
+        },
+    )
+
+
+def _validate_format_artifact(
+    fmt: str,
+    envelope: dict[str, Any],
+    *,
+    source: str,
+) -> None:
+    expected = _EXPECTED_FORMAT_EXTENSIONS.get(fmt)
+    if expected is None:
+        return
+    extension = str(envelope.get("extension") or "").strip().lower().lstrip(".")
+    if extension not in expected:
+        expected_label = "/".join(f".{ext}" for ext in sorted(expected))
+        got_label = f".{extension}" if extension else "<none>"
+        raise RuntimeError(
+            f"Renderer produced {got_label} for output_format '{fmt}' on '{source}', "
+            f"expected {expected_label}."
+        )
+    if fmt in {"json", "chunks"}:
+        text = str(envelope.get("text") or "")
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Renderer produced invalid JSON for output_format '{fmt}' on '{source}'."
+            ) from exc
+
+
+def _envelope_for_requested_format(
+    envelope: dict[str, Any],
+    filepath: str,
+    requested_format: str,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    envelope_extension = str(envelope.get("extension") or "").lstrip(".").lower()
+    if requested_format == "chunks" and envelope_extension in {"md", "markdown"}:
+        envelope = build_chunks_envelope(
+            str(envelope.get("text") or ""),
+            source_name=Path(filepath).name,
+            metadata=dict(envelope.get("metadata") or {}),
+            strategy=str(config.get("chunking_strategy") or "markdown_heading_blocks_v2"),
+        )
+    if requested_format in _EXPECTED_FORMAT_EXTENSIONS:
+        _validate_format_artifact(requested_format, envelope, source=Path(filepath).name)
+    return envelope
+
+
 def _derived_markdown_formats(
     markdown_envelope: dict[str, Any],
     filepath: str,
@@ -733,7 +853,14 @@ def _derived_markdown_formats(
     config: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     outputs: dict[str, dict[str, Any]] = {}
-    requested = [fmt for fmt in dict.fromkeys(str(fmt).strip().lower() for fmt in formats) if fmt]
+    requested = _normalize_requested_formats(formats)
+    engine = (
+        (markdown_envelope.get("metadata") or {}).get("engine", {}).get("engine")
+        if isinstance(markdown_envelope.get("metadata"), dict)
+        and isinstance((markdown_envelope.get("metadata") or {}).get("engine"), dict)
+        else "markdown"
+    )
+    _raise_unsupported_markdown_derivation(filepath, requested, engine=str(engine or "markdown"))
     text = str(markdown_envelope.get("text") or "")
     for fmt in requested:
         if fmt == "markdown":
@@ -745,6 +872,9 @@ def _derived_markdown_formats(
                 metadata=dict(markdown_envelope.get("metadata") or {}),
                 strategy=str((config or {}).get("chunking_strategy") or "markdown_heading_blocks_v2"),
             )
+            _validate_format_artifact("chunks", outputs["chunks"], source=Path(filepath).name)
     if not outputs:
         outputs["markdown"] = markdown_envelope
+    if "markdown" in outputs:
+        _validate_format_artifact("markdown", outputs["markdown"], source=Path(filepath).name)
     return outputs
