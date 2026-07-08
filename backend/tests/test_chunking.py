@@ -70,6 +70,40 @@ def test_chunk_markdown_split_text_uses_tight_source_spans() -> None:
         assert chunk["source_refs"][0]["char_end"] == chunk["char_end"]
 
 
+def test_chunk_markdown_default_overlap_keeps_source_spans_exact() -> None:
+    markdown = "# Long\n\n" + ("alpha beta gamma. " * 35)
+    payload = chunk_markdown(
+        markdown,
+        source_name="overlap.md",
+        max_chars=200,
+    )
+
+    chunks = payload["chunks"]
+
+    assert len(chunks) > 3
+    assert not any(
+        len(chunk["text"]) < 40
+        and index + 1 < len(chunks)
+        and chunk["text"] in chunks[index + 1]["text"]
+        for index, chunk in enumerate(chunks)
+    )
+    for chunk in chunks:
+        source_slice = markdown[chunk["char_start"] : chunk["char_end"]]
+        assert source_slice == chunk["text"]
+        assert chunk["source_refs"] == [
+            {
+                "type": "markdown_line_span",
+                "source": "overlap.md",
+                "start_line": chunk["start_line"],
+                "end_line": chunk["end_line"],
+                "char_start": chunk["char_start"],
+                "char_end": chunk["char_end"],
+                "heading_path": chunk["heading_path"],
+                "content_types": chunk["content_types"],
+            }
+        ]
+
+
 def test_build_chunks_envelope_falls_back_when_optional_strategy_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_import(name: str):
         if name.startswith("unstructured."):

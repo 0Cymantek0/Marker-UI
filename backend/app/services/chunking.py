@@ -40,6 +40,7 @@ class MarkdownBlock:
     asset_refs: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     source_spans: tuple[SourceSpan, ...] = field(default_factory=tuple)
     page_numbers: tuple[int, ...] = field(default_factory=tuple)
+    pack_isolated: bool = False
 
 
 def build_chunks_envelope(
@@ -911,6 +912,8 @@ def _pack_chunk_blocks(
             flush()
         if current and block.page_numbers != current[-1].page_numbers and (block.page_numbers or current[-1].page_numbers):
             flush()
+        if current and block.pack_isolated and not _is_standalone_heading(current):
+            flush()
         projected_len = len("\n\n".join([*(item.text for item in current), block.text]))
         if current and projected_len > max_chars:
             if _is_standalone_heading(current) and block.kind == "text":
@@ -923,7 +926,14 @@ def _pack_chunk_blocks(
                     )
                     current.append(head_block)
                     if tail_block is not None:
-                        pending.appendleft(tail_block)
+                        next_block = pending[0] if pending else None
+                        if not (
+                            block.pack_isolated
+                            and next_block is not None
+                            and tail_block.text
+                            and tail_block.text in next_block.text
+                        ):
+                            pending.appendleft(tail_block)
                     flush()
                     continue
                 current.append(block)
@@ -931,7 +941,7 @@ def _pack_chunk_blocks(
                 continue
             flush()
         current.append(block)
-        if block.kind in {"fenced_code", "table"}:
+        if block.kind in {"fenced_code", "table"} or block.pack_isolated:
             flush()
     flush()
     return packed
@@ -1050,7 +1060,13 @@ def _split_block(
             current = f"{prefix} {current[max_chars:]}".strip() if prefix else current[max_chars:].strip()
     if current:
         pieces.append(current)
-    return _locate_split_pieces(block, pieces, overlap_chars=overlap_chars, line_offsets=line_offsets)
+    return _locate_split_pieces(
+        block,
+        pieces,
+        overlap_chars=overlap_chars,
+        line_offsets=line_offsets,
+        pack_isolated=True,
+    )
 
 
 def _fence_marker(line: str) -> str | None:
@@ -1100,7 +1116,13 @@ def _split_line_preserving_block(
         else:
             current.append(line)
     flush()
-    return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+    return _locate_split_pieces(
+        block,
+        pieces,
+        overlap_chars=0,
+        line_offsets=line_offsets,
+        pack_isolated=True,
+    )
 
 
 def _split_table_block(
@@ -1113,7 +1135,13 @@ def _split_table_block(
     lines = text.splitlines()
     if len(lines) <= 2:
         pieces = _split_text_by_chars(text, max_chars=max_chars)
-        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+        return _locate_split_pieces(
+            block,
+            pieces,
+            overlap_chars=0,
+            line_offsets=line_offsets,
+            pack_isolated=True,
+        )
 
     header = lines[:2]
     rows = lines[2:]
@@ -1121,7 +1149,13 @@ def _split_table_block(
     row_limit = max_chars - len(header_text) - 1
     if row_limit < 1:
         pieces = _split_text_by_chars(text, max_chars=max_chars)
-        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+        return _locate_split_pieces(
+            block,
+            pieces,
+            overlap_chars=0,
+            line_offsets=line_offsets,
+            pack_isolated=True,
+        )
     pieces: list[MarkdownBlock] = []
     current_rows: list[tuple[int, str]] = []
 
@@ -1199,7 +1233,13 @@ def _split_fenced_code_block(
     lines = text.splitlines()
     if len(lines) < 2:
         pieces = _split_text_by_chars(text, max_chars=max_chars)
-        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+        return _locate_split_pieces(
+            block,
+            pieces,
+            overlap_chars=0,
+            line_offsets=line_offsets,
+            pack_isolated=True,
+        )
 
     opener = lines[0]
     opener_marker = _fence_marker(opener) or ""
@@ -1210,7 +1250,13 @@ def _split_fenced_code_block(
     body_limit = max_chars - overhead
     if body_limit < 1:
         pieces = _split_text_by_chars(text, max_chars=max_chars)
-        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+        return _locate_split_pieces(
+            block,
+            pieces,
+            overlap_chars=0,
+            line_offsets=line_offsets,
+            pack_isolated=True,
+        )
     pieces: list[MarkdownBlock] = []
     current: list[tuple[int, str]] = []
 
@@ -1325,6 +1371,7 @@ def _synthetic_wrapped_block(
         asset_refs=_asset_refs(text),
         source_spans=_coerce_source_spans(source_spans, page_numbers=block.page_numbers),
         page_numbers=block.page_numbers,
+        pack_isolated=True,
     )
 
 
@@ -1432,6 +1479,7 @@ def _locate_split_pieces(
     *,
     overlap_chars: int,
     line_offsets: list[tuple[int, int]],
+    pack_isolated: bool = False,
 ) -> list[MarkdownBlock]:
     located: list[MarkdownBlock] = []
     search_from = 0
@@ -1447,7 +1495,16 @@ def _locate_split_pieces(
             end = len(block.text)
         else:
             end = start + len(piece)
-        located.append(_block_piece(block, piece, start, end, line_offsets=line_offsets))
+        located.append(
+            _block_piece(
+                block,
+                piece,
+                start,
+                end,
+                line_offsets=line_offsets,
+                pack_isolated=pack_isolated,
+            )
+        )
         search_from = max(start + 1, end - overlap_chars)
     return located
 
@@ -1459,7 +1516,14 @@ def _split_block_once(
     line_offsets: list[tuple[int, int]],
 ) -> tuple[MarkdownBlock, MarkdownBlock | None]:
     head_text, tail_text = _split_text_at_limit(block.text, max_chars=max_chars)
-    head = _block_piece(block, head_text, 0, len(head_text), line_offsets=line_offsets)
+    head = _block_piece(
+        block,
+        head_text,
+        0,
+        len(head_text),
+        line_offsets=line_offsets,
+        pack_isolated=True,
+    )
     if not tail_text.strip():
         return head, None
     tail_start = block.text.find(tail_text, len(head_text))
@@ -1471,6 +1535,7 @@ def _split_block_once(
         max(0, tail_start),
         max(0, tail_start) + len(tail_text),
         line_offsets=line_offsets,
+        pack_isolated=True,
     )
     return head, tail
 
@@ -1482,6 +1547,7 @@ def _block_piece(
     rel_end: int,
     *,
     line_offsets: list[tuple[int, int]],
+    pack_isolated: bool = False,
 ) -> MarkdownBlock:
     stripped = _trim_block_text(text, block.kind)
     leading_trim = 0 if _preserves_leading_space(block.kind) else len(text) - len(text.lstrip())
@@ -1504,6 +1570,7 @@ def _block_piece(
         content_types=_block_content_types(stripped, block.kind),
         asset_refs=_asset_refs(stripped),
         page_numbers=block.page_numbers,
+        pack_isolated=pack_isolated,
     )
 
 
