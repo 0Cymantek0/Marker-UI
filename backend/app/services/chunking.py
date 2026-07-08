@@ -28,6 +28,8 @@ class MarkdownBlock:
     heading_path: tuple[str, ...] = field(default_factory=tuple)
     kind: str = "text"
     content_types: tuple[str, ...] = field(default_factory=tuple)
+    asset_refs: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    source_spans: tuple[tuple[int, int, int, int], ...] = field(default_factory=tuple)
 
 
 def build_chunks_envelope(
@@ -150,13 +152,29 @@ def chunk_markdown(
             continue
         index = len(chunks)
         chunk_id = _chunk_id(source_name, index, text)
+        stable_id = _stable_chunk_id(source_sha256, block, text)
         token_estimate = max(1, (len(text) + 3) // 4)
         heading_path = list(block.heading_path)
         content_types = list(block.content_types or (block.kind,))
+        source_refs = _source_refs(
+            block,
+            source_name=source_name,
+            heading_path=heading_path,
+            content_types=content_types,
+        )
+        asset_refs = list(block.asset_refs)
+        metadata: dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION,
+            "stable_id": stable_id,
+            "content_types": content_types,
+        }
+        if asset_refs:
+            metadata["asset_refs"] = asset_refs
         chunks.append(
             {
                 "id": chunk_id,
                 "chunk_id": chunk_id,
+                "stable_id": stable_id,
                 "index": index,
                 "text": text,
                 "contextual_text": _contextual_text(text, heading_path),
@@ -170,19 +188,10 @@ def chunk_markdown(
                 "token_estimate": token_estimate,
                 "token_count": token_estimate,
                 "content_types": content_types,
+                "asset_refs": asset_refs,
+                "metadata": metadata,
                 "content_hash": f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}",
-                "source_refs": [
-                    {
-                        "type": "markdown_line_span",
-                        "source": source_name,
-                        "start_line": block.start_line,
-                        "end_line": block.end_line,
-                        "char_start": block.char_start,
-                        "char_end": block.char_end,
-                        "heading_path": heading_path,
-                        "content_types": content_types,
-                    }
-                ],
+                "source_refs": source_refs,
             }
         )
     for index, chunk in enumerate(chunks):
@@ -319,6 +328,33 @@ def _public_unstructured_metadata(chunk: object) -> dict[str, Any]:
     return public
 
 
+def _source_refs(
+    block: MarkdownBlock,
+    *,
+    source_name: str,
+    heading_path: list[str],
+    content_types: list[str],
+) -> list[dict[str, Any]]:
+    spans = block.source_spans or (
+        (block.start_line, block.end_line, block.char_start, block.char_end),
+    )
+    refs: list[dict[str, Any]] = []
+    for start_line, end_line, char_start, char_end in spans:
+        refs.append(
+            {
+                "type": "markdown_line_span",
+                "source": source_name,
+                "start_line": start_line,
+                "end_line": end_line,
+                "char_start": char_start,
+                "char_end": char_end,
+                "heading_path": heading_path,
+                "content_types": content_types,
+            }
+        )
+    return refs
+
+
 def _locate_unstructured_chunk_span(
     markdown: str,
     text: str,
@@ -364,6 +400,157 @@ def _normalize_markdown_line_text(line: str) -> str:
     return re.sub(r"\s+", " ", stripped)
 
 
+def _block_content_types(text: str, kind: str) -> tuple[str, ...]:
+    values = [kind]
+    if kind == "html_block":
+        lowered = text.lower()
+        if "<table" in lowered:
+            values.append("table")
+    for asset in _asset_refs(text):
+        asset_type = str(asset.get("type") or "")
+        if asset_type and asset_type not in values:
+            values.append(asset_type)
+    if kind == "list" and re.search(r"^\s*[-*+]\s+\[[ xX]\]", text, re.MULTILINE):
+        values.append("task_list")
+    return tuple(values)
+
+
+def _asset_refs(text: str) -> tuple[dict[str, Any], ...]:
+    refs: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def add_ref(kind: str, target: str, *, label: str = "", title: str = "") -> None:
+        target = target.strip()
+        if not target:
+            return
+        key = (kind, target, label)
+        if key in seen:
+            return
+        seen.add(key)
+        ref: dict[str, Any] = {"type": kind, "target": target}
+        if kind in {"image", "html_image"}:
+            ref["url"] = target
+        else:
+            ref["href"] = target
+        if label:
+            ref["alt" if kind in {"image", "html_image"} else "label"] = label
+        if title:
+            ref["title"] = title
+        refs.append(ref)
+
+    for match in re.finditer(r"!\[([^\]]*)\]\(([^)]*)\)", text):
+        target, title = _parse_markdown_link_destination(match.group(2))
+        add_ref("image", target, label=match.group(1).strip(), title=title)
+    for match in re.finditer(r"(?<!!)\[([^\]]+)\]\(([^)]*)\)", text):
+        target, title = _parse_markdown_link_destination(match.group(2))
+        add_ref("link", target, label=match.group(1).strip(), title=title)
+    for match in re.finditer(r"<(https?://[^>\s]+)>", text):
+        add_ref("link", match.group(1))
+    for match in re.finditer(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"'][^>]*>", text, flags=re.IGNORECASE):
+        alt = _html_attr(match.group(0), "alt")
+        title = _html_attr(match.group(0), "title")
+        add_ref("html_image", match.group(1), label=alt, title=title)
+    for match in re.finditer(r"<a\b[^>]*\bhref=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", text, flags=re.IGNORECASE | re.DOTALL):
+        label = re.sub(r"<[^>]+>", "", match.group(2)).strip()
+        add_ref("html_link", match.group(1), label=label, title=_html_attr(match.group(0), "title"))
+    return tuple(refs)
+
+
+def _parse_markdown_link_destination(raw: str) -> tuple[str, str]:
+    value = raw.strip()
+    if not value:
+        return "", ""
+    title = ""
+    if value.startswith("<") and ">" in value:
+        end = value.find(">")
+        target = value[1:end]
+        rest = value[end + 1 :].strip()
+    else:
+        parts = value.split(None, 1)
+        target = parts[0]
+        rest = parts[1].strip() if len(parts) > 1 else ""
+    if len(rest) >= 2 and rest[0] in {"'", '"'} and rest[-1] == rest[0]:
+        title = rest[1:-1]
+    return target, title
+
+
+def _html_attr(tag: str, name: str) -> str:
+    match = re.search(rf"\b{re.escape(name)}=[\"']([^\"']*)[\"']", tag, flags=re.IGNORECASE)
+    return match.group(1).strip() if match else ""
+
+
+def _html_block_end_pattern(line: str):
+    stripped = line.strip()
+    if not stripped.startswith("<"):
+        return None
+    if stripped.startswith("<!--"):
+        return lambda candidate: "-->" in candidate
+    if stripped.startswith("<![CDATA["):
+        return lambda candidate: "]]>" in candidate
+    if stripped.startswith("<?"):
+        return lambda candidate: "?>" in candidate
+    match = re.match(
+        r"^</?([A-Za-z][\w:-]*)(?:\s|>|/>)",
+        stripped,
+    )
+    if not match:
+        return None
+    tag = match.group(1).lower()
+    block_tags = {
+        "address",
+        "article",
+        "aside",
+        "blockquote",
+        "canvas",
+        "details",
+        "dialog",
+        "div",
+        "dl",
+        "fieldset",
+        "figcaption",
+        "figure",
+        "footer",
+        "form",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "hr",
+        "li",
+        "main",
+        "nav",
+        "ol",
+        "p",
+        "pre",
+        "section",
+        "table",
+        "ul",
+        "video",
+    }
+    if tag not in block_tags:
+        return None
+    if stripped.endswith("/>") or tag == "hr":
+        return lambda _candidate: True
+    close = re.compile(rf"</{re.escape(tag)}\s*>", flags=re.IGNORECASE)
+    return lambda candidate: bool(close.search(candidate))
+
+
+def _is_blockquote_line(line: str) -> bool:
+    return bool(re.match(r"^\s{0,3}>", line))
+
+
+def _list_marker(line: str) -> str | None:
+    match = re.match(r"^(\s{0,3})(?:[-*+]|\d{1,9}[.)])\s+", line)
+    return match.group(0) if match else None
+
+
+def _is_list_continuation(line: str) -> bool:
+    return bool(re.match(r"^\s{2,}\S", line))
+
+
 def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> list[MarkdownBlock]:
     lines = markdown.splitlines()
     blocks: list[MarkdownBlock] = []
@@ -389,7 +576,8 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
                     char_end=char_end,
                     heading_path=tuple(title for _level, title in heading_stack),
                     kind=kind,
-                    content_types=(kind,),
+                    content_types=_block_content_types(text, kind),
+                    asset_refs=_asset_refs(text),
                 )
             )
         buffer = []
@@ -397,6 +585,21 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
     line_no = 1
     while line_no <= len(lines):
         line = lines[line_no - 1]
+        if line_no == 1 and line.strip() in {"---", "+++"}:
+            closing = line.strip()
+            closing_line = None
+            for candidate_line in range(line_no + 1, len(lines) + 1):
+                if lines[candidate_line - 1].strip() == closing:
+                    closing_line = candidate_line
+                    break
+            if closing_line is not None:
+                block_start = line_no
+                buffer = lines[line_no - 1 : closing_line]
+                flush(closing_line, kind="front_matter")
+                block_start = closing_line + 1
+                line_no = closing_line + 1
+                continue
+
         heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
         if heading:
             flush(line_no - 1)
@@ -428,6 +631,30 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
             line_no += 1
             continue
 
+        html_end = _html_block_end_pattern(line)
+        if html_end:
+            flush(line_no - 1)
+            block_start = line_no
+            html_lines = [line]
+            if html_end(line):
+                buffer = html_lines
+                flush(line_no, kind="html_block")
+                block_start = line_no + 1
+                line_no += 1
+                continue
+            line_no += 1
+            while line_no <= len(lines):
+                if html_end(lines[line_no - 1]):
+                    html_lines.append(lines[line_no - 1])
+                    line_no += 1
+                    break
+                html_lines.append(lines[line_no - 1])
+                line_no += 1
+            buffer = html_lines
+            flush(line_no - 1, kind="html_block")
+            block_start = line_no
+            continue
+
         if _looks_like_table_start(lines, line_no - 1):
             flush(line_no - 1)
             block_start = line_no
@@ -441,6 +668,48 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
                 line_no += 1
             buffer = table_lines
             flush(line_no - 1, kind="table")
+            block_start = line_no
+            continue
+        if _is_blockquote_line(line):
+            flush(line_no - 1)
+            block_start = line_no
+            quote_lines = [line]
+            line_no += 1
+            while line_no <= len(lines):
+                candidate = lines[line_no - 1]
+                if _is_blockquote_line(candidate):
+                    quote_lines.append(candidate)
+                    line_no += 1
+                    continue
+                if not candidate.strip() and line_no < len(lines) and _is_blockquote_line(lines[line_no]):
+                    quote_lines.append(candidate)
+                    line_no += 1
+                    continue
+                break
+            buffer = quote_lines
+            flush(line_no - 1, kind="blockquote")
+            block_start = line_no
+            continue
+        if _list_marker(line):
+            flush(line_no - 1)
+            block_start = line_no
+            list_lines = [line]
+            line_no += 1
+            while line_no <= len(lines):
+                candidate = lines[line_no - 1]
+                if _list_marker(candidate) or _is_list_continuation(candidate):
+                    list_lines.append(candidate)
+                    line_no += 1
+                    continue
+                if not candidate.strip() and line_no < len(lines):
+                    next_line = lines[line_no]
+                    if _list_marker(next_line) or _is_list_continuation(next_line):
+                        list_lines.append(candidate)
+                        line_no += 1
+                        continue
+                break
+            buffer = list_lines
+            flush(line_no - 1, kind="list")
             block_start = line_no
             continue
         if not line.strip():
@@ -482,6 +751,8 @@ def _pack_chunk_blocks(
                     heading_path=_common_heading_path(current),
                     kind=current[0].kind if len(current) == 1 else "mixed",
                     content_types=_content_types(current),
+                    asset_refs=_asset_refs(text),
+                    source_spans=_source_spans_for_blocks(current),
                 )
             )
         current = []
@@ -546,6 +817,25 @@ def _content_types(blocks: list[MarkdownBlock]) -> tuple[str, ...]:
     return tuple(values)
 
 
+def _source_spans_for_blocks(blocks: list[MarkdownBlock]) -> tuple[tuple[int, int, int, int], ...]:
+    if blocks and not any(block.source_spans for block in blocks):
+        return (
+            (
+                blocks[0].start_line,
+                blocks[-1].end_line,
+                blocks[0].char_start,
+                blocks[-1].char_end,
+            ),
+        )
+    spans: list[tuple[int, int, int, int]] = []
+    for block in blocks:
+        if block.source_spans:
+            spans.extend(block.source_spans)
+        else:
+            spans.append((block.start_line, block.end_line, block.char_start, block.char_end))
+    return tuple(spans)
+
+
 def _split_block(
     block: MarkdownBlock,
     *,
@@ -557,11 +847,11 @@ def _split_block(
     if len(text) <= max_chars:
         return [block]
     if block.kind == "table":
-        pieces = _split_table_block(text, max_chars=max_chars)
-        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+        return _split_table_block(block, max_chars=max_chars, line_offsets=line_offsets)
     if block.kind == "fenced_code":
-        pieces = _split_fenced_code_block(text, max_chars=max_chars)
-        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+        return _split_fenced_code_block(block, max_chars=max_chars, line_offsets=line_offsets)
+    if block.kind in {"blockquote", "front_matter", "html_block", "list"}:
+        return _split_line_preserving_block(block, max_chars=max_chars, line_offsets=line_offsets)
     sentences = re.split(r"(?<=[.!?])\s+", text)
     pieces: list[str] = []
     current = ""
@@ -603,45 +893,132 @@ def _looks_like_table_start(lines: list[str], index: int) -> bool:
     return bool(re.match(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$", separator))
 
 
-def _split_table_block(text: str, *, max_chars: int) -> list[str]:
+def _split_line_preserving_block(
+    block: MarkdownBlock,
+    *,
+    max_chars: int,
+    line_offsets: list[tuple[int, int]],
+) -> list[MarkdownBlock]:
+    lines = block.text.splitlines()
+    pieces: list[str] = []
+    current: list[str] = []
+
+    def flush() -> None:
+        nonlocal current
+        if current:
+            pieces.append("\n".join(current))
+            current = []
+
+    for line in lines:
+        candidate = "\n".join([*current, line])
+        if current and len(candidate) > max_chars:
+            flush()
+            candidate = line
+        if len(candidate) > max_chars:
+            flush()
+            pieces.extend(_split_text_by_chars(line, max_chars=max_chars))
+        else:
+            current.append(line)
+    flush()
+    return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+
+
+def _split_table_block(
+    block: MarkdownBlock,
+    *,
+    max_chars: int,
+    line_offsets: list[tuple[int, int]],
+) -> list[MarkdownBlock]:
+    text = block.text
     lines = text.splitlines()
     if len(lines) <= 2:
-        return _split_text_by_chars(text, max_chars=max_chars)
+        pieces = _split_text_by_chars(text, max_chars=max_chars)
+        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
 
     header = lines[:2]
     rows = lines[2:]
     header_text = "\n".join(header)
     row_limit = max_chars - len(header_text) - 1
     if row_limit < 1:
-        return _split_text_by_chars(text, max_chars=max_chars)
-    pieces: list[str] = []
-    current_rows: list[str] = []
+        pieces = _split_text_by_chars(text, max_chars=max_chars)
+        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+    pieces: list[MarkdownBlock] = []
+    current_rows: list[tuple[int, str]] = []
 
     def flush_rows() -> None:
         nonlocal current_rows
         if current_rows:
-            pieces.append("\n".join([*header, *current_rows]))
+            piece_text = "\n".join([*header, *(row for _index, row in current_rows)])
+            first_index = current_rows[0][0]
+            last_index = current_rows[-1][0]
+            pieces.append(
+                _synthetic_wrapped_block(
+                    block,
+                    piece_text,
+                    start_line=block.start_line + 2 + first_index,
+                    end_line=block.start_line + 2 + last_index,
+                    line_offsets=line_offsets,
+                    source_spans=_table_source_spans(
+                        block,
+                        row_start_line=block.start_line + 2 + first_index,
+                        row_end_line=block.start_line + 2 + last_index,
+                        line_offsets=line_offsets,
+                    ),
+                )
+            )
             current_rows = []
 
-    for row in rows:
-        candidate = "\n".join([*header, *current_rows, row])
+    for row_index, row in enumerate(rows):
+        candidate = "\n".join([*header, *(item for _index, item in current_rows), row])
         if current_rows and len(candidate) > max_chars:
             flush_rows()
             candidate = "\n".join([*header, row])
         if len(candidate) > max_chars:
             flush_rows()
+            row_line = block.start_line + 2 + row_index
+            row_start, _row_end = _line_char_span(line_offsets, start_line=row_line, end_line=row_line)
+            cursor = 0
             for row_piece in _split_text_by_chars(row, max_chars=row_limit):
-                pieces.append("\n".join([*header, row_piece]))
+                rel_start = row.find(row_piece, cursor)
+                if rel_start < 0:
+                    rel_start = cursor
+                rel_end = rel_start + len(row_piece)
+                cursor = rel_end
+                pieces.append(
+                    _synthetic_wrapped_block(
+                        block,
+                        "\n".join([*header, row_piece]),
+                        start_line=row_line,
+                        end_line=row_line,
+                        line_offsets=line_offsets,
+                        source_spans=(
+                            *_table_source_spans(
+                                block,
+                                row_start_line=row_line,
+                                row_end_line=row_line,
+                                line_offsets=line_offsets,
+                            )[:1],
+                            (row_line, row_line, row_start + rel_start, row_start + rel_end),
+                        ),
+                    )
+                )
         else:
-            current_rows.append(row)
+            current_rows.append((row_index, row))
     flush_rows()
-    return pieces or [text]
+    return pieces or [block]
 
 
-def _split_fenced_code_block(text: str, *, max_chars: int) -> list[str]:
+def _split_fenced_code_block(
+    block: MarkdownBlock,
+    *,
+    max_chars: int,
+    line_offsets: list[tuple[int, int]],
+) -> list[MarkdownBlock]:
+    text = block.text
     lines = text.splitlines()
     if len(lines) < 2:
-        return _split_text_by_chars(text, max_chars=max_chars)
+        pieces = _split_text_by_chars(text, max_chars=max_chars)
+        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
 
     opener = lines[0]
     closer = lines[-1] if _is_matching_fence(lines[-1], _fence_marker(opener) or "") else lines[0][:3]
@@ -649,29 +1026,167 @@ def _split_fenced_code_block(text: str, *, max_chars: int) -> list[str]:
     overhead = len(opener) + len(closer) + 2
     body_limit = max_chars - overhead
     if body_limit < 1:
-        return _split_text_by_chars(text, max_chars=max_chars)
-    pieces: list[str] = []
-    current: list[str] = []
+        pieces = _split_text_by_chars(text, max_chars=max_chars)
+        return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
+    pieces: list[MarkdownBlock] = []
+    current: list[tuple[int, str]] = []
 
     def flush_code() -> None:
         nonlocal current
         if current:
-            pieces.append("\n".join([opener, *current, closer]))
+            piece_text = "\n".join([opener, *(line for _index, line in current), closer])
+            first_index = current[0][0]
+            last_index = current[-1][0]
+            body_start_line = block.start_line + 1 + first_index
+            body_end_line = block.start_line + 1 + last_index
+            pieces.append(
+                _synthetic_wrapped_block(
+                    block,
+                    piece_text,
+                    start_line=body_start_line,
+                    end_line=body_end_line,
+                    line_offsets=line_offsets,
+                    source_spans=_fenced_code_source_spans(
+                        block,
+                        body_start_line=body_start_line,
+                        body_end_line=body_end_line,
+                        line_offsets=line_offsets,
+                    ),
+                )
+            )
             current = []
 
-    for line in body:
-        candidate = "\n".join([*current, line])
+    for body_index, line in enumerate(body):
+        candidate = "\n".join([*(item for _index, item in current), line])
         if current and len(candidate) > body_limit:
             flush_code()
             candidate = line
         if len(candidate) > body_limit:
             flush_code()
+            body_line = block.start_line + 1 + body_index
+            line_start, _line_end = _line_char_span(line_offsets, start_line=body_line, end_line=body_line)
+            cursor = 0
             for line_piece in _split_text_by_chars(line, max_chars=body_limit):
-                pieces.append("\n".join([opener, line_piece, closer]))
+                rel_start = line.find(line_piece, cursor)
+                if rel_start < 0:
+                    rel_start = cursor
+                rel_end = rel_start + len(line_piece)
+                cursor = rel_end
+                pieces.append(
+                    _synthetic_wrapped_block(
+                        block,
+                        "\n".join([opener, line_piece, closer]),
+                        start_line=body_line,
+                        end_line=body_line,
+                        line_offsets=line_offsets,
+                        source_spans=(
+                            *_fenced_code_source_spans(
+                                block,
+                                body_start_line=body_line,
+                                body_end_line=body_line,
+                                line_offsets=line_offsets,
+                            )[:1],
+                            (body_line, body_line, line_start + rel_start, line_start + rel_end),
+                            *_fenced_code_source_spans(
+                                block,
+                                body_start_line=body_line,
+                                body_end_line=body_line,
+                                line_offsets=line_offsets,
+                            )[2:],
+                        ),
+                    )
+                )
         else:
-            current.append(line)
+            current.append((body_index, line))
     flush_code()
-    return pieces or [text]
+    return pieces or [block]
+
+
+def _synthetic_wrapped_block(
+    block: MarkdownBlock,
+    text: str,
+    *,
+    start_line: int,
+    end_line: int,
+    line_offsets: list[tuple[int, int]],
+    source_spans: tuple[tuple[int, int, int, int], ...],
+) -> MarkdownBlock:
+    char_start, char_end = _line_char_span(
+        line_offsets,
+        start_line=start_line,
+        end_line=end_line,
+    )
+    content_types = _content_types([block])
+    for asset in _asset_refs(text):
+        asset_type = str(asset.get("type") or "")
+        if asset_type and asset_type not in content_types:
+            content_types = (*content_types, asset_type)
+    return MarkdownBlock(
+        text=text.strip(),
+        start_line=start_line,
+        end_line=end_line,
+        char_start=char_start,
+        char_end=char_end,
+        heading_path=block.heading_path,
+        kind=block.kind,
+        content_types=content_types,
+        asset_refs=_asset_refs(text),
+        source_spans=source_spans,
+    )
+
+
+def _table_source_spans(
+    block: MarkdownBlock,
+    *,
+    row_start_line: int,
+    row_end_line: int,
+    line_offsets: list[tuple[int, int]],
+) -> tuple[tuple[int, int, int, int], ...]:
+    header_start, header_end = _line_char_span(
+        line_offsets,
+        start_line=block.start_line,
+        end_line=block.start_line + 1,
+    )
+    row_start, row_end = _line_char_span(
+        line_offsets,
+        start_line=row_start_line,
+        end_line=row_end_line,
+    )
+    if row_start_line == block.start_line + 2:
+        return ((block.start_line, row_end_line, header_start, row_end),)
+    return (
+        (block.start_line, block.start_line + 1, header_start, header_end),
+        (row_start_line, row_end_line, row_start, row_end),
+    )
+
+
+def _fenced_code_source_spans(
+    block: MarkdownBlock,
+    *,
+    body_start_line: int,
+    body_end_line: int,
+    line_offsets: list[tuple[int, int]],
+) -> tuple[tuple[int, int, int, int], ...]:
+    opener_start, opener_end = _line_char_span(
+        line_offsets,
+        start_line=block.start_line,
+        end_line=block.start_line,
+    )
+    body_start, body_end = _line_char_span(
+        line_offsets,
+        start_line=body_start_line,
+        end_line=body_end_line,
+    )
+    closer_start, closer_end = _line_char_span(
+        line_offsets,
+        start_line=block.end_line,
+        end_line=block.end_line,
+    )
+    return (
+        (block.start_line, block.start_line, opener_start, opener_end),
+        (body_start_line, body_end_line, body_start, body_end),
+        (block.end_line, block.end_line, closer_start, closer_end),
+    )
 
 
 def _split_text_by_chars(text: str, *, max_chars: int) -> list[str]:
@@ -759,7 +1274,8 @@ def _block_piece(
         char_end=piece_end,
         heading_path=block.heading_path,
         kind=block.kind,
-        content_types=block.content_types,
+        content_types=_block_content_types(stripped, block.kind),
+        asset_refs=_asset_refs(stripped),
     )
 
 
@@ -841,3 +1357,12 @@ def _contextual_text(text: str, heading_path: list[str]) -> str:
 def _chunk_id(source_name: str, index: int, text: str) -> str:
     digest = hashlib.sha1(f"{source_name}:{index}:{text}".encode("utf-8")).hexdigest()[:12]
     return f"chunk_{index:04d}_{digest}"
+
+
+def _stable_chunk_id(source_sha256: str, block: MarkdownBlock, text: str) -> str:
+    material = (
+        f"{source_sha256}:{block.start_line}:{block.end_line}:"
+        f"{block.char_start}:{block.char_end}:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
+    )
+    digest = hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
+    return f"stable_{digest}"

@@ -261,3 +261,107 @@ def test_chunk_markdown_respects_size_budget_when_code_fence_info_is_oversized()
 
     assert payload["chunk_count"] > 1
     assert all(chunk["char_count"] <= 200 for chunk in payload["chunks"])
+
+
+def test_chunk_markdown_tags_structural_blocks_and_extracts_assets() -> None:
+    markdown = (
+        "---\n"
+        "title: Demo\n"
+        "---\n"
+        "# Guide\n\n"
+        'Intro with ![Diagram](images/flow.png "Flow") and [docs](https://example.com/docs).\n\n'
+        "> Quote one\n"
+        ">\n"
+        "> Quote two with <https://example.com/q>.\n\n"
+        "- [x] First item\n"
+        "  continued detail\n\n"
+        "  loose continuation\n"
+        "- Second item\n\n"
+        "<div>\n"
+        '  <img src="assets/chart.png" alt="Chart">\n'
+        '  <a href="https://example.com/html">HTML Link</a>\n'
+        "</div>\n"
+    )
+
+    payload = chunk_markdown(markdown, source_name="assets.md", max_chars=700)
+    chunks = payload["chunks"]
+
+    assert chunks[0]["content_types"] == ["front_matter"]
+    body_chunk = chunks[1]
+    assert body_chunk["heading_path"] == ["Guide"]
+    assert "blockquote" in body_chunk["content_types"]
+    assert "list" in body_chunk["content_types"]
+    assert "task_list" in body_chunk["content_types"]
+    assert "html_block" in body_chunk["content_types"]
+    assert "- [x] First item\n  continued detail\n\n  loose continuation\n- Second item" in body_chunk["text"]
+    assert {asset["target"] for asset in body_chunk["asset_refs"]} == {
+        "images/flow.png",
+        "https://example.com/docs",
+        "https://example.com/q",
+        "assets/chart.png",
+        "https://example.com/html",
+    }
+    assert body_chunk["metadata"]["asset_refs"] == body_chunk["asset_refs"]
+
+
+def test_chunk_markdown_does_not_treat_unclosed_front_matter_as_document() -> None:
+    payload = chunk_markdown("---\n# Title\n\nBody.", source_name="not-front-matter.md", max_chars=200)
+
+    assert "front_matter" not in payload["chunks"][0]["content_types"]
+    assert payload["chunks"][-1]["heading_path"] == ["Title"]
+
+
+def test_chunk_markdown_repeated_table_headers_use_row_source_spans() -> None:
+    rows = "\n".join(f"| Person {i} | Score {i} |" for i in range(30))
+    markdown = f"# Scores\n\n| Name | Score |\n| --- | --- |\n{rows}"
+
+    payload = chunk_markdown(markdown, source_name="scores.md", max_chars=220)
+    table_chunks = [chunk for chunk in payload["chunks"] if "| Name | Score |" in chunk["text"]]
+
+    assert len(table_chunks) > 1
+    later_chunk = table_chunks[1]
+    assert later_chunk["start_line"] > table_chunks[0]["start_line"]
+    assert later_chunk["char_end"] < len(markdown)
+    assert later_chunk["source_refs"][0]["start_line"] == 3
+    assert later_chunk["source_refs"][1]["start_line"] == later_chunk["start_line"]
+    assert markdown[later_chunk["source_refs"][1]["char_start"] : later_chunk["source_refs"][1]["char_end"]].startswith(
+        "| Person"
+    )
+
+
+def test_chunk_markdown_repeated_code_fences_use_body_source_spans() -> None:
+    body = "\n".join(f"print({i!r})" for i in range(80))
+    markdown = f"```python\n{body}\n```"
+
+    payload = chunk_markdown(markdown, source_name="large-code.md", max_chars=220)
+    second_chunk = payload["chunks"][1]
+
+    assert second_chunk["text"].startswith("```python\n")
+    assert second_chunk["text"].endswith("\n```")
+    assert second_chunk["start_line"] > 2
+    assert len(second_chunk["source_refs"]) == 3
+    assert second_chunk["source_refs"][0]["start_line"] == 1
+    assert second_chunk["source_refs"][1]["start_line"] == second_chunk["start_line"]
+    assert second_chunk["source_refs"][2]["end_line"] == 82
+
+
+def test_chunk_markdown_splits_long_lists_on_lines_before_chars() -> None:
+    markdown = "\n".join(f"- item {index} " + ("detail " * 8) for index in range(20))
+
+    payload = chunk_markdown(markdown, source_name="list.md", max_chars=220, overlap_chars=0)
+
+    assert payload["chunk_count"] > 1
+    assert all(chunk["char_count"] <= 220 for chunk in payload["chunks"])
+    assert all(chunk["text"].startswith("- item") for chunk in payload["chunks"])
+    assert all("\nitem " not in chunk["text"] for chunk in payload["chunks"])
+
+
+def test_chunk_markdown_stable_ids_do_not_depend_on_source_name() -> None:
+    markdown = "# Title\n\nBody."
+
+    first = chunk_markdown(markdown, source_name="first.md", max_chars=200)
+    second = chunk_markdown(markdown, source_name="second.md", max_chars=200)
+
+    assert first["chunks"][0]["id"] != second["chunks"][0]["id"]
+    assert first["chunks"][0]["stable_id"] == second["chunks"][0]["stable_id"]
+    assert first["chunks"][0]["metadata"]["stable_id"] == first["chunks"][0]["stable_id"]
