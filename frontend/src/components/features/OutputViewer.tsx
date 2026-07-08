@@ -67,6 +67,13 @@ export function OutputViewer({
         {children}
       </code>
     ),
+    p: ({ children, node }) => {
+      const hasImage = Array.isArray(node?.children) && node.children.some((child) => (
+        'tagName' in child && child.tagName === 'img'
+      ))
+      const Component = hasImage ? 'div' : 'p'
+      return <Component>{children}</Component>
+    },
     img: ({ src, alt, ...props }) => {
       const safeSrc = safeMarkdownImageSrc(src)
       if (!safeSrc) {
@@ -88,7 +95,7 @@ export function OutputViewer({
       const imageFilename = (safeSrc.split(/[?#]/, 1)[0] ?? '').split('/').pop() ?? ''
       const entry = metaByFilename.get(imageFilename)
       return (
-        <span className="relative inline-block align-middle my-1">
+        <span data-marker-image className="relative inline-block align-middle my-1">
           <img src={imageSrc} alt={alt} {...props} />
           {entry && (
             <ImageUnderstandingBadge

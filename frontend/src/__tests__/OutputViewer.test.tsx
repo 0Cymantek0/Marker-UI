@@ -82,6 +82,8 @@ describe('OutputViewer component', () => {
     render(<OutputViewer content={md} onDownload={vi.fn()} imageUnderstanding={meta} />)
 
     const badges = screen.getAllByRole('button', { name: /chart_bar converted via vlm/i })
+    const image = screen.getByRole('img', { name: /chart/i })
+    expect(image.closest('p')).toBeNull()
     expect(badges[0]).toBeInTheDocument()
     expect(badges[0]).toHaveAttribute('aria-label', expect.stringContaining('Confidence 92%'))
   })
