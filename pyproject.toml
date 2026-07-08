@@ -51,3 +51,6 @@ include = ["app*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["backend/requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
