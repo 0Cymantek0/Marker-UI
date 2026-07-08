@@ -24,6 +24,19 @@ ok()    { echo -e "  ${GREEN}$1${NC}"; }
 warn()  { echo -e "  ${YELLOW}$1${NC}"; }
 err()   { echo -e "  ${RED}$1${NC}"; }
 
+dependency_signature() {
+    local path
+    for path in "$@"; do
+        if [ -f "$path" ]; then
+            if command -v sha256sum &>/dev/null; then
+                sha256sum "$path"
+            else
+                shasum -a 256 "$path"
+            fi
+        fi
+    done
+}
+
 # ----------------------------------------------------------------------
 # Prerequisites
 # ----------------------------------------------------------------------
@@ -76,14 +89,26 @@ ok "Virtual environment ready"
 echo ""
 echo -e "${YELLOW}[3/6] Installing Python dependencies...${NC}"
 
-if [ ! -f ".venv/installed" ]; then
+PYTHON_DEPS_SIGNATURE="$(dependency_signature backend/requirements.txt pyproject.toml)"
+PYTHON_DEPS_SIGNATURE_FILE=".venv/requirements.sha256"
+if [ ! -f ".venv/installed" ] || [ ! -f "$PYTHON_DEPS_SIGNATURE_FILE" ] || [ "$(cat "$PYTHON_DEPS_SIGNATURE_FILE")" != "$PYTHON_DEPS_SIGNATURE" ]; then
     info "Installing dependencies (first run may take a while)..."
     if pip install -r backend/requirements.txt --quiet; then
+        if ! pip check --quiet; then
+            err "ERROR: Python dependency check failed."
+            exit 1
+        fi
+        printf '%s' "$PYTHON_DEPS_SIGNATURE" > "$PYTHON_DEPS_SIGNATURE_FILE"
         touch .venv/installed
         ok "Python dependencies installed"
     else
         warn "Full install had issues, retrying without [full] extra..."
         if grep -v "marker-pdf\[full\]" backend/requirements.txt | pip install -r /dev/stdin --quiet && pip install marker-pdf --quiet; then
+            if ! pip check --quiet; then
+                err "ERROR: Python dependency check failed."
+                exit 1
+            fi
+            printf '%s' "$PYTHON_DEPS_SIGNATURE" > "$PYTHON_DEPS_SIGNATURE_FILE"
             touch .venv/installed
             ok "Python dependencies installed"
         else
@@ -92,7 +117,7 @@ if [ ! -f ".venv/installed" ]; then
         fi
     fi
 else
-    info "Python dependencies already installed, skipping check."
+    info "Python dependencies already current."
 fi
 
 # ----------------------------------------------------------------------
@@ -102,15 +127,28 @@ echo ""
 echo -e "${YELLOW}[4/6] Installing Node.js dependencies...${NC}"
 
 cd frontend
-if [ ! -d "node_modules" ]; then
-    npm install --loglevel error
-    if [ $? -ne 0 ]; then
-        err "npm install failed"
+NODE_DEPS_SIGNATURE="$(dependency_signature package.json ../pnpm-lock.yaml)"
+NODE_DEPS_SIGNATURE_FILE="node_modules/.marker-ui-deps.sha256"
+if [ ! -d "node_modules" ] || [ ! -f "$NODE_DEPS_SIGNATURE_FILE" ] || [ "$(cat "$NODE_DEPS_SIGNATURE_FILE")" != "$NODE_DEPS_SIGNATURE" ]; then
+    if ! command -v pnpm &>/dev/null; then
+        if command -v corepack &>/dev/null; then
+            corepack enable
+        fi
+    fi
+    if ! command -v pnpm &>/dev/null; then
+        err "pnpm not found. Install pnpm or enable Corepack."
         cd ..
         exit 1
     fi
+    pnpm install --frozen-lockfile
+    if [ $? -ne 0 ]; then
+        err "pnpm install failed"
+        cd ..
+        exit 1
+    fi
+    printf '%s' "$NODE_DEPS_SIGNATURE" > "$NODE_DEPS_SIGNATURE_FILE"
 else
-    info "node_modules exists, skipping install"
+    info "Node.js dependencies already current."
 fi
 cd ..
 ok "Node.js dependencies installed"

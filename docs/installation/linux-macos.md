@@ -61,6 +61,8 @@ If ports `8000` (FastAPI) or `5173` (Vite) are occupied, the `start.sh` launcher
 ### 2. Slow First Startup
 The launcher waits for backend and frontend readiness before printing success. If backend startup takes longer than the soft readiness timeout, it keeps waiting while the backend process is still running. Set `MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS` if automation needs a fixed failure timeout.
 
+The launcher records hashes for `backend/requirements.txt`, `pyproject.toml`, `frontend/package.json`, and `pnpm-lock.yaml`. If any dependency input changes, it refreshes the matching Python or Node environment instead of blindly reusing the old install.
+
 ### 3. GPU/CUDA Support (Linux)
 If you run Marker UI on Linux with an NVIDIA GPU:
 1. Ensure the NVIDIA Container Toolkit is installed if using Docker.

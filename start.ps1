@@ -27,6 +27,18 @@ function Test-Command {
     catch { return $false }
 }
 
+function Get-DependencySignature {
+    param([string[]]$Paths)
+    $parts = @()
+    foreach ($path in $Paths) {
+        if (Test-Path $path) {
+            $hash = Get-FileHash -Algorithm SHA256 -Path $path
+            $parts += "$path=$($hash.Hash)"
+        }
+    }
+    return ($parts -join "`n")
+}
+
 function Get-LauncherIntEnv {
     param(
         [string]$Name,
@@ -124,7 +136,10 @@ Write-Host ""
 Write-Host "[3/6] Installing Python dependencies..." -ForegroundColor Yellow
 
 $installedFlag = Join-Path ".venv" "installed"
-if (-not (Test-Path $installedFlag)) {
+$pythonDepsSignature = Get-DependencySignature @("backend/requirements.txt", "pyproject.toml")
+$pythonDepsSignatureFile = Join-Path ".venv" "requirements.sha256"
+$pythonDepsInstalled = (Test-Path $installedFlag) -and (Test-Path $pythonDepsSignatureFile) -and ((Get-Content $pythonDepsSignatureFile -Raw).Trim() -eq $pythonDepsSignature.Trim())
+if (-not $pythonDepsInstalled) {
     Write-Host "  Installing dependencies (first run may take a while)..." -ForegroundColor DarkGray
     & $venvPip install -r backend/requirements.txt --quiet
     if ($LASTEXITCODE -ne 0) {
@@ -146,6 +161,12 @@ if (-not (Test-Path $installedFlag)) {
     }
     
     if ($LASTEXITCODE -eq 0) {
+        & $venvPip check --quiet
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  ERROR: Python dependency check failed." -ForegroundColor Red
+            exit 1
+        }
+        Set-Content -Path $pythonDepsSignatureFile -Value $pythonDepsSignature -Encoding UTF8
         New-Item -ItemType File -Path $installedFlag -Force | Out-Null
         Write-Host "  Python dependencies installed" -ForegroundColor Green
     } else {
@@ -153,7 +174,7 @@ if (-not (Test-Path $installedFlag)) {
         exit 1
     }
 } else {
-    Write-Host "  Python dependencies already installed, skipping check." -ForegroundColor DarkGray
+    Write-Host "  Python dependencies already current." -ForegroundColor DarkGray
 }
 
 # ── Install Node deps ────────────────────────────────────────────────
@@ -162,17 +183,31 @@ Write-Host ""
 Write-Host "[4/6] Installing Node.js dependencies..." -ForegroundColor Yellow
 
 Push-Location frontend
-if (-not (Test-Path "node_modules")) {
-    npm install --loglevel error 2>&1 | ForEach-Object {
-        if ($_ -match "error|ERR") { Write-Host "  $_" -ForegroundColor Red }
+$nodeDepsSignature = Get-DependencySignature @("package.json", "..\pnpm-lock.yaml")
+$nodeDepsSignatureFile = Join-Path "node_modules" ".marker-ui-deps.sha256"
+$nodeDepsInstalled = (Test-Path "node_modules") -and (Test-Path $nodeDepsSignatureFile) -and ((Get-Content $nodeDepsSignatureFile -Raw).Trim() -eq $nodeDepsSignature.Trim())
+if (-not $nodeDepsInstalled) {
+    if (-not (Test-Command "pnpm")) {
+        if (Test-Command "corepack") {
+            corepack enable | Out-Null
+        }
     }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  ERROR: npm install failed" -ForegroundColor Red
+    if (-not (Test-Command "pnpm")) {
+        Write-Host "  ERROR: pnpm not found. Install pnpm or enable Corepack." -ForegroundColor Red
         Pop-Location
         exit 1
     }
+    pnpm install --frozen-lockfile 2>&1 | ForEach-Object {
+        if ($_ -match "error|ERR") { Write-Host "  $_" -ForegroundColor Red }
+    }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: pnpm install failed" -ForegroundColor Red
+        Pop-Location
+        exit 1
+    }
+    Set-Content -Path $nodeDepsSignatureFile -Value $nodeDepsSignature -Encoding UTF8
 } else {
-    Write-Host "  node_modules exists, skipping install" -ForegroundColor DarkGray
+    Write-Host "  Node.js dependencies already current." -ForegroundColor DarkGray
 }
 Pop-Location
 
