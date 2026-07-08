@@ -28,13 +28,13 @@ def _write_chunks_output(tmp_path: Path) -> Path:
     out_file = tmp_path / "doc.chunks.json"
     out_file.write_text(envelope["text"], encoding="utf-8")
     # Manifest sidecar so _assert_output_read_permitted accepts the path.
-    # _has_marker_output_manifest requires output.text_path/final_path to match.
+    # _has_marker_output_manifest resolves portable manifest paths relative to the manifest file.
     manifest = tmp_path / "doc.chunks.marker.json"
     manifest.write_text(
         json.dumps(
             {
                 "schema_version": "marker.output_manifest.v1",
-                "output": {"text_path": str(out_file.resolve())},
+                "output": {"text_path": out_file.name},
             }
         ),
         encoding="utf-8",

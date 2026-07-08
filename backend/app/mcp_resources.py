@@ -120,8 +120,8 @@ def register_mcp_resources(
     async def marker_job_output_resource(job_id: str) -> str:
         require_mcp_scopes(*resource_scopes("marker://jobs/{job_id}/output"))
         status = await get_job_status(job_id)
-        _, manifest = manifest_for_job_status(status)
-        text_path = output_text_path_from_manifest(manifest) or status.get("result_path")
+        manifest_path, manifest = manifest_for_job_status(status)
+        text_path = output_text_path_from_manifest(manifest, manifest_path=manifest_path) or status.get("result_path")
         if not text_path:
             return ""
         if Path(text_path).is_dir():

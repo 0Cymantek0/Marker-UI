@@ -308,7 +308,7 @@ def _safe_asset_request_path(asset_path: str) -> str | None:
     if not raw or raw.startswith("/"):
         return None
     parts = [part for part in raw.split("/") if part]
-    if not parts or any(part in {".", ".."} for part in parts):
+    if not parts or any(part in {".", ".."} or ":" in part for part in parts):
         return None
     return "/".join(parts)
 
@@ -341,6 +341,45 @@ def _load_result_manifest(result_path: Path) -> dict[str, Any] | None:
         if isinstance(parsed, dict):
             return parsed
     return None
+
+
+def _portable_manifest_for_zip(manifest_path: Path, result_root: Path) -> str:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "{}"
+    if not isinstance(manifest, dict):
+        return "{}"
+    output = manifest.get("output")
+    if isinstance(output, dict):
+        for key in ("final_path", "text_path", "manifest_path"):
+            if key in output:
+                output[key] = _portable_manifest_member(output[key], result_root)
+        assets = output.get("assets")
+        if isinstance(assets, list):
+            for entry in assets:
+                if not isinstance(entry, dict):
+                    continue
+                relative = _safe_asset_request_path(str(entry.get("relative_path") or entry.get("name") or ""))
+                if relative is None:
+                    relative = _portable_manifest_member(entry.get("path"), result_root)
+                entry["relative_path"] = relative
+                entry["path"] = relative
+    return json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _portable_manifest_member(raw_path: Any, result_root: Path) -> str:
+    value = str(raw_path or "").strip()
+    if not value:
+        return ""
+    path = Path(value)
+    if path.is_absolute():
+        try:
+            return path.resolve(strict=False).relative_to(result_root.resolve(strict=False)).as_posix()
+        except ValueError:
+            return path.name
+    safe = _safe_asset_request_path(value)
+    return safe or Path(value.replace("\\", "/")).name
 
 
 def _asset_entry_for_request(manifest: dict[str, Any], asset_path: str) -> dict[str, Any] | None:
@@ -1169,10 +1208,10 @@ async def download_result(
                 if result_path and result_path.is_dir():
                     manifest_file = result_path / f"{result_path.name}.marker.json"
                     if manifest_file.exists():
-                        zf.write(manifest_file, manifest_file.name)
+                        zf.writestr(manifest_file.name, _portable_manifest_for_zip(manifest_file, result_path))
                     else:
                         for f in result_path.glob("*.marker.json"):
-                            zf.write(f, f.name)
+                            zf.writestr(f.name, _portable_manifest_for_zip(f, result_path))
 
                     # 3. Write all assets (images/diagrams/etc.)
                     for file_in_dir in sorted(result_path.rglob("*")):

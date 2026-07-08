@@ -107,7 +107,10 @@ def write_conversion_output(
         asset_entries.append(entry)
     for entry in _write_assets(assets, asset_dir, used_asset_paths=used_asset_paths, overwrite=overwrite):
         asset_entries.append(entry)
-    asset_paths = [Path(entry["path"]) for entry in asset_entries]
+    asset_paths = [
+        (asset_dir / str(entry["relative_path"])).resolve()
+        for entry in asset_entries
+    ]
 
     manifest = _build_manifest(
         source_name=source_name,
@@ -358,10 +361,11 @@ def _safe_relative_path(name: str) -> Path | None:
 
 
 def _asset_entry(*, name: str, path: Path, media_type: str) -> dict[str, Any]:
+    relative_path = Path(name.replace("\\", "/")).as_posix()
     return {
         "name": name,
-        "relative_path": name,
-        "path": str(path.resolve()),
+        "relative_path": relative_path,
+        "path": relative_path,
         "media_type": media_type,
         "sha256": _sha256_file(path),
         "bytes": path.stat().st_size,
@@ -395,9 +399,9 @@ def _build_manifest(
             "source_url": source_url,
         },
         "output": {
-            "final_path": str(final_path.resolve()),
-            "text_path": str(text_path.resolve()),
-            "manifest_path": str(manifest_path.resolve()),
+            "final_path": _manifest_relative_path(final_path, manifest_path),
+            "text_path": _manifest_relative_path(text_path, manifest_path),
+            "manifest_path": _manifest_relative_path(manifest_path, manifest_path),
             "media_type": media_type,
             "text_chars": len(text),
             "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
@@ -409,6 +413,15 @@ def _build_manifest(
             "metadata": _safe_json(metadata),
         },
     }
+
+
+def _manifest_relative_path(path: Path, manifest_path: Path) -> str:
+    try:
+        rel = path.resolve(strict=False).relative_to(manifest_path.parent.resolve(strict=False))
+    except ValueError:
+        rel = Path(path.name)
+    value = rel.as_posix()
+    return value or "."
 
 
 def _redact_config(config: dict[str, Any]) -> dict[str, Any]:

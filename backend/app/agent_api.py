@@ -1258,12 +1258,19 @@ def _has_marker_output_manifest(path: Path) -> bool:
         output.get("text_path"),
         output.get("final_path"),
     ]
-    return any(_same_resolved_path(resolved, value) for value in allowed if value)
+    return any(
+        _same_resolved_path(resolved, value, base_dir=manifest_path.parent)
+        for value in allowed
+        if value
+    )
 
 
-def _same_resolved_path(path: Path, raw: Any) -> bool:
+def _same_resolved_path(path: Path, raw: Any, *, base_dir: Path | None = None) -> bool:
     try:
-        return path == Path(str(raw)).expanduser().resolve(strict=False)
+        candidate = Path(str(raw)).expanduser()
+        if base_dir is not None and not candidate.is_absolute():
+            candidate = base_dir / candidate
+        return path == candidate.resolve(strict=False)
     except (OSError, ValueError):
         return False
 

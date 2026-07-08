@@ -103,9 +103,9 @@ async def test_mcp_manifest_tools_read_sibling_manifest_for_json_output(tmp_path
     assets_result = await mcp_server.marker_list_output_assets(str(output_path))
 
     assert manifest_result["manifest_path"] == str(manifest_path.resolve())
-    assert manifest_result["manifest"]["output"]["text_path"] == str(output_path.resolve())
+    assert manifest_result["manifest"]["output"]["text_path"] == output_path.name
     assert assets_result["manifest_path"] == str(manifest_path.resolve())
-    assert assets_result["assets"] == [{"name": "asset.txt", "path": str((tmp_path / "asset.txt").resolve())}]
+    assert assets_result["assets"] == [{"name": "asset.txt", "path": "asset.txt"}]
 
 
 @pytest.mark.asyncio
@@ -113,18 +113,18 @@ async def test_mcp_manifest_resources_share_manifest_reader(tmp_path: Path, monk
     import app.mcp_resources as mcp_resources
     import app.mcp_server as mcp_server
 
-    output_path, _manifest_path = _write_output_and_manifest(tmp_path)
+    output_path, manifest_path = _write_output_and_manifest(tmp_path)
 
     output_id = quote(str(output_path), safe="")
     output_resource = await mcp_server.mcp.read_resource(f"marker://outputs/{output_id}/manifest")
     output_manifest = json.loads(output_resource[0].content)
-    assert output_manifest["output"]["text_path"] == str(output_path.resolve())
+    assert output_manifest["output"]["text_path"] == output_path.name
 
     async def fake_get_job_status(job_id: str) -> dict:
         return {
             "job_id": job_id,
             "result_path": str(output_path),
-            "conversion_metadata": {"manifest_path": output_manifest["output"]["manifest_path"]},
+            "conversion_metadata": {"manifest_path": str(manifest_path)},
         }
 
     monkeypatch.setattr(mcp_resources, "get_job_status", fake_get_job_status)
@@ -134,7 +134,7 @@ async def test_mcp_manifest_resources_share_manifest_reader(tmp_path: Path, monk
 
     job_manifest = json.loads(job_manifest_resource[0].content)
     job_assets = json.loads(job_assets_resource[0].content)
-    assert job_manifest["output"]["text_path"] == str(output_path.resolve())
+    assert job_manifest["output"]["text_path"] == output_path.name
     assert job_assets["assets"][0]["name"] == "asset.txt"
 
 
@@ -149,9 +149,9 @@ def _write_output_and_manifest(tmp_path: Path) -> tuple[Path, Path]:
             {
                 "schema_version": "marker.output_manifest.v1",
                 "output": {
-                    "text_path": str(output_path.resolve()),
-                    "manifest_path": str(manifest_path.resolve()),
-                    "assets": [{"name": "asset.txt", "path": str(asset_path.resolve())}],
+                    "text_path": output_path.name,
+                    "manifest_path": manifest_path.name,
+                    "assets": [{"name": "asset.txt", "path": asset_path.name}],
                 },
             }
         ),

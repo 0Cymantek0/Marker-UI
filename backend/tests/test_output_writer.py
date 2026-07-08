@@ -42,12 +42,14 @@ def test_write_conversion_output_creates_manifest_and_collision_safe_file(tmp_pa
 
     manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == OUTPUT_MANIFEST_SCHEMA_VERSION
-    assert manifest["output"]["text_path"] == str(first.text_path.resolve())
-    assert manifest["output"]["manifest_path"] == str(first.manifest_path.resolve())
+    assert manifest["output"]["text_path"] == "report.md"
+    assert manifest["output"]["manifest_path"] == "report.marker.json"
+    assert manifest["output"]["final_path"] == "report.md"
     assert manifest["output"]["text_chars"] == len(result["text"])
     assert manifest["output"]["text_sha256"]
     assert manifest["conversion"]["metadata"]["engine"] == {"engine": "text_data"}
     assert manifest["conversion"]["config"]["api_key"] == "****"
+    assert not Path(manifest["output"]["text_path"]).is_absolute()
 
 
 def test_write_conversion_output_refuses_existing_explicit_output_path(tmp_path: Path):
@@ -98,6 +100,10 @@ def test_write_conversion_output_bundles_assets_and_sanitizes_paths(tmp_path: Pa
     names = sorted(asset["name"] for asset in manifest["output"]["assets"])
     assert names == ["sheets/Sheet_1.csv", "unsafe_image.png"]
     assert all(asset["sha256"] for asset in manifest["output"]["assets"])
+    assert manifest["output"]["text_path"] == "input.md"
+    assert manifest["output"]["manifest_path"] == "input.marker.json"
+    assert manifest["output"]["final_path"] == "."
+    assert all(not Path(asset["path"]).is_absolute() for asset in manifest["output"]["assets"])
 
 
 def test_write_conversion_output_deduplicates_image_asset_names(tmp_path: Path):
@@ -174,6 +180,7 @@ def test_write_conversion_output_deduplicates_image_and_asset_collision(tmp_path
     assert [entry["name"] for entry in entries] == ["shared-1.bin", "shared.bin"]
     assert [entry["relative_path"] for entry in entries] == ["shared-1.bin", "shared.bin"]
     assert len({entry["path"] for entry in entries}) == 2
+    assert all(not Path(entry["path"]).is_absolute() for entry in entries)
 
 
 def test_write_conversion_output_uses_result_media_type_for_chunks_explicit_path(tmp_path: Path):

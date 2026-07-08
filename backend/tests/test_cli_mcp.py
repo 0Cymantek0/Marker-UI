@@ -1460,7 +1460,7 @@ async def test_agent_api_converts_same_file_without_clobbering_previous_output(t
     assert second_manifest.is_file()
     manifest = json.loads(second_manifest.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == "marker.output_manifest.v1"
-    assert manifest["output"]["text_path"] == str(second_path.resolve())
+    assert manifest["output"]["text_path"] == second_path.name
 
 
 @pytest.mark.asyncio

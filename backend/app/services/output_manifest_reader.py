@@ -36,12 +36,21 @@ def manifest_for_job_status(status: dict[str, Any]) -> tuple[Path | None, dict[s
     return None, {}
 
 
-def output_text_path_from_manifest(manifest: dict[str, Any]) -> str | None:
+def output_text_path_from_manifest(
+    manifest: dict[str, Any],
+    *,
+    manifest_path: Path | None = None,
+) -> str | None:
     output = manifest.get("output") if isinstance(manifest, dict) else None
     if not isinstance(output, dict):
         return None
     text_path = output.get("text_path")
-    return str(text_path) if text_path else None
+    if not text_path:
+        return None
+    path = Path(str(text_path))
+    if manifest_path is not None and not path.is_absolute():
+        path = manifest_path.parent / path
+    return str(path)
 
 
 def _manifest_candidates(path: Path) -> list[Path]:

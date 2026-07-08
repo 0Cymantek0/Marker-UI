@@ -1579,7 +1579,24 @@ async def test_download_specific_format_does_not_zip_assets(client: AsyncClient,
     result_dir = tmp_path / "job-assets"
     result_dir.mkdir()
     (result_dir / "image.png").write_bytes(b"fake image bytes")
-    (result_dir / "job-assets.marker.json").write_text("{}", encoding="utf-8")
+    (result_dir / "job-assets.marker.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "marker.output_manifest.v1",
+                "output": {
+                    "final_path": str(result_dir.resolve()),
+                    "text_path": str((result_dir / "job-assets.md").resolve()),
+                    "manifest_path": str((result_dir / "job-assets.marker.json").resolve()),
+                    "assets": [
+                        {
+                            "path": str((result_dir / "image.png").resolve()),
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     job_id = "job-download-md-assets"
     job = ConversionJob(
@@ -1614,6 +1631,13 @@ async def test_download_specific_format_does_not_zip_assets(client: AsyncClient,
     package_resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
     assert package_resp.status_code == 200
     assert package_resp.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(package_resp.content)) as zf:
+        manifest = json.loads(zf.read("job-assets.marker.json").decode("utf-8"))
+    assert manifest["output"]["final_path"] == "."
+    assert manifest["output"]["text_path"] == "job-assets.md"
+    assert manifest["output"]["manifest_path"] == "job-assets.marker.json"
+    assert manifest["output"]["assets"][0]["path"] == "image.png"
+    assert not Path(manifest["output"]["assets"][0]["path"]).is_absolute()
 
 
 @pytest.mark.asyncio
