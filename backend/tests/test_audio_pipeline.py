@@ -261,6 +261,31 @@ def test_risk_summary_clean_transcript_needs_no_review() -> None:
     assert risk["review_required"] is False
 
 
+def test_low_confidence_review_required_respects_explicit_toggle() -> None:
+    """Low-confidence spans remain visible but only force review when requested."""
+
+    raw = {
+        "duration": 1.0,
+        "segments": [
+            {"start": 0.0, "end": 1.0, "text": "uncertain but isolated", "confidence": 0.4},
+        ],
+    }
+
+    advisory = normalize_transcript(raw, source_label="low.wav")
+    strict = normalize_transcript(
+        raw,
+        source_label="low.wav",
+        config={"audio_review_required_on_low_confidence": True},
+    )
+
+    assert advisory.risk_summary["level"] == "review"
+    assert advisory.risk_summary["low_confidence_count"] == 1
+    assert advisory.risk_summary["low_confidence_requires_review"] is False
+    assert advisory.risk_summary["review_required"] is False
+    assert strict.risk_summary["low_confidence_requires_review"] is True
+    assert strict.risk_summary["review_required"] is True
+
+
 def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
     """The shared video/audio transcription seam returns a normalized transcript.
 

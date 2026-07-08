@@ -256,7 +256,7 @@ def normalize_transcript(
         warnings.append("language_mismatch")
     media_info = dict(raw.get("media_info") or {})
     vocabulary_hits = tuple(_vocabulary_hits(segments, config))
-    risk_summary = _risk_summary(segments, warnings)
+    risk_summary = _risk_summary(segments, warnings, config=config)
     return AudioTranscript(
         source_id=source_id,
         source_label=source_label,
@@ -704,7 +704,13 @@ def _coerce_float(value: Any) -> float | None:
     return result
 
 
-def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str, Any]:
+def _risk_summary(
+    segments: list[AudioSegment],
+    warnings: list[str],
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    config = config or {}
     segment_warning_count = sum(1 for segment in segments if segment.warnings)
     low_confidence_count = sum(1 for segment in segments if "low_confidence" in segment.warnings)
     empty_count = sum(1 for segment in segments if "empty_text" in segment.warnings)
@@ -742,12 +748,12 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
         if confidence_values
         else None
     )
-    # Review verdict (plan §8.2): a transcript needs eyes on it when any segment
-    # is low-confidence, overlaps, has a long preceding gap, or carries unknown
-    # confidence. Surfaced separately from ``level`` so the heatmap can flag weak
-    # evidence even on a "clean" run that happens to have no low_confidence spans.
+    # Review verdict (plan §8.2): serious timing/provider anomalies always need
+    # eyes. Low confidence can be advisory-only unless the user enables the
+    # stricter "require review" toggle exposed in CLI/API/UI.
+    low_confidence_requires_review = _truthy(config.get("audio_review_required_on_low_confidence"))
     review_required = bool(
-        low_confidence_count
+        (low_confidence_count and low_confidence_requires_review)
         or overlap_count
         or long_gap_count
         or empty_count
@@ -774,7 +780,16 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
         "words_per_minute": round(word_count / (speech_ms / 60000.0), 3) if speech_ms else None,
         "speech_coverage": round(speech_ms / duration_ms, 6) if duration_ms else None,
         "review_required": review_required,
+        "low_confidence_requires_review": low_confidence_requires_review,
     }
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _batch_risk_summary(transcripts: list[AudioTranscript]) -> dict[str, Any]:
