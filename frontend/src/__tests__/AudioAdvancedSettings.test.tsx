@@ -316,6 +316,7 @@ describe('AudioAdvancedSettings', () => {
     fireEvent.click(screen.getByText('Enhancement & Correction'))
 
     expect(screen.getByText(/Most aggressive local cleanup; no new claims/i)).toBeInTheDocument()
+    expect(screen.getByText(/still use local deterministic cleanup/i)).toBeInTheDocument()
     expect(screen.queryByText(/Full rewrite/i)).not.toBeInTheDocument()
   })
 

@@ -419,7 +419,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                     </p>
                     {(config.audio_text_enhancement_strength ?? 0) >= 4 && (
                       <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug">
-                        Higher levels may rephrase for readability. Raw transcript and source refs remain preserved for audit.
+                        Higher levels still use local deterministic cleanup in this build. Raw transcript and source refs remain preserved for audit.
                       </div>
                     )}
                   </div>
