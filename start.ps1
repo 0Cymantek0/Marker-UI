@@ -185,6 +185,36 @@ function Find-FreePort {
     return $null
 }
 
+function Wait-BackendReady {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [int]$Port,
+        [int]$TimeoutSeconds = 120
+    )
+
+    $healthUrl = "http://127.0.0.1:$Port/api/health"
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+    while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+        if ($Process.HasExited) {
+            Write-Host "  ERROR: Backend exited before it became healthy." -ForegroundColor Red
+            return $false
+        }
+
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri $healthUrl
+            if ($response.StatusCode -eq 200) {
+                return $true
+            }
+        } catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    Write-Host "  ERROR: Backend did not pass health check on port $Port within $TimeoutSeconds seconds." -ForegroundColor Red
+    return $false
+}
+
 $backendPort = Find-FreePort -StartPort 8000
 if (-not $backendPort) {
     Write-Host "  ERROR: No free port found for backend." -ForegroundColor Red
@@ -212,12 +242,14 @@ Write-Host "  Starting backend on http://localhost:$backendPort ..." -Foreground
 $venvPythonFull = (Resolve-Path $venvPython).Path
 $backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", $backendPort, "--app-dir", "backend" -PassThru -WindowStyle Hidden
 
-Start-Sleep -Seconds 3
-
-if ($backendJob.HasExited) {
-    Write-Host "  ERROR: Backend failed to start." -ForegroundColor Red
+Write-Host "  Waiting for backend health check (up to 120 seconds)..." -ForegroundColor DarkGray
+if (-not (Wait-BackendReady -Process $backendJob -Port $backendPort -TimeoutSeconds 120)) {
+    if (-not $backendJob.HasExited) {
+        Stop-Process -Id $backendJob.Id -Force -ErrorAction SilentlyContinue
+    }
     exit 1
 }
+Write-Host "  Backend health check passed on port $backendPort." -ForegroundColor Green
 
 # Frontend - use cmd.exe because npm is a .cmd file on Windows, not a real .exe
 Write-Host "  Starting frontend on http://localhost:$frontendPort ..." -ForegroundColor Cyan

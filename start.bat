@@ -149,15 +149,17 @@ if not "!FRONTEND_PORT!"=="5173" (
 echo   Starting backend on http://localhost:!BACKEND_PORT! ...
 start /B .venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port !BACKEND_PORT! --app-dir backend
 
-:: Wait for backend to start (checks up to 30 times with 1-second delay)
-echo   Waiting for backend to start...
+:: Wait for backend to become healthy. First start can be slow while
+:: database, job recovery, and model/runtime checks initialize.
+set BACKEND_WAIT_SECONDS=120
+echo   Waiting for backend health check (up to !BACKEND_WAIT_SECONDS! seconds)...
 set WAIT_COUNT=0
 :checkBackendLoop
-netstat -aon | findstr /C:":!BACKEND_PORT!" | findstr "LISTENING" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri 'http://127.0.0.1:!BACKEND_PORT!/api/health'; if ($response.StatusCode -eq 200) { exit 0 } } catch { } exit 1" >nul 2>&1
 if !ERRORLEVEL! equ 0 goto backendStarted
 set /a WAIT_COUNT+=1
-if !WAIT_COUNT! geq 30 (
-    echo   ERROR: Backend failed to start on port !BACKEND_PORT! within 30 seconds.
+if !WAIT_COUNT! geq !BACKEND_WAIT_SECONDS! (
+    echo   ERROR: Backend did not pass health check on port !BACKEND_PORT! within !BACKEND_WAIT_SECONDS! seconds.
     pause
     exit /b 1
 )
@@ -165,7 +167,7 @@ ping -n 2 127.0.0.1 >nul
 goto checkBackendLoop
 
 :backendStarted
-echo   Backend is listening on port !BACKEND_PORT!.
+echo   Backend health check passed on port !BACKEND_PORT!.
 
 echo   Starting frontend on http://localhost:!FRONTEND_PORT! ...
 cd frontend
