@@ -46,3 +46,13 @@ def test_python_version_contract_is_311_everywhere() -> None:
         if re.search(r"Python 3\.10\+|python 3\.10|3,\s*10", text):
             stale.append(relative)
     assert stale == []
+
+
+def test_security_policy_matches_implemented_auth_model() -> None:
+    security = (REPO_ROOT / "SECURITY.md").read_text(encoding="utf-8")
+
+    assert "does not ship with built-in user authentication" not in security
+    assert "MARKER_REST_AUTH_TOKEN" in security
+    assert "MARKER_MCP_AUTH_TOKEN" in security
+    assert "MARKER_WORKSPACE_ROOTS" in security
+    assert "MARKER_OUTPUT_ROOT" in security
