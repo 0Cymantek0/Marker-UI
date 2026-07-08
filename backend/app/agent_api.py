@@ -181,6 +181,8 @@ def build_conversion_config(
         "output_format": options.output_format,
         "original_name": original_name or "",
     }
+    if options.output_formats:
+        config["output_formats"] = [str(fmt) for fmt in options.output_formats]
     _put(config, "converter_cls", options.converter_cls)
     _put(config, "engine_override", options.engine_override)
     _put(config, "conversion_profile", options.conversion_profile)
@@ -601,7 +603,7 @@ async def _convert_resolved_path(
 
     await _prepare_runtime(config)
     marker_options = build_marker_options(await _load_llm_config_for_options(config), config)
-    result = await _convert_primary_format(
+    result, format_results = await _convert_requested_formats(
         service,
         str(path),
         marker_options,
@@ -616,6 +618,17 @@ async def _convert_resolved_path(
         conversion_config=config,
         source_url=source_url,
     )
+    if len(format_results) > 1:
+        saved["formats"] = _save_extra_formats(
+            format_results,
+            primary_format=requested_formats[0] if requested_formats else "markdown",
+            primary_text_path=Path(saved["text_path"]),
+            source_name=original_name,
+            output_base=output_base,
+            overwrite=overwrite,
+            conversion_config=config,
+            source_url=source_url,
+        )
     text = result.get("text") or ""
     preview = text[:max_chars]
     return {
@@ -634,15 +647,16 @@ async def _convert_resolved_path(
     }
 
 
-async def _convert_primary_format(
+async def _convert_requested_formats(
     service: ConversionService,
     filepath: str,
     config: dict[str, Any],
     requested_formats: list[str],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     primary_format = requested_formats[0] if requested_formats else "markdown"
-    if primary_format == "markdown":
-        return await asyncio.to_thread(service.convert_file, filepath, config)
+    if len(requested_formats) <= 1 and primary_format == "markdown":
+        result = await asyncio.to_thread(service.convert_file, filepath, config)
+        return result, {primary_format: result}
     formatted = await asyncio.to_thread(
         service.convert_file_formats,
         filepath,
@@ -650,8 +664,8 @@ async def _convert_primary_format(
         requested_formats or [primary_format],
     )
     if primary_format in formatted:
-        return formatted[primary_format]
-    return next(iter(formatted.values()))
+        return formatted[primary_format], formatted
+    return next(iter(formatted.values())), formatted
 
 
 def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHARS) -> dict[str, Any]:
@@ -1416,3 +1430,50 @@ def _save_result(
         overwrite=overwrite,
     )
     return written.to_agent_output()
+
+
+def _save_extra_formats(
+    format_results: dict[str, dict[str, Any]],
+    *,
+    primary_format: str,
+    primary_text_path: Path,
+    source_name: str,
+    output_base: Path,
+    overwrite: bool,
+    conversion_config: dict[str, Any],
+    source_url: str | None,
+) -> dict[str, dict[str, Any]]:
+    saved: dict[str, dict[str, Any]] = {primary_format: {"text_path": str(primary_text_path.resolve())}}
+    for fmt, result in format_results.items():
+        if fmt == primary_format:
+            continue
+        extra_path = _extra_format_output_path(primary_text_path, fmt, result)
+        written = write_conversion_output(
+            result,
+            source_name=source_name,
+            output_base=output_base,
+            output_path=extra_path,
+            output_format=fmt,
+            conversion_config={**conversion_config, "output_format": fmt},
+            layout="file",
+            source_url=source_url,
+            overwrite=overwrite,
+        )
+        saved[fmt] = written.to_agent_output()
+    return saved
+
+
+def _extra_format_output_path(primary_text_path: Path, fmt: str, result: dict[str, Any]) -> Path:
+    extension = str(result.get("extension") or "").strip().lstrip(".")
+    if not extension:
+        extension = {
+            "markdown": "md",
+            "html": "html",
+            "json": "json",
+            "chunks": "chunks.json",
+        }.get(fmt, fmt)
+    if fmt == "chunks" and extension == "json":
+        suffix = ".chunks.json"
+    else:
+        suffix = f".{extension}"
+    return primary_text_path.with_suffix(suffix)

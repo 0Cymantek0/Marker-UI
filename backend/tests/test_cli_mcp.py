@@ -90,6 +90,30 @@ async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_agent_api_persists_extra_output_formats_with_markdown_primary(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\nbeta\t2\n", encoding="utf-8")
+
+    result = await convert_document(
+        local_file_path=str(source),
+        output_dir=str(tmp_path / "out"),
+        max_chars=5000,
+        options=AgentConversionOptions(output_format="markdown", output_formats=["markdown", "chunks"]),
+    )
+
+    output = result["output"]
+    markdown_path = Path(output["formats"]["markdown"]["text_path"])
+    chunks_path = Path(output["formats"]["chunks"]["text_path"])
+
+    assert markdown_path == Path(output["text_path"])
+    assert markdown_path.read_text(encoding="utf-8") == result["text_preview"]
+    assert chunks_path.name == "scores.chunks.json"
+    payload = json.loads(chunks_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert "| alpha | 1 |" in payload["chunks"][-1]["text"]
+
+
+@pytest.mark.asyncio
 async def test_agent_api_rejects_unshipped_audio_benchmark_compare(tmp_path: Path):
     source = tmp_path / "meeting.wav"
     source.write_bytes(b"RIFF fake wav")

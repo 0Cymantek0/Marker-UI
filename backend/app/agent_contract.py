@@ -55,6 +55,7 @@ class FlexibleContractModel(BaseModel):
 
 class ConversionOptionsModel(ContractModel):
     output_format: OutputFormat = "markdown"
+    output_formats: list[OutputFormat] = Field(default_factory=list)
     converter_cls: str | None = None
     engine_override: str | None = None
     conversion_profile: ConversionProfile | None = None
