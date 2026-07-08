@@ -37,6 +37,7 @@ class ArchiveBudget:
     max_converted_children: int
     max_compression_ratio: float
     used_uncompressed_bytes: int = 0
+    used_converted_children: int = 0
 
 
 class ArchiveConverter(BaseConverter):
@@ -100,13 +101,14 @@ class ArchiveConverter(BaseConverter):
             if recursive:
                 lines.extend(["", "## Converted Children", ""])
             for info in infos[:max_files]:
-                if converted >= max_converted_children:
+                if budget.used_converted_children >= budget.max_converted_children:
                     manifest.append(_manifest_entry(info, "skipped", "archive child conversion limit reached", depth))
                     continue
                 budget_entry = _check_archive_budget(info, budget, depth)
                 if budget_entry is not None:
                     manifest.append(budget_entry)
                     continue
+                budget.used_converted_children += 1
                 entry, child_result = _convert_child(
                     zf,
                     info,
@@ -115,6 +117,8 @@ class ArchiveConverter(BaseConverter):
                     max_depth=max_depth,
                     depth=depth,
                 )
+                if child_result is None:
+                    budget.used_converted_children -= 1
                 manifest.append(entry)
                 child_text = child_result.text if child_result else None
                 if child_result:
@@ -163,6 +167,7 @@ class ArchiveConverter(BaseConverter):
                     "max_child_bytes": budget.max_child_bytes,
                     "max_depth": budget.max_depth,
                     "max_converted_children": budget.max_converted_children,
+                    "used_converted_children": budget.used_converted_children,
                     "max_compression_ratio": budget.max_compression_ratio,
                 },
             }

@@ -54,6 +54,42 @@ def test_nested_archives_share_total_uncompressed_budget(tmp_path: Path) -> None
     assert "two two two" not in result.text
 
 
+def test_nested_archives_share_converted_child_budget(tmp_path: Path) -> None:
+    inner = tmp_path / "inner.zip"
+    _write_zip(
+        inner,
+        {
+            "one.txt": b"one " * 10,
+            "two.txt": b"two " * 10,
+        },
+    )
+    outer = tmp_path / "outer.zip"
+    _write_zip(
+        outer,
+        {
+            "inner.zip": inner.read_bytes(),
+            "root.txt": b"root " * 10,
+        },
+    )
+
+    result = ArchiveConverter().convert(
+        str(outer),
+        _base_config(archive_max_converted_children=2),
+    )
+
+    manifest = result.metadata["engine_detail"]["manifest"]
+    inner_entry = next(item for item in manifest if item["path"] == "inner.zip")
+    root_entry = next(item for item in manifest if item["path"] == "root.txt")
+
+    assert inner_entry["action"] == "converted"
+    assert root_entry["action"] == "skipped"
+    assert root_entry["reason"] == "archive child conversion limit reached"
+    assert "one one one" in result.text
+    assert "two two two" not in result.text
+    assert "root root root" not in result.text
+    assert result.metadata["engine_detail"]["archive_budget"]["used_converted_children"] == 2
+
+
 def test_archive_skips_high_compression_ratio_child_before_reading(tmp_path: Path) -> None:
     archive = tmp_path / "bombish.zip"
     _write_zip(archive, {"repeated.txt": b"a" * 4096}, compression=ZIP_DEFLATED)
