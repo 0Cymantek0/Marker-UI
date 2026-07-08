@@ -909,8 +909,12 @@ async def test_enqueue_does_not_resurrect_completed_job(tmp_path: Path):
 
     async with session_factory() as session:
         job = await session.get(ConversionJob, job_id)
+        events = (
+            await session.execute(select(JobEvent).where(JobEvent.job_id == job_id))
+        ).scalars().all()
     assert job.status == "completed", (
         f"completed job must not be resurrected by enqueue; got {job.status}"
     )
     assert job.result_text == "# already done"
+    assert events == []
     await engine.dispose()

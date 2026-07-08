@@ -116,7 +116,7 @@ class SQLiteDurableQueueBackend:
         stored_config = dict(config)
         if filepath:
             stored_config.setdefault("durable_filepath", filepath)
-        await session.execute(
+        result = await session.execute(
             update(ConversionJob)
             .where(ConversionJob.id == job_id)
             # Never resurrect a terminal job: only re-enqueue rows that are still
@@ -137,6 +137,8 @@ class SQLiteDurableQueueBackend:
                 config_json=json.dumps(stored_config),
             )
         )
+        if result.rowcount == 0:
+            return
         await append_job_event(
             session,
             job_id=job_id,
