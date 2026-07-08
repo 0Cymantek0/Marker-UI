@@ -908,13 +908,11 @@ class TaskManager:
         # Calculate elapsed and ETA
         start_time = self._job_start_time.get(job_id)
         elapsed = int(time.time() - start_time) if start_time else 0
-        eta = 0
-        if status == "processing":
+        eta: int | None = None
+        if status == "processing" and self._job_has_real_progress.get(job_id):
             if progress > 10 and progress < 100:
                 estimated_total = elapsed * 100 / progress
                 eta = max(1, int(estimated_total - elapsed))
-            else:
-                eta = 45  # Default fallback
 
         return {
             "job_id": job_id,

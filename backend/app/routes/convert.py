@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
@@ -56,6 +56,7 @@ HARD_MAX_PAGE_RANGE_PAGES = 2000
 AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
     {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".avi"}
 )
+HISTORY_STATUS_ALIASES = {"queued": "pending"}
 
 # MAX_UPLOAD_SIZE is imported from app.core.config so the upload + source_url
 # download paths share a single source of truth driven by
@@ -64,6 +65,10 @@ AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 
 def _count_requested_pages(page_range: str) -> int:
     count = 0
@@ -1253,22 +1258,56 @@ async def get_output_asset(
 async def get_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    converter: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> HistoryResponse:
-    """List all conversion jobs (paginated)."""
+    """List all conversion jobs (paginated, with optional filtering)."""
     offset = (page - 1) * page_size
+
+    # Build filter conditions
+    conditions = []
+    if search and (search_term := search.strip()):
+        search_pattern = f"%{_escape_like(search_term)}%"
+        conditions.append(
+            or_(
+                ConversionJob.filename.ilike(search_pattern, escape="\\"),
+                ConversionJob.original_name.ilike(search_pattern, escape="\\"),
+            )
+        )
+    if status and status != "all":
+        conditions.append(ConversionJob.status == HISTORY_STATUS_ALIASES.get(status, status))
+    if converter and converter != "all":
+        converter_pattern = _escape_like(converter.strip())
+        converter_spaced = f'%"converter_cls": "{converter_pattern}"%'
+        converter_compact = f'%"converter_cls":"{converter_pattern}"%'
+        if converter.strip() == "PdfConverter":
+            conditions.append(
+                (ConversionJob.config_json.is_(None)) |
+                (~ConversionJob.config_json.like('%"converter_cls"%')) |
+                (ConversionJob.config_json.like(converter_spaced, escape="\\")) |
+                (ConversionJob.config_json.like(converter_compact, escape="\\"))
+            )
+        else:
+            conditions.append(
+                (ConversionJob.config_json.like(converter_spaced, escape="\\")) |
+                (ConversionJob.config_json.like(converter_compact, escape="\\"))
+            )
 
     # Query total count
     count_stmt = select(func.count(ConversionJob.id))
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
 
-    stmt = (
-        select(ConversionJob)
-        .order_by(ConversionJob.created_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
+    # Query paginated records
+    stmt = select(ConversionJob).order_by(ConversionJob.created_at.desc())
+    if conditions:
+        stmt = stmt.where(*conditions)
+    stmt = stmt.offset(offset).limit(page_size)
+
     result = await db.execute(stmt)
     jobs = result.scalars().all()
 

@@ -601,6 +601,81 @@ async def test_history_excludes_result_text(
     assert our_job["result_text"] is None, "result_text should be excluded from history"
 
 
+@pytest.mark.asyncio
+async def test_history_filtering(
+    client: AsyncClient, db_session
+):
+    """Verify history endpoint filters by search, status, and converter."""
+    # Insert multiple jobs
+    job1 = ConversionJob(
+        id="job-filter-1",
+        filename="stored-job-filter-1.pdf",
+        original_name="apple display.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        config_json='{"converter_cls": "PdfConverter"}',
+        progress=100,
+    )
+    job2 = ConversionJob(
+        id="job-filter-2",
+        filename="banana.pdf",
+        original_name="banana.pdf",
+        status="failed",
+        input_format="pdf",
+        output_format="markdown",
+        config_json='{"converter_cls": "LiteParse"}',
+        progress=0,
+    )
+    job3 = ConversionJob(
+        id="job-filter-3",
+        filename="stored-job-filter-3.pdf",
+        original_name="compact-table.pdf",
+        status="pending",
+        input_format="pdf",
+        output_format="markdown",
+        config_json='{"converter_cls":"TableConverter"}',
+        progress=0,
+    )
+    db_session.add_all([job1, job2, job3])
+    await db_session.commit()
+
+    # Test search filter against displayed original filename, not only stored path name
+    resp = await client.get("/api/convert/history?search=apple%20display")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-1"
+
+    # Test status filter
+    resp = await client.get("/api/convert/history?status=failed")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-2"
+
+    # Test queued UI alias maps to persisted pending status
+    resp = await client.get("/api/convert/history?status=queued")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-3"
+
+    # Test converter filter
+    resp = await client.get("/api/convert/history?converter=LiteParse")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-2"
+
+    # Test converter filter against compact JSON serialization
+    resp = await client.get("/api/convert/history?converter=TableConverter")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-3"
+
+
 # ---------------------------------------------------------------------------
 # Cancelled jobs stay cancelled
 # ---------------------------------------------------------------------------

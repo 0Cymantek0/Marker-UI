@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -79,6 +80,42 @@ class TestGetStatus:
         status = task_manager.get_status("active-job")
         assert status["status"] == "processing"
         assert status["progress"] == 42
+
+    def test_low_progress_eta_is_unknown_not_fake(self, task_manager: TaskManager):
+        mock_future = MagicMock()
+        mock_future.done.return_value = False
+        task_manager._tasks["active-job"] = mock_future
+        task_manager._progress["active-job"] = 10
+        task_manager._job_start_time["active-job"] = time.time() - 120
+
+        status = task_manager.get_status("active-job")
+
+        assert status["eta"] is None
+
+    def test_eta_estimates_after_progress_advances(self, task_manager: TaskManager):
+        mock_future = MagicMock()
+        mock_future.done.return_value = False
+        task_manager._tasks["active-job"] = mock_future
+        task_manager._progress["active-job"] = 50
+        task_manager._job_has_real_progress["active-job"] = True
+        task_manager._job_start_time["active-job"] = time.time() - 60
+
+        status = task_manager.get_status("active-job")
+
+        assert status["eta"] is not None
+        assert 1 <= status["eta"] <= 70
+
+    def test_eta_is_unknown_for_coarse_fallback_progress(self, task_manager: TaskManager):
+        mock_future = MagicMock()
+        mock_future.done.return_value = False
+        task_manager._tasks["active-job"] = mock_future
+        task_manager._progress["active-job"] = 33
+        task_manager._job_has_real_progress["active-job"] = False
+        task_manager._job_start_time["active-job"] = time.time() - 300
+
+        status = task_manager.get_status("active-job")
+
+        assert status["eta"] is None
 
     def test_completed_future_shows_completed(self, task_manager: TaskManager):
         mock_future = MagicMock()
