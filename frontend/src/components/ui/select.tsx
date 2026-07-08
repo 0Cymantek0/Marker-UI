@@ -67,13 +67,13 @@ export function Select({ value, onChange, options, className, disabled }: Select
   }, [isOpen])
 
   return (
-    <div ref={containerRef} className={cn('relative w-full md:w-44', isOpen && 'z-30', className)}>
+    <div ref={containerRef} className={cn('relative w-full min-w-0', isOpen && 'z-30', className)}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center justify-between w-full px-3 py-2 bg-background/40 hover:bg-muted/30 border border-border/50 rounded-lg text-xs font-semibold text-foreground transition-all duration-200 focus:outline-none text-left h-10',
+          'flex h-10 min-h-10 items-center justify-between w-full px-3 py-2 bg-background/40 hover:bg-muted/30 border border-border/50 rounded-lg text-sm font-semibold text-foreground transition-all duration-200 focus:outline-none text-left',
           isOpen && 'bg-muted/20',
           disabled && 'opacity-50 cursor-not-allowed pointer-events-none'
         )}
@@ -109,7 +109,7 @@ export function Select({ value, onChange, options, className, disabled }: Select
                   setIsOpen(false)
                 }}
                 className={cn(
-                  'flex items-center justify-between w-full gap-2 px-3 py-1.5 text-xs text-left transition-colors duration-150',
+                  'flex items-center justify-between w-full gap-2 px-3 py-2 text-sm text-left transition-colors duration-150',
                   isSelected
                     ? 'bg-primary/10 text-primary font-bold'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
