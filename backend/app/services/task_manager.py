@@ -137,6 +137,25 @@ def _actual_output_format_for_finalize(
     return requested if requested in OUTPUT_FORMAT_SET else "markdown"
 
 
+def _resolved_asset_entries_for_metadata(
+    asset_entries: list[dict[str, Any]],
+    asset_paths: list[Path],
+) -> list[dict[str, Any]]:
+    """Return DB metadata assets with readable absolute paths.
+
+    Output manifests keep portable relative paths for downloads and bundles.
+    Job metadata is local status data, so callers should not have to infer the
+    output bundle directory before reading a persisted sidecar.
+    """
+    resolved: list[dict[str, Any]] = []
+    for index, entry in enumerate(asset_entries):
+        item = dict(entry)
+        if index < len(asset_paths):
+            item["path"] = str(asset_paths[index].resolve())
+        resolved.append(item)
+    return resolved
+
+
 # Registry of thread ID to job ID (ThreadExecutorBackend only).
 active_conversion_threads: dict[int, str] = {}
 
@@ -1387,7 +1406,10 @@ class TaskManager:
             source_url=config.get("source_url"),
         )
         if written.asset_entries:
-            result_metadata["assets"] = written.asset_entries
+            result_metadata["assets"] = _resolved_asset_entries_for_metadata(
+                written.asset_entries,
+                written.asset_paths,
+            )
         result_metadata["manifest_path"] = str(written.manifest_path.resolve())
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
 
