@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.conversion.formats import OUTPUT_FORMATS, OUTPUT_FORMATS_DESCRIPTION, OutputFormat
+from app.conversion.formats import OUTPUT_FORMATS_DESCRIPTION, OutputFormat
 from app.errors import ERROR_SCHEMA_VERSION
 from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION
 
@@ -317,6 +317,7 @@ class OptionMetadataModel(ContractModel):
 
 OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="output_format", cli_flag="--output-format", type="enum", default="markdown", category="output", description=f"Requested output format: {OUTPUT_FORMATS_DESCRIPTION}. Markdown and chunks are broadly available; json/html require a Marker-backed PDF/image/EPUB route."),
+    OptionMetadataModel(name="output_formats", type="array", default=[], category="output", description=f"Requested multi-format outputs: {OUTPUT_FORMATS_DESCRIPTION}."),
     OptionMetadataModel(name="converter_cls", cli_flag="--converter-cls", type="string", category="routing", description="Optional Marker converter class override."),
     OptionMetadataModel(name="engine_override", cli_flag="--engine-override", type="string", category="routing", description="Optional universal converter engine override."),
     OptionMetadataModel(name="conversion_profile", cli_flag="--conversion-profile", type="enum", category="routing", description="Conversion policy profile."),
@@ -367,21 +368,37 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="audio_compute_type", cli_flag="--audio-compute-type", type="string", category="audio", description="CTranslate2 compute type (int8/float16/...)."),
     OptionMetadataModel(name="audio_beam_size", cli_flag="--audio-beam-size", type="integer", category="audio", description="Beam size for decoding."),
     OptionMetadataModel(name="audio_vad_filter", cli_flag="--audio-vad-filter", type="boolean", category="audio", description="Apply Silero VAD silence filtering."),
+    OptionMetadataModel(name="audio_gap_warning_ms", type="integer", category="audio", description="Timestamp gap in milliseconds that emits an audio continuity warning."),
     OptionMetadataModel(name="audio_diarization", cli_flag="--audio-diarization", type="boolean", default=False, category="audio", description="Separate speakers when the provider supports it."),
     OptionMetadataModel(name="audio_min_speakers", cli_flag="--audio-min-speakers", type="integer", category="audio", description="Minimum expected speaker count."),
     OptionMetadataModel(name="audio_max_speakers", cli_flag="--audio-max-speakers", type="integer", category="audio", description="Maximum expected speaker count."),
     OptionMetadataModel(name="audio_speaker_aliases", cli_flag="--audio-speaker-alias", type="object", category="audio", description="Map of speaker labels to confirmed names."),
+    OptionMetadataModel(name="audio_speaker_memory", type="boolean", default=False, category="audio", description="Allow local speaker memory for confirmed speaker mappings."),
+    OptionMetadataModel(name="audio_speaker_memory_scope", type="string", default="machine", category="audio", description="Scope for speaker memory; current default is local machine."),
     OptionMetadataModel(name="audio_vocabulary_pack_ids", cli_flag="--audio-vocabulary-pack-id", type="array", category="audio", description="Saved vocabulary pack ids to compile."),
     OptionMetadataModel(name="audio_confidence_heatmap", cli_flag="--audio-confidence-heatmap", type="boolean", default=True, category="audio", description="Emit per-segment confidence for the heatmap view."),
     OptionMetadataModel(name="audio_quality_diagnostics", cli_flag="--audio-quality-diagnostics", type="boolean", default=True, category="audio", description="Emit the audio quality diagnostics block."),
+    OptionMetadataModel(name="audio_review_required_on_low_confidence", type="boolean", default=False, category="audio", description="Mark low-confidence transcripts as requiring review."),
     OptionMetadataModel(name="audio_text_enhancement_enabled", cli_flag="--audio-text-enhancement", type="boolean", default=False, category="audio", description="Allow textual enhancement of the transcript."),
     OptionMetadataModel(name="audio_text_enhancement_strength", cli_flag="--audio-text-enhancement-strength", type="integer", default=0, category="audio", description="Textual enhancement strength 0-5."),
+    OptionMetadataModel(name="audio_text_enhancement_provider", type="string", default="local_rule_based", category="audio", description="Provider id for transcript text enhancement."),
+    OptionMetadataModel(name="audio_text_enhancement_model", type="string", category="audio", description="Optional model id for transcript text enhancement."),
     OptionMetadataModel(name="audio_structural_enhancement_enabled", cli_flag="--audio-structural-enhancement", type="boolean", default=False, category="audio", description="Restructure the transcript into a document."),
     OptionMetadataModel(name="audio_structural_enhancement_mode", cli_flag="--audio-structural-enhancement-mode", type="enum", default="auto", category="audio", description="Document structure: auto, meeting_notes, lecture_notes, interview_qna, action_decision_log, timeline."),
+    OptionMetadataModel(name="audio_structural_preserve_words", type="boolean", default=True, category="audio", description="Require structural enhancement to preserve transcript words."),
+    OptionMetadataModel(name="audio_enhancement_require_source_refs", type="boolean", default=True, category="audio", description="Require enhancement output to map back to transcript source references."),
+    OptionMetadataModel(name="audio_enhancement_show_diff", type="boolean", default=True, category="audio", description="Include a raw-vs-enhanced diff when text enhancement is active."),
+    OptionMetadataModel(name="audio_enhancement_include_audit", type="boolean", default=True, category="audio", description="Include enhancement validation and provenance audit metadata."),
+    OptionMetadataModel(name="audio_enhancement_fallback_on_validation_failure", type="boolean", default=True, category="audio", description="Fall back to safe transcript output when enhancement validation fails."),
+    OptionMetadataModel(name="audio_enhancement_allow_cloud", type="boolean", default=False, category="audio", description="Explicit opt-in for cloud audio text enhancement."),
+    OptionMetadataModel(name="audio_enhancement_custom_instructions", type="string", category="audio", description="Optional user instructions for transcript enhancement."),
     OptionMetadataModel(name="audio_fusion_mode", cli_flag="--audio-fusion-mode", type="enum", category="audio", description="Fuse transcript with context documents: audio_first, meeting_followup, lecture_study, research_memo, contradiction_audit, qna_extraction."),
     OptionMetadataModel(name="audio_contradiction_detection", cli_flag="--audio-contradiction-detection", type="boolean", default=False, category="audio", description="Detect contradictory claims across the transcript."),
+    OptionMetadataModel(name="audio_context_trust_policy", type="string", default="transcript_wins", category="audio", description="Policy for resolving transcript/context conflicts."),
     OptionMetadataModel(name="audio_allow_cloud_stt", cli_flag="--audio-allow-cloud-stt", type="boolean", default=False, category="audio", description="Explicit opt-in to send audio to a cloud STT provider."),
     OptionMetadataModel(name="audio_benchmark_compare", cli_flag="--audio-benchmark-compare", type="boolean", default=False, category="audio", description="Reserved for provider/model comparison; current builds reject it because no benchmark runner ships."),
+    OptionMetadataModel(name="audio_compare_providers", cli_flag="--audio-compare-provider", type="array", default=[], category="audio", description="Provider ids to include in audio comparison mode."),
+    OptionMetadataModel(name="audio_compare_metrics", type="array", default=[], category="audio", description="Metric ids to include in audio comparison mode."),
     OptionMetadataModel(name="audio_config", type="object", category="audio", description="REST JSON blob of advanced audio controls; CLI callers can use --options-json or --option."),
     OptionMetadataModel(name="disable_multiprocessing", cli_flag="--disable-multiprocessing", type="boolean", default=False, category="runtime", description="Run conversion single-threaded where supported."),
     OptionMetadataModel(name="strip_existing_ocr", cli_flag="--strip-existing-ocr", type="boolean", default=False, category="pdf", description="Strip existing OCR text before re-OCR."),

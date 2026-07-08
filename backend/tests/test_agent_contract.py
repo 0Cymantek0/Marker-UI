@@ -106,6 +106,15 @@ def test_option_metadata_cli_flags_exist_on_convert_parser():
     assert missing == []
 
 
+def test_option_metadata_covers_conversion_options_model_fields():
+    """Every first-class agent option needs exported docs/metadata."""
+    option_fields = set(ConversionOptionsModel.model_fields)
+    metadata_names = {metadata.name for metadata in OPTION_METADATA}
+
+    assert sorted(option_fields - metadata_names) == []
+    assert sorted(metadata_names - option_fields) == ["audio_config"]
+
+
 def test_conversion_options_validate_known_enums_and_extra_options():
     opts = ConversionOptionsModel(
         output_format="markdown",
