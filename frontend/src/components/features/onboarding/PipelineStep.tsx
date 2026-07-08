@@ -144,7 +144,7 @@ export function PipelineStep({
           >
             {title}
           </h4>
-          <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-widest font-bold">
+          <span className="text-xs font-mono text-muted-foreground/40 uppercase tracking-widest font-bold">
             {status}
           </span>
         </div>

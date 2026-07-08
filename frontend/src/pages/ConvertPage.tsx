@@ -596,7 +596,7 @@ export function ConvertPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowConsole(true)}
-                className="h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
+                className="h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
               >
                 <Terminal className="w-3.5 h-3.5" />
                 Open Console
@@ -622,10 +622,10 @@ export function ConvertPage() {
                 </h3>
                 
                 {/* Sleek Universal Progress Info */}
-                <div className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase flex items-center gap-2">
+                <div className="text-xs font-bold text-muted-foreground tracking-wider uppercase flex items-center gap-2">
                   <span>Overall:</span>
                   <span className="text-foreground">{completedJobs.length} of {jobs.length} completed</span>
-                  <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[9px]">
+                  <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-xs">
                     {overallProgress}%
                   </span>
                 </div>
@@ -684,17 +684,17 @@ export function ConvertPage() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold truncate text-foreground" title={job.filename}>
+                            <span className="text-sm font-bold truncate text-foreground" title={job.filename}>
                               {job.filename}
                             </span>
                             {(job.availableFormats ?? [job.outputFormat || 'markdown']).map((fmt) => (
-                              <span key={fmt} className="text-[9px] text-muted-foreground font-mono bg-muted/65 px-1 py-0.5 rounded uppercase">
+                              <span key={fmt} className="text-xs text-muted-foreground font-mono bg-muted/65 px-1 py-0.5 rounded uppercase">
                                 {fmt}
                               </span>
                             ))}
                             {engineMeta?.label && (
                               <span
-                                className="text-[9px] text-primary font-mono bg-primary/10 px-1 py-0.5 rounded truncate max-w-[170px]"
+                                className="text-xs text-primary font-mono bg-primary/10 px-1 py-0.5 rounded truncate max-w-[170px]"
                                 title={(engineMeta.reasons ?? []).join(' · ')}
                               >
                                 {engineMeta.label}
@@ -704,7 +704,7 @@ export function ConvertPage() {
 
                           <div className="flex items-center gap-2 mt-1.5">
                             <span className={cn(
-                              'text-[10px] font-bold tracking-wide flex items-center gap-1.5',
+                              'text-xs font-bold tracking-wide flex items-center gap-1.5',
                               isCompleted && 'text-emerald-600 dark:text-emerald-400',
                               isCancelled && 'text-amber-600 dark:text-amber-400',
                               isFailed && 'text-rose-600 dark:text-rose-400',
@@ -717,14 +717,14 @@ export function ConvertPage() {
 
                             {isJobRunning && (
                               <>
-                                <span className="text-[10px] text-muted-foreground/60 font-mono">•</span>
-                                <span className="text-[10px] font-bold font-mono text-foreground">
+                                <span className="text-xs text-muted-foreground/60 font-mono">•</span>
+                                <span className="text-xs font-bold font-mono text-foreground">
                                   {Math.round(job.progress)}%
                                 </span>
                                 {job.eta !== undefined && job.eta > 0 && (
                                   <>
-                                    <span className="text-[10px] text-muted-foreground/60 font-mono">•</span>
-                                    <span className="text-[10px] font-mono text-muted-foreground">
+                                    <span className="text-xs text-muted-foreground/60 font-mono">•</span>
+                                    <span className="text-xs font-mono text-muted-foreground">
                                       ETA: {job.eta}s
                                     </span>
                                   </>
@@ -745,7 +745,7 @@ export function ConvertPage() {
                           className="relative z-10 mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors text-left"
                         >
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider">
+                          <span className="text-xs font-bold uppercase tracking-wider">
                             Rate-limited — swap model or retry with another provider
                           </span>
                         </button>
@@ -761,7 +761,7 @@ export function ConvertPage() {
                           className="relative z-10 mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors text-left"
                         >
                           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider">
+                          <span className="text-xs font-bold uppercase tracking-wider">
                             Some LLM steps skipped (rate-limited) — Retry to refine
                           </span>
                         </button>
@@ -774,7 +774,7 @@ export function ConvertPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => download(job.id, job.outputFormat || (job.availableFormats ?? ['markdown'])[0] || 'markdown')}
-                            className="h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border shadow-sm"
+                            className="h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border shadow-sm"
                           >
                             <Download className="w-3.5 h-3.5" />
                             Download
@@ -786,7 +786,7 @@ export function ConvertPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => cancel(job.id)}
-                            className="h-8 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-500/10"
+                            className="h-8 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-500/10"
                           >
                             Cancel
                           </Button>
@@ -799,7 +799,7 @@ export function ConvertPage() {
                             onClick={() => openSwapManual(job.id)}
                             title="Switch model for this running job"
                             className={cn(
-                              'h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg',
+                              'h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg',
                               job.rateLimited
                                 ? 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
                                 : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
@@ -816,7 +816,7 @@ export function ConvertPage() {
                             size="sm"
                             onClick={() => openSwapManual(job.id)}
                             title="Retry this job — swap model or use another provider"
-                            className="h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                            className="h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                           >
                             <RotateCw className="w-3.5 h-3.5" />
                             Retry
@@ -895,8 +895,8 @@ export function ConvertPage() {
           {jobs.length === 0 && (
             <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border/50 rounded-2xl bg-card/10 text-muted-foreground min-h-[200px]">
               <FileText className="w-8 h-8 text-muted-foreground/45 mb-3 stroke-[1.5]" />
-              <p className="text-xs font-semibold text-muted-foreground">Queue is empty</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-1 max-w-[280px] text-center leading-relaxed">
+              <p className="text-sm font-semibold text-muted-foreground">Queue is empty</p>
+              <p className="text-xs text-muted-foreground/60 mt-1 max-w-[280px] text-center leading-relaxed">
                 Add source files or local paths on the left, then click Convert to start.
               </p>
             </div>

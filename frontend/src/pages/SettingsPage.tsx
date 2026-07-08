@@ -541,7 +541,7 @@ export function SettingsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-end">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Active Provider</label>
+            <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Active Provider</label>
             <Select
               value={activeLLM.provider_id}
               onChange={(val) => {
@@ -561,7 +561,7 @@ export function SettingsPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Active Model</label>
+            <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Active Model</label>
             <Select
               value={activeLLM.model_id}
               onChange={(val) => void handleActiveChange(activeLLM.provider_id, val)}
@@ -693,22 +693,22 @@ export function SettingsPage() {
           {/* Toggle Switch */}
           <div className="flex items-center gap-3">
             {gpuStatus?.status === 'ready' && gpuStatus.cuda_available && (
-              <Badge variant="success" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+              <Badge variant="success" className="px-2.5 py-1 text-xs font-bold uppercase tracking-wider">
                 Ready
               </Badge>
             )}
             {gpuStatus?.status === 'ready' && !gpuStatus.cuda_available && (
-              <Badge variant="warning" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+              <Badge variant="warning" className="px-2.5 py-1 text-xs font-bold uppercase tracking-wider">
                 Restart Required
               </Badge>
             )}
             {(gpuStatus?.status === 'installing' || (gpuStatus?.status === 'not_installed' && gpuEnabled)) && (
-              <Badge variant="processing" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+              <Badge variant="processing" className="px-2.5 py-1 text-xs font-bold uppercase tracking-wider">
                 Installing {gpuStatus.progress}%
               </Badge>
             )}
             {gpuStatus?.status === 'failed' && (
-              <Badge variant="destructive" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+              <Badge variant="destructive" className="px-2.5 py-1 text-xs font-bold uppercase tracking-wider">
                 Verification Failed
               </Badge>
             )}
@@ -724,8 +724,8 @@ export function SettingsPage() {
             >
               <span
                 className={cn(
-                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  gpuEnabled ? 'translate-x-5' : 'translate-x-0'
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full shadow ring-0 transition duration-200 ease-in-out',
+                  gpuEnabled ? 'bg-primary-foreground translate-x-5' : 'bg-white translate-x-0'
                 )}
               />
             </button>
@@ -753,7 +753,7 @@ export function SettingsPage() {
 
               {/* Status explanation & restart message */}
               <div className="text-center space-y-1">
-                <p className="text-[11px] text-muted-foreground font-semibold">
+                <p className="text-xs text-muted-foreground font-semibold">
                   {gpuStatus.status === 'not_installed' && 'Setting up GPU Acceleration backend...'}
                   {gpuStatus.status === 'installing' && 'Downloading & Installing Backend Components...'}
                   {gpuStatus.status === 'ready' && 'GPU Acceleration backend components are ready.'}
@@ -761,7 +761,7 @@ export function SettingsPage() {
                 </p>
                 
                 {gpuStatus.status === 'ready' && gpuStatus.cuda_available && (
-                  <span className="text-[9px] text-emerald-500/80 font-extrabold uppercase tracking-widest select-none">
+                  <span className="text-xs text-emerald-500/80 font-extrabold uppercase tracking-widest select-none">
                     GPU Acceleration is active and running
                   </span>
                 )}
@@ -774,7 +774,7 @@ export function SettingsPage() {
                 <strong className="font-semibold">Error:</strong> {gpuStatus.error_message}
                 <button
                   onClick={() => handleToggleGpu(true)}
-                  className="ml-3 underline text-primary hover:text-primary/80 font-semibold uppercase tracking-wider text-[10px]"
+                  className="ml-3 underline text-primary hover:text-primary/80 font-semibold uppercase tracking-wider text-xs"
                 >
                   Retry Installation
                 </button>
@@ -784,8 +784,8 @@ export function SettingsPage() {
             {/* Log messages */}
             {gpuStatus.logs && gpuStatus.logs.length > 0 && (
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Installation Logs</div>
-                <div className="h-40 overflow-y-auto p-3 bg-black/60 rounded-lg text-[11px] font-mono text-emerald-400 border border-border/10 space-y-1 select-text scrollbar-thin font-semibold text-left">
+                <div className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Installation Logs</div>
+                <div className="h-40 overflow-y-auto p-3 bg-black/60 rounded-lg text-xs font-mono text-emerald-400 border border-border/10 space-y-1 select-text scrollbar-thin font-semibold text-left">
                   {gpuStatus.logs.map((log, i) => (
                     <div key={i} className="whitespace-pre-wrap leading-relaxed">{log}</div>
                   ))}
@@ -810,9 +810,9 @@ export function SettingsPage() {
 
         <div className="p-4 rounded-xl border border-border/50 bg-card/45 space-y-4">
           {/* Detected GPUs summary */}
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-muted-foreground font-semibold uppercase tracking-wider">Detected GPUs:</span>
-            <Badge variant={gpuWorkers && gpuWorkers.detected > 0 ? 'success' : 'secondary'} className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">
+            <Badge variant={gpuWorkers && gpuWorkers.detected > 0 ? 'success' : 'secondary'} className="px-2.5 py-1 text-xs font-bold uppercase tracking-wider">
               {gpuWorkers ? gpuWorkers.detected : '—'}
             </Badge>
             {gpuWorkers && (
@@ -840,7 +840,7 @@ export function SettingsPage() {
                   )}
                 >
                   <span className="block text-xs font-semibold text-foreground">{opt.label}</span>
-                  <span className="block text-[11px] text-muted-foreground mt-0.5 leading-normal">{opt.desc}</span>
+                  <span className="block text-xs text-muted-foreground mt-0.5 leading-normal">{opt.desc}</span>
                 </button>
               )
             })}
@@ -850,10 +850,10 @@ export function SettingsPage() {
           {workerMode === 'manual' && gpuWorkers && (
             <div className="space-y-1.5 animate-fade-in">
               <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">
                   Worker Count
                 </label>
-                <span className="text-[11px] font-bold tabular-nums text-foreground">
+                <span className="text-xs font-bold tabular-nums text-foreground">
                   {Math.min(workerCount, Math.max(1, gpuWorkers.detected))} / {Math.max(1, gpuWorkers.detected)} GPUs
                 </span>
               </div>
@@ -866,7 +866,7 @@ export function SettingsPage() {
                 onChange={(e) => setWorkerCount(Number(e.target.value))}
                 className="w-full h-6 appearance-none bg-transparent accent-primary cursor-pointer [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-muted"
               />
-              <p className="text-[11px] text-muted-foreground leading-normal">
+              <p className="text-xs text-muted-foreground leading-normal">
                 Each worker pins to one GPU and loads its own copy of the marker models (uses more VRAM).
               </p>
             </div>
@@ -874,7 +874,7 @@ export function SettingsPage() {
 
           {/* Restart notice + save */}
           {gpuWorkers?.restart_required && (
-            <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-normal">
+            <p className="text-xs text-amber-600 dark:text-amber-400 leading-normal">
               Changing the worker count restarts the pool — restart the server to apply.
             </p>
           )}
@@ -906,7 +906,7 @@ export function SettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Default Vision Model */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+            <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
               Default Vision Model
             </label>
             <Select
@@ -927,7 +927,7 @@ export function SettingsPage() {
               ]}
               className="w-full md:w-full"
             />
-            <p className="text-[10px] text-muted-foreground/70 leading-normal">
+            <p className="text-xs text-muted-foreground/70 leading-normal">
               {providers.some((p) => (p.models ?? []).some((m) => m.vision_capable))
                 ? 'Override auto-resolution. Only models marked vision-capable in the provider editors above are used for understanding.'
                 : 'No vision-capable models yet. Pick one here, then mark it vision-capable in its provider editor above to enable understanding modes.'}
@@ -936,7 +936,7 @@ export function SettingsPage() {
 
           {/* Per-document image cap */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+            <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
               Per-document Image Cap
             </label>
             <Input
@@ -959,13 +959,13 @@ export function SettingsPage() {
               disabled={isSavingImageSetting}
               className="bg-background/50 h-9 text-xs"
             />
-            <p className="text-[10px] text-muted-foreground/70 leading-normal">
+            <p className="text-xs text-muted-foreground/70 leading-normal">
               Caps VLM work per document (1–1000). Images beyond the cap keep their original reference.
             </p>
           </div>
         </div>
 
-        <p className="text-[10px] text-muted-foreground/60 leading-normal">
+        <p className="text-xs text-muted-foreground/60 leading-normal">
           Cache management, privacy mode, and batch-API toggles are planned for a later phase (see roadmap).
         </p>
       </div>
@@ -1002,7 +1002,7 @@ export function SettingsPage() {
                 variant="outline"
                 disabled={isSelfHealing || isResetting}
                 onClick={handleSelfHeal}
-                className="w-full text-[10px] font-bold uppercase tracking-wider h-8 rounded-lg border-border/50 hover:bg-muted/40 gap-1.5"
+                className="w-full text-xs font-bold uppercase tracking-wider h-8 rounded-lg border-border/50 hover:bg-muted/40 gap-1.5"
               >
                 {isSelfHealing ? (
                   <>
@@ -1059,7 +1059,7 @@ export function SettingsPage() {
                 variant="outline"
                 disabled={isSelfHealing || isResetting}
                 onClick={triggerResetConfirm}
-                className="w-full text-[10px] font-bold uppercase tracking-wider h-8 rounded-lg border-rose-500/30 hover:border-rose-500 hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition-colors gap-1.5"
+                className="w-full text-xs font-bold uppercase tracking-wider h-8 rounded-lg border-rose-500/30 hover:border-rose-500 hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition-colors gap-1.5"
               >
                 <RotateCcw className="w-3.5 h-3.5 mr-1 text-muted-foreground hover:text-rose-500" />
                 Reset Environment
@@ -1097,14 +1097,14 @@ export function SettingsPage() {
                 <Button
                   variant="ghost"
                   onClick={handleGoBack}
-                  className="flex-1 text-[10px] font-bold uppercase tracking-wider h-8 rounded-lg text-red-200 hover:text-white hover:bg-white/10"
+                  className="flex-1 text-xs font-bold uppercase tracking-wider h-8 rounded-lg text-red-200 hover:text-white hover:bg-white/10"
                 >
                   Go Back
                 </Button>
                 <Button
                   disabled={isResetting}
                   onClick={handleReset}
-                  className="flex-1 text-[10px] font-bold uppercase tracking-wider h-8 rounded-lg bg-white text-red-700 hover:bg-red-50 transition-colors shadow-md border-0"
+                  className="flex-1 text-xs font-bold uppercase tracking-wider h-8 rounded-lg bg-white text-red-700 hover:bg-red-50 transition-colors shadow-md border-0"
                 >
                   {isResetting ? (
                     <>
@@ -1137,7 +1137,7 @@ export function SettingsPage() {
                   <h3 className="font-extrabold text-sm text-foreground uppercase tracking-wider">
                     {draftProvider.label} Credentials
                   </h3>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Manage API endpoints, keys, and fallbacks.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Manage API endpoints, keys, and fallbacks.</p>
                 </div>
               </div>
               <button
@@ -1154,7 +1154,7 @@ export function SettingsPage() {
               {/* Base URL (if applicable) */}
               {draftProvider.type !== 'gemini' && draftProvider.type !== 'claude' && (
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                  <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                     <Globe className="w-3.5 h-3.5 text-muted-foreground" />
                     {draftProvider.type === 'azure' ? 'Azure Endpoint URL' : 'API Base URL'}
                   </label>
@@ -1178,7 +1178,7 @@ export function SettingsPage() {
               )}              {/* Primary API Key */}
               {draftProvider.type !== 'ollama' && (
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                  <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                     <Key className="w-3.5 h-3.5 text-muted-foreground" />
                     {draftProvider.type === 'vertex' ? 'Google Cloud Project ID' : 'Primary API Key'}
                   </label>
@@ -1211,7 +1211,7 @@ export function SettingsPage() {
               {draftProvider.type !== 'ollama' && draftProvider.type !== 'vertex' && (
                 <div className="space-y-3 pt-2 border-t border-border/10">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                    <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                       <ListPlus className="w-3.5 h-3.5 text-muted-foreground" />
                       Fallback API Keys ({draftProvider.fallback_api_keys.length}/5)
                     </label>
@@ -1223,7 +1223,7 @@ export function SettingsPage() {
                             draft.fallback_api_keys.push('')
                           })
                         }}
-                        className="text-[10px] font-bold text-primary hover:underline uppercase flex items-center gap-1"
+                        className="text-xs font-bold text-primary hover:underline uppercase flex items-center gap-1"
                       >
                         <Plus className="w-3 h-3" /> Add
                       </button>
@@ -1233,7 +1233,7 @@ export function SettingsPage() {
                   <div className="space-y-2">
                     {draftProvider.fallback_api_keys.map((keyVal, idx) => (
                       <div key={idx} className="flex gap-2 items-center">
-                        <span className="text-[10px] font-bold font-mono text-muted-foreground shrink-0 w-4">#{idx + 1}</span>
+                        <span className="text-xs font-bold font-mono text-muted-foreground shrink-0 w-4">#{idx + 1}</span>
                         <Input
                           type="password"
                           value={keyVal}
@@ -1264,7 +1264,7 @@ export function SettingsPage() {
                       </div>
                     ))}
                     {draftProvider.fallback_api_keys.length === 0 && (
-                      <div className="text-[11px] text-muted-foreground/60 italic py-2 text-center">
+                      <div className="text-xs text-muted-foreground/60 italic py-2 text-center">
                         No fallback API keys configured.
                       </div>
                     )}
@@ -1274,7 +1274,7 @@ export function SettingsPage() {
 
               {/* Concurrency cap */}
               <div className="space-y-2 pt-2 border-t border-border/10">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                   <Activity className="w-3.5 h-3.5 text-muted-foreground" />
                   Max Concurrent API Calls
                 </label>
@@ -1292,7 +1292,7 @@ export function SettingsPage() {
                   placeholder="Unlimited"
                   className="bg-background/50 text-xs"
                 />
-                <p className="text-[10px] text-muted-foreground/60 leading-normal">
+                <p className="text-xs text-muted-foreground/60 leading-normal">
                   Caps simultaneous in-flight requests to this provider across all jobs. Lower it if the provider returns 504 / DEADLINE_EXCEEDED under parallel load. Leave blank for unlimited.
                 </p>
               </div>
@@ -1314,7 +1314,7 @@ export function SettingsPage() {
                   )}
                   <div>
                     <div className="font-bold text-xs">{testResult.success ? 'Connection Successful' : 'Connection Failed'}</div>
-                    <div className="text-[10px] mt-1 leading-normal opacity-90 font-mono whitespace-pre-wrap">{testResult.message}</div>
+                    <div className="text-xs mt-1 leading-normal opacity-90 font-mono whitespace-pre-wrap">{testResult.message}</div>
                   </div>
                 </div>
               )}
@@ -1357,7 +1357,7 @@ export function SettingsPage() {
                   <h3 className="font-extrabold text-sm text-foreground uppercase tracking-wider">
                     {draftProvider.label} Models
                   </h3>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Add, query, and edit model threshold parameters.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Add, query, and edit model threshold parameters.</p>
                 </div>
               </div>
               <button
@@ -1375,12 +1375,12 @@ export function SettingsPage() {
               {draftProvider.type !== 'vertex' && (
                 <div className="bg-card/40 border border-border/40 p-4 rounded-xl space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold tracking-widest text-muted-foreground uppercase">Query API Models List</span>
+                    <span className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">Query API Models List</span>
                     <Button
                       size="sm"
                       onClick={handleFetchModels}
                       disabled={isFetchingModels}
-                      className="h-8 text-[9px] font-bold uppercase tracking-wider rounded-lg px-3 gap-1.5"
+                      className="h-8 text-xs font-bold uppercase tracking-wider rounded-lg px-3 gap-1.5"
                     >
                       {isFetchingModels && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       Fetch Models
@@ -1406,7 +1406,7 @@ export function SettingsPage() {
                                   {modelId}
                                 </span>
                                 {alreadyAdded ? (
-                                  <Badge variant="secondary" className="text-[9px] uppercase font-bold tracking-wider opacity-60">Added</Badge>
+                                  <Badge variant="secondary" className="text-xs uppercase font-bold tracking-wider opacity-60">Added</Badge>
                                 ) : (
                                   <button
                                     type="button"
@@ -1417,7 +1417,7 @@ export function SettingsPage() {
                                       })
                                       toast.success(`Model "${modelId}" added`)
                                     }}
-                                    className="text-[10px] font-bold text-primary hover:underline uppercase"
+                                    className="text-xs font-bold text-primary hover:underline uppercase"
                                   >
                                     Add
                                   </button>
@@ -1433,7 +1433,7 @@ export function SettingsPage() {
 
               {/* Add Custom Model ID */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">Add Custom Model ID</label>
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">Add Custom Model ID</label>
                 <div className="flex gap-2">
                   <Input
                     value={customModelId}
@@ -1457,7 +1457,7 @@ export function SettingsPage() {
                       setCustomModelId('')
                       toast.success(`Model "${cleanId}" added`)
                     }}
-                    className="text-[10px] font-bold uppercase tracking-wider h-9.5 rounded-lg px-4 gap-1"
+                    className="text-xs font-bold uppercase tracking-wider h-9.5 rounded-lg px-4 gap-1"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add
                   </Button>
@@ -1466,7 +1466,7 @@ export function SettingsPage() {
 
               {/* Configured Models List */}
               <div className="space-y-3 pt-4 border-t border-border/15">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                   Configured Models ({draftProvider.models.length})
                 </label>
 
@@ -1496,7 +1496,7 @@ export function SettingsPage() {
                           </button>
 
                           <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/80">Vision</span>
+                            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">Vision</span>
                             <button
                               type="button"
                               role="switch"
@@ -1541,14 +1541,14 @@ export function SettingsPage() {
                         {/* Expandable settings panel */}
                         {isExpanded && (
                           <div className="p-4 border-t border-border/10 bg-background/30 space-y-4 text-xs animate-fade-in text-left">
-                            <h4 className="text-[9px] font-bold tracking-wider text-muted-foreground uppercase pb-1 border-b border-border/10">
+                            <h4 className="text-xs font-bold tracking-wider text-muted-foreground uppercase pb-1 border-b border-border/10">
                               Threshold Parameters Override
                             </h4>
 
                             <div className="grid grid-cols-2 gap-3.5">
                               {/* Timeout */}
                               <div className="space-y-1">
-                                <label className="text-[9px] font-semibold text-muted-foreground uppercase">Timeout (s)</label>
+                                <label className="text-xs font-semibold text-muted-foreground uppercase">Timeout (s)</label>
                                 <Input
                                   type="number"
                                   value={model.timeout ?? ''}
@@ -1565,7 +1565,7 @@ export function SettingsPage() {
 
                               {/* Max Retries */}
                               <div className="space-y-1">
-                                <label className="text-[9px] font-semibold text-muted-foreground uppercase">Max Retries</label>
+                                <label className="text-xs font-semibold text-muted-foreground uppercase">Max Retries</label>
                                 <Input
                                   type="number"
                                   value={model.max_retries ?? ''}
@@ -1582,7 +1582,7 @@ export function SettingsPage() {
 
                               {/* Max Output Tokens */}
                               <div className="space-y-1">
-                                <label className="text-[9px] font-semibold text-muted-foreground uppercase">Max Output Tokens</label>
+                                <label className="text-xs font-semibold text-muted-foreground uppercase">Max Output Tokens</label>
                                 <Input
                                   type="number"
                                   value={model.max_output_tokens ?? ''}
@@ -1599,7 +1599,7 @@ export function SettingsPage() {
 
                               {/* Context Window */}
                               <div className="space-y-1">
-                                <label className="text-[9px] font-semibold text-muted-foreground uppercase">Context Window</label>
+                                <label className="text-xs font-semibold text-muted-foreground uppercase">Context Window</label>
                                 <Input
                                   type="number"
                                   value={model.context_window ?? ''}
@@ -1671,7 +1671,7 @@ export function SettingsPage() {
 
             <div className="p-6 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Provider Name</label>
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Provider Name</label>
                 <Input
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
@@ -1681,7 +1681,7 @@ export function SettingsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">API Protocol</label>
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">API Protocol</label>
                 <Select
                   value={customType}
                   onChange={(val) => setCustomType(val)}
@@ -1694,7 +1694,7 @@ export function SettingsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Base Endpoint URL</label>
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Base Endpoint URL</label>
                 <Input
                   value={customBaseUrl}
                   onChange={(e) => setCustomBaseUrl(e.target.value)}

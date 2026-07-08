@@ -198,7 +198,7 @@ export function HistoryPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Total Conversions</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Total Conversions</p>
             <h3 className="text-3xl font-extrabold mt-2 text-foreground">{stats.total}</h3>
           </div>
           <div className="p-3 rounded-xl bg-secondary text-foreground border border-border/30">
@@ -208,7 +208,7 @@ export function HistoryPage() {
 
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Success Rate</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Success Rate</p>
             <h3 className="text-3xl font-extrabold mt-2 text-foreground">{stats.successRate}%</h3>
           </div>
           <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -218,7 +218,7 @@ export function HistoryPage() {
 
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Failed Jobs</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Failed Jobs</p>
             <h3 className="text-3xl font-extrabold mt-2 text-rose-600 dark:text-rose-400">{stats.failed}</h3>
           </div>
           <div className="p-3 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
@@ -228,7 +228,7 @@ export function HistoryPage() {
 
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Active Tasks</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Active Tasks</p>
             <h3 className="text-3xl font-extrabold mt-2 text-amber-600 dark:text-amber-400">{stats.processing}</h3>
           </div>
           <div className="p-3 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
@@ -320,17 +320,17 @@ export function HistoryPage() {
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
                         <p className="text-sm font-semibold truncate text-foreground">{job.filename}</p>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-[10px] py-0.5 px-1.5">
+                          <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-xs py-0.5 px-1.5">
                             {job.status}
                           </Badge>
                           {job.conversion_metadata?.engine?.label && (
-                            <Badge variant="outline" className="w-fit text-[9px] py-0 px-1 border-primary/20 bg-primary/5 text-primary">
+                            <Badge variant="outline" className="w-fit text-xs py-0 px-1 border-primary/20 bg-primary/5 text-primary">
                               {job.conversion_metadata.engine.label}
                             </Badge>
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-muted-foreground/90 font-medium">
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground/90 font-medium">
                         <span className="uppercase text-primary font-bold">{job.output_format}</span>
                         <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                         <span>{job.converter}</span>
@@ -393,19 +393,19 @@ export function HistoryPage() {
                         <div className="space-y-3 pt-3">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="p-2.5 rounded-lg border border-border/30 bg-background/50">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Job ID</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Job ID</span>
                               <span className="text-xs font-mono break-all text-foreground/90 select-all block mt-1">{job.id}</span>
                             </div>
 
                             <div className="p-2.5 rounded-lg border border-border/30 bg-background/50">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Completed At</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Completed At</span>
                               <span className="text-xs font-medium text-foreground/90 block mt-1">
                                 {job.completed_at ? formatDate(job.completed_at) : 'N/A'}
                               </span>
                             </div>
 
                             <div className="p-2.5 rounded-lg border border-border/30 bg-background/50">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Status Code</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Status Code</span>
                               <span className="text-xs font-mono font-bold capitalize text-foreground/90 block mt-1">{job.status}</span>
                             </div>
                           </div>
@@ -424,7 +424,7 @@ export function HistoryPage() {
                                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
                                 <span>Execution Mismatch (Error Message)</span>
                               </div>
-                              <pre className="text-[11px] font-mono whitespace-pre-wrap leading-relaxed mt-2 p-2 rounded bg-rose-950/20 border border-rose-500/10">
+                              <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed mt-2 p-2 rounded bg-rose-950/20 border border-rose-500/10">
                                 {job.error_message}
                               </pre>
                             </div>
@@ -433,7 +433,7 @@ export function HistoryPage() {
                           {/* Converted text preview (if completed) */}
                           {job.status === 'completed' && (
                             <div className="space-y-1.5">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Document Output Preview</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Document Output Preview</span>
                               <div className="border border-border/40 rounded-xl overflow-hidden shadow-sm bg-slate-950/5/10 max-h-[220px] overflow-y-auto">
                                 {loadingPreviews[job.id] ? (
                                   <div className="p-6 text-center text-xs text-muted-foreground italic bg-background/40 flex items-center justify-center gap-2">
@@ -441,7 +441,7 @@ export function HistoryPage() {
                                     Loading document preview...
                                   </div>
                                 ) : job.result_text ? (
-                                  <pre className="p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text text-slate-800 dark:text-slate-300">
+                                  <pre className="p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap select-text text-slate-800 dark:text-slate-300">
                                     {job.result_text}
                                   </pre>
                                 ) : (

@@ -65,21 +65,21 @@
     border-color: hsl(var(--border));
   }
 
-  /* Mouse/touch focus stays quiet; keyboard focus gets a visible brand ring. */
+  /* Keep focus states visually quiet; avoid browser/Tailwind blue-white rings. */
   input:focus,
   textarea:focus,
   select:focus,
-  [contenteditable="true"]:focus {
-    outline: none;
-  }
-
+  button:focus,
+  [role="button"]:focus,
+  [contenteditable="true"]:focus,
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible,
   [contenteditable="true"]:focus-visible {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: 1px;
-    border-color: hsl(var(--ring));
+    outline: none !important;
+    box-shadow: none !important;
   }
 
   body {
@@ -252,5 +252,18 @@
   animation: shake 0.4s ease-in-out forwards;
 }
 
+/* Final focus override after Tailwind plugins. No blue/white focus rings. */
+:where(input, textarea, select, button, [role="button"], [tabindex]):focus,
+:where(input, textarea, select, button, [role="button"], [tabindex]):focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-color: transparent !important;
+  --tw-ring-offset-color: transparent !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+}
 
-
+:where(input, textarea, select):focus,
+:where(input, textarea, select):focus-visible {
+  border-color: hsl(var(--input)) !important;
+}

@@ -95,11 +95,11 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
       <div className="pb-1">
         <div className="flex items-center gap-2">
           <Mic className="w-4 h-4 text-primary" />
-          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">
             Audio & Voice Notes
           </label>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+        <p className="text-xs text-muted-foreground mt-1 leading-normal">
           Configure transcription, speakers, vocabulary, enhancement, and more.
         </p>
       </div>
@@ -110,7 +110,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
         title="Transcription"
         defaultOpen
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <SectionLabel label="Provider" help="Speech-to-text engine. Local runs on your machine; cloud requires opt-in." />
             <Select
@@ -141,12 +141,12 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               onChange={(e) => onChange('audio_model', e.target.value)}
               placeholder={cap?.default_model || 'tiny.en'}
               disabled={disabled}
-              className="bg-background/50 h-9 text-xs"
+              className="bg-background/50"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
           <div className="space-y-1.5">
             <SectionLabel label="Language" help="Spoken language hint (e.g., en, es, fr, hi). Improves accuracy." />
             <Input
@@ -154,7 +154,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               onChange={(e) => onChange('audio_language', e.target.value || undefined)}
               placeholder="auto-detect"
               disabled={disabled}
-              className="bg-background/50 h-9 text-xs"
+              className="bg-background/50"
             />
           </div>
 
@@ -217,7 +217,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 <span className={cn('text-xs font-semibold block', isActive ? 'text-primary' : 'text-foreground')}>
                   {opt.label}
                 </span>
-                <span className="text-[10px] text-muted-foreground mt-0.5 block leading-snug">
+                <span className="text-xs text-muted-foreground mt-0.5 block leading-snug">
                   {opt.desc}
                 </span>
               </button>
@@ -259,7 +259,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
       <button
         type="button"
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-2 w-full py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 hover:text-foreground transition-colors"
+        className="flex items-center gap-2 w-full py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground/70 hover:text-foreground transition-colors"
       >
         <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showAdvanced && 'rotate-180')} />
         <span>{showAdvanced ? 'Hide Advanced Controls' : 'Show Advanced Controls'}</span>
@@ -283,7 +283,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               <ProviderWarning message={`${cap.provider_label} does not support speaker diarization. All segments will be labeled speaker_0.`} />
             )}
             {config.audio_diarization && cap?.supports_diarization && (
-              <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                 <div className="space-y-1.5">
                   <SectionLabel label="Min Speakers" help="Expected minimum speaker count." />
                   <Input
@@ -294,7 +294,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                     min={1}
                     max={20}
                     disabled={disabled}
-                    className="bg-background/50 h-9 text-xs"
+                    className="bg-background/50"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -307,12 +307,12 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                     min={1}
                     max={20}
                     disabled={disabled}
-                    className="bg-background/50 h-9 text-xs"
+                    className="bg-background/50"
                   />
                 </div>
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground/70 mt-2 leading-snug">
+            <p className="text-xs text-muted-foreground/70 mt-2 leading-snug">
               Speaker labels are anonymous by default. Only labels you explicitly map to names are renamed.
             </p>
           </CollapsibleSection>
@@ -400,11 +400,11 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                         {ENHANCEMENT_LABELS[config.audio_text_enhancement_strength ?? 0]?.label ?? 'Off'}
                       </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground leading-snug">
+                    <p className="text-xs text-muted-foreground leading-snug">
                       {ENHANCEMENT_LABELS[config.audio_text_enhancement_strength ?? 0]?.desc}
                     </p>
                     {(config.audio_text_enhancement_strength ?? 0) >= 4 && (
-                      <div className="text-[10px] text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug">
+                      <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug">
                         Higher levels may paraphrase speech. Raw transcript and source refs preserved for audit.
                       </div>
                     )}
@@ -430,7 +430,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                       className="w-full"
                     />
                     {!config.audio_text_enhancement_enabled && (
-                      <p className="text-[10px] text-blue-600 dark:text-blue-400 leading-snug">
+                      <p className="text-xs text-blue-600 dark:text-blue-400 leading-snug">
                         Structural-only mode will reorganize the transcript but will not rewrite transcript words.
                       </p>
                     )}
@@ -453,7 +453,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                   onChange={(e) => onChange('audio_context', e.target.value)}
                   placeholder="optional context for batch processing"
                   disabled={disabled}
-                  className="bg-background/50 h-9 text-xs"
+                  className="bg-background/50"
                 />
               </div>
               <ToggleChip
@@ -462,7 +462,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 onChange={(v) => onChange('audio_contradiction_detection', v)}
                 disabled={disabled}
               />
-              <p className="text-[10px] text-muted-foreground/70 leading-snug">
+              <p className="text-xs text-muted-foreground/70 leading-snug">
                 When enabled, contradictory claims across segments and speakers are surfaced with source refs. The system will not auto-resolve conflicts.
               </p>
             </div>
@@ -490,18 +490,18 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 <ProviderWarning message="Cloud transcript enhancement is not shipped in this build. Enhancement uses local deterministic source-bound notes only." />
               )}
               {(config.audio_allow_cloud_stt || config.audio_enhancement_allow_cloud) && (
-                <div className="text-[10px] text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug flex items-start gap-2">
+                <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug flex items-start gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span>Audio data will leave your machine. Cloud usage is recorded in job metadata.</span>
                 </div>
               )}
               <div className="flex items-center gap-2 pt-1">
                 {isCloud ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
                     <Cloud className="w-3 h-3" /> Cloud provider selected
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                     <HardDrive className="w-3 h-3" /> Local processing only
                   </span>
                 )}
@@ -522,7 +522,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 disabled={disabled || !audioBenchmarkAvailable}
               />
               <ProviderWarning message="Provider comparison is not shipped in this build. The backend rejects this option until a benchmark runner and at least two adapters ship." />
-              <p className="text-[10px] text-muted-foreground/70 leading-snug">
+              <p className="text-xs text-muted-foreground/70 leading-snug">
                 Reserved for future latency, confidence, vocabulary-hit, and segment-count comparison reports.
               </p>
             </div>
@@ -558,11 +558,11 @@ function CollapsibleSection({
         className="flex items-center gap-2 w-full px-3.5 py-2.5 hover:bg-muted/20 transition-colors"
       >
         <Icon className="w-3.5 h-3.5 text-primary/80" />
-        <span className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex-1 text-left">
+        <span className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex-1 text-left">
           {title}
         </span>
         {badge && (
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+          <span className="text-xs font-semibold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
             {badge}
           </span>
         )}
@@ -581,8 +581,8 @@ function CollapsibleSection({
 
 function SectionLabel({ label, help }: { label: string; help: string }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+    <div className="flex items-start gap-1.5">
+      <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block leading-5">
         {label}
       </label>
       <HelpBubble text={help} />
@@ -593,8 +593,8 @@ function SectionLabel({ label, help }: { label: string; help: string }) {
 function HelpBubble({ text }: { text: string }) {
   return (
     <div className="group relative">
-      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help" />
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-[10px] leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-30 pointer-events-none text-left">
+      <HelpCircle className="mt-[3px] w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help" />
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-30 pointer-events-none text-left">
         {text}
       </div>
     </div>
@@ -633,8 +633,8 @@ function ToggleChip({
       >
         <div
           className={cn(
-            'absolute top-[2px] w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200',
-            checked ? 'left-[15px]' : 'left-[2px]'
+            'absolute top-[2px] w-3 h-3 rounded-full shadow-sm transition-transform duration-200',
+            checked ? 'left-[15px] bg-primary-foreground' : 'left-[2px] bg-white'
           )}
         />
       </div>
@@ -647,7 +647,7 @@ function ToggleChip({
 
 function ProviderWarning({ message }: { message: string }) {
   return (
-    <div className="text-[10px] text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug mt-2 flex items-start gap-2">
+    <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug mt-2 flex items-start gap-2">
       <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
       <span>{message}</span>
     </div>
@@ -656,7 +656,7 @@ function ProviderWarning({ message }: { message: string }) {
 
 function CloudBadge() {
   return (
-    <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded mt-1">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded mt-1">
       <Cloud className="w-3 h-3" />
       Cloud provider — audio leaves your machine
     </span>

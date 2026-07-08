@@ -87,7 +87,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
           <div className="flex flex-col justify-center gap-0.5">
             <span className="text-xs font-bold text-foreground leading-snug">{routingPlan.label}</span>
             {routingPlan.confidence > 0 && (
-              <span className="text-[10px] text-muted-foreground font-mono leading-none">
+              <span className="text-xs text-muted-foreground font-mono leading-none">
                 Confidence: {(routingPlan.confidence * 100).toFixed(0)}%
               </span>
             )}
@@ -103,7 +103,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
         </div>
 
         {hasFallback && (
-          <div className="flex items-center gap-1 bg-muted/40 border border-border/20 rounded-lg px-2.5 py-1 text-[10px] text-muted-foreground font-mono">
+          <div className="flex items-center gap-1 bg-muted/40 border border-border/20 rounded-lg px-2.5 py-1 text-xs text-muted-foreground font-mono">
             <span>Fallback Chain: </span>
             {routingPlan.fallback_chain.map((item, idx) => (
               <span key={item} className="flex items-center">
@@ -130,7 +130,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
         <div className="space-y-2" data-testid="mixed-routing-segments">
           <div className="flex items-center gap-1.5">
             <GitBranch className="w-3.5 h-3.5 text-primary" />
-            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Page Segments</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Page Segments</span>
           </div>
           <div className="overflow-hidden rounded-lg border border-border/30 bg-background/30">
             {mixedSegments.map((segment, index) => {
@@ -151,7 +151,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
                   <span className="font-semibold text-primary truncate" title={segment.actual_engine ?? actual}>
                     {actual}
                   </span>
-                  <span className="text-[11px] text-muted-foreground truncate" title={segment.fallback_reason ?? (changedEngine ? `Requested ${requested}` : '')}>
+                  <span className="text-xs text-muted-foreground truncate" title={segment.fallback_reason ?? (changedEngine ? `Requested ${requested}` : '')}>
                     {segment.fallback_reason ?? (changedEngine ? `Requested ${requested}` : 'Segment completed')}
                   </span>
                 </div>
@@ -164,7 +164,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
       {/* Probe Scores Grid (suppressed when preliminary) */}
       {showProbeGrid && routingPlan.probe_result && (
         <div className="space-y-2">
-          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">PDF Probing Analysis</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">PDF Probing Analysis</span>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
             {Object.entries(SCORE_LABELS).map(([key, label]) => {
               const val = routingPlan.probe_result?.[key]
@@ -182,7 +182,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
                       : 'border-border/30 bg-background/40 text-muted-foreground'
                   )}
                 >
-                  <span className="text-[10px] block leading-tight font-medium mb-1">{label}</span>
+                  <span className="text-xs block leading-tight font-medium mb-1">{label}</span>
                   <div className="flex items-center gap-1">
                     <span className={cn('text-sm font-extrabold font-mono', isUnsafe ? 'text-rose-600 dark:text-rose-400' : 'text-foreground/90')}>
                       {formattedVal}
@@ -204,7 +204,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {hasReasons && (
           <div className="space-y-1.5">
-            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Routing Reasons</span>
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Routing Reasons</span>
             <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-4 leading-relaxed">
               {routingPlan.reasons.map((r, i) => (
                 <li key={i}>{r}</li>
@@ -215,7 +215,7 @@ export function RoutingAnalysis({ plan, title, className }: RoutingAnalysisProps
 
         {hasWarnings && (
           <div className="space-y-1.5">
-            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Warnings</span>
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Warnings</span>
             <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1 list-none leading-relaxed">
               {routingPlan.warnings.map((w, i) => (
                 <li key={i} className="flex gap-1.5 items-start">

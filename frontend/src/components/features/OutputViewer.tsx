@@ -75,7 +75,7 @@ export function OutputViewer({
           <span
             role="note"
             aria-label="External image blocked for privacy"
-            className="not-prose inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-sans text-amber-800 dark:text-amber-200"
+            className="not-prose inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-sans text-amber-800 dark:text-amber-200"
             title={blockedSrc}
           >
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -248,12 +248,12 @@ export function OutputViewer({
               <div className="prose prose-sm dark:prose-invert max-w-none">
                 {imageUnderstanding && imageUnderstanding.length > 0 && (
                   <div className="not-prose flex flex-wrap items-center gap-x-6 gap-y-3 p-4 mb-5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 shadow-sm">
-                    <span className="text-[10px] font-extrabold tracking-widest text-slate-400 dark:text-slate-500 uppercase w-full mb-0.5">
+                    <span className="text-xs font-extrabold tracking-widest text-slate-400 dark:text-slate-500 uppercase w-full mb-0.5">
                       VLM Processed Images ({imageUnderstanding.length})
                     </span>
                     {imageUnderstanding.map((meta, i) => (
                       <div key={meta.image_name} className="flex items-center gap-2 pr-4 border-r border-slate-200 dark:border-slate-800 last:border-0">
-                        <span className="text-[10px] font-mono text-muted-foreground max-w-[120px] truncate" title={meta.image_name}>
+                        <span className="text-xs font-mono text-muted-foreground max-w-[120px] truncate" title={meta.image_name}>
                           {meta.image_name}
                         </span>
                         <ImageUnderstandingBadge
@@ -379,7 +379,7 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
             <div className="font-bold">Audio review suggested</div>
-            <div className="mt-0.5 text-[11px]">
+            <div className="mt-0.5 text-xs">
               Low confidence: {lowConfidenceCount}; unknown confidence: {unknownConfidenceCount}
             </div>
           </div>
@@ -388,7 +388,7 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
 
       {speakers.length > 0 && (
         <section className="space-y-2">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Speaker Timeline</h4>
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Speaker Timeline</h4>
           <div className="flex flex-wrap gap-2">
             {speakers.map((speaker, index) => {
               const speakerId = displayValue(speaker.speaker, `speaker_${index}`)
@@ -405,7 +405,7 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
 
       {(requestedVocabularyCount > 0 || detectedVocabularyCount > 0) && (
         <section className="space-y-2">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Vocabulary</h4>
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Vocabulary</h4>
           <div className="rounded-lg border border-border/40 bg-card/30 p-3">
             <div>Requested: {requestedVocabularyCount}; detected: {detectedVocabularyCount}</div>
             {detectedVocabulary.length > 0 && (
@@ -419,7 +419,7 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
       )}
 
       <section className="space-y-2">
-        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confidence Timeline</h4>
+        <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Confidence Timeline</h4>
         <div className="space-y-2">
           {segments.length === 0 ? (
             <div className="text-muted-foreground">No audio segments in metadata.</div>
@@ -440,7 +440,7 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
                       : 'border-emerald-500/25'
                 )}
               >
-                <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <code>{formatMs(segment.start_ms)}-{formatMs(segment.end_ms)}</code>
                   <span>{displayValue(segment.speaker, 'speaker_0')}</span>
                   <span>{segmentId}</span>
@@ -462,7 +462,7 @@ function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
 function AudioMetric({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
   return (
     <div className="rounded-lg border border-border/40 bg-card/30 p-3 min-w-0">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</div>
       <div className={cn('mt-1 truncate font-semibold', tone === 'ok' && 'text-emerald-600 dark:text-emerald-400', tone === 'warn' && 'text-amber-600 dark:text-amber-400')}>
         {value}
       </div>

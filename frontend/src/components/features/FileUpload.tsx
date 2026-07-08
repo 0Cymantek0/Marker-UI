@@ -59,7 +59,7 @@ function getFileIcon(name: string) {
 function PlanDetails({ control }: { control: SourceEngineControl }) {
   if (control.loading) {
     return (
-      <div className="flex items-center gap-2 text-[11px] text-muted-foreground rounded-lg border border-border/30 bg-card/30 p-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border border-border/30 bg-card/30 p-3">
         <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
         Checking route...
       </div>
@@ -67,7 +67,7 @@ function PlanDetails({ control }: { control: SourceEngineControl }) {
   }
   if (control.error) {
     return (
-      <div className="flex items-center gap-2 text-[11px] text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+      <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
         {control.error}
       </div>
@@ -228,10 +228,10 @@ export function FileUpload({
             </div>
 
             <div className="text-center space-y-1">
-              <p className="text-xs font-bold text-foreground">
+              <p className="text-sm font-bold text-foreground">
                 {isDragOver ? 'Release to upload your files' : 'Drag & drop files here or click to browse'}
               </p>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 PDF, DOCX, XLSX, PPTX, EPUB, HTML, or images (select multiple)
               </p>
             </div>
@@ -240,7 +240,7 @@ export function FileUpload({
           {/* Selected Files List */}
           {selectedFiles.length > 0 && (
             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-              <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground tracking-wider uppercase">
+              <div className="flex items-center justify-between text-xs font-bold text-muted-foreground tracking-wider uppercase">
                 <span>Selected Files ({selectedFiles.length})</span>
                 <button
                   type="button"
@@ -268,10 +268,10 @@ export function FileUpload({
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold truncate text-foreground">{file.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{formatSize(file.size)}</p>
+                          <p className="text-sm font-semibold truncate text-foreground">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
                           {engineControl && (
-                            <p className="text-[9px] text-muted-foreground truncate" title={engineControl.title}>
+                            <p className="text-xs text-muted-foreground truncate" title={engineControl.title}>
                               {engineControl.status}
                             </p>
                           )}
@@ -324,14 +324,14 @@ export function FileUpload({
         /* Local paths text area */
         <div className="space-y-2 animate-fade-in">
           <div className="flex items-center justify-between">
-            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+            <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
               Absolute Local File Paths (One Per Line)
             </label>
             <button
               type="button"
               onClick={handleBrowseLocalFiles}
               disabled={disabled}
-              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-all hover:translate-x-0.5 active:scale-95"
+              className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-all hover:translate-x-0.5 active:scale-95"
             >
               <FolderOpen className="w-3 h-3" />
               Browse Files...
@@ -344,7 +344,7 @@ export function FileUpload({
             placeholder="e.g. C:\path\to\document.pdf&#10;e.g. C:\path\to\report.docx"
             className="w-full h-[120px] bg-background/50 border border-border/80 rounded-xl p-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none transition-all font-mono leading-relaxed"
           />
-          <p className="text-[10px] text-muted-foreground/80 leading-normal">
+          <p className="text-xs text-muted-foreground/80 leading-normal">
             * Backend reads files directly from your computer. Outputs will save to the same folder as the input file unless a custom folder is specified below.
           </p>
           {localPathEngineControls && localPathEngineControls.length > 0 && (
@@ -359,10 +359,10 @@ export function FileUpload({
                     >
                       <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-foreground truncate" title={control.title}>
+                        <p className="text-sm font-semibold text-foreground truncate" title={control.title}>
                           {control.title}
                         </p>
-                        <p className="text-[9px] text-muted-foreground truncate">
+                        <p className="text-xs text-muted-foreground truncate">
                           {control.status}
                         </p>
                       </div>
@@ -401,7 +401,7 @@ export function FileUpload({
       <div className="space-y-2 pt-2 border-t border-border/10">
         <div className="flex items-center gap-1.5">
           <FolderOpen className="w-3.5 h-3.5 text-primary" />
-          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block mt-0.5">
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block mt-0.5">
             Output Folder Path (Optional)
           </label>
         </div>
@@ -423,7 +423,7 @@ export function FileUpload({
             Browse...
           </button>
         </div>
-        <p className="text-[9px] text-muted-foreground/75 leading-normal">
+        <p className="text-xs text-muted-foreground/75 leading-normal">
           * Leave blank to save to the default directory (or same folder as the input file when using local paths).
         </p>
       </div>

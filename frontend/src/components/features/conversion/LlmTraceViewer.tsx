@@ -101,7 +101,7 @@ export function LlmTraceViewer({ open, jobId, filename, isRunning, onClose, poll
               <h3 id="llm-trace-title" className="font-extrabold text-base text-foreground uppercase tracking-wider">
                 LLM Call Inspector
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
                 {filename}
                 {jobId && <span className="font-mono ml-2 opacity-60">{jobId.slice(0, 12)}...</span>}
                 {isRunning && <span className="ml-2 text-primary">live</span>}
@@ -116,7 +116,7 @@ export function LlmTraceViewer({ open, jobId, filename, isRunning, onClose, poll
                     type="button"
                     onClick={() => setViewMode('raw')}
                     className={cn(
-                      'px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors',
+                      'px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors',
                       viewMode === 'raw' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
@@ -126,17 +126,17 @@ export function LlmTraceViewer({ open, jobId, filename, isRunning, onClose, poll
                     type="button"
                     onClick={() => setViewMode('rendered')}
                     className={cn(
-                      'px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors border-l border-border/40',
+                      'px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors border-l border-border/40',
                       viewMode === 'rendered' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
                     Rendered
                   </button>
                 </div>
-                <Button variant="ghost" size="sm" onClick={expandAll} className="h-8 text-[10px] font-bold uppercase tracking-wider">
+                <Button variant="ghost" size="sm" onClick={expandAll} className="h-8 text-xs font-bold uppercase tracking-wider">
                   Expand All
                 </Button>
-                <Button variant="ghost" size="sm" onClick={collapseAll} className="h-8 text-[10px] font-bold uppercase tracking-wider">
+                <Button variant="ghost" size="sm" onClick={collapseAll} className="h-8 text-xs font-bold uppercase tracking-wider">
                   Collapse
                 </Button>
               </>
@@ -163,7 +163,7 @@ export function LlmTraceViewer({ open, jobId, filename, isRunning, onClose, poll
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <Eye className="w-10 h-10 mb-3 opacity-40" />
               <p className="text-sm font-semibold">No LLM calls captured yet</p>
-              <p className="text-[11px] mt-1 max-w-sm text-center leading-relaxed">
+              <p className="text-xs mt-1 max-w-sm text-center leading-relaxed">
                 Traces appear here as the converter refines tables, equations, and other
                 blocks with the LLM. {isRunning ? 'Waiting for the first call...' : 'Run a job with LLM enabled.'}
               </p>
@@ -185,7 +185,7 @@ export function LlmTraceViewer({ open, jobId, filename, isRunning, onClose, poll
 
         {/* Footer summary */}
         {traces.length > 0 && (
-          <div className="shrink-0 px-6 py-3 border-t border-border/20 bg-muted/10 flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+          <div className="shrink-0 px-6 py-3 border-t border-border/20 bg-muted/10 flex items-center justify-between text-xs text-muted-foreground font-mono">
             <span>
               {traces.length} call{traces.length !== 1 ? 's' : ''} |
               {' '}{traces.filter((t) => t.cache_hit).length} cached |
@@ -225,9 +225,9 @@ function TraceCard({ trace, expanded, onToggle, viewMode }: TraceCardProps) {
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
       >
         {expanded ? <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />}
-        <span className="font-mono text-[10px] text-muted-foreground/60 shrink-0">#{trace.index + 1}</span>
+        <span className="font-mono text-xs text-muted-foreground/60 shrink-0">#{trace.index + 1}</span>
         <span className={cn(
-          'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide shrink-0',
+          'px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wide shrink-0',
           trace.cache_hit
             ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400'
             : ok
@@ -236,10 +236,10 @@ function TraceCard({ trace, expanded, onToggle, viewMode }: TraceCardProps) {
         )}>
           {trace.cache_hit ? 'CACHE' : `HTTP ${trace.status}`}
         </span>
-        <span className="text-[11px] font-mono text-foreground/80 truncate">
+        <span className="text-xs font-mono text-foreground/80 truncate">
           {trace.model || trace.host}
         </span>
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
           {trace.image_count > 0 && (
             <span className="flex items-center gap-0.5" title={`${trace.image_count} image(s) sent`}>
               <ImageIcon className="w-3 h-3" />{trace.image_count}
@@ -249,7 +249,7 @@ function TraceCard({ trace, expanded, onToggle, viewMode }: TraceCardProps) {
             <FileText className="w-3 h-3" />{trace.prompt_chars}
           </span>
         </span>
-        <span className="ml-auto flex items-center gap-3 text-[10px] text-muted-foreground shrink-0 font-mono">
+        <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground shrink-0 font-mono">
           {trace.elapsed_ms > 0 && (
             <span className="flex items-center gap-0.5" title="elapsed">
               <Clock className="w-3 h-3" />{trace.elapsed_ms}ms
@@ -266,7 +266,7 @@ function TraceCard({ trace, expanded, onToggle, viewMode }: TraceCardProps) {
         <div className="px-4 pb-4 pt-1 space-y-4 border-t border-border/20">
           {/* Request parts */}
           <div>
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2 mt-3 flex items-center gap-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 mb-2 mt-3 flex items-center gap-1.5">
               <Zap className="w-3 h-3" /> Sent to LLM
             </h4>
             <div className="space-y-3">
@@ -278,7 +278,7 @@ function TraceCard({ trace, expanded, onToggle, viewMode }: TraceCardProps) {
 
           {/* Response */}
           <div>
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-2 mt-3 flex items-center gap-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 mb-2 mt-3 flex items-center gap-1.5">
               <FileText className="w-3 h-3" /> Received
             </h4>
             <ResponseView trace={trace} viewMode={viewMode} />
@@ -293,7 +293,7 @@ function PartView({ part, viewMode }: { part: import('@/lib/api').LlmTracePart; 
   if (part.type === 'image') {
     if (part.truncated) {
       return (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
           {part.note || 'Image skipped (too large)'}
         </div>
       )
@@ -305,7 +305,7 @@ function PartView({ part, viewMode }: { part: import('@/lib/api').LlmTracePart; 
           alt="LLM input"
           className="max-w-full max-h-80 rounded object-contain"
         />
-        <p className="text-[9px] text-muted-foreground/60 font-mono mt-1.5">
+        <p className="text-xs text-muted-foreground/60 font-mono mt-1.5">
           {part.mime} | {((part.size_bytes ?? 0) * 0.75 / 1024).toFixed(1)} KB
         </p>
       </div>
@@ -324,11 +324,11 @@ function PartView({ part, viewMode }: { part: import('@/lib/api').LlmTracePart; 
       return (
         <div className="space-y-2">
           <div className="rounded-lg border border-border/30 bg-background/50 p-3 overflow-x-auto">
-            <SafeTable rows={rows} className="text-[11px] border-collapse" />
+            <SafeTable rows={rows} className="text-xs border-collapse" />
           </div>
-          <details className="text-[10px] text-muted-foreground">
+          <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer hover:text-foreground">Full prompt ({text.length} chars)</summary>
-            <pre className="mt-2 p-3 rounded-lg bg-muted/30 text-[10px] whitespace-pre-wrap break-words font-mono text-muted-foreground max-h-60 overflow-y-auto">
+            <pre className="mt-2 p-3 rounded-lg bg-muted/30 text-xs whitespace-pre-wrap break-words font-mono text-muted-foreground max-h-60 overflow-y-auto">
               {text}
             </pre>
           </details>
@@ -338,7 +338,7 @@ function PartView({ part, viewMode }: { part: import('@/lib/api').LlmTracePart; 
   }
 
   return (
-    <pre className="p-3 rounded-lg bg-muted/30 text-[11px] whitespace-pre-wrap break-words font-mono text-foreground/80 max-h-72 overflow-y-auto">
+    <pre className="p-3 rounded-lg bg-muted/30 text-xs whitespace-pre-wrap break-words font-mono text-foreground/80 max-h-72 overflow-y-auto">
       {text}
     </pre>
   )
@@ -364,11 +364,11 @@ function ResponseView({ trace, viewMode }: { trace: LlmTrace; viewMode: 'raw' | 
       return (
         <div className="space-y-2">
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 overflow-x-auto">
-            <SafeTable rows={rows} className="text-[11px] border-collapse" />
+            <SafeTable rows={rows} className="text-xs border-collapse" />
           </div>
-          <details className="text-[10px] text-muted-foreground">
+          <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer hover:text-foreground">Raw response ({text.length} chars)</summary>
-            <pre className="mt-2 p-3 rounded-lg bg-muted/30 text-[10px] whitespace-pre-wrap break-words font-mono text-muted-foreground max-h-60 overflow-y-auto">
+            <pre className="mt-2 p-3 rounded-lg bg-muted/30 text-xs whitespace-pre-wrap break-words font-mono text-muted-foreground max-h-60 overflow-y-auto">
               {text}
             </pre>
           </details>
@@ -379,7 +379,7 @@ function ResponseView({ trace, viewMode }: { trace: LlmTrace; viewMode: 'raw' | 
 
   return (
     <pre className={cn(
-      'p-3 rounded-lg text-[11px] whitespace-pre-wrap break-words font-mono max-h-72 overflow-y-auto',
+      'p-3 rounded-lg text-xs whitespace-pre-wrap break-words font-mono max-h-72 overflow-y-auto',
       trace.status >= 400 ? 'bg-rose-500/5 text-rose-600 dark:text-rose-400' : 'bg-muted/30 text-foreground/80'
     )}>
       {text || '[empty response]'}

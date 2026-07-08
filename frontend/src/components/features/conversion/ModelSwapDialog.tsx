@@ -186,7 +186,7 @@ export function ModelSwapDialog({
               >
                 {auto ? 'Hitting Rate Limits' : 'Switch Model'}
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">
+              <p className="text-xs text-muted-foreground mt-0.5 leading-normal">
                 {auto
                   ? 'Keys are exhausted or throttled. Swap to another model; your progress is kept.'
                   : 'Swap the model for the running job without losing progress.'}
@@ -212,7 +212,7 @@ export function ModelSwapDialog({
                 type="button"
                 onClick={() => setTab(t)}
                 className={cn(
-                  'flex-1 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-colors border-b-2',
+                  'flex-1 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2',
                   tab === t
                     ? 'border-primary text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -235,12 +235,12 @@ export function ModelSwapDialog({
         {/* Body */}
         <div className="px-6 py-5 space-y-5">
           {/* File + provider context */}
-          <div className="flex items-center gap-2 text-[11px]">
+          <div className="flex items-center gap-2 text-xs">
             <span className="font-mono text-muted-foreground truncate" title={filename}>
               {filename}
             </span>
             {providerId && (
-              <span className="px-1.5 py-0.5 rounded bg-muted/65 text-muted-foreground font-mono text-[9px] uppercase tracking-wide shrink-0">
+              <span className="px-1.5 py-0.5 rounded bg-muted/65 text-muted-foreground font-mono text-xs uppercase tracking-wide shrink-0">
                 {providerId}
               </span>
             )}
@@ -250,7 +250,7 @@ export function ModelSwapDialog({
             <>
               {/* Cross-provider retry: pick a DIFFERENT provider + its model. */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                   <RotateCw className="w-3.5 h-3.5 text-muted-foreground" />
                   Provider
                 </label>
@@ -273,7 +273,7 @@ export function ModelSwapDialog({
                 )}
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-muted-foreground" />
                   Model
                 </label>
@@ -284,7 +284,7 @@ export function ModelSwapDialog({
                   className="w-full"
                 />
               </div>
-              <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-normal pt-1 border-t border-border/10">
+              <p className="text-xs text-amber-600 dark:text-amber-400 leading-normal pt-1 border-t border-border/10">
                 Creates a new job from the stored source file. The original job
                 stays in history. Cached LLM responses for unchanged prompts are
                 replayed, so only the work that did not finish is re-done.
@@ -294,7 +294,7 @@ export function ModelSwapDialog({
             <>
               {/* Same-provider model picker (live override) */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-muted-foreground" />
                   Model
                 </label>
@@ -311,12 +311,12 @@ export function ModelSwapDialog({
                     className="w-full md:w-full"
                   />
                 ) : (
-                  <div className="text-[11px] text-muted-foreground/70 italic py-2">
+                  <div className="text-xs text-muted-foreground/70 italic py-2">
                     No other models configured for this provider. Add one in Settings.
                   </div>
                 )}
                 {currentModel && (
-                  <p className="text-[10px] text-muted-foreground/60 font-mono">
+                  <p className="text-xs text-muted-foreground/60 font-mono">
                     Current: {currentModel}
                   </p>
                 )}
@@ -324,7 +324,7 @@ export function ModelSwapDialog({
 
               {/* Concurrency (optional, on the fly) */}
               <div className="space-y-2 pt-1 border-t border-border/10">
-                <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
+                <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex items-center gap-1.5">
                   <Activity className="w-3.5 h-3.5 text-muted-foreground" />
                   Max Concurrent API Calls
                 </label>
@@ -336,7 +336,7 @@ export function ModelSwapDialog({
                   placeholder="Unlimited"
                   className="bg-background/50 text-xs"
                 />
-                <p className="text-[10px] text-muted-foreground/60 leading-normal">
+                <p className="text-xs text-muted-foreground/60 leading-normal">
                   Applies live to this provider. Lower it to ease off a throttling endpoint.
                 </p>
               </div>

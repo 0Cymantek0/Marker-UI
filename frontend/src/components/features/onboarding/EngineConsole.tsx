@@ -151,7 +151,7 @@ export function EngineConsole({
         </div>
 
         {isDownloading && (
-          <div className="flex items-start gap-2 text-[11px] text-muted-foreground/45 select-none pt-1">
+          <div className="flex items-start gap-2 text-xs text-muted-foreground/45 select-none pt-1">
             <Lightbulb className="h-3.5 w-3.5 text-muted-foreground/35 shrink-0 mt-[1px]" />
             <span>If download speed is slower than your actual connection, try using a VPN.</span>
           </div>
@@ -170,7 +170,7 @@ export function EngineConsole({
               Hybrid OCR specialists
             </div>
             {hybridStatus && (
-              <div className="mt-1 font-mono text-[11px]">
+              <div className="mt-1 font-mono text-xs">
                 GLM-OCR {hybridStatus.engines.glm_ocr.model_present ? 'ready' : 'missing'} | PaddleOCR-VL{' '}
                 {hybridStatus.engines.paddleocr_vl.model_present ? 'ready' : 'missing'}
               </div>
@@ -186,7 +186,7 @@ export function EngineConsole({
             variant="outline"
             onClick={handleCancel}
             disabled={isCancelling}
-            className="w-full md:w-auto border-border/60 hover:border-border bg-transparent text-muted-foreground hover:text-foreground px-5 py-2 h-9 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
+            className="w-full md:w-auto border-border/60 hover:border-border bg-transparent text-muted-foreground hover:text-foreground px-5 py-2 h-9 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
           >
             {isCancelling ? (
               <>
@@ -202,7 +202,7 @@ export function EngineConsole({
           <Button
             onClick={handleRetry}
             disabled={isRetrying}
-            className="w-full md:w-auto bg-primary text-primary-foreground font-bold rounded-lg px-5 py-2 h-9 text-[10px] uppercase tracking-wider transition-all"
+            className="w-full md:w-auto bg-primary text-primary-foreground font-bold rounded-lg px-5 py-2 h-9 text-xs uppercase tracking-wider transition-all"
           >
             {isRetrying ? (
               <>
@@ -219,7 +219,7 @@ export function EngineConsole({
         {isCompleted && (
           <Button
             onClick={onComplete}
-            className="w-full md:w-auto bg-foreground text-background hover:bg-foreground/90 font-bold rounded-lg px-5 py-2 h-9 text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all"
+            className="w-full md:w-auto bg-foreground text-background hover:bg-foreground/90 font-bold rounded-lg px-5 py-2 h-9 text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all"
           >
             Continue to Workspace <ArrowRight className="h-3.5 w-3.5" />
           </Button>
