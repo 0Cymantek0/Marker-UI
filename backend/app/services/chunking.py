@@ -19,6 +19,15 @@ UNSTRUCTURED_CHUNKING_STRATEGY = "unstructured_by_title"
 
 
 @dataclass(frozen=True)
+class SourceSpan:
+    start_line: int
+    end_line: int
+    char_start: int
+    char_end: int
+    page_numbers: tuple[int, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class MarkdownBlock:
     text: str
     start_line: int
@@ -29,7 +38,8 @@ class MarkdownBlock:
     kind: str = "text"
     content_types: tuple[str, ...] = field(default_factory=tuple)
     asset_refs: tuple[dict[str, Any], ...] = field(default_factory=tuple)
-    source_spans: tuple[tuple[int, int, int, int], ...] = field(default_factory=tuple)
+    source_spans: tuple[SourceSpan, ...] = field(default_factory=tuple)
+    page_numbers: tuple[int, ...] = field(default_factory=tuple)
 
 
 def build_chunks_envelope(
@@ -163,6 +173,7 @@ def chunk_markdown(
             content_types=content_types,
         )
         asset_refs = list(block.asset_refs)
+        page_numbers = _page_numbers_for_refs(source_refs) or list(block.page_numbers)
         metadata: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION,
             "stable_id": stable_id,
@@ -170,6 +181,10 @@ def chunk_markdown(
         }
         if asset_refs:
             metadata["asset_refs"] = asset_refs
+        if page_numbers:
+            page_range = _format_page_range(page_numbers)
+            metadata["page_numbers"] = page_numbers
+            metadata["page_range"] = page_range
         chunks.append(
             {
                 "id": chunk_id,
@@ -194,6 +209,9 @@ def chunk_markdown(
                 "source_refs": source_refs,
             }
         )
+        if page_numbers:
+            chunks[-1]["page_numbers"] = page_numbers
+            chunks[-1]["page_range"] = _format_page_range(page_numbers)
     for index, chunk in enumerate(chunks):
         chunk["previous_id"] = chunks[index - 1]["id"] if index > 0 else None
         chunk["next_id"] = chunks[index + 1]["id"] if index + 1 < len(chunks) else None
@@ -360,23 +378,60 @@ def _source_refs(
     content_types: list[str],
 ) -> list[dict[str, Any]]:
     spans = block.source_spans or (
-        (block.start_line, block.end_line, block.char_start, block.char_end),
+        SourceSpan(
+            block.start_line,
+            block.end_line,
+            block.char_start,
+            block.char_end,
+            block.page_numbers,
+        ),
     )
     refs: list[dict[str, Any]] = []
-    for start_line, end_line, char_start, char_end in spans:
-        refs.append(
-            {
-                "type": "markdown_line_span",
-                "source": source_name,
-                "start_line": start_line,
-                "end_line": end_line,
-                "char_start": char_start,
-                "char_end": char_end,
-                "heading_path": heading_path,
-                "content_types": content_types,
-            }
-        )
+    seen: set[tuple[int, int, int, int, tuple[int, ...]]] = set()
+    for span in spans:
+        key = (span.start_line, span.end_line, span.char_start, span.char_end, span.page_numbers)
+        if key in seen:
+            continue
+        seen.add(key)
+        ref = {
+            "type": "markdown_line_span",
+            "source": source_name,
+            "start_line": span.start_line,
+            "end_line": span.end_line,
+            "char_start": span.char_start,
+            "char_end": span.char_end,
+            "heading_path": heading_path,
+            "content_types": content_types,
+        }
+        if span.page_numbers:
+            ref["page_numbers"] = list(span.page_numbers)
+            ref["page_range"] = _format_page_range(span.page_numbers)
+        refs.append(ref)
     return refs
+
+
+def _page_numbers_for_refs(refs: list[dict[str, Any]]) -> list[int]:
+    values: set[int] = set()
+    for ref in refs:
+        for page in ref.get("page_numbers") or []:
+            values.add(int(page))
+    return sorted(values)
+
+
+def _format_page_range(page_numbers: list[int] | tuple[int, ...]) -> str:
+    pages = sorted({int(page) for page in page_numbers if int(page) > 0})
+    if not pages:
+        return ""
+    ranges: list[str] = []
+    start = prev = pages[0]
+    for page in pages[1:]:
+        if page == prev + 1:
+            prev = page
+            continue
+        ranges.append(str(start) if start == prev else f"{start}-{prev}")
+        start = prev = page
+    ranges.append(str(start) if start == prev else f"{start}-{prev}")
+    return ",".join(ranges)
 
 
 def _locate_unstructured_chunk_span(
@@ -578,16 +633,40 @@ def _is_list_continuation(line: str) -> bool:
     return bool(re.match(r"^\s{2,}\S", line))
 
 
+def _is_indented_code_line(line: str) -> bool:
+    return bool(re.match(r"^(?: {4}|\t)\S", line))
+
+
+def _parse_page_marker(line: str) -> tuple[int, ...] | None:
+    match = re.match(r"^\s*<!--\s*pages?\s*:\s*([^>]+?)\s*-->\s*$", line, flags=re.IGNORECASE)
+    if not match:
+        return None
+    pages: set[int] = set()
+    for part in match.group(1).split(","):
+        token = part.strip()
+        if not token:
+            continue
+        if re.match(r"^\d+\s*-\s*\d+$", token):
+            left, right = [int(value.strip()) for value in token.split("-", 1)]
+            start, end = sorted((left, right))
+            pages.update(range(max(1, start), end + 1))
+            continue
+        if token.isdigit() and int(token) > 0:
+            pages.add(int(token))
+    return tuple(sorted(pages))
+
+
 def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> list[MarkdownBlock]:
     lines = markdown.splitlines()
     blocks: list[MarkdownBlock] = []
     heading_stack: list[tuple[int, str]] = []
+    current_page_numbers: tuple[int, ...] = ()
     buffer: list[str] = []
     block_start = 1
 
     def flush(end_line: int, *, kind: str = "text") -> None:
         nonlocal buffer, block_start
-        text = "\n".join(buffer).strip()
+        text = _trim_block_text("\n".join(buffer), kind)
         if text:
             char_start, char_end = _line_char_span(
                 line_offsets,
@@ -605,6 +684,7 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
                     kind=kind,
                     content_types=_block_content_types(text, kind),
                     asset_refs=_asset_refs(text),
+                    page_numbers=current_page_numbers,
                 )
             )
         buffer = []
@@ -612,6 +692,14 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
     line_no = 1
     while line_no <= len(lines):
         line = lines[line_no - 1]
+        page_marker = _parse_page_marker(line)
+        if page_marker is not None:
+            flush(line_no - 1)
+            current_page_numbers = page_marker
+            block_start = line_no + 1
+            line_no += 1
+            continue
+
         if line_no == 1 and line.strip() in {"---", "+++"}:
             closing = line.strip()
             closing_line = None
@@ -636,6 +724,18 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
             heading_stack.append((level, title))
             block_start = line_no
             buffer = [line]
+            flush(line_no, kind="heading")
+            block_start = line_no + 1
+            line_no += 1
+            continue
+
+        setext = re.match(r"^\s{0,3}(=+|-+)\s*$", line)
+        if setext and len(buffer) == 1 and buffer[0].strip() and block_start == line_no - 1:
+            level = 1 if setext.group(1).startswith("=") else 2
+            title = buffer[0].strip()
+            heading_stack = [(lvl, text) for lvl, text in heading_stack if lvl < level]
+            heading_stack.append((level, title))
+            buffer = [buffer[0], line]
             flush(line_no, kind="heading")
             block_start = line_no + 1
             line_no += 1
@@ -717,6 +817,26 @@ def _markdown_blocks(markdown: str, *, line_offsets: list[tuple[int, int]]) -> l
             flush(line_no - 1, kind="blockquote")
             block_start = line_no
             continue
+        if _is_indented_code_line(line):
+            flush(line_no - 1)
+            block_start = line_no
+            code_lines = [line]
+            line_no += 1
+            while line_no <= len(lines):
+                candidate = lines[line_no - 1]
+                if _is_indented_code_line(candidate):
+                    code_lines.append(candidate)
+                    line_no += 1
+                    continue
+                if not candidate.strip() and line_no < len(lines) and _is_indented_code_line(lines[line_no]):
+                    code_lines.append(candidate)
+                    line_no += 1
+                    continue
+                break
+            buffer = code_lines
+            flush(line_no - 1, kind="indented_code")
+            block_start = line_no
+            continue
         if _list_marker(line):
             flush(line_no - 1)
             block_start = line_no
@@ -780,6 +900,7 @@ def _pack_chunk_blocks(
                     content_types=_content_types(current),
                     asset_refs=_asset_refs(text),
                     source_spans=_source_spans_for_blocks(current),
+                    page_numbers=_page_numbers_for_blocks(current),
                 )
             )
         current = []
@@ -787,6 +908,8 @@ def _pack_chunk_blocks(
     while pending:
         block = pending.popleft()
         if block.kind == "heading" and current:
+            flush()
+        if current and block.page_numbers != current[-1].page_numbers and (block.page_numbers or current[-1].page_numbers):
             flush()
         projected_len = len("\n\n".join([*(item.text for item in current), block.text]))
         if current and projected_len > max_chars:
@@ -844,23 +967,53 @@ def _content_types(blocks: list[MarkdownBlock]) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _source_spans_for_blocks(blocks: list[MarkdownBlock]) -> tuple[tuple[int, int, int, int], ...]:
-    if blocks and not any(block.source_spans for block in blocks):
+def _page_numbers_for_blocks(blocks: list[MarkdownBlock]) -> tuple[int, ...]:
+    values: set[int] = set()
+    for block in blocks:
+        values.update(block.page_numbers)
+        for span in block.source_spans:
+            values.update(span.page_numbers)
+    return tuple(sorted(values))
+
+
+def _source_spans_for_blocks(blocks: list[MarkdownBlock]) -> tuple[SourceSpan, ...]:
+    if blocks and not any(block.source_spans for block in blocks) and _same_page_numbers(blocks):
         return (
-            (
+            SourceSpan(
                 blocks[0].start_line,
                 blocks[-1].end_line,
                 blocks[0].char_start,
                 blocks[-1].char_end,
+                blocks[0].page_numbers,
             ),
         )
-    spans: list[tuple[int, int, int, int]] = []
+    spans: list[SourceSpan] = []
     for block in blocks:
         if block.source_spans:
-            spans.extend(block.source_spans)
+            spans.extend(
+                span
+                if span.page_numbers
+                else SourceSpan(span.start_line, span.end_line, span.char_start, span.char_end, block.page_numbers)
+                for span in block.source_spans
+            )
         else:
-            spans.append((block.start_line, block.end_line, block.char_start, block.char_end))
+            spans.append(
+                SourceSpan(
+                    block.start_line,
+                    block.end_line,
+                    block.char_start,
+                    block.char_end,
+                    block.page_numbers,
+                )
+            )
     return tuple(spans)
+
+
+def _same_page_numbers(blocks: list[MarkdownBlock]) -> bool:
+    if not blocks:
+        return True
+    first = blocks[0].page_numbers
+    return all(block.page_numbers == first for block in blocks)
 
 
 def _split_block(
@@ -877,7 +1030,7 @@ def _split_block(
         return _split_table_block(block, max_chars=max_chars, line_offsets=line_offsets)
     if block.kind == "fenced_code":
         return _split_fenced_code_block(block, max_chars=max_chars, line_offsets=line_offsets)
-    if block.kind in {"blockquote", "front_matter", "html_block", "list"}:
+    if block.kind in {"blockquote", "front_matter", "html_block", "indented_code", "list"}:
         return _split_line_preserving_block(block, max_chars=max_chars, line_offsets=line_offsets)
     sentences = re.split(r"(?<=[.!?])\s+", text)
     pieces: list[str] = []
@@ -1019,13 +1172,14 @@ def _split_table_block(
                         end_line=row_line,
                         line_offsets=line_offsets,
                         source_spans=(
-                            *_table_source_spans(
-                                block,
-                                row_start_line=row_line,
-                                row_end_line=row_line,
-                                line_offsets=line_offsets,
-                            )[:1],
-                            (row_line, row_line, row_start + rel_start, row_start + rel_end),
+                            _table_header_source_span(block, line_offsets=line_offsets),
+                            SourceSpan(
+                                row_line,
+                                row_line,
+                                row_start + rel_start,
+                                row_start + rel_end,
+                                block.page_numbers,
+                            ),
                         ),
                     )
                 )
@@ -1048,8 +1202,10 @@ def _split_fenced_code_block(
         return _locate_split_pieces(block, pieces, overlap_chars=0, line_offsets=line_offsets)
 
     opener = lines[0]
-    closer = lines[-1] if _is_matching_fence(lines[-1], _fence_marker(opener) or "") else lines[0][:3]
-    body = lines[1:-1] if closer == lines[-1] else lines[1:]
+    opener_marker = _fence_marker(opener) or ""
+    has_closer = bool(_is_matching_fence(lines[-1], opener_marker))
+    closer = lines[-1] if has_closer else lines[0][:3]
+    body = lines[1:-1] if has_closer else lines[1:]
     overhead = len(opener) + len(closer) + 2
     body_limit = max_chars - overhead
     if body_limit < 1:
@@ -1078,6 +1234,7 @@ def _split_fenced_code_block(
                         body_start_line=body_start_line,
                         body_end_line=body_end_line,
                         line_offsets=line_offsets,
+                        include_closer=has_closer,
                     ),
                 )
             )
@@ -1112,13 +1269,21 @@ def _split_fenced_code_block(
                                 body_start_line=body_line,
                                 body_end_line=body_line,
                                 line_offsets=line_offsets,
+                                include_closer=has_closer,
                             )[:1],
-                            (body_line, body_line, line_start + rel_start, line_start + rel_end),
+                            SourceSpan(
+                                body_line,
+                                body_line,
+                                line_start + rel_start,
+                                line_start + rel_end,
+                                block.page_numbers,
+                            ),
                             *_fenced_code_source_spans(
                                 block,
                                 body_start_line=body_line,
                                 body_end_line=body_line,
                                 line_offsets=line_offsets,
+                                include_closer=has_closer,
                             )[2:],
                         ),
                     )
@@ -1136,7 +1301,7 @@ def _synthetic_wrapped_block(
     start_line: int,
     end_line: int,
     line_offsets: list[tuple[int, int]],
-    source_spans: tuple[tuple[int, int, int, int], ...],
+    source_spans: tuple[SourceSpan | tuple[int, int, int, int], ...],
 ) -> MarkdownBlock:
     char_start, char_end = _line_char_span(
         line_offsets,
@@ -1158,8 +1323,40 @@ def _synthetic_wrapped_block(
         kind=block.kind,
         content_types=content_types,
         asset_refs=_asset_refs(text),
-        source_spans=source_spans,
+        source_spans=_coerce_source_spans(source_spans, page_numbers=block.page_numbers),
+        page_numbers=block.page_numbers,
     )
+
+
+def _coerce_source_spans(
+    source_spans: tuple[SourceSpan | tuple[int, int, int, int], ...],
+    *,
+    page_numbers: tuple[int, ...],
+) -> tuple[SourceSpan, ...]:
+    spans: list[SourceSpan] = []
+    for span in source_spans:
+        if isinstance(span, SourceSpan):
+            spans.append(
+                span
+                if span.page_numbers
+                else SourceSpan(span.start_line, span.end_line, span.char_start, span.char_end, page_numbers)
+            )
+        else:
+            spans.append(SourceSpan(*span, page_numbers))
+    return tuple(spans)
+
+
+def _table_header_source_span(
+    block: MarkdownBlock,
+    *,
+    line_offsets: list[tuple[int, int]],
+) -> SourceSpan:
+    header_start, header_end = _line_char_span(
+        line_offsets,
+        start_line=block.start_line,
+        end_line=block.start_line + 1,
+    )
+    return SourceSpan(block.start_line, block.start_line + 1, header_start, header_end, block.page_numbers)
 
 
 def _table_source_spans(
@@ -1168,7 +1365,7 @@ def _table_source_spans(
     row_start_line: int,
     row_end_line: int,
     line_offsets: list[tuple[int, int]],
-) -> tuple[tuple[int, int, int, int], ...]:
+) -> tuple[SourceSpan, ...]:
     header_start, header_end = _line_char_span(
         line_offsets,
         start_line=block.start_line,
@@ -1180,10 +1377,10 @@ def _table_source_spans(
         end_line=row_end_line,
     )
     if row_start_line == block.start_line + 2:
-        return ((block.start_line, row_end_line, header_start, row_end),)
+        return (SourceSpan(block.start_line, row_end_line, header_start, row_end, block.page_numbers),)
     return (
-        (block.start_line, block.start_line + 1, header_start, header_end),
-        (row_start_line, row_end_line, row_start, row_end),
+        SourceSpan(block.start_line, block.start_line + 1, header_start, header_end, block.page_numbers),
+        SourceSpan(row_start_line, row_end_line, row_start, row_end, block.page_numbers),
     )
 
 
@@ -1193,7 +1390,8 @@ def _fenced_code_source_spans(
     body_start_line: int,
     body_end_line: int,
     line_offsets: list[tuple[int, int]],
-) -> tuple[tuple[int, int, int, int], ...]:
+    include_closer: bool = True,
+) -> tuple[SourceSpan, ...]:
     opener_start, opener_end = _line_char_span(
         line_offsets,
         start_line=block.start_line,
@@ -1204,16 +1402,18 @@ def _fenced_code_source_spans(
         start_line=body_start_line,
         end_line=body_end_line,
     )
-    closer_start, closer_end = _line_char_span(
-        line_offsets,
-        start_line=block.end_line,
-        end_line=block.end_line,
-    )
-    return (
-        (block.start_line, block.start_line, opener_start, opener_end),
-        (body_start_line, body_end_line, body_start, body_end),
-        (block.end_line, block.end_line, closer_start, closer_end),
-    )
+    spans = [
+        SourceSpan(block.start_line, block.start_line, opener_start, opener_end, block.page_numbers),
+        SourceSpan(body_start_line, body_end_line, body_start, body_end, block.page_numbers),
+    ]
+    if include_closer:
+        closer_start, closer_end = _line_char_span(
+            line_offsets,
+            start_line=block.end_line,
+            end_line=block.end_line,
+        )
+        spans.append(SourceSpan(block.end_line, block.end_line, closer_start, closer_end, block.page_numbers))
+    return tuple(spans)
 
 
 def _split_text_by_chars(text: str, *, max_chars: int) -> list[str]:
@@ -1283,8 +1483,8 @@ def _block_piece(
     *,
     line_offsets: list[tuple[int, int]],
 ) -> MarkdownBlock:
-    stripped = text.strip()
-    leading_trim = len(text) - len(text.lstrip())
+    stripped = _trim_block_text(text, block.kind)
+    leading_trim = 0 if _preserves_leading_space(block.kind) else len(text) - len(text.lstrip())
     trailing_trim = len(text) - len(text.rstrip())
     piece_start = max(block.char_start, block.char_start + rel_start + leading_trim)
     piece_end = max(piece_start, block.char_start + rel_end - trailing_trim)
@@ -1303,7 +1503,18 @@ def _block_piece(
         kind=block.kind,
         content_types=_block_content_types(stripped, block.kind),
         asset_refs=_asset_refs(stripped),
+        page_numbers=block.page_numbers,
     )
+
+
+def _preserves_leading_space(kind: str) -> bool:
+    return kind in {"blockquote", "fenced_code", "indented_code", "list", "table"}
+
+
+def _trim_block_text(text: str, kind: str) -> str:
+    if _preserves_leading_space(kind):
+        return text.rstrip()
+    return text.strip()
 
 
 def _split_text_at_limit(text: str, *, max_chars: int) -> tuple[str, str]:

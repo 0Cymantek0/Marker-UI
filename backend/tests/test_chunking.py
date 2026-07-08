@@ -387,3 +387,76 @@ def test_chunk_markdown_stable_ids_do_not_depend_on_source_name() -> None:
     assert first["chunks"][0]["id"] != second["chunks"][0]["id"]
     assert first["chunks"][0]["stable_id"] == second["chunks"][0]["stable_id"]
     assert first["chunks"][0]["metadata"]["stable_id"] == first["chunks"][0]["stable_id"]
+
+
+def test_chunk_markdown_uses_page_markers_as_metadata_not_chunk_text() -> None:
+    markdown = (
+        "<!-- pages: 1-2 -->\n\n"
+        "# First Segment\n\n"
+        "Alpha content.\n\n"
+        "<!-- pages: 3 -->\n\n"
+        "## Second Segment\n\n"
+        "Beta content."
+    )
+
+    payload = chunk_markdown(markdown, source_name="paged.md", max_chars=260)
+    chunks = payload["chunks"]
+
+    assert all("<!-- pages:" not in chunk["text"] for chunk in chunks)
+    assert chunks[0]["page_numbers"] == [1, 2]
+    assert chunks[0]["page_range"] == "1-2"
+    assert chunks[0]["metadata"]["page_numbers"] == [1, 2]
+    assert chunks[0]["source_refs"][0]["page_range"] == "1-2"
+    assert chunks[1]["page_numbers"] == [3]
+    assert chunks[1]["source_refs"][0]["page_numbers"] == [3]
+
+
+def test_chunk_markdown_recognizes_setext_headings_and_indented_code_boundaries() -> None:
+    markdown = (
+        "Title\n"
+        "=====\n\n"
+        "Intro.\n\n"
+        "Subhead\n"
+        "-------\n\n"
+        "    def call():\n"
+        "        return 1\n\n"
+        "After."
+    )
+
+    payload = chunk_markdown(markdown, source_name="setext.md", max_chars=260)
+    chunks = payload["chunks"]
+
+    assert chunks[0]["heading_path"] == ["Title"]
+    code_chunk = next(chunk for chunk in chunks if "def call" in chunk["text"])
+    assert code_chunk["heading_path"] == ["Title", "Subhead"]
+    assert "indented_code" in code_chunk["content_types"]
+    assert code_chunk["text"].startswith("Subhead\n-------\n\n    def call")
+
+
+def test_chunk_markdown_long_table_row_refs_header_and_row_piece_only() -> None:
+    long_cell = " ".join(f"value{i}" for i in range(80))
+    markdown = f"| Key | Value |\n| --- | --- |\n| a | {long_cell} |"
+
+    payload = chunk_markdown(markdown, source_name="wide-row.md", max_chars=220)
+    chunks = payload["chunks"]
+
+    assert len(chunks) > 1
+    first = chunks[0]
+    assert first["text"].startswith("| Key | Value |\n| --- | --- |\n| a |")
+    assert len(first["source_refs"]) == 2
+    assert [(ref["start_line"], ref["end_line"]) for ref in first["source_refs"]] == [(1, 2), (3, 3)]
+    assert markdown[first["source_refs"][1]["char_start"] : first["source_refs"][1]["char_end"]].startswith("| a |")
+
+
+def test_chunk_markdown_unclosed_large_code_fence_does_not_ref_fake_closer() -> None:
+    body = "\n".join(f"print({i!r})" for i in range(80))
+    markdown = f"```python\n{body}"
+
+    payload = chunk_markdown(markdown, source_name="unclosed-code.md", max_chars=220)
+    second = payload["chunks"][1]
+
+    assert second["text"].endswith("\n```")
+    assert len(second["source_refs"]) == 2
+    assert second["source_refs"][0]["start_line"] == 1
+    assert second["source_refs"][1]["start_line"] == second["start_line"]
+    assert second["source_refs"][-1]["end_line"] < len(markdown.splitlines())
