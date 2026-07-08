@@ -102,6 +102,22 @@ def test_cli_guide_documents_first_class_audio_flags() -> None:
         assert flag in cli_guide
 
 
+def test_database_docs_do_not_claim_automatic_alembic_upgrade() -> None:
+    storage_doc = (REPO_ROOT / "docs" / "configuration" / "storage.md").read_text(encoding="utf-8")
+    database_doc = (REPO_ROOT / "docs" / "development" / "database.md").read_text(encoding="utf-8")
+
+    forbidden_claims = (
+        "updated automatically via Alembic database migrations",
+        "database updates are performed automatically when running the Docker container",
+    )
+    for claim in forbidden_claims:
+        assert claim not in storage_doc
+        assert claim not in database_doc
+
+    assert "does not currently run `alembic upgrade head` automatically" in storage_doc
+    assert "does not currently run `alembic upgrade head` automatically" in database_doc
+
+
 def test_mcp_guide_documents_url_open_world_and_audio_controls() -> None:
     mcp_guide = (REPO_ROOT / "docs" / "usage" / "mcp.md").read_text(encoding="utf-8")
 
