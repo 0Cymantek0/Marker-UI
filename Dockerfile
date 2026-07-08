@@ -17,9 +17,10 @@ RUN pnpm run build
 # ---- Stage 2: Runtime (backend + nginx) ----
 FROM python:3.11-slim
 
-# System deps: nginx, supervisord, OCR libs, curl for healthcheck
+# System deps: nginx, supervisord, OCR/video libs, curl for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
+    ffmpeg \
     tesseract-ocr \
     tesseract-ocr-eng \
     libgl1 \
