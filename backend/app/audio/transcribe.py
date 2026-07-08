@@ -21,6 +21,7 @@ from app.audio.pipeline import AudioTranscript, normalize_transcript, slug_sourc
 from app.audio.providers import ProviderCapability, build_provider, get_capability
 from app.audio.providers.registry import (
     validate_audio_benchmark_selection,
+    validate_audio_fusion_selection,
     validate_provider_selection,
 )
 from app.audio.speakers import apply_speaker_aliases
@@ -128,6 +129,7 @@ def resolve_audio_provider(config: dict[str, Any]) -> str:
 
     provider_id = str(config.get("audio_provider") or "local_faster_whisper").strip().lower()
     validate_audio_benchmark_selection(config)
+    validate_audio_fusion_selection(config)
     validate_provider_selection(
         provider_id,
         allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),

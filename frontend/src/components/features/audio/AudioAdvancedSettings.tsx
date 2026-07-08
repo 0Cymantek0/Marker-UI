@@ -89,6 +89,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
   const cloudEnhancementAvailable = false
   const cloudEnhancementEnabled = config.audio_enhancement_allow_cloud ?? false
   const benchmarkCompareEnabled = config.audio_benchmark_compare ?? false
+  const configuredFusionMode = config.audio_fusion_mode?.trim()
   const providerOptions = selectableCapabilities.length > 0
     ? selectableCapabilities.map((c) => ({
         value: c.provider_id,
@@ -478,6 +479,9 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               <p className="text-xs text-muted-foreground/70 leading-snug">
                 When enabled, contradictory claims across segments and speakers are surfaced with source refs. The system will not auto-resolve conflicts.
               </p>
+              {configuredFusionMode && (
+                <ProviderWarning message={`Audio context fusion mode "${configuredFusionMode}" is not shipped in this build. The backend rejects this saved option so it cannot be mistaken for active behavior.`} />
+              )}
             </div>
           </CollapsibleSection>
 

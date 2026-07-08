@@ -36,6 +36,7 @@ from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse, RetryJobRequest
 from app.audio.providers.registry import (
     validate_audio_benchmark_selection,
+    validate_audio_fusion_selection,
     validate_provider_selection,
 )
 from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
@@ -757,6 +758,7 @@ async def upload_file(
     if suffix in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
         try:
             validate_audio_benchmark_selection(config)
+            validate_audio_fusion_selection(config)
             validate_provider_selection(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),

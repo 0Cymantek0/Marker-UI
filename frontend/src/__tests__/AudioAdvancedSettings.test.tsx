@@ -355,4 +355,23 @@ describe('AudioAdvancedSettings', () => {
     expect(cloudEnhancement).toBeDisabled()
     expect(screen.getByText(/cloud transcript enhancement is not shipped/i)).toBeInTheDocument()
   })
+
+  it('warns when a saved fusion mode would be rejected by the backend', async () => {
+    const onChange = vi.fn()
+    render(
+      <AudioAdvancedSettings
+        config={{ ...baseConfig, audio_fusion_mode: 'audio_first' }}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Context & Fusion'))
+
+    expect(screen.getByText(/audio context fusion mode "audio_first" is not shipped/i)).toBeInTheDocument()
+  })
 })

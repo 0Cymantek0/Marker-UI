@@ -26,6 +26,7 @@ __all__ = [
     "build_provider",
     "get_capability",
     "validate_audio_benchmark_selection",
+    "validate_audio_fusion_selection",
     "validate_provider_selection",
 ]
 
@@ -133,6 +134,19 @@ def validate_audio_benchmark_selection(config: dict[str, object]) -> None:
         "Audio provider comparison is not shipped in this build. "
         "It requires a benchmark runner plus at least two shipped STT adapters; "
         "disable audio_benchmark_compare."
+    )
+
+
+def validate_audio_fusion_selection(config: dict[str, object]) -> None:
+    """Reject context-fusion modes until the fusion executor ships."""
+
+    mode = str(config.get("audio_fusion_mode") or "").strip().lower()
+    if mode in {"", "none", "off", "disabled"}:
+        return
+    raise NotImplementedError(
+        "Audio context fusion is not shipped in this build. "
+        "audio_fusion_mode would be ignored by the converter; "
+        "disable audio_fusion_mode and use audio_context only as renderer context."
     )
 
 

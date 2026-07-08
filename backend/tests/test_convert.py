@@ -1931,6 +1931,30 @@ async def test_upload_rejects_unshipped_audio_benchmark_compare_before_queue(cli
 
 
 @pytest.mark.asyncio
+async def test_upload_rejects_unshipped_audio_fusion_mode_before_queue(client: AsyncClient, db_session):
+    """Fusion mode is not wired; do not accept a silent no-op job."""
+    resp = await _upload_file(
+        client,
+        filename="fusion.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {
+                    "audio_provider": "local_faster_whisper",
+                    "audio_fusion_mode": "audio_first",
+                }
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Audio context fusion is not shipped" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "fusion.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
 async def test_upload_accepts_all_frontend_audio_output_modes(client: AsyncClient, db_session):
     """REST allow-list must match the frontend audio output style cards."""
 

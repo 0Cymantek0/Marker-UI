@@ -604,6 +604,28 @@ def test_audio_benchmark_compare_rejected_before_transcription(monkeypatch, tmp_
         )
 
 
+def test_audio_fusion_mode_rejected_before_transcription(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "fusion.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    def fail_build_provider(provider_id):
+        raise AssertionError("provider should not be built for unsupported fusion mode")
+
+    monkeypatch.setattr(
+        "app.audio.transcribe.build_provider",
+        fail_build_provider,
+    )
+
+    with pytest.raises(NotImplementedError, match="Audio context fusion is not shipped"):
+        AudioConverter().convert(
+            str(path),
+            {
+                "audio_provider": "local_faster_whisper",
+                "audio_fusion_mode": "audio_first",
+            },
+        )
+
+
 def test_audio_transcribe_passes_vocabulary_and_word_timestamp_options(monkeypatch, tmp_path: Path) -> None:
     seen: dict[str, object] = {}
 

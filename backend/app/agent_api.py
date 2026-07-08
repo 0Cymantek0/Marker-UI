@@ -21,6 +21,7 @@ from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as Age
 from app.agent_surface import DEFAULT_AGENT_TOOL_NAMES
 from app.audio.providers.registry import (
     validate_audio_benchmark_selection,
+    validate_audio_fusion_selection,
     validate_provider_selection,
 )
 from app.conversion.engine_policy import validate_engine_override as _validate_engine_override
@@ -465,6 +466,7 @@ async def submit_conversion_job(
     if suffix in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
         try:
             validate_audio_benchmark_selection(config)
+            validate_audio_fusion_selection(config)
             validate_provider_selection(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
@@ -575,6 +577,7 @@ async def _convert_resolved_path(
     if path.suffix.lower() in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
         try:
             validate_audio_benchmark_selection(config)
+            validate_audio_fusion_selection(config)
             validate_provider_selection(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),

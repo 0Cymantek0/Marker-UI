@@ -15,6 +15,7 @@ from app.audio.providers.capabilities import (
 from app.audio.providers.registry import (
     build_provider,
     validate_audio_benchmark_selection,
+    validate_audio_fusion_selection,
     validate_provider_selection,
 )
 from app.audio.pipeline import normalize_transcript
@@ -97,6 +98,11 @@ def test_build_provider_rejects_unknown_provider_without_local_fallback() -> Non
 def test_validate_audio_benchmark_selection_rejects_unshipped_comparison() -> None:
     with pytest.raises(NotImplementedError, match="comparison is not shipped"):
         validate_audio_benchmark_selection({"audio_benchmark_compare": True})
+
+
+def test_validate_audio_fusion_selection_rejects_unshipped_mode() -> None:
+    with pytest.raises(NotImplementedError, match="context fusion is not shipped"):
+        validate_audio_fusion_selection({"audio_fusion_mode": "audio_first"})
 
 
 def test_faster_whisper_adapter_preserves_segment_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
