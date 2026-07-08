@@ -74,6 +74,7 @@ async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
 
     output_path = Path(result["output"]["text_path"])
     payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert output_path.name == "scores.chunks.json"
     assert output_path.suffix == ".json"
     assert result["output"]["media_type"] == "application/json"
     assert payload["schema_version"] == "marker.chunks.v1"

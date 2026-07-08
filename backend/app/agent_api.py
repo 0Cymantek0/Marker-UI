@@ -39,10 +39,8 @@ from app.database import async_session_factory, create_tables
 from app.errors import (
     InputNotAllowedError,
     InputNotFoundError,
-    MarkerError,
     UnsupportedFormatError,
     UsageError,
-    from_exception,
 )
 from app.models.job import ConversionJob
 from app.models.settings import Setting
@@ -617,6 +615,7 @@ async def _convert_resolved_path(
         source_name=original_name,
         output_base=output_base,
         output_path=Path(output_path).expanduser() if output_path else None,
+        output_format=requested_formats[0] if requested_formats else "markdown",
         overwrite=overwrite,
         conversion_config=config,
         source_url=source_url,
@@ -1417,6 +1416,7 @@ def _save_result(
     source_name: str,
     output_base: Path,
     output_path: Path | None,
+    output_format: str | None,
     overwrite: bool,
     conversion_config: dict[str, Any],
     source_url: str | None,
@@ -1426,7 +1426,7 @@ def _save_result(
         source_name=source_name,
         output_base=output_base,
         output_path=output_path,
-        output_format=None,
+        output_format=output_format,
         conversion_config=conversion_config,
         layout="file",
         source_url=source_url,
