@@ -561,6 +561,7 @@ def marker_output_manifest(
 async def marker_list_capabilities() -> CapabilitiesOutput:
     """Return supported extensions, engines, output modes, and tool names."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     return active_profile_capabilities()
 
 
@@ -577,6 +578,7 @@ async def marker_list_capabilities() -> CapabilitiesOutput:
 async def marker_get_capabilities() -> CapabilitiesOutput:
     """Alias for marker_list_capabilities using v1 naming."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     return await marker_list_capabilities()
 
 
@@ -593,6 +595,7 @@ async def marker_get_capabilities() -> CapabilitiesOutput:
 async def marker_get_health() -> HealthOutput:
     """Return lightweight MCP server health."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     return {"service": SERVICE_NAME, "status": "ok"}
 
 
@@ -609,6 +612,7 @@ async def marker_get_health() -> HealthOutput:
 async def marker_get_version() -> VersionOutput:
     """Return package/build and schema version information."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     return {
         "service": SERVICE_NAME,
         "version": os.getenv("MARKER_VERSION", "unknown"),
@@ -643,6 +647,7 @@ async def marker_plan_conversion(
     high-accuracy modes. This tool never writes output files.
     """
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     options = AgentConversionOptions(
         engine_override=_none_if_blank(engine_override),
         conversion_profile=_none_if_blank(conversion_profile),
@@ -681,6 +686,7 @@ async def marker_plan_local_file(
 ) -> PlanOutput:
     """Plan conversion for one local file inside allowed roots."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     options = AgentConversionOptions(
         engine_override=_none_if_blank(engine_override),
         conversion_profile=_none_if_blank(conversion_profile),
@@ -715,6 +721,7 @@ async def marker_plan_url(
 ) -> PlanOutput:
     """Plan conversion for a public URL without downloading it."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     assert_safe_source_url(source_url)
     parsed_name = Path(unquote(urlparse(source_url).path)).name or "document"
     options = AgentConversionOptions(
@@ -830,6 +837,7 @@ async def marker_convert_file(
     marker_read_output using output.text_path and the returned offsets.
     """
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = AgentConversionOptions(
         output_format=output_format,
         converter_cls=_none_if_blank(converter_cls),
@@ -957,6 +965,7 @@ async def marker_convert_local_file(
 ) -> ConvertOutput:
     """Convert one local file inside allowed roots."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -1001,6 +1010,7 @@ async def marker_convert_url(
 ) -> ConvertOutput:
     """Download a safe public URL and convert it."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -1100,6 +1110,7 @@ async def marker_submit_job(
     history/status parity matters. Poll marker_get_job_status afterwards.
     """
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = AgentConversionOptions(
         output_format=output_format,
         converter_cls=_none_if_blank(converter_cls),
@@ -1204,6 +1215,7 @@ async def marker_submit_local_job(
 ) -> SubmitJobOutput:
     """Submit an async conversion job for one local file inside allowed roots."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -1242,6 +1254,7 @@ async def marker_submit_url_job(
 ) -> SubmitJobOutput:
     """Submit an async conversion job for a safe public URL."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -1374,6 +1387,7 @@ async def marker_list_jobs(
 ) -> JobsOutput:
     """List conversion history with pagination and without full result text."""
 
+    require_mcp_scopes(SCOPE_JOBS_READ)
     return await list_jobs(page=page, page_size=page_size)
 
 
@@ -1394,6 +1408,7 @@ async def marker_get_job_status(
 ) -> JobStatusOutput:
     """Get one job status, metadata, paths, and optional bounded result text."""
 
+    require_mcp_scopes(SCOPE_JOBS_READ)
     result = await get_job_status(
         job_id,
         include_result_text=include_result_text,
@@ -1556,6 +1571,7 @@ async def marker_self_test(
 ) -> SelfTestOutput:
     """Report expected tools and optionally verify a real deterministic conversion."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     data = await self_test(include_conversion=include_conversion)
     registered = await mcp.list_tools()
     resources = await mcp.list_resources()

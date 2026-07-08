@@ -167,8 +167,8 @@ def register_mcp_resources(
         return (
             "# Marker Agent Guide\n\n"
             "1. Read `marker://capabilities`.\n"
-            "2. Plan local files with `marker_plan_local_file` or URLs with `marker_plan_url`.\n"
-            "3. Convert locally with `marker_convert_local_file` or public URLs with `marker_convert_url`.\n"
+            "2. Plan sources with `marker_plan` and a `source` object.\n"
+            "3. Convert sources with `marker_convert` or submit long work with `marker_submit`.\n"
             "4. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.\n"
             "5. Read long outputs as bounded offset pages with `marker_read_output`; request `output_format='chunks'` when semantic RAG chunks are needed.\n"
         )

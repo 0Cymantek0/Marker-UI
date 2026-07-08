@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import os
 import subprocess
@@ -1150,6 +1151,23 @@ async def test_mcp_default_tool_profile_is_minimal():
 
 
 @pytest.mark.asyncio
+async def test_mcp_agent_guide_uses_minimal_v2_tool_names():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("minimal")
+    contents = await mcp_server.mcp.read_resource("marker://docs/agent-guide")
+    text = contents[0].content
+
+    assert "marker_plan" in text
+    assert "marker_convert" in text
+    assert "marker_submit" in text
+    assert "marker_plan_local_file" not in text
+    assert "marker_plan_url" not in text
+    assert "marker_convert_local_file" not in text
+    assert "marker_convert_url" not in text
+
+
+@pytest.mark.asyncio
 async def test_mcp_full_and_admin_profiles_gate_destructive_tools(monkeypatch: pytest.MonkeyPatch):
     import app.mcp_server as mcp_server
 
@@ -1406,6 +1424,30 @@ def test_mcp_extra_options_omit_unspecified_booleans():
         "archive_max_total_uncompressed_bytes": 4096,
         "archive_max_compression_ratio": 25.0,
     }
+
+
+def test_mcp_tools_enforce_declared_scopes():
+    import app.agent_surface as agent_surface
+    import app.mcp_server as mcp_server
+
+    missing: list[str] = []
+    for name in agent_surface.MCP_ALL_TOOL_NAMES:
+        fn = getattr(mcp_server, name)
+        if "require_mcp_scopes(" not in inspect.getsource(fn):
+            missing.append(name)
+
+    assert missing == []
+
+
+@pytest.mark.asyncio
+async def test_mcp_v1_capability_tools_require_capabilities_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["jobs:read"]))
+
+    with pytest.raises(PermissionError, match="capabilities:read"):
+        await mcp_server.marker_get_health()
 
 
 @pytest.mark.asyncio
