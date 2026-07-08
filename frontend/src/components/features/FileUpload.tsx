@@ -3,10 +3,8 @@ import { UploadCloud, FileText, X, FileImage, FileCode, FileSpreadsheet, FolderO
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
-import { browseFiles, browseFolder } from '@/lib/api'
 import type { ConverterPlanResponse, InputFormatCapability } from '@/lib/api'
 import { RoutingAnalysis } from './conversion/RoutingAnalysis'
-import { toast } from 'sonner'
 
 const DEFAULT_ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.msg,.epub,.html,.htm,.csv,.tsv,.json,.jsonl,.txt,.md,.rst,.log,.xml,.rss,.atom,.ipynb,.zip,.wav,.mp3,.m4a,.flac,.ogg,.aac,.mp4,.mov,.mkv,.webm,.avi,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
 const DEFAULT_SUPPORTED_FORMATS_TEXT = 'Supported: PDF, Word, spreadsheets, slides, email, EPUB, HTML, text/data, archives, audio/video, and images (select multiple)'
@@ -143,33 +141,6 @@ export function FileUpload({
       ...prev,
       [key]: !prev[key],
     }))
-  }
-
-  const handleBrowseLocalFiles = async () => {
-    try {
-      const res = await browseFiles()
-      if (res.paths && res.paths.length > 0) {
-        const newPaths = res.paths.join('\n')
-        onLocalPathsChange(localPaths ? `${localPaths}\n${newPaths}` : newPaths)
-        toast.success(`Added ${res.paths.length} file path(s)`)
-      }
-    } catch (err) {
-      console.error('Failed to browse files:', err)
-      toast.error('Failed to open file browser')
-    }
-  }
-
-  const handleBrowseOutputDir = async () => {
-    try {
-      const res = await browseFolder()
-      if (res.path) {
-        onOutputDirChange(res.path)
-        toast.success('Output folder updated')
-      }
-    } catch (err) {
-      console.error('Failed to browse folder:', err)
-      toast.error('Failed to open folder browser')
-    }
   }
 
   const handleDrop = useCallback(
@@ -367,20 +338,9 @@ export function FileUpload({
       ) : (
         /* Local paths text area */
         <div className="space-y-2 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
-              Absolute Local File Paths (One Per Line)
-            </label>
-            <button
-              type="button"
-              onClick={handleBrowseLocalFiles}
-              disabled={disabled}
-              className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-all hover:translate-x-0.5 active:scale-95"
-            >
-              <FolderOpen className="w-3 h-3" />
-              Browse Files...
-            </button>
-          </div>
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
+            Absolute Local File Paths (One Per Line)
+          </label>
           <textarea
             disabled={disabled}
             value={localPaths}
@@ -449,24 +409,13 @@ export function FileUpload({
             Output Folder Path (Optional)
           </label>
         </div>
-        <div className="flex gap-2">
-          <Input
-            disabled={disabled}
-            value={outputDir}
-            onChange={(e) => onOutputDirChange(e.target.value)}
-            placeholder="e.g. C:\path\to\output_folder"
-            className="bg-background/50 text-xs flex-1 rounded-xl"
-          />
-          <button
-            type="button"
-            onClick={handleBrowseOutputDir}
-            disabled={disabled}
-            className="px-3 text-xs font-bold uppercase tracking-wider border border-border/80 hover:bg-muted/40 rounded-xl transition-all flex items-center gap-1.5 shrink-0 bg-background/50 shadow-sm active:scale-95"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            Browse...
-          </button>
-        </div>
+        <Input
+          disabled={disabled}
+          value={outputDir}
+          onChange={(e) => onOutputDirChange(e.target.value)}
+          placeholder="e.g. C:\path\to\output_folder"
+          className="bg-background/50 text-xs flex-1 rounded-xl"
+        />
         <p className="text-xs text-muted-foreground/75 leading-normal">
           * Leave blank to save to the default directory (or same folder as the input file when using local paths).
         </p>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { FileUpload } from '@/components/features/FileUpload'
 import type { InputFormatCapability } from '@/lib/api'
@@ -64,5 +64,32 @@ describe('FileUpload', () => {
     expect(input).toHaveAttribute('accept', expect.stringContaining('.pdf'))
     expect(input).toHaveAttribute('accept', expect.stringContaining('.wav'))
     expect(screen.getByText(/Supported: PDF, Word, spreadsheets/i)).toBeInTheDocument()
+  })
+
+  it('uses manual path entry without exposing unsupported browse buttons', () => {
+    const onLocalPathsChange = vi.fn()
+    const onOutputDirChange = vi.fn()
+    render(
+      <FileUpload
+        {...baseProps}
+        localPaths=""
+        onLocalPathsChange={onLocalPathsChange}
+        outputDir=""
+        onOutputDirChange={onOutputDirChange}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /local paths/i }))
+
+    expect(screen.queryByRole('button', { name: /browse/i })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText(/document\.pdf/i), {
+      target: { value: 'C:\\docs\\paper.pdf' },
+    })
+    fireEvent.change(screen.getByPlaceholderText(/output_folder/i), {
+      target: { value: 'C:\\docs\\out' },
+    })
+
+    expect(onLocalPathsChange).toHaveBeenCalledWith('C:\\docs\\paper.pdf')
+    expect(onOutputDirChange).toHaveBeenCalledWith('C:\\docs\\out')
   })
 })

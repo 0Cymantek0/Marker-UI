@@ -789,14 +789,6 @@ export async function cancelJob(jobId: string): Promise<{ status: string; job_id
   return request<{ status: string; job_id: string; cancelled: boolean }>(`/convert/${jobId}/cancel`, { method: 'POST' })
 }
 
-export async function browseFolder(): Promise<{ path: string }> {
-  return request<{ path: string }>('/convert/browse-folder')
-}
-
-export async function browseFiles(): Promise<{ paths: string[] }> {
-  return request<{ paths: string[] }>('/convert/browse-files')
-}
-
 export async function healthCheck(): Promise<{ status: string }> {
   return request<{ status: string }>('/health')
 }

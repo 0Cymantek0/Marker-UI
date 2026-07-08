@@ -27,8 +27,6 @@ vi.mock('@/lib/api', () => ({
   deleteJob: (...args: unknown[]) => mockDeleteJob(...args),
   getJobStatus: (...args: unknown[]) => mockGetJobStatus(...args),
   getHistory: (...args: unknown[]) => mockGetHistory(...args),
-  browseFiles: vi.fn(),
-  browseFolder: vi.fn(),
   getCapabilities: () => mockGetCapabilities(),
   planConversion: (...args: unknown[]) => mockPlanConversion(...args),
   getLLMProviders: vi.fn().mockResolvedValue([]),
