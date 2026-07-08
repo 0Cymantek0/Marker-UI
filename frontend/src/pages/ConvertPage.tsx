@@ -721,7 +721,7 @@ export function ConvertPage() {
                                 <span className="text-xs font-bold font-mono text-foreground">
                                   {Math.round(job.progress)}%
                                 </span>
-                                {job.eta !== undefined && job.eta > 0 && (
+                                {typeof job.eta === 'number' && job.eta > 0 && (
                                   <>
                                     <span className="text-xs text-muted-foreground/60 font-mono">•</span>
                                     <span className="text-xs font-mono text-muted-foreground">

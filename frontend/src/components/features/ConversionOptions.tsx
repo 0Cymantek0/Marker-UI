@@ -1063,7 +1063,7 @@ function HelpIcon({ text }: { text: string }) {
   return (
     <div className="group relative">
       <HelpCircle className="mt-[3px] w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help" />
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-20 pointer-events-none text-left">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-50 pointer-events-none text-left">
         {text}
       </div>
     </div>

@@ -12,6 +12,8 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   FileCode,
   AlertCircle,
   Activity,
@@ -38,7 +40,7 @@ const STATUS_VARIANT = {
 }
 
 export function HistoryPage() {
-  const PAGE_SIZE = 50
+  const [pageSize, setPageSize] = useState(10)
   const [jobs, setJobs] = useState<JobStatus[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -46,6 +48,7 @@ export function HistoryPage() {
 
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [converterFilter, setConverterFilter] = useState<string>('all')
 
@@ -56,6 +59,14 @@ export function HistoryPage() {
   // Delete confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
+  // Debounce search query changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   // Reset delete confirmation after 3 seconds of inactivity
   useEffect(() => {
     if (!deleteConfirmId) return
@@ -65,15 +76,26 @@ export function HistoryPage() {
     return () => clearTimeout(timer)
   }, [deleteConfirmId])
 
+  // Reset page to 1 when filters or page size change
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearchQuery, statusFilter, converterFilter, pageSize])
+
   // Reset delete confirmation when filters or page change
   useEffect(() => {
     setDeleteConfirmId(null)
-  }, [searchQuery, statusFilter, converterFilter, page])
+  }, [debouncedSearchQuery, statusFilter, converterFilter, page])
 
   const fetchJobs = useCallback(async () => {
     setIsLoading(true)
     try {
-      const data = await getHistory(page, PAGE_SIZE)
+      const data = await getHistory(
+        page,
+        pageSize,
+        debouncedSearchQuery || undefined,
+        statusFilter || undefined,
+        converterFilter || undefined
+      )
       setJobs(data.jobs)
       setTotal(data.total)
     } catch {
@@ -81,7 +103,7 @@ export function HistoryPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [page])
+  }, [page, pageSize, debouncedSearchQuery, statusFilter, converterFilter])
 
   useEffect(() => {
     void fetchJobs()
@@ -130,13 +152,8 @@ export function HistoryPage() {
 
   // Local filtering & search
   const filteredJobs = useMemo(() => {
-    return jobs.filter((job) => {
-      const matchesSearch = job.filename.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesStatus = statusFilter === 'all' || job.status === statusFilter
-      const matchesConverter = converterFilter === 'all' || job.converter === converterFilter
-      return matchesSearch && matchesStatus && matchesConverter
-    })
-  }, [jobs, searchQuery, statusFilter, converterFilter])
+    return jobs
+  }, [jobs])
 
   // Statistics calculation
   const stats = useMemo(() => {
@@ -179,7 +196,37 @@ export function HistoryPage() {
     }
   }
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const totalPages = Math.ceil(total / pageSize)
+
+  const getPageNumbers = () => {
+    const pageNumbers: (number | string)[] = []
+    const maxVisiblePages = 5
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i)
+      }
+    } else {
+      pageNumbers.push(1)
+      const start = Math.max(2, page - 1)
+      const end = Math.min(totalPages - 1, page + 1)
+
+      if (start > 2) {
+        pageNumbers.push('ellipsis-start')
+      }
+
+      for (let i = start; i <= end; i++) {
+        pageNumbers.push(i)
+      }
+
+      if (end < totalPages - 1) {
+        pageNumbers.push('ellipsis-end')
+      }
+
+      pageNumbers.push(totalPages)
+    }
+    return pageNumbers
+  }
 
   return (
     <div className="flex flex-col min-h-full">
@@ -263,7 +310,7 @@ export function HistoryPage() {
               { value: 'completed', label: 'Completed' },
               { value: 'failed', label: 'Failed' },
               { value: 'processing', label: 'Processing' },
-              { value: 'queued', label: 'Queued' },
+              { value: 'pending', label: 'Queued' },
             ]}
           />
 
@@ -276,6 +323,17 @@ export function HistoryPage() {
               { value: 'TableConverter', label: 'Table Focused' },
               { value: 'OCRConverter', label: 'OCR Extraction' },
               { value: 'ExtractionConverter', label: 'Marker Text Extract' },
+            ]}
+          />
+
+          <Select
+            value={String(pageSize)}
+            onChange={(val) => setPageSize(Number(val))}
+            options={[
+              { value: '10', label: '10 / page' },
+              { value: '20', label: '20 / page' },
+              { value: '50', label: '50 / page' },
+              { value: '100', label: '100 / page' },
             ]}
           />
         </div>
@@ -320,11 +378,11 @@ export function HistoryPage() {
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
                         <p className="text-sm font-semibold truncate text-foreground">{job.filename}</p>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-xs py-0.5 px-1.5">
+                          <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-xs py-0.5 px-3">
                             {job.status}
                           </Badge>
                           {job.conversion_metadata?.engine?.label && (
-                            <Badge variant="outline" className="w-fit text-xs py-0 px-1 border-primary/20 bg-primary/5 text-primary">
+                            <Badge variant="outline" className="w-fit text-xs py-0.5 px-3 border-primary/20 bg-primary/5 text-primary">
                               {job.conversion_metadata.engine.label}
                             </Badge>
                           )}
@@ -466,28 +524,57 @@ export function HistoryPage() {
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4 select-none">
-          <Button
-            variant="outline"
-            size="sm"
+        <div className="flex items-center justify-center gap-4 pt-6 select-none text-xs font-bold">
+          <button
+            type="button"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-lg h-8 px-3"
+            className="text-muted-foreground/60 hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            title="Previous Page"
           >
-            Previous
-          </Button>
-          <span className="text-xs font-semibold text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-center gap-3">
+            {getPageNumbers().map((num, i) => {
+              if (num === 'ellipsis-start' || num === 'ellipsis-end') {
+                return (
+                  <span key={`ellipsis-${i}`} className="text-muted-foreground/45">
+                    •••
+                  </span>
+                )
+              }
+
+              const pageNum = num as number
+              const isActive = pageNum === page
+
+              return (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setPage(pageNum)}
+                  className={cn(
+                    "transition-colors px-1",
+                    isActive
+                      ? "text-foreground font-extrabold"
+                      : "text-muted-foreground/60 hover:text-foreground"
+                  )}
+                >
+                  {pageNum}
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            type="button"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg h-8 px-3"
+            className="text-muted-foreground/60 hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            title="Next Page"
           >
-            Next
-          </Button>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

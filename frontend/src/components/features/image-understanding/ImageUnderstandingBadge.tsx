@@ -61,12 +61,12 @@ export function ImageUnderstandingBadge({ meta, index, total, inline = false }: 
           aria-label={`Image ${index} of ${total}: ${meta.image_type} converted via VLM. Confidence ${confidencePct}%. Click for details.`}
           className={cn(inline ? "relative" : "absolute -top-2 -right-2 z-10")}
         >
-          <Badge variant={variant} className="px-1.5 py-0 text-xs font-bold uppercase tracking-wide shadow-sm cursor-pointer">
+          <Badge variant={variant} className="px-3 py-0.5 text-xs font-bold uppercase tracking-wide shadow-sm cursor-pointer">
             {label}
           </Badge>
         </button>
         {/* Hover tooltip */}
-        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 hidden group-hover:block w-56 p-2.5 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-relaxed text-slate-100 shadow-lg border border-slate-800/80 z-20 pointer-events-none text-left">
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 hidden group-hover:block w-56 p-2.5 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-relaxed text-slate-100 shadow-lg border border-slate-800/80 z-50 pointer-events-none text-left">
           <div className="font-bold uppercase tracking-wide text-xs text-slate-400 mb-1">
             Image Understanding
           </div>
