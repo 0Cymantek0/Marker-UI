@@ -119,6 +119,14 @@ def test_option_metadata_covers_conversion_options_model_fields():
     assert sorted(metadata_names - option_fields) == ["audio_config"]
 
 
+def test_audio_diarization_metadata_is_capability_gated():
+    metadata = {item.name: item for item in OPTION_METADATA}
+
+    description = metadata["audio_diarization"].description
+    assert "rejected unless" in description
+    assert "supports diarization" in description
+
+
 def test_conversion_options_validate_known_enums_and_extra_options():
     opts = ConversionOptionsModel(
         output_format="markdown",

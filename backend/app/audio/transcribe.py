@@ -21,6 +21,7 @@ from app.audio.pipeline import AudioTranscript, normalize_transcript, slug_sourc
 from app.audio.providers import ProviderCapability, build_provider, get_capability
 from app.audio.providers.registry import (
     validate_audio_benchmark_selection,
+    validate_audio_diarization_selection,
     validate_audio_fusion_selection,
     validate_provider_selection,
 )
@@ -97,14 +98,6 @@ def transcribe_audio_file_detailed(
     )
     raw_payload = raw.to_dict()
     raw_payload["media_info"] = media_info
-    # Diarization is provider-specific (plan §10). A provider that can't
-    # diarize surfaces an explicit warning instead of silently faking a single
-    # speaker when the user asked for diarization.
-    if config.get("audio_diarization") and not capability.supports_diarization:
-        raw_payload.setdefault("warnings", []).append(
-            "diarization_requested_but_unsupported_by_provider"
-        )
-
     label = str(source_label or Path(filepath).name)
     sid = str(source_id or slug_source_id(label))
     transcript = normalize_transcript(
@@ -130,10 +123,11 @@ def resolve_audio_provider(config: dict[str, Any]) -> str:
     provider_id = str(config.get("audio_provider") or "local_faster_whisper").strip().lower()
     validate_audio_benchmark_selection(config)
     validate_audio_fusion_selection(config)
-    validate_provider_selection(
+    capability = validate_provider_selection(
         provider_id,
         allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
     )
+    validate_audio_diarization_selection(config, capability)
     return provider_id
 
 

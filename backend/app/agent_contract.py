@@ -373,7 +373,7 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="audio_beam_size", cli_flag="--audio-beam-size", type="integer", category="audio", description="Beam size for decoding."),
     OptionMetadataModel(name="audio_vad_filter", cli_flag="--audio-vad-filter", type="boolean", category="audio", description="Apply Silero VAD silence filtering."),
     OptionMetadataModel(name="audio_gap_warning_ms", type="integer", category="audio", description="Timestamp gap in milliseconds that emits an audio continuity warning."),
-    OptionMetadataModel(name="audio_diarization", cli_flag="--audio-diarization", type="boolean", default=False, category="audio", description="Separate speakers when the provider supports it."),
+    OptionMetadataModel(name="audio_diarization", cli_flag="--audio-diarization", type="boolean", default=False, category="audio", description="Request provider-backed speaker diarization; rejected unless the selected shipped provider supports diarization."),
     OptionMetadataModel(name="audio_min_speakers", cli_flag="--audio-min-speakers", type="integer", category="audio", description="Minimum expected speaker count."),
     OptionMetadataModel(name="audio_max_speakers", cli_flag="--audio-max-speakers", type="integer", category="audio", description="Maximum expected speaker count."),
     OptionMetadataModel(name="audio_speaker_aliases", cli_flag="--audio-speaker-alias", type="object", category="audio", description="Map of speaker labels to confirmed names."),

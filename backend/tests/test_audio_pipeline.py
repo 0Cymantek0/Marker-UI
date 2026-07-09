@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.audio.pipeline import (
     append_contradiction_section,
     build_multi_audio_document,
@@ -321,7 +323,7 @@ def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
     try:
         transcript = transcribe_audio_file(
             "/tmp/fake.wav",
-            {"audio_speaker_aliases": {"speaker_0": "Alice"}, "audio_diarization": True},
+            {"audio_speaker_aliases": {"speaker_0": "Alice"}},
             source_label="video.mp4",
             source_id="video_audio",
         )
@@ -332,5 +334,29 @@ def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
     assert transcript.segments[1].speaker == "speaker_1"
     assert transcript.source_id == "video_audio"
     assert transcript.segments[0].confidence == 0.9
-    assert "diarization_requested_but_unsupported_by_provider" in transcript.warnings
+
+
+def test_transcribe_audio_file_rejects_unsupported_diarization_before_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Diarization must fail clearly when the selected provider cannot diarize."""
+
+    from app.audio.transcribe import transcribe_audio_file
+
+    import app.audio.transcribe as transcribe_mod
+
+    def _unexpected_provider(_provider_id):
+        raise AssertionError("provider should not be built for unsupported diarization")
+
+    monkeypatch.setattr(transcribe_mod, "build_provider", _unexpected_provider)
+
+    with pytest.raises(
+        NotImplementedError,
+        match="Audio diarization is not supported by provider 'local_faster_whisper'",
+    ):
+        transcribe_audio_file(
+            "/tmp/fake.wav",
+            {"audio_diarization": True},
+            source_label="video.mp4",
+        )
 

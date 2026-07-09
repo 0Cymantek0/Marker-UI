@@ -58,6 +58,9 @@ so contributors can see where help is useful.
   queued.
 - Audio provider comparison is not shipped yet because it needs at least two
   implemented provider adapters plus a benchmark runner.
+- Real speaker diarization is not shipped. Requests for diarization fail before
+  provider execution or job queueing when the selected provider lacks that
+  capability; no single-speaker result is presented as diarized output.
 - Audio enhancement is deterministic and evidence-first. Enhanced output must
   retain source refs or fall back to the original transcript unless strict
   failure is requested.

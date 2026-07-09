@@ -26,6 +26,7 @@ __all__ = [
     "build_provider",
     "get_capability",
     "validate_audio_benchmark_selection",
+    "validate_audio_diarization_selection",
     "validate_audio_fusion_selection",
     "validate_provider_selection",
 ]
@@ -134,6 +135,23 @@ def validate_audio_benchmark_selection(config: dict[str, object]) -> None:
         "Audio provider comparison is not shipped in this build. "
         "It requires a benchmark runner plus at least two shipped STT adapters; "
         "disable audio_benchmark_compare."
+    )
+
+
+def validate_audio_diarization_selection(
+    config: dict[str, object],
+    capability: ProviderCapability,
+) -> None:
+    """Reject diarization when the selected provider cannot actually do it."""
+
+    if not _truthy(config.get("audio_diarization")):
+        return
+    if capability.supports_diarization:
+        return
+    raise NotImplementedError(
+        f"Audio diarization is not supported by provider {capability.provider_id!r}. "
+        "Diarization requires a shipped provider with supports_diarization=true; "
+        "disable audio_diarization or choose a diarization-capable provider after its adapter ships."
     )
 
 

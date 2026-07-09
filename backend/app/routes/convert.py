@@ -36,6 +36,7 @@ from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse, RetryJobRequest
 from app.audio.providers.registry import (
     validate_audio_benchmark_selection,
+    validate_audio_diarization_selection,
     validate_audio_fusion_selection,
     validate_provider_selection,
 )
@@ -775,10 +776,11 @@ async def upload_file(
         try:
             validate_audio_benchmark_selection(config)
             validate_audio_fusion_selection(config)
-            validate_provider_selection(
+            capability = validate_provider_selection(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
             )
+            validate_audio_diarization_selection(config, capability)
         except (NotImplementedError, PermissionError, ValueError) as exc:
             if not is_local:
                 Path(stored_path).unlink(missing_ok=True)

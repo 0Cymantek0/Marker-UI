@@ -15,6 +15,7 @@ from app.audio.providers.capabilities import (
 from app.audio.providers.registry import (
     build_provider,
     validate_audio_benchmark_selection,
+    validate_audio_diarization_selection,
     validate_audio_fusion_selection,
     validate_provider_selection,
 )
@@ -98,6 +99,13 @@ def test_build_provider_rejects_unknown_provider_without_local_fallback() -> Non
 def test_validate_audio_benchmark_selection_rejects_unshipped_comparison() -> None:
     with pytest.raises(NotImplementedError, match="comparison is not shipped"):
         validate_audio_benchmark_selection({"audio_benchmark_compare": True})
+
+
+def test_validate_audio_diarization_selection_rejects_unsupported_provider() -> None:
+    cap = get_capability("local_faster_whisper")
+
+    with pytest.raises(NotImplementedError, match="not supported by provider 'local_faster_whisper'"):
+        validate_audio_diarization_selection({"audio_diarization": True}, cap)
 
 
 def test_validate_audio_fusion_selection_rejects_unshipped_mode() -> None:

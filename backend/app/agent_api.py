@@ -21,6 +21,7 @@ from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as Age
 from app.agent_surface import DEFAULT_AGENT_TOOL_NAMES
 from app.audio.providers.registry import (
     validate_audio_benchmark_selection,
+    validate_audio_diarization_selection,
     validate_audio_fusion_selection,
     validate_provider_selection,
 )
@@ -467,10 +468,11 @@ async def submit_conversion_job(
         try:
             validate_audio_benchmark_selection(config)
             validate_audio_fusion_selection(config)
-            validate_provider_selection(
+            capability = validate_provider_selection(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
             )
+            validate_audio_diarization_selection(config, capability)
         except (NotImplementedError, PermissionError, ValueError) as exc:
             if source_url_safe:
                 Path(stored_path).unlink(missing_ok=True)
@@ -578,10 +580,11 @@ async def _convert_resolved_path(
         try:
             validate_audio_benchmark_selection(config)
             validate_audio_fusion_selection(config)
-            validate_provider_selection(
+            capability = validate_provider_selection(
                 config.get("audio_provider"),
                 allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
             )
+            validate_audio_diarization_selection(config, capability)
         except (NotImplementedError, PermissionError, ValueError) as exc:
             raise UsageError(str(exc)) from exc
     if source_url:

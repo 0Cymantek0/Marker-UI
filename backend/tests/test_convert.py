@@ -1843,7 +1843,7 @@ async def test_upload_accepts_audio_config_blob(client: AsyncClient, db_session)
     """The audio_config JSON blob is parsed and merged into the stored config."""
     blob = {
         "audio_provider": "local_faster_whisper",
-        "audio_diarization": True,
+        "audio_speaker_aliases": {"speaker_0": "Alice"},
         "audio_vocabulary_pack_ids": ["medical", "team"],
         "audio_text_enhancement_strength": 3,
     }
@@ -1858,9 +1858,33 @@ async def test_upload_accepts_audio_config_blob(client: AsyncClient, db_session)
     job = (await db_session.execute(stmt)).scalar_one()
     cfg = json.loads(job.config_json)
     assert cfg["audio_provider"] == "local_faster_whisper"
-    assert cfg["audio_diarization"] is True
+    assert cfg["audio_speaker_aliases"] == {"speaker_0": "Alice"}
     assert cfg["audio_vocabulary_pack_ids"] == ["medical", "team"]
     assert cfg["audio_text_enhancement_strength"] == 3
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_unsupported_audio_diarization_before_queue(client: AsyncClient, db_session):
+    """Diarization must fail before queueing when the selected provider cannot do it."""
+    resp = await _upload_file(
+        client,
+        filename="diarize.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {
+                    "audio_provider": "local_faster_whisper",
+                    "audio_diarization": True,
+                }
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Audio diarization is not supported by provider" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "diarize.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
 
 
 @pytest.mark.asyncio

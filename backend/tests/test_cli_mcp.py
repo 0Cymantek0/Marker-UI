@@ -156,6 +156,23 @@ async def test_agent_api_rejects_unshipped_audio_fusion_mode(tmp_path: Path):
         )
 
 
+@pytest.mark.asyncio
+async def test_agent_api_rejects_unsupported_audio_diarization(tmp_path: Path):
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"RIFF fake wav")
+
+    with pytest.raises(UsageError, match="Audio diarization is not supported by provider"):
+        await convert_document(
+            local_file_path=str(source),
+            output_dir=str(tmp_path / "out"),
+            options=AgentConversionOptions(
+                output_format="markdown",
+                audio_provider="local_faster_whisper",
+                audio_diarization=True,
+            ),
+        )
+
+
 def test_agent_capabilities_and_config_include_frontend_audio_modes():
     caps = agent_api.capabilities()
 
