@@ -149,6 +149,10 @@ class ReadOutputResult(MarkerOutputModel):
     chunk_count: int | None = Field(default=None, description="Total semantic chunks in the envelope (semantic mode).", examples=[12])
     next_chunk_index: int | None = Field(default=None, description="Next chunk index, or null if this was the last (semantic mode).", examples=[1])
     schema_version: str | None = Field(default=None, description="Chunk envelope schema version (semantic mode).", examples=["marker.chunks.v1"])
+    renderer_kind: str | None = Field(default=None, description="Chunk renderer class, currently 'derived' for Markdown-derived chunks (semantic mode).", examples=["derived"])
+    source_format: str | None = Field(default=None, description="Format used as chunking input, currently 'markdown' for derived chunks (semantic mode).", examples=["markdown"])
+    semantic_level: str | None = Field(default=None, description="Semantic boundary level represented by the chunks, currently 'markdown_structure' (semantic mode).", examples=["markdown_structure"])
+    structured_ir: bool | None = Field(default=None, description="True only when chunks came from a structured document IR instead of derived Markdown (semantic mode).", examples=[False])
     chunk: dict[str, Any] | None = Field(default=None, description="Full semantic chunk object with id/chunk_id, contextual_text, heading_path/section_path, content_types, line and char spans, counts, source_refs, previous_id, and next_id (semantic mode).", examples=[{"id": "chunk_0000_abc123", "heading_path": ["Title"], "content_types": ["text"]}])
 
 

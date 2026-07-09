@@ -1320,6 +1320,10 @@ async def test_mcp_tools_have_complete_input_metadata_and_output_schemas():
         "semantic_markdown",
     ]
     assert chunk_reader.outputSchema["properties"]["is_semantic_chunk"]["examples"] == [False, True]
+    assert chunk_reader.outputSchema["properties"]["renderer_kind"]["examples"] == ["derived"]
+    assert chunk_reader.outputSchema["properties"]["source_format"]["examples"] == ["markdown"]
+    assert chunk_reader.outputSchema["properties"]["semantic_level"]["examples"] == ["markdown_structure"]
+    assert chunk_reader.outputSchema["properties"]["structured_ir"]["examples"] == [False]
 
     for tool in tools:
         assert tool.outputSchema["type"] == "object", tool.name
