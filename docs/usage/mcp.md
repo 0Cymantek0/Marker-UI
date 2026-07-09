@@ -220,6 +220,9 @@ chunk budgets while keeping semantic chunk reads available through
 `marker_read_output_chunk(mode="semantic")`. `unstructured_by_title` fails
 clearly when the optional Unstructured path is unavailable; pass
 `allow_chunking_fallback=true` only when markdown-heading fallback is acceptable.
+Semantic chunk reads also return `renderer_kind`, `source_format`,
+`semantic_level`, and `structured_ir` so agents can tell today's
+Markdown-derived chunks apart from future document-IR chunks.
 
 ## Resources
 

@@ -177,11 +177,19 @@ class TestConversionService:
         payload = json.loads(result["chunks"]["text"])
         assert payload["schema_version"] == "marker.chunks.v1"
         assert payload["chunk_kind"] == "semantic_markdown"
+        assert payload["renderer_kind"] == "derived"
+        assert payload["source_format"] == "markdown"
+        assert payload["semantic_level"] == "markdown_structure"
+        assert payload["structured_ir"] is False
         assert payload["source"]["name"] == "scores.tsv"
         assert payload["chunk_count"] >= 1
         assert "| Ada | 10 |" in payload["chunks"][-1]["text"]
         assert result["chunks"]["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
         assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "markdown_heading_blocks_v2"
+        assert result["chunks"]["metadata"]["chunking"]["renderer_kind"] == "derived"
+        assert result["chunks"]["metadata"]["chunking"]["source_format"] == "markdown"
+        assert result["chunks"]["metadata"]["chunking"]["semantic_level"] == "markdown_structure"
+        assert result["chunks"]["metadata"]["chunking"]["structured_ir"] is False
 
     def test_native_convert_file_rejects_json_output_format(self, tmp_path: Any) -> None:
         from app.errors import UnsupportedFormatError

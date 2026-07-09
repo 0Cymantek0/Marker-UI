@@ -26,6 +26,10 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
     assert payload["schema_version"] == SCHEMA_VERSION
     assert payload["chunk_kind"] == "semantic_markdown"
     assert payload["chunking_strategy"] == "markdown_heading_blocks_v2"
+    assert payload["renderer_kind"] == "derived"
+    assert payload["source_format"] == "markdown"
+    assert payload["semantic_level"] == "markdown_structure"
+    assert payload["structured_ir"] is False
     assert payload["chunk_count"] == len(payload["chunks"])
     assert payload["chunks"][0]["heading_path"] == ["Title"]
     assert payload["chunks"][-1]["heading_path"] == ["Title", "Details"]
@@ -115,6 +119,10 @@ def test_build_chunks_envelope_includes_token_budget_metadata(monkeypatch: pytes
     payload = json.loads(envelope["text"])
 
     assert envelope["metadata"]["chunking"]["max_tokens"] == 24
+    assert envelope["metadata"]["chunking"]["renderer_kind"] == "derived"
+    assert envelope["metadata"]["chunking"]["source_format"] == "markdown"
+    assert envelope["metadata"]["chunking"]["semantic_level"] == "markdown_structure"
+    assert envelope["metadata"]["chunking"]["structured_ir"] is False
     assert payload["max_tokens"] == 24
     assert all(chunk["token_count"] <= 24 for chunk in payload["chunks"])
 
@@ -280,6 +288,10 @@ def test_chunk_markdown_unstructured_by_title_strategy_when_available(monkeypatc
     )
 
     assert payload["chunking_strategy"] == "unstructured_by_title"
+    assert payload["renderer_kind"] == "derived"
+    assert payload["source_format"] == "markdown"
+    assert payload["semantic_level"] == "markdown_structure"
+    assert payload["structured_ir"] is False
     assert payload["chunk_count"] == 2
     assert payload["chunks"][0]["text"] == "Title\n\nIntro paragraph."
     assert payload["chunks"][0]["char_start"] == 0

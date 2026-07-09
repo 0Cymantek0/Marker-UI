@@ -40,6 +40,9 @@ Segments the document text into smaller, overlapping chunks.
   semantic chunker. It preserves heading paths, line spans, chunk IDs,
   `previous_id` / `next_id` links, character counts, token estimates,
   source document SHA-256, per-chunk content hashes, and source references.
+  Chunks declare `renderer_kind="derived"`, `source_format="markdown"`,
+  `semantic_level="markdown_structure"`, and `structured_ir=false` so callers
+  do not confuse Markdown-derived chunks with future document-IR chunks.
 - Large prose blocks split on sentence and character boundaries with bounded
   overlap. Markdown tables split by rows and repeat the header. Fenced code
   blocks stay fenced, even when split.

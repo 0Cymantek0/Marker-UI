@@ -15,6 +15,10 @@ SCHEMA_VERSION = "marker.chunks.v1"
 DEFAULT_MAX_CHARS = 1800
 DEFAULT_OVERLAP_CHARS = 160
 DEFAULT_TOKEN_ENCODING = "cl100k_base"
+CHUNK_RENDERER_KIND = "derived"
+CHUNK_SOURCE_FORMAT = "markdown"
+CHUNK_SEMANTIC_LEVEL = "markdown_structure"
+CHUNK_STRUCTURED_IR = False
 MARKDOWN_CHUNKING_STRATEGY = "markdown_heading_blocks_v2"
 UNSTRUCTURED_CHUNKING_STRATEGY = "unstructured_by_title"
 _TOKEN_ENCODER: Any | None = None
@@ -73,7 +77,10 @@ def build_chunks_envelope(
         "chunk_kind": "semantic_markdown",
         "chunking_strategy": resolved_strategy,
         "requested_strategy": _normalize_strategy(strategy),
-        "source_format": "markdown",
+        "renderer_kind": CHUNK_RENDERER_KIND,
+        "source_format": CHUNK_SOURCE_FORMAT,
+        "semantic_level": CHUNK_SEMANTIC_LEVEL,
+        "structured_ir": CHUNK_STRUCTURED_IR,
         "source_sha256": payload["source"]["sha256"],
         "chunk_count": payload["chunk_count"],
         "max_chars": max_chars,
@@ -246,6 +253,10 @@ def chunk_markdown(
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
         "chunking_strategy": MARKDOWN_CHUNKING_STRATEGY,
+        "renderer_kind": CHUNK_RENDERER_KIND,
+        "source_format": CHUNK_SOURCE_FORMAT,
+        "semantic_level": CHUNK_SEMANTIC_LEVEL,
+        "structured_ir": CHUNK_STRUCTURED_IR,
         "source": {
             "name": source_name,
             "sha256": source_sha256,
@@ -369,6 +380,10 @@ def chunk_markdown_unstructured_by_title(
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
         "chunking_strategy": UNSTRUCTURED_CHUNKING_STRATEGY,
+        "renderer_kind": CHUNK_RENDERER_KIND,
+        "source_format": CHUNK_SOURCE_FORMAT,
+        "semantic_level": CHUNK_SEMANTIC_LEVEL,
+        "structured_ir": CHUNK_STRUCTURED_IR,
         "source": {
             "name": source_name,
             "sha256": source_sha256,

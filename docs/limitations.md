@@ -26,7 +26,9 @@ so contributors can see where help is useful.
 - `chunks` is available for Marker-backed routes and for native Markdown output.
   Native chunks use Marker UI's deterministic `marker.chunks.v1` Markdown
   chunker with headings, line spans, source refs, and neighbor links. It is not
-  yet a Docling/Unstructured document-IR chunker.
+  yet a Docling/Unstructured document-IR chunker, and the chunks envelope marks
+  that boundary with `renderer_kind="derived"`, `source_format="markdown"`,
+  `semantic_level="markdown_structure"`, and `structured_ir=false`.
 - Downloads choose the file extension from the actual response media type. Jobs
   with extracted sidecar assets are packaged as ZIP archives.
 

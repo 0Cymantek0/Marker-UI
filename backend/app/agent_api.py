@@ -777,12 +777,20 @@ def read_semantic_chunk(path: str, *, chunk_index: int = 0) -> dict[str, Any]:
         )
 
     envelope_kind = str(payload.get("chunk_kind") or "semantic_markdown")
+    renderer_kind = str(payload.get("renderer_kind") or "derived")
+    source_format = str(payload.get("source_format") or "markdown")
+    semantic_level = str(payload.get("semantic_level") or "markdown_structure")
+    structured_ir = payload.get("structured_ir") is True
     return {
         "path": str(output_path.resolve()),
         "chunk_index": chunk_index,
         "chunk_count": len(chunks),
         "schema_version": schema,
         "chunk_kind": envelope_kind,
+        "renderer_kind": renderer_kind,
+        "source_format": source_format,
+        "semantic_level": semantic_level,
+        "structured_ir": structured_ir,
         "is_semantic_chunk": True,
         "chunk": chunk,
         "text": str(chunk.get("text") or ""),

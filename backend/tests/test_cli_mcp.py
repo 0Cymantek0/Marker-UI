@@ -79,6 +79,10 @@ async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
     assert result["output"]["media_type"] == "application/json"
     assert payload["schema_version"] == "marker.chunks.v1"
     assert payload["chunk_kind"] == "semantic_markdown"
+    assert payload["renderer_kind"] == "derived"
+    assert payload["source_format"] == "markdown"
+    assert payload["semantic_level"] == "markdown_structure"
+    assert payload["structured_ir"] is False
     assert payload["chunk_count"] == len(payload["chunks"])
     assert "| alpha | 1 |" in payload["chunks"][-1]["text"]
     assert result["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
@@ -87,6 +91,10 @@ async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
     assert chunk["is_semantic_chunk"] is True
     assert chunk["schema_version"] == "marker.chunks.v1"
     assert chunk["chunk_kind"] == "semantic_markdown"
+    assert chunk["renderer_kind"] == "derived"
+    assert chunk["source_format"] == "markdown"
+    assert chunk["semantic_level"] == "markdown_structure"
+    assert chunk["structured_ir"] is False
     assert chunk["chunk_index"] == 0
     assert chunk["chunk_count"] == payload["chunk_count"]
 

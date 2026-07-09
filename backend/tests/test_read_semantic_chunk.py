@@ -51,6 +51,10 @@ def test_read_semantic_chunk_returns_chunk_by_index(tmp_path: Path) -> None:
     result = read_semantic_chunk(str(out_file), chunk_index=0)
 
     assert result["chunk_kind"] == "semantic_markdown"
+    assert result["renderer_kind"] == "derived"
+    assert result["source_format"] == "markdown"
+    assert result["semantic_level"] == "markdown_structure"
+    assert result["structured_ir"] is False
     assert result["is_semantic_chunk"] is True
     assert result["chunk_index"] == 0
     assert "text" in result and result["text"]
@@ -127,6 +131,8 @@ def test_read_output_chunk_semantic_mode_returns_chunk(tmp_path: Path) -> None:
     result = read_output_chunk(str(out_file), mode="semantic", chunk_index=1)
 
     assert result["is_semantic_chunk"] is True
+    assert result["renderer_kind"] == "derived"
+    assert result["source_format"] == "markdown"
     assert result["chunk_index"] == 1
     assert result["chunk_count"] >= 2
 
