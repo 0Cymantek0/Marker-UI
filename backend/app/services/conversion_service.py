@@ -839,6 +839,7 @@ def _envelope_for_requested_format(
             source_name=Path(filepath).name,
             metadata=dict(envelope.get("metadata") or {}),
             strategy=str(config.get("chunking_strategy") or "markdown_heading_blocks_v2"),
+            max_tokens=config.get("chunk_max_tokens"),
         )
     if requested_format in _EXPECTED_FORMAT_EXTENSIONS:
         _validate_format_artifact(requested_format, envelope, source=Path(filepath).name)
@@ -871,6 +872,7 @@ def _derived_markdown_formats(
                 source_name=Path(filepath).name,
                 metadata=dict(markdown_envelope.get("metadata") or {}),
                 strategy=str((config or {}).get("chunking_strategy") or "markdown_heading_blocks_v2"),
+                max_tokens=(config or {}).get("chunk_max_tokens"),
             )
             _validate_format_artifact("chunks", outputs["chunks"], source=Path(filepath).name)
     if not outputs:

@@ -14,8 +14,10 @@ from typing import Any
 SCHEMA_VERSION = "marker.chunks.v1"
 DEFAULT_MAX_CHARS = 1800
 DEFAULT_OVERLAP_CHARS = 160
+DEFAULT_TOKEN_ENCODING = "cl100k_base"
 MARKDOWN_CHUNKING_STRATEGY = "markdown_heading_blocks_v2"
 UNSTRUCTURED_CHUNKING_STRATEGY = "unstructured_by_title"
+_TOKEN_ENCODER: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,7 @@ def build_chunks_envelope(
     metadata: dict[str, Any] | None = None,
     max_chars: int = DEFAULT_MAX_CHARS,
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+    max_tokens: int | None = None,
     strategy: str = MARKDOWN_CHUNKING_STRATEGY,
 ) -> dict[str, Any]:
     """Return a legacy conversion envelope containing JSON chunk payload."""
@@ -59,6 +62,7 @@ def build_chunks_envelope(
         source_name=source_name,
         max_chars=max_chars,
         overlap_chars=overlap_chars,
+        max_tokens=max_tokens,
         strategy=strategy,
     )
     resolved_strategy = str(payload.get("chunking_strategy") or MARKDOWN_CHUNKING_STRATEGY)
@@ -73,6 +77,8 @@ def build_chunks_envelope(
         "max_chars": max_chars,
         "overlap_chars": overlap_chars,
     }
+    if max_tokens is not None:
+        chunk_metadata["max_tokens"] = max_tokens
     if payload.get("chunking_fallback_reason"):
         chunk_metadata["fallback_reason"] = payload["chunking_fallback_reason"]
     return {
@@ -92,6 +98,7 @@ def chunk_markdown_with_strategy(
     source_name: str,
     max_chars: int = DEFAULT_MAX_CHARS,
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+    max_tokens: int | None = None,
     strategy: str = MARKDOWN_CHUNKING_STRATEGY,
 ) -> dict[str, Any]:
     normalized = _normalize_strategy(strategy)
@@ -102,6 +109,7 @@ def chunk_markdown_with_strategy(
                 source_name=source_name,
                 max_chars=max_chars,
                 overlap_chars=overlap_chars,
+                max_tokens=max_tokens,
             )
         except Exception as exc:  # noqa: BLE001 - optional strategy must degrade.
             payload = chunk_markdown(
@@ -109,6 +117,7 @@ def chunk_markdown_with_strategy(
                 source_name=source_name,
                 max_chars=max_chars,
                 overlap_chars=overlap_chars,
+                max_tokens=max_tokens,
             )
             payload["chunking_strategy_requested"] = UNSTRUCTURED_CHUNKING_STRATEGY
             payload["chunking_fallback_reason"] = f"{type(exc).__name__}: {exc}"
@@ -118,6 +127,7 @@ def chunk_markdown_with_strategy(
         source_name=source_name,
         max_chars=max_chars,
         overlap_chars=overlap_chars,
+        max_tokens=max_tokens,
     )
 
 
@@ -127,6 +137,7 @@ def chunk_markdown(
     source_name: str,
     max_chars: int = DEFAULT_MAX_CHARS,
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Chunk Markdown by headings and paragraphs, splitting oversized blocks.
 
@@ -138,6 +149,7 @@ def chunk_markdown(
 
     max_chars = max(200, int(max_chars or DEFAULT_MAX_CHARS))
     overlap_chars = max(0, min(int(overlap_chars or 0), max_chars // 3))
+    max_tokens = _normalize_max_tokens(max_tokens)
     chunks: list[dict[str, Any]] = []
     source_sha256 = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
     line_offsets = _line_offsets(markdown)
@@ -150,11 +162,13 @@ def chunk_markdown(
                 block,
                 max_chars=max_chars,
                 overlap_chars=overlap_chars,
+                max_tokens=max_tokens,
                 line_offsets=line_offsets,
             )
             if piece.text.strip()
         ],
         max_chars=max_chars,
+        max_tokens=max_tokens,
         line_offsets=line_offsets,
         markdown=markdown,
     )
@@ -165,7 +179,8 @@ def chunk_markdown(
         index = len(chunks)
         chunk_id = _chunk_id(source_name, index, text)
         stable_id = _stable_chunk_id(source_sha256, block, text)
-        token_estimate = max(1, (len(text) + 3) // 4)
+        token_estimate = _estimated_token_count(text)
+        token_count, token_count_source = _token_count_with_source(text)
         heading_path = list(block.heading_path)
         content_types = list(block.content_types or (block.kind,))
         source_refs = _source_refs(
@@ -203,7 +218,8 @@ def chunk_markdown(
                 "char_end": block.char_end,
                 "char_count": len(text),
                 "token_estimate": token_estimate,
-                "token_count": token_estimate,
+                "token_count": token_count,
+                "token_count_source": token_count_source,
                 "content_types": content_types,
                 "asset_refs": asset_refs,
                 "metadata": metadata,
@@ -217,7 +233,7 @@ def chunk_markdown(
     for index, chunk in enumerate(chunks):
         chunk["previous_id"] = chunks[index - 1]["id"] if index > 0 else None
         chunk["next_id"] = chunks[index + 1]["id"] if index + 1 < len(chunks) else None
-    return {
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
         "chunking_strategy": MARKDOWN_CHUNKING_STRATEGY,
@@ -229,6 +245,9 @@ def chunk_markdown(
         "chunk_count": len(chunks),
         "chunks": chunks,
     }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    return payload
 
 
 def chunk_markdown_unstructured_by_title(
@@ -237,6 +256,7 @@ def chunk_markdown_unstructured_by_title(
     source_name: str,
     max_chars: int = DEFAULT_MAX_CHARS,
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Chunk Markdown with Unstructured's title-aware element chunker.
 
@@ -246,6 +266,7 @@ def chunk_markdown_unstructured_by_title(
 
     max_chars = max(200, int(max_chars or DEFAULT_MAX_CHARS))
     overlap_chars = max(0, min(int(overlap_chars or 0), max_chars // 3))
+    max_tokens = _normalize_max_tokens(max_tokens)
     partition_md = importlib.import_module("unstructured.partition.md").partition_md
     chunk_by_title = importlib.import_module("unstructured.chunking.title").chunk_by_title
     elements = partition_md(text=markdown)
@@ -276,7 +297,8 @@ def chunk_markdown_unstructured_by_title(
         content_types = ["unstructured_composite"]
         if metadata.get("text_as_html"):
             content_types.append("table")
-        token_estimate = max(1, (len(text) + 3) // 4)
+        token_estimate = _estimated_token_count(text)
+        token_count, token_count_source = _token_count_with_source(text)
         stable_id = _stable_chunk_id(
             source_sha256,
             MarkdownBlock(
@@ -311,7 +333,8 @@ def chunk_markdown_unstructured_by_title(
                 "char_end": char_end,
                 "char_count": len(text),
                 "token_estimate": token_estimate,
-                "token_count": token_estimate,
+                "token_count": token_count,
+                "token_count_source": token_count_source,
                 "content_types": content_types,
                 "content_hash": f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}",
                 "metadata": chunk_metadata,
@@ -333,7 +356,7 @@ def chunk_markdown_unstructured_by_title(
     for index, chunk in enumerate(chunks):
         chunk["previous_id"] = chunks[index - 1]["id"] if index > 0 else None
         chunk["next_id"] = chunks[index + 1]["id"] if index + 1 < len(chunks) else None
-    return {
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "chunk_kind": "semantic_markdown",
         "chunking_strategy": UNSTRUCTURED_CHUNKING_STRATEGY,
@@ -345,6 +368,9 @@ def chunk_markdown_unstructured_by_title(
         "chunk_count": len(chunks),
         "chunks": chunks,
     }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    return payload
 
 
 def _normalize_strategy(strategy: str | None) -> str:
@@ -354,6 +380,45 @@ def _normalize_strategy(strategy: str | None) -> str:
     if value in {MARKDOWN_CHUNKING_STRATEGY, UNSTRUCTURED_CHUNKING_STRATEGY, "unstructured"}:
         return UNSTRUCTURED_CHUNKING_STRATEGY if value == "unstructured" else value
     return MARKDOWN_CHUNKING_STRATEGY
+
+
+def _normalize_max_tokens(max_tokens: int | None) -> int | None:
+    if max_tokens is None:
+        return None
+    return max(16, int(max_tokens))
+
+
+def _estimated_token_count(text: str) -> int:
+    return max(1, (len(text) + 3) // 4)
+
+
+def _token_count_with_source(text: str) -> tuple[int, str]:
+    encoder = _token_encoder()
+    if encoder is None:
+        return _estimated_token_count(text), "char_estimate"
+    return max(1, len(encoder.encode(text))), f"tiktoken:{DEFAULT_TOKEN_ENCODING}"
+
+
+def _token_count(text: str) -> int:
+    return _token_count_with_source(text)[0]
+
+
+def _token_encoder() -> Any | None:
+    global _TOKEN_ENCODER
+    if _TOKEN_ENCODER is not None:
+        return _TOKEN_ENCODER
+    try:
+        tiktoken = importlib.import_module("tiktoken")
+        _TOKEN_ENCODER = tiktoken.get_encoding(DEFAULT_TOKEN_ENCODING)
+        return _TOKEN_ENCODER
+    except Exception:  # noqa: BLE001 - tokenizer is optional.
+        return None
+
+
+def _exceeds_budget(text: str, *, max_chars: int, max_tokens: int | None = None) -> bool:
+    if len(text) > max_chars:
+        return True
+    return max_tokens is not None and _token_count(text) > max_tokens
 
 
 def _public_unstructured_metadata(chunk: object) -> dict[str, Any]:
@@ -985,6 +1050,7 @@ def _pack_chunk_blocks(
     blocks: list[MarkdownBlock],
     *,
     max_chars: int,
+    max_tokens: int | None,
     line_offsets: list[tuple[int, int]],
     markdown: str,
 ) -> list[MarkdownBlock]:
@@ -1023,14 +1089,20 @@ def _pack_chunk_blocks(
             flush()
         if current and block.pack_isolated and not _is_standalone_heading(current):
             flush()
-        projected_len = len("\n\n".join([*(item.text for item in current), block.text]))
-        if current and projected_len > max_chars:
+        projected_text = "\n\n".join([*(item.text for item in current), block.text])
+        if current and _exceeds_budget(projected_text, max_chars=max_chars, max_tokens=max_tokens):
             if _is_standalone_heading(current) and block.kind == "text":
                 heading_budget = max_chars - len(current[0].text) - 2
-                if heading_budget > 0 and len(block.text) > heading_budget:
+                heading_token_budget = max_tokens - _token_count(current[0].text) if max_tokens is not None else None
+                if (
+                    heading_budget > 0
+                    and (heading_token_budget is None or heading_token_budget > 0)
+                    and _exceeds_budget(block.text, max_chars=heading_budget, max_tokens=heading_token_budget)
+                ):
                     head_block, tail_block = _split_block_once(
                         block,
                         max_chars=heading_budget,
+                        max_tokens=heading_token_budget,
                         line_offsets=line_offsets,
                     )
                     current.append(head_block)
@@ -1153,10 +1225,11 @@ def _split_block(
     *,
     max_chars: int,
     overlap_chars: int,
+    max_tokens: int | None,
     line_offsets: list[tuple[int, int]],
 ) -> list[MarkdownBlock]:
     text = block.text
-    if len(text) <= max_chars:
+    if not _exceeds_budget(text, max_chars=max_chars, max_tokens=max_tokens):
         return [block]
     if block.kind == "table":
         return _split_table_block(block, max_chars=max_chars, line_offsets=line_offsets)
@@ -1170,16 +1243,18 @@ def _split_block(
     for sentence in sentences:
         if not sentence:
             continue
-        if current and len(current) + 1 + len(sentence) > max_chars:
+        candidate = f"{current} {sentence}".strip() if current else sentence
+        if current and _exceeds_budget(candidate, max_chars=max_chars, max_tokens=max_tokens):
             pieces.append(current)
             prefix = current[-overlap_chars:].strip() if overlap_chars else ""
             current = f"{prefix} {sentence}".strip() if prefix else sentence
         else:
-            current = f"{current} {sentence}".strip() if current else sentence
-        while len(current) > max_chars:
-            pieces.append(current[:max_chars].rstrip())
-            prefix = current[max(0, max_chars - overlap_chars) : max_chars].strip() if overlap_chars else ""
-            current = f"{prefix} {current[max_chars:]}".strip() if prefix else current[max_chars:].strip()
+            current = candidate
+        while _exceeds_budget(current, max_chars=max_chars, max_tokens=max_tokens):
+            head, tail = _split_text_at_budget(current, max_chars=max_chars, max_tokens=max_tokens)
+            pieces.append(head)
+            prefix = "" if max_tokens is not None else (head[-overlap_chars:].strip() if overlap_chars else "")
+            current = f"{prefix} {tail}".strip() if prefix else tail
     if current:
         pieces.append(current)
     return _locate_split_pieces(
@@ -1635,9 +1710,10 @@ def _split_block_once(
     block: MarkdownBlock,
     *,
     max_chars: int,
+    max_tokens: int | None = None,
     line_offsets: list[tuple[int, int]],
 ) -> tuple[MarkdownBlock, MarkdownBlock | None]:
-    head_text, tail_text = _split_text_at_limit(block.text, max_chars=max_chars)
+    head_text, tail_text = _split_text_at_budget(block.text, max_chars=max_chars, max_tokens=max_tokens)
     head = _block_piece(
         block,
         head_text,
@@ -1717,6 +1793,39 @@ def _split_text_at_limit(text: str, *, max_chars: int) -> tuple[str, str]:
         split_at = limit
     head = text[:split_at].rstrip()
     tail = text[split_at:].lstrip()
+    return head, tail
+
+
+def _split_text_at_budget(
+    text: str,
+    *,
+    max_chars: int,
+    max_tokens: int | None,
+) -> tuple[str, str]:
+    """Split once under both character and optional tokenizer budgets."""
+
+    if not _exceeds_budget(text, max_chars=max_chars, max_tokens=max_tokens):
+        return text, ""
+
+    limit = min(len(text), max(1, max_chars))
+    if max_tokens is not None and _token_count(text[:limit]) > max_tokens:
+        low = 1
+        high = limit
+        while low < high:
+            mid = (low + high + 1) // 2
+            if _token_count(text[:mid]) <= max_tokens:
+                low = mid
+            else:
+                high = mid - 1
+        limit = max(1, low)
+
+    split_at = text.rfind(" ", 0, limit + 1)
+    if split_at < max(1, limit // 2):
+        split_at = limit
+    head = text[:split_at].rstrip()
+    tail = text[split_at:].lstrip()
+    if not head:
+        return text[:1], text[1:].lstrip()
     return head, tail
 
 

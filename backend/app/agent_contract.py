@@ -152,6 +152,7 @@ class ConversionOptionsModel(ContractModel):
     # docs instead of needing to tunnel stable options through extra_options.
     text_data_max_rows: int | None = Field(default=None, ge=1)
     chunking_strategy: ChunkingStrategy | None = None
+    chunk_max_tokens: int | None = Field(default=None, ge=16)
     archive_recursive: bool | None = None
     archive_max_files: int | None = Field(default=None, ge=1)
     archive_inline_bytes: int | None = Field(default=None, ge=1)
@@ -348,6 +349,7 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="max_batch_retries", cli_flag="--max-batch-retries", type="integer", category="images", description="Extra batch attempts used to recover missing or malformed VLM responses."),
     OptionMetadataModel(name="text_data_max_rows", cli_flag="--text-data-max-rows", type="integer", category="text_data", description="Maximum rows rendered for text/data table inputs."),
     OptionMetadataModel(name="chunking_strategy", cli_flag="--chunking-strategy", type="enum", category="chunks", description="Chunking strategy for derived Markdown chunks: markdown_heading_blocks_v2 or unstructured_by_title."),
+    OptionMetadataModel(name="chunk_max_tokens", cli_flag="--chunk-max-tokens", type="integer", category="chunks", description="Optional tokenizer-backed maximum token budget for derived Markdown chunks."),
     OptionMetadataModel(name="archive_recursive", cli_flag="--archive-recursive", type="boolean", category="archives", description="Recursively convert deterministic safe children inside archives."),
     OptionMetadataModel(name="archive_max_files", cli_flag="--archive-max-files", type="integer", category="archives", description="Maximum files scanned inside an archive."),
     OptionMetadataModel(name="archive_inline_bytes", cli_flag="--archive-inline-bytes", type="integer", category="archives", description="Maximum small child bytes to inline in archive output."),

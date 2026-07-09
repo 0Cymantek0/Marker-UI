@@ -480,6 +480,11 @@ async def upload_file(
         None,
         description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title",
     ),
+    chunk_max_tokens: Optional[int] = Query(
+        None,
+        ge=16,
+        description="Optional tokenizer-backed maximum token budget for derived Markdown chunks",
+    ),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
     engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
     conversion_profile: Optional[str] = Query(None, description="Conversion profile: auto, fast, high_accuracy"),
@@ -683,6 +688,8 @@ async def upload_file(
                 detail="Unsupported chunking_strategy. Expected markdown_heading_blocks_v2 or unstructured_by_title.",
             )
         config["chunking_strategy"] = chunking_strategy
+    if chunk_max_tokens is not None:
+        config["chunk_max_tokens"] = chunk_max_tokens
     if converter:
         config["converter_cls"] = converter
     if engine_override:

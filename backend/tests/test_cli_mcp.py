@@ -284,6 +284,7 @@ def test_agent_build_conversion_config_preserves_productivity_options():
         AgentConversionOptions(
             text_data_max_rows=12,
             chunking_strategy="unstructured_by_title",
+            chunk_max_tokens=512,
             archive_recursive=False,
             archive_max_files=25,
             archive_inline_bytes=4096,
@@ -309,6 +310,7 @@ def test_agent_build_conversion_config_preserves_productivity_options():
 
     assert config["text_data_max_rows"] == 12
     assert config["chunking_strategy"] == "unstructured_by_title"
+    assert config["chunk_max_tokens"] == 512
     assert config["archive_recursive"] is False
     assert config["archive_max_files"] == 25
     assert config["archive_inline_bytes"] == 4096
@@ -1346,6 +1348,7 @@ async def test_mcp_convert_schema_has_rich_descriptions_and_nullable_booleans():
     assert properties["router_enabled"].get("default") is None
     assert {item.get("type") for item in properties["router_enabled"].get("anyOf", [])} == {"boolean", "null"}
     assert properties["chunking_strategy"]["default"] == ""
+    assert properties["chunk_max_tokens"]["default"] == 0
     assert properties["archive_recursive"].get("default") is None
     assert {item.get("type") for item in properties["archive_recursive"].get("anyOf", [])} == {"boolean", "null"}
     assert properties["archive_max_total_uncompressed_bytes"]["default"] == 0
@@ -1467,7 +1470,8 @@ def test_mcp_extra_options_omit_unspecified_booleans():
     assert mcp_server._agent_productivity_extra_options(archive_recursive=None) == {}
     assert mcp_server._agent_productivity_extra_options(
         chunking_strategy="unstructured_by_title",
-    ) == {"chunking_strategy": "unstructured_by_title"}
+        chunk_max_tokens=384,
+    ) == {"chunking_strategy": "unstructured_by_title", "chunk_max_tokens": 384}
     assert mcp_server._agent_productivity_extra_options(
         archive_max_total_uncompressed_bytes=4096,
         archive_max_compression_ratio=25.0,

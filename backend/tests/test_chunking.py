@@ -6,7 +6,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services import chunking as chunking_mod
 from app.services.chunking import SCHEMA_VERSION, build_chunks_envelope, chunk_markdown, chunk_markdown_with_strategy
+
+
+class _WhitespaceTokenEncoder:
+    def encode(self, text: str) -> list[str]:
+        return [token for token in re.findall(r"\S+", text)]
 
 
 def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
@@ -31,7 +37,7 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
     assert payload["chunks"][-1]["chunk_id"] == payload["chunks"][-1]["id"]
     assert payload["chunks"][-1]["section_path"] == ["Title", "Details"]
     assert payload["chunks"][-1]["contextual_text"].startswith("Title > Details")
-    assert payload["chunks"][-1]["token_count"] == payload["chunks"][-1]["token_estimate"]
+    assert payload["chunks"][-1]["token_count"] > 0
     assert payload["chunks"][-1]["char_start"] < payload["chunks"][-1]["char_end"]
     assert payload["chunks"][-1]["source_refs"] == [
         {
@@ -45,6 +51,72 @@ def test_chunk_markdown_preserves_heading_paths_and_line_spans() -> None:
             "content_types": payload["chunks"][-1]["content_types"],
         }
     ]
+
+
+def test_chunk_markdown_respects_optional_token_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chunking_mod, "_TOKEN_ENCODER", _WhitespaceTokenEncoder())
+    markdown = "# Token Budget\n\n" + " ".join(f"term{i}" for i in range(90))
+
+    payload = chunk_markdown(
+        markdown,
+        source_name="tokens.md",
+        max_chars=2000,
+        max_tokens=20,
+        overlap_chars=0,
+    )
+
+    chunks = payload["chunks"]
+
+    assert payload["max_tokens"] == 20
+    assert len(chunks) > 1
+    assert all(chunk["token_count"] <= 20 for chunk in chunks)
+    assert all(chunk["token_count_source"] == "tiktoken:cl100k_base" for chunk in chunks)
+    assert chunks[0]["text"].startswith("# Token Budget\n\nterm0")
+    for chunk in chunks:
+        for ref in chunk["source_refs"]:
+            assert markdown[ref["char_start"] : ref["char_end"]].strip()
+
+
+def test_chunk_markdown_does_not_attach_body_to_heading_that_exhausts_token_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(chunking_mod, "_TOKEN_ENCODER", _WhitespaceTokenEncoder())
+    heading = "# " + " ".join(f"heading{i}" for i in range(20))
+    body = " ".join(f"body{i}" for i in range(40))
+    markdown = f"{heading}\n\n{body}"
+
+    payload = chunk_markdown(
+        markdown,
+        source_name="heading-budget.md",
+        max_chars=2000,
+        max_tokens=16,
+        overlap_chars=0,
+    )
+
+    chunks = payload["chunks"]
+
+    heading_chunks = [chunk for chunk in chunks if chunk["text"].startswith("#") or chunk["text"].startswith("heading")]
+    body_chunks = [chunk for chunk in chunks if chunk["text"].startswith("body")]
+
+    assert len(heading_chunks) > 1
+    assert all("body" not in chunk["text"] for chunk in heading_chunks)
+    assert body_chunks[0]["text"].startswith("body0")
+    assert all(chunk["token_count"] <= 16 for chunk in chunks)
+
+
+def test_build_chunks_envelope_includes_token_budget_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(chunking_mod, "_TOKEN_ENCODER", _WhitespaceTokenEncoder())
+
+    envelope = build_chunks_envelope(
+        "# Token Budget\n\n" + " ".join(f"term{i}" for i in range(60)),
+        source_name="tokens.md",
+        max_tokens=24,
+    )
+    payload = json.loads(envelope["text"])
+
+    assert envelope["metadata"]["chunking"]["max_tokens"] == 24
+    assert payload["max_tokens"] == 24
+    assert all(chunk["token_count"] <= 24 for chunk in payload["chunks"])
 
 
 def test_chunk_markdown_split_text_uses_tight_source_spans() -> None:

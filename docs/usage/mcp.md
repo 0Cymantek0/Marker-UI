@@ -214,6 +214,11 @@ controls used by the CLI and GUI, including `audio_provider`,
 The generic v2 tools can also receive advanced fields through
 `extra_options_json`.
 
+For chunks output, MCP callers can pass `chunk_max_tokens` (or the same key in
+`extra_options_json`) with `chunking_strategy` to request tokenizer-backed
+chunk budgets while keeping semantic chunk reads available through
+`marker_read_output_chunk(mode="semantic")`.
+
 ## Resources
 
 | Resource | Purpose |

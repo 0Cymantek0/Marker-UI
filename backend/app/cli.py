@@ -1154,6 +1154,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         choices=["markdown_heading_blocks_v2", "unstructured_by_title"],
         help="Chunking strategy for derived chunks output",
     )
+    parser.add_argument("--chunk-max-tokens", type=int, help="Max tokenizer tokens per derived Markdown chunk")
     parser.add_argument("--archive-max-files", type=int, help="Max archive entries to inspect")
     parser.add_argument("--archive-inline-bytes", type=int, help="Max bytes to inline per archive text child")
     parser.add_argument("--archive-max-child-bytes", type=int, help="Max bytes per converted archive child")
@@ -1311,6 +1312,7 @@ def _direct_extra_options(args: argparse.Namespace) -> dict[str, Any]:
     option_names = (
         "text_data_max_rows",
         "chunking_strategy",
+        "chunk_max_tokens",
         "archive_max_files",
         "archive_inline_bytes",
         "archive_max_child_bytes",

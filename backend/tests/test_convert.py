@@ -178,6 +178,7 @@ async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db
         params={
             "output_format": "chunks",
             "chunking_strategy": "unstructured_by_title",
+            "chunk_max_tokens": "384",
         },
     )
 
@@ -191,6 +192,7 @@ async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db
     assert job.output_format == "chunks"
     assert config["output_format"] == "chunks"
     assert config["chunking_strategy"] == "unstructured_by_title"
+    assert config["chunk_max_tokens"] == 384
 
 
 @pytest.mark.asyncio

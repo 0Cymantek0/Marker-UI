@@ -43,6 +43,11 @@ Segments the document text into smaller, overlapping chunks.
 - Large prose blocks split on sentence and character boundaries with bounded
   overlap. Markdown tables split by rows and repeat the header. Fenced code
   blocks stay fenced, even when split.
+- Agent, CLI, MCP, and REST callers can set `chunk_max_tokens` /
+  `--chunk-max-tokens` to request tokenizer-backed budgets for prose chunks.
+  Structural chunks such as tables and fenced code stay intact where possible.
+  When `tiktoken` is available, each chunk reports both `token_count` and
+  `token_count_source`; otherwise the schema falls back to `token_estimate`.
 - Read semantic chunks by index through `marker_read_output_chunk` with
   `mode="semantic"` instead of loading the whole chunks JSON into agent
   context.
