@@ -53,6 +53,7 @@ def test_export_json_schemas_contains_core_models_and_metadata():
         "text_data_max_rows",
         "chunking_strategy",
         "chunk_max_tokens",
+        "allow_chunking_fallback",
         "archive_recursive",
         "archive_max_total_uncompressed_bytes",
         "archive_max_compression_ratio",
@@ -71,6 +72,7 @@ def test_export_json_schemas_contains_core_models_and_metadata():
         "unstructured_by_title",
     ]
     assert option_properties["chunk_max_tokens"]["anyOf"][0]["minimum"] == 16
+    assert option_properties["allow_chunking_fallback"]["default"] is False
     assert option_properties["archive_max_depth"]["anyOf"][0]["minimum"] == 0
     assert option_properties["archive_max_compression_ratio"]["anyOf"][0]["minimum"] == 1.0
 
@@ -148,6 +150,7 @@ def test_conversion_options_validate_agent_productivity_fields():
         text_data_max_rows=10,
         chunking_strategy="unstructured_by_title",
         chunk_max_tokens=512,
+        allow_chunking_fallback=True,
         archive_recursive=False,
         archive_max_files=25,
         archive_max_total_uncompressed_bytes=4096,
@@ -165,6 +168,7 @@ def test_conversion_options_validate_agent_productivity_fields():
     assert opts.archive_recursive is False
     assert opts.chunking_strategy == "unstructured_by_title"
     assert opts.chunk_max_tokens == 512
+    assert opts.allow_chunking_fallback is True
     assert opts.archive_max_total_uncompressed_bytes == 4096
     assert opts.archive_max_compression_ratio == 50.0
     assert opts.router_enabled is False

@@ -485,6 +485,10 @@ async def upload_file(
         ge=16,
         description="Optional tokenizer-backed maximum token budget for derived Markdown chunks",
     ),
+    allow_chunking_fallback: bool = Query(
+        False,
+        description="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2 when unavailable",
+    ),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
     engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
     conversion_profile: Optional[str] = Query(None, description="Conversion profile: auto, fast, high_accuracy"),
@@ -690,6 +694,8 @@ async def upload_file(
         config["chunking_strategy"] = chunking_strategy
     if chunk_max_tokens is not None:
         config["chunk_max_tokens"] = chunk_max_tokens
+    if allow_chunking_fallback:
+        config["allow_chunking_fallback"] = True
     if converter:
         config["converter_cls"] = converter
     if engine_override:

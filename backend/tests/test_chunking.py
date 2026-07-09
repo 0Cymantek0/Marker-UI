@@ -204,7 +204,23 @@ def test_chunk_markdown_uses_discrete_source_refs_when_packing_normalizes_blank_
     assert "\n\n".join(ref_texts) == chunk["text"]
 
 
-def test_build_chunks_envelope_falls_back_when_optional_strategy_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_chunks_envelope_rejects_missing_optional_strategy_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_import(name: str):
+        if name.startswith("unstructured."):
+            raise ImportError("missing optional dependency")
+        raise AssertionError(f"unexpected import: {name}")
+
+    monkeypatch.setattr("app.services.chunking.importlib.import_module", fail_import)
+
+    with pytest.raises(RuntimeError, match="allow_chunking_fallback=true"):
+        build_chunks_envelope(
+            "# Title\n\nBody.",
+            source_name="doc.md",
+            strategy="unstructured_by_title",
+        )
+
+
+def test_build_chunks_envelope_falls_back_when_explicitly_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_import(name: str):
         if name.startswith("unstructured."):
             raise ImportError("missing optional dependency")
@@ -216,6 +232,7 @@ def test_build_chunks_envelope_falls_back_when_optional_strategy_is_missing(monk
         "# Title\n\nBody.",
         source_name="doc.md",
         strategy="unstructured_by_title",
+        allow_fallback=True,
     )
 
     payload = json.loads(envelope["text"])

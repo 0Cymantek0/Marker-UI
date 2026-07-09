@@ -217,7 +217,9 @@ The generic v2 tools can also receive advanced fields through
 For chunks output, MCP callers can pass `chunk_max_tokens` (or the same key in
 `extra_options_json`) with `chunking_strategy` to request tokenizer-backed
 chunk budgets while keeping semantic chunk reads available through
-`marker_read_output_chunk(mode="semantic")`.
+`marker_read_output_chunk(mode="semantic")`. `unstructured_by_title` fails
+clearly when the optional Unstructured path is unavailable; pass
+`allow_chunking_fallback=true` only when markdown-heading fallback is acceptable.
 
 ## Resources
 

@@ -136,12 +136,14 @@ describe('uploadFile', () => {
       output_formats: ['chunks'],
       converter: 'PdfConverter',
       chunking_strategy: 'unstructured_by_title',
+      allow_chunking_fallback: true,
     })
 
     const call = vi.mocked(global.fetch).mock.calls[0]
     const url = new URL(String(call?.[0]), 'http://localhost')
     expect(url.searchParams.get('output_format')).toBe('chunks')
     expect(url.searchParams.get('chunking_strategy')).toBe('unstructured_by_title')
+    expect(url.searchParams.get('allow_chunking_fallback')).toBe('true')
   })
 
   it('sends archive budget controls as upload query params', async () => {

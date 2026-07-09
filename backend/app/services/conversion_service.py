@@ -777,6 +777,14 @@ def _normalize_requested_formats(formats: list[str]) -> list[str]:
     return [fmt for fmt in dict.fromkeys(str(fmt).strip().lower() for fmt in formats) if fmt]
 
 
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _raise_unsupported_markdown_derivation(
     filepath: str,
     formats: list[str],
@@ -840,6 +848,7 @@ def _envelope_for_requested_format(
             metadata=dict(envelope.get("metadata") or {}),
             strategy=str(config.get("chunking_strategy") or "markdown_heading_blocks_v2"),
             max_tokens=config.get("chunk_max_tokens"),
+            allow_fallback=_truthy(config.get("allow_chunking_fallback")),
         )
     if requested_format in _EXPECTED_FORMAT_EXTENSIONS:
         _validate_format_artifact(requested_format, envelope, source=Path(filepath).name)
@@ -873,6 +882,7 @@ def _derived_markdown_formats(
                 metadata=dict(markdown_envelope.get("metadata") or {}),
                 strategy=str((config or {}).get("chunking_strategy") or "markdown_heading_blocks_v2"),
                 max_tokens=(config or {}).get("chunk_max_tokens"),
+                allow_fallback=_truthy((config or {}).get("allow_chunking_fallback")),
             )
             _validate_format_artifact("chunks", outputs["chunks"], source=Path(filepath).name)
     if not outputs:

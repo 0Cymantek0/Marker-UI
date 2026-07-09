@@ -752,6 +752,7 @@ async def marker_convert_file(
     text_data_max_rows: PositiveRowsParam = 0,
     chunking_strategy: Annotated[str, Field(description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title.", examples=["markdown_heading_blocks_v2"])] = "",
     chunk_max_tokens: PositiveRowsParam = 0,
+    allow_chunking_fallback: Annotated[bool, Field(description="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2 when unavailable.", examples=[False])] = False,
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
@@ -846,6 +847,7 @@ async def marker_convert_file(
                 text_data_max_rows=text_data_max_rows,
                 chunking_strategy=chunking_strategy,
                 chunk_max_tokens=chunk_max_tokens,
+                allow_chunking_fallback=allow_chunking_fallback,
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
@@ -1012,6 +1014,7 @@ async def marker_submit_job(
     text_data_max_rows: PositiveRowsParam = 0,
     chunking_strategy: Annotated[str, Field(description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title.", examples=["markdown_heading_blocks_v2"])] = "",
     chunk_max_tokens: PositiveRowsParam = 0,
+    allow_chunking_fallback: Annotated[bool, Field(description="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2 when unavailable.", examples=[False])] = False,
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
@@ -1089,6 +1092,7 @@ async def marker_submit_job(
                 text_data_max_rows=text_data_max_rows,
                 chunking_strategy=chunking_strategy,
                 chunk_max_tokens=chunk_max_tokens,
+                allow_chunking_fallback=allow_chunking_fallback,
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
@@ -1824,6 +1828,7 @@ def _agent_productivity_extra_options(
     text_data_max_rows: int = 0,
     chunking_strategy: str = "",
     chunk_max_tokens: int = 0,
+    allow_chunking_fallback: bool = False,
     archive_max_files: int = 0,
     archive_inline_bytes: int = 0,
     archive_max_child_bytes: int = 0,
@@ -1842,6 +1847,8 @@ def _agent_productivity_extra_options(
         options["chunking_strategy"] = chunking_strategy
     if chunk_max_tokens > 0:
         options["chunk_max_tokens"] = chunk_max_tokens
+    if allow_chunking_fallback:
+        options["allow_chunking_fallback"] = True
     if archive_max_files > 0:
         options["archive_max_files"] = archive_max_files
     if archive_inline_bytes > 0:

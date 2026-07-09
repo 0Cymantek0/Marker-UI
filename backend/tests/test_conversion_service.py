@@ -271,6 +271,57 @@ class TestConversionService:
         assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "unstructured_by_title"
         assert result["chunks"]["metadata"]["chunking"]["requested_strategy"] == "unstructured_by_title"
 
+    def test_unstructured_chunking_does_not_silently_fallback_without_opt_in(
+        self,
+        tmp_path: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def fail_import(name: str):
+            if name.startswith("unstructured."):
+                raise ImportError("missing optional dependency")
+            raise AssertionError(f"unexpected import: {name}")
+
+        monkeypatch.setattr("app.services.chunking.importlib.import_module", fail_import)
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "notes.md"
+        source.write_text("# Title\n\nIntro paragraph.", encoding="utf-8")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["chunks"],
+            "chunking_strategy": "unstructured_by_title",
+        }
+
+        with pytest.raises(RuntimeError, match="allow_chunking_fallback=true"):
+            svc.convert_file_formats(str(source), config, ["chunks"])
+
+    def test_unstructured_chunking_fallback_requires_explicit_opt_in(
+        self,
+        tmp_path: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def fail_import(name: str):
+            if name.startswith("unstructured."):
+                raise ImportError("missing optional dependency")
+            raise AssertionError(f"unexpected import: {name}")
+
+        monkeypatch.setattr("app.services.chunking.importlib.import_module", fail_import)
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "notes.md"
+        source.write_text("# Title\n\nIntro paragraph.", encoding="utf-8")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["chunks"],
+            "chunking_strategy": "unstructured_by_title",
+            "allow_chunking_fallback": True,
+        }
+
+        result = svc.convert_file_formats(str(source), config, ["chunks"])
+        payload = json.loads(result["chunks"]["text"])
+
+        assert payload["chunking_strategy"] == "markdown_heading_blocks_v2"
+        assert payload["chunking_strategy_requested"] == "unstructured_by_title"
+        assert "ImportError" in payload["chunking_fallback_reason"]
+
     def test_marker_chunks_honor_explicit_chunking_strategy_by_deriving_from_markdown(self, tmp_path: Any) -> None:
         svc, fake_ms = self._make_service()
         source = tmp_path / "paper.pdf"

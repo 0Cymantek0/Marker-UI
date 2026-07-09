@@ -54,6 +54,7 @@ def build_chunks_envelope(
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
     max_tokens: int | None = None,
     strategy: str = MARKDOWN_CHUNKING_STRATEGY,
+    allow_fallback: bool = False,
 ) -> dict[str, Any]:
     """Return a legacy conversion envelope containing JSON chunk payload."""
 
@@ -64,6 +65,7 @@ def build_chunks_envelope(
         overlap_chars=overlap_chars,
         max_tokens=max_tokens,
         strategy=strategy,
+        allow_fallback=allow_fallback,
     )
     resolved_strategy = str(payload.get("chunking_strategy") or MARKDOWN_CHUNKING_STRATEGY)
     chunk_metadata = {
@@ -100,6 +102,7 @@ def chunk_markdown_with_strategy(
     overlap_chars: int = DEFAULT_OVERLAP_CHARS,
     max_tokens: int | None = None,
     strategy: str = MARKDOWN_CHUNKING_STRATEGY,
+    allow_fallback: bool = False,
 ) -> dict[str, Any]:
     normalized = _normalize_strategy(strategy)
     if normalized == UNSTRUCTURED_CHUNKING_STRATEGY:
@@ -111,7 +114,13 @@ def chunk_markdown_with_strategy(
                 overlap_chars=overlap_chars,
                 max_tokens=max_tokens,
             )
-        except Exception as exc:  # noqa: BLE001 - optional strategy must degrade.
+        except Exception as exc:  # noqa: BLE001 - optional strategy must fail or explicitly degrade.
+            if not allow_fallback:
+                raise RuntimeError(
+                    "Chunking strategy 'unstructured_by_title' is unavailable. "
+                    "Install Unstructured dependencies or set allow_chunking_fallback=true "
+                    "to use markdown_heading_blocks_v2 fallback."
+                ) from exc
             payload = chunk_markdown(
                 markdown,
                 source_name=source_name,

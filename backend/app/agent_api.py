@@ -288,6 +288,7 @@ def build_conversion_config(
         "text_data_max_rows",
         "chunking_strategy",
         "chunk_max_tokens",
+        "allow_chunking_fallback",
         "archive_recursive",
         "archive_max_files",
         "archive_inline_bytes",

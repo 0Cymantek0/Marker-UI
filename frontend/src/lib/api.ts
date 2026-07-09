@@ -113,6 +113,7 @@ export function normalizeOcrEngine(value: unknown): OcrEngine {
 export interface ConversionConfig {
   output_formats: OutputFormat[]
   chunking_strategy?: ChunkingStrategy
+  allow_chunking_fallback?: boolean
   converter: ConverterType
   engine_override?: string
   use_llm?: boolean
@@ -476,6 +477,7 @@ export async function uploadFile(
     params.append('output_formats', config.output_formats.join(','))
   }
   if (config.chunking_strategy) params.append('chunking_strategy', config.chunking_strategy)
+  if (config.allow_chunking_fallback !== undefined) params.append('allow_chunking_fallback', String(config.allow_chunking_fallback))
   if (config.conversion_profile) params.append('conversion_profile', config.conversion_profile)
   if (config.converter) params.append('converter', config.converter)
   if (config.engine_override) params.append('engine_override', config.engine_override)
