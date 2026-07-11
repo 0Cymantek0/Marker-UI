@@ -7,7 +7,27 @@ The fastest way to deploy Marker UI is via Docker Compose. The container bundles
 ## Prerequisites
 - **Docker** and **Docker Compose** installed.
 - Minimum **8 GB RAM** (16 GB recommended for GPU acceleration or large documents).
+- **10 GB free disk** for the image and first-run model downloads.
 - Active internet connection (required on first launch to download model weights).
+
+## Native Runtime Dependencies
+
+The container installs these system binaries at build time:
+
+| Binary | Version | Used by |
+|--------|---------|---------|
+| `ffmpeg` / `ffprobe` | 5.x (Debian 12) | Video conversion (demux, keyframe extraction, audio probe) |
+| `tesseract-ocr` | 5.x | Frame OCR for video, fallback OCR for images |
+
+If video conversion fails with `NATIVE_DEPENDENCY_MISSING`, verify the binaries
+are present inside the container:
+
+```bash
+docker exec <container> sh -lc 'command -v ffmpeg && command -v ffprobe'
+```
+
+Both commands must return a path. If not, rebuild the image from the latest
+Dockerfile.
 
 ---
 

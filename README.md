@@ -13,6 +13,22 @@ until their adapters ship. Every conversion writes a `.marker.json`
 manifest with source metadata, output paths, media type, hashes, assets, and
 conversion settings so long outputs can be audited and paged safely.
 
+## System Requirements
+
+| Component | Requirement |
+| --- | --- |
+| **Python** | 3.11+ |
+| **Node** | 22+ (frontend build only) |
+| **ffmpeg / ffprobe** | ≥ 5.0 — required for video conversion (`VideoConverter`) and audio preflight (`probe_audio`). The official Docker image installs both via `apt-get install ffmpeg`. |
+| **tesseract-ocr** | Required for video frame OCR fallback. Bundled in the Docker image. |
+| **RAM** | 8 GB minimum (16 GB recommended for marker + faster-whisper concurrency or large documents) |
+
+If video conversion fails with a `NATIVE_DEPENDENCY_MISSING` error, verify the binaries are on `PATH`:
+
+```bash
+command -v ffmpeg && command -v ffprobe
+```
+
 ## Current Maturity
 
 Marker UI is alpha software. Some surfaces are already useful for local agent
