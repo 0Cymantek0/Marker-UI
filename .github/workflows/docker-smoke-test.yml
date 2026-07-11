@@ -1,0 +1,94 @@
+name: Docker smoke test
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "supervisord.conf"
+      - "nginx.conf"
+      - "backend/requirements.txt"
+      - "backend/app/**"
+      - "frontend/**"
+      - ".github/workflows/docker-smoke-test.yml"
+  push:
+    branches: [master, main]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t marker-ui:smoke .
+
+      - name: Start container
+        run: |
+          docker run -d --name marker-ui-smoke -p 3000:80 marker-ui:smoke
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3000/api/health > /dev/null; then
+              echo "healthy after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:3000/api/health || (docker logs marker-ui-smoke && exit 1)
+
+      - name: Verify ffmpeg/ffprobe present as appuser
+        run: |
+          docker exec marker-ui-smoke sh -lc '
+            su -s /bin/sh appuser -c "command -v ffmpeg && command -v ffprobe"
+          '
+
+      - name: Verify HF cache dir writable as appuser
+        run: |
+          docker exec marker-ui-smoke sh -lc '
+            su -s /bin/sh appuser -c "touch /app/backend/data/huggingface/test && rm /app/backend/data/huggingface/test"
+          '
+
+      - name: Verify capability endpoint reports video ready
+        run: |
+          STATUS=$(curl -sf http://localhost:3000/api/capabilities | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          v = data['engines']['video']
+          print(v.get('status', v) if isinstance(v, dict) else v)
+          ")
+          echo "video status: $STATUS"
+          [ "$STATUS" = "ready" ] || (echo "FAIL: video not ready" && exit 1)
+
+      - name: Upload tiny test mp4 and verify conversion
+        run: |
+          docker exec marker-ui-smoke sh -lc '
+            ffmpeg -f lavfi -i color=c=blue:s=160x90:d=2 -pix_fmt yuv420p /tmp/test.mp4
+          '
+          docker cp marker-ui-smoke:/tmp/test.mp4 /tmp/test.mp4
+          JOB_ID=$(curl -X POST -F "file=@/tmp/test.mp4" \
+            "http://localhost:3000/api/convert/upload?output_format=markdown" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['job_id'])")
+          echo "job_id: $JOB_ID"
+          for i in $(seq 1 120); do
+            STATUS=$(curl -sf "http://localhost:3000/api/convert/status/$JOB_ID" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))")
+            echo "poll $i: $STATUS"
+            if [ "$STATUS" = "completed" ]; then exit 0; fi
+            if [ "$STATUS" = "failed" ]; then
+              curl -sf "http://localhost:3000/api/convert/status/$JOB_ID"
+              docker logs marker-ui-smoke
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "TIMEOUT"
+          docker logs marker-ui-smoke
+          exit 1
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker logs marker-ui-smoke || true
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f marker-ui-smoke || true

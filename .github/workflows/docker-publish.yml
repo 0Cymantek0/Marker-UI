@@ -10,7 +10,11 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  smoke-test:
+    uses: ./.github/workflows/docker-smoke-test.yml
+
   build-and-push:
+    needs: smoke-test
     runs-on: ubuntu-latest
     permissions:
       contents: read
