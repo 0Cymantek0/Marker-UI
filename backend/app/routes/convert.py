@@ -22,6 +22,7 @@ import aiofiles
 
 from app.core.config import MAX_UPLOAD_SIZE, UPLOAD_DIR
 from app.agent_contract import AUDIO_OUTPUT_MODES
+from app.conversion.dependencies import get_engine_status
 from app.conversion.engine_policy import validate_engine_override
 from app.conversion.formats import (
     OUTPUT_FORMAT_SET,
@@ -627,6 +628,29 @@ async def upload_file(
             detail=f"Unsupported file type '{suffix}' (not supported). Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
     input_format = suffix.lstrip(".")
+
+    # Pre-flight capability gate: reject uploads whose engine reports a missing
+    # native dependency BEFORE the file is stored/queued. Prevents the user from
+    # waiting for a full upload + worker dispatch only to get a generic failure.
+    _NATIVE_DEP_ENGINES: dict[str, frozenset[str]] = {
+        "video": frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"}),
+    }
+    for engine_name, engine_exts in _NATIVE_DEP_ENGINES.items():
+        if suffix in engine_exts:
+            engine_status = get_engine_status().get(engine_name, "ready")
+            if engine_status in ("missing_optional_dependency", "missing_native_dependency"):
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "NATIVE_DEPENDENCY_MISSING",
+                        "engine": engine_name,
+                        "message": (
+                            f"The {engine_name} engine cannot process this file because "
+                            f"required native dependencies (ffmpeg/ffprobe) are not available."
+                        ),
+                        "install_hint": "Install ffmpeg (ships ffprobe) on the host or in the container.",
+                    },
+                )
 
     stored_name = f"{job_id}{suffix}"
 
@@ -1253,11 +1277,19 @@ async def download_result(
         ext = ext_map.get(fmt, fmt)
         text_content = formats_map[fmt]
         
-        tmp_file = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False, mode="w", encoding="utf-8")
-        tmp_path = Path(tmp_file.name)
-        tmp_file.write(text_content)
-        tmp_file.close()
-        
+        try:
+            tmp_file = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False, mode="w", encoding="utf-8")
+            tmp_path = Path(tmp_file.name)
+            tmp_file.write(text_content)
+            tmp_file.close()
+        except Exception:
+            # Guard against a leak if the temp file is created but writing fails.
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except NameError:
+                pass
+            raise
+
         media_types = {
             "md": "text/markdown",
             "html": "text/html",
@@ -1265,7 +1297,7 @@ async def download_result(
             "chunks.json": "application/json",
             "txt": "text/plain",
         }
-        
+
         return FileResponse(
             path=str(tmp_path),
             filename=f"{stem}.{ext}",
