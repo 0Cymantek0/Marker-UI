@@ -11,6 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
+from app.conversion.native_requirements import NativeRequirement
 from app.conversion.result import UniversalConversionResult
 from app.conversion.stream_info import StreamInfo
 
@@ -36,6 +37,23 @@ class BaseConverter(ABC):
 
     # Whether this converter needs GPU.
     requires_gpu: bool = False
+
+    # Native system binaries the converter needs at runtime (e.g. ffmpeg).
+    # Empty tuple means no native deps. Declared at class level so the
+    # capability endpoint can introspect without instantiating the converter.
+    native_requirements: tuple[NativeRequirement, ...] = ()
+
+    def runtime_ready(self) -> bool:
+        """True when every ``native_requirements`` entry is present and version-OK."""
+        return all(req.resolve()["available"] for req in self.native_requirements)
+
+    def missing_requirements(self) -> list[dict[str, Any]]:
+        """Structured list of native deps that are missing or wrong-version."""
+        return [
+            req.resolve()
+            for req in self.native_requirements
+            if not req.resolve()["available"]
+        ]
 
     def accepts(self, stream_info: StreamInfo, config: dict[str, Any]) -> bool:
         """Quick check: can this converter handle the file?

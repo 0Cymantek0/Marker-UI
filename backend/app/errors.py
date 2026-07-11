@@ -57,6 +57,7 @@ CODE_CLOUD_NOT_ALLOWED = "CLOUD_NOT_ALLOWED"
 CODE_TIMEOUT = "TIMEOUT"
 CODE_CANCELLED = "CANCELLED"
 CODE_PARTIAL_FAILURE = "PARTIAL_FAILURE"
+CODE_NATIVE_DEPENDENCY_MISSING = "NATIVE_DEPENDENCY_MISSING"
 CODE_INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
@@ -81,6 +82,7 @@ EXIT_CODE_BY_CODE: dict[str, int] = {
     CODE_TIMEOUT: EXIT_TIMEOUT_OR_CANCELLED,
     CODE_CANCELLED: EXIT_TIMEOUT_OR_CANCELLED,
     CODE_PARTIAL_FAILURE: EXIT_PARTIAL_FAILURE,
+    CODE_NATIVE_DEPENDENCY_MISSING: EXIT_CONFIG_ERROR,
     CODE_INTERNAL_ERROR: EXIT_INTERNAL_ERROR,
 }
 
@@ -273,6 +275,12 @@ class PartialFailureError(MarkerError):
     default_retryable = False
 
 
+class NativeDependencyMissingError(MarkerError):
+    code = CODE_NATIVE_DEPENDENCY_MISSING
+    default_exit_code = EXIT_CONFIG_ERROR
+    default_retryable = False
+
+
 class InternalError(MarkerError):
     code = CODE_INTERNAL_ERROR
     default_exit_code = EXIT_INTERNAL_ERROR
@@ -302,6 +310,7 @@ ERROR_CLASSES: dict[str, type[MarkerError]] = {
         OperationTimeoutError,
         OperationCancelledError,
         PartialFailureError,
+        NativeDependencyMissingError,
         InternalError,
     )
 }
@@ -328,4 +337,13 @@ def from_exception(exc: BaseException) -> MarkerError:
         return OperationTimeoutError(str(exc) or "Operation timed out", retryable=True)
     if isinstance(exc, (ValueError, TypeError, KeyError)):
         return UsageError(str(exc) or "Invalid argument")
+    # Defensive: un-migrated converters may still raise bare RuntimeError for
+    # missing native binaries (e.g. ffmpeg). Sniff the message so callers still
+    # get a typed, actionable error instead of generic INTERNAL_ERROR.
+    if isinstance(exc, RuntimeError) and "ffmpeg" in str(exc).lower():
+        return NativeDependencyMissingError(
+            str(exc),
+            hint="Install ffmpeg and ffprobe on the host or in the container.",
+            details={"original_type": type(exc).__name__},
+        )
     return InternalError(str(exc) or "Internal error", retryable=False)

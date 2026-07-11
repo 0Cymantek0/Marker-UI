@@ -30,6 +30,7 @@ def test_each_concrete_error_has_stable_code_and_exit_code():
         "TIMEOUT",
         "CANCELLED",
         "PARTIAL_FAILURE",
+        "NATIVE_DEPENDENCY_MISSING",
         "INTERNAL_ERROR",
     }
     assert set(errors.ERROR_CLASSES) == expected_codes
