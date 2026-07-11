@@ -832,6 +832,11 @@ class TaskManager:
                 reset_stuck_counter(provider_id)
             except Exception:  # noqa: BLE001 - cleanup is best effort
                 pass
+        # Deferred eviction of per-job in-memory state. The drain thread is
+        # sync-only (no event loop), so use a threading.Timer instead of
+        # loop.call_later. The SSE poller has usually already observed the
+        # terminal _proc_jobs entry by the time the delay elapses.
+        self._cleanup_job_memory(job_id, delay=30.0)
 
     @staticmethod
     def _run_async(coro: Any) -> Any:
@@ -860,6 +865,54 @@ class TaskManager:
     def _mark_job_started(self, job_id: str) -> None:
         """Called by thread backends when a queued job begins executing."""
         self._job_started[job_id] = True
+
+    # Dicts that must survive briefly past terminal status so the SSE
+    # stream can emit the final event. The values are evicted by
+    # ``_cleanup_job_memory`` after a short grace period.
+    _DEFERRED_CLEANUP_KEYS = (
+        "_progress",
+        "_job_logs",
+        "_job_status_text",
+        "_job_start_time",
+        "_job_has_real_progress",
+        "_job_providers",
+    )
+
+    def _purge_job_memory(self, job_id: str) -> None:
+        """Remove all in-memory tracking entries for *job_id*.
+
+        Safe to call multiple times — each pop has a default. Also clears
+        LLM call traces (see CACHE-3).
+        """
+        for attr in self._DEFERRED_CLEANUP_KEYS:
+            getattr(self, attr).pop(job_id, None)
+        try:
+            from app.core import llm_trace
+            llm_trace.reset_traces(job_id)
+        except Exception:  # noqa: BLE001 - trace cleanup must never block
+            pass
+
+    def _cleanup_job_memory(self, job_id: str, delay: float = 30.0) -> None:
+        """Evict in-memory job dicts to prevent unbounded growth.
+
+        ``delay=0`` purges immediately (cancel path). Non-zero delay gives the
+        SSE terminal event a grace window to read progress/logs/status before
+        eviction (completion/failure path). Thread backend uses the event
+        loop's ``call_later``; process backend uses ``threading.Timer``.
+        """
+        if delay <= 0:
+            self._purge_job_memory(job_id)
+            return
+        try:
+            loop = _get_or_create_event_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            loop.call_later(delay, self._purge_job_memory, job_id)
+        else:
+            timer = threading.Timer(delay, self._purge_job_memory, args=(job_id,))
+            timer.daemon = True
+            timer.start()
 
     # ------------------------------------------------------------------
     # Submit
@@ -915,6 +968,7 @@ class TaskManager:
                         smooth.cancel()
                     if isinstance(backend, ThreadExecutorBackend):
                         backend.pop(job_id)
+                    self._cleanup_job_memory(job_id)
                     return
                 exc = fut.exception()
                 if exc:
@@ -928,6 +982,7 @@ class TaskManager:
                     smooth.cancel()
                 if isinstance(backend, ThreadExecutorBackend):
                     backend.pop(job_id)
+                self._cleanup_job_memory(job_id)
 
             # Synthetic crawl only until real tqdm-derived progress kicks in.
             async def _smooth_progress():
@@ -1119,6 +1174,8 @@ class TaskManager:
                 smooth.cancel()
 
         if cancelled:
+            # Cancelled jobs don't need the SSE grace window — evict immediately.
+            self._cleanup_job_memory(job_id, delay=0.0)
             pid = self._pids.pop(job_id, None)
             if pid is not None:
                 self._kill_pid(pid)

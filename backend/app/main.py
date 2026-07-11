@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -253,9 +254,27 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
             "models will lazy-load on first marker job."
         )
 
+    # Periodic background sweep for the opt-in LLM response cache.
+    # purge_expired() is a no-op when MARKER_LLM_CACHE != 1, so the loop is
+    # harmless on deployments that don't use the cache.
+    from app.core import llm_cache
+
+    async def _llm_cache_sweep() -> None:
+        while True:
+            await asyncio.sleep(6 * 3600)  # every 6 hours
+            try:
+                purged = llm_cache.purge_expired()
+                if purged:
+                    logger.info("LLM cache sweep: removed %d expired entries", purged)
+            except Exception:  # noqa: BLE001 - sweep must never crash the app
+                logger.exception("LLM cache sweep failed")
+
+    _cache_sweep_task = asyncio.create_task(_llm_cache_sweep())
+
     yield
 
     # Shutdown
+    _cache_sweep_task.cancel()
     _app_state.task_manager.shutdown(wait=False)
     logger.info("Shutdown complete")
 

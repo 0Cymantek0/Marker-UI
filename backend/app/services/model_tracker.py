@@ -595,6 +595,14 @@ def setup_monkeypatch() -> None:
         except Exception as e:
             tracker.fail_file_download(model_key, filename, str(e))
             logger.error(f"Download error for file {remote_path}: {str(e)}")
+            # Remove partial weight file so it cannot masquerade as a complete
+            # download on the next health check (check_and_clean_if_corrupt only
+            # rejects zero-byte files). A fresh retry starts clean.
+            if local_path_obj.exists():
+                try:
+                    local_path_obj.unlink()
+                except OSError:
+                    pass
             raise e
 
     def custom_download_directory(remote_path: str, local_dir: str):
