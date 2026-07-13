@@ -14,6 +14,70 @@ from typing import Any
 
 
 _WORDS_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+_NEGATION_WORDS = frozenset({
+    "no",
+    "not",
+    "never",
+    "cannot",
+    "cant",
+    "won",
+    "wont",
+    "didn",
+    "didnt",
+    "isn",
+    "isnt",
+    "aren",
+    "arent",
+    "false",
+    "reject",
+    "rejected",
+    "blocked",
+    "failed",
+    "cancelled",
+    "canceled",
+})
+_AFFIRMATION_WORDS = frozenset({
+    "yes",
+    "true",
+    "can",
+    "will",
+    "is",
+    "are",
+    "approved",
+    "approve",
+    "accepted",
+    "accept",
+    "passed",
+    "pass",
+    "complete",
+    "completed",
+    "ready",
+})
+_STOPWORDS = frozenset({
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "for",
+    "from",
+    "i",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "we",
+    "with",
+    "you",
+})
 
 
 @dataclass(frozen=True)
@@ -26,6 +90,12 @@ class AudioSegment:
     text: str
     speaker: str = "speaker_0"
     confidence: float | None = None
+    confidence_source: str | None = None
+    speaker_confidence: float | None = None
+    no_speech_probability: float | None = None
+    avg_logprob: float | None = None
+    compression_ratio: float | None = None
+    overlap_warning: bool = False
     warnings: tuple[str, ...] = ()
     words: tuple[dict[str, Any], ...] = ()
 
@@ -50,6 +120,12 @@ class AudioSegment:
             "speaker": self.speaker,
             "text": self.text,
             "confidence": self.confidence,
+            "confidence_source": self.confidence_source,
+            "speaker_confidence": self.speaker_confidence,
+            "no_speech_probability": self.no_speech_probability,
+            "avg_logprob": self.avg_logprob,
+            "compression_ratio": self.compression_ratio,
+            "overlap_warning": self.overlap_warning,
             "warnings": list(self.warnings),
             "words": [dict(word) for word in self.words],
         }
@@ -113,7 +189,7 @@ def normalize_transcript(
     threshold = float(config.get("audio_low_confidence_threshold", 0.65))
     language = raw.get("language")
     duration_ms = int(round(float(raw.get("duration") or 0.0) * 1000))
-    warnings: list[str] = []
+    warnings: list[str] = _normalize_warning_list(raw.get("warnings"))
     segments: list[AudioSegment] = []
     previous_end = 0
     raw_segments = sorted(
@@ -125,6 +201,10 @@ def normalize_transcript(
         end_ms = max(start_ms, int(round(float(item.get("end") or 0.0) * 1000)))
         text = str(item.get("text") or "").strip()
         confidence = _coerce_confidence(item.get("confidence"))
+        no_speech_probability = _coerce_confidence(item.get("no_speech_prob"))
+        avg_logprob = _coerce_float(item.get("avg_logprob"))
+        compression_ratio = _coerce_float(item.get("compression_ratio"))
+        overlap_warning = bool(item.get("overlap_warning"))
         segment_warnings: list[str] = []
         if not text:
             segment_warnings.append("empty_text")
@@ -134,8 +214,20 @@ def normalize_transcript(
             segment_warnings.append("low_confidence")
         if start_ms < previous_end:
             segment_warnings.append("overlaps_previous")
+        if overlap_warning and "overlaps_previous" not in segment_warnings:
+            segment_warnings.append("overlap_warning")
         if start_ms > previous_end + int(config.get("audio_gap_warning_ms", 30_000)):
             segment_warnings.append("long_gap_before_segment")
+        if no_speech_probability is not None and no_speech_probability >= float(
+            config.get("audio_no_speech_warning_threshold", 0.6)
+        ):
+            segment_warnings.append("high_no_speech_probability")
+        if avg_logprob is not None and avg_logprob <= float(config.get("audio_avg_logprob_warning_threshold", -1.0)):
+            segment_warnings.append("low_avg_logprob")
+        if compression_ratio is not None and compression_ratio >= float(
+            config.get("audio_compression_ratio_warning_threshold", 2.4)
+        ):
+            segment_warnings.append("high_compression_ratio")
         previous_end = max(previous_end, end_ms)
         segments.append(
             AudioSegment(
@@ -147,6 +239,12 @@ def normalize_transcript(
                 text=text,
                 speaker=str(item.get("speaker") or "speaker_0"),
                 confidence=confidence,
+                confidence_source=_confidence_source(item, confidence),
+                speaker_confidence=_coerce_confidence(item.get("speaker_confidence")),
+                no_speech_probability=no_speech_probability,
+                avg_logprob=avg_logprob,
+                compression_ratio=compression_ratio,
+                overlap_warning=overlap_warning,
                 warnings=tuple(segment_warnings),
                 words=tuple(_normalize_words(item.get("words"))),
             )
@@ -158,7 +256,7 @@ def normalize_transcript(
         warnings.append("language_mismatch")
     media_info = dict(raw.get("media_info") or {})
     vocabulary_hits = tuple(_vocabulary_hits(segments, config))
-    risk_summary = _risk_summary(segments, warnings)
+    risk_summary = _risk_summary(segments, warnings, config=config)
     return AudioTranscript(
         source_id=source_id,
         source_label=source_label,
@@ -211,6 +309,25 @@ def render_transcript_markdown(transcript: AudioTranscript, *, title: str) -> st
         lines.extend(["", "## Audio Quality Warnings", ""])
         for key, value in transcript.risk_summary.items():
             lines.append(f"- **{key}:** {value}")
+    return "\n".join(lines).strip()
+
+
+def append_contradiction_section(text: str, contradictions: list[dict[str, Any]]) -> str:
+    """Append conservative possible-contradiction findings with source refs."""
+
+    if not contradictions:
+        return text
+    lines = [text.rstrip(), "", "## Possible Contradictions", ""]
+    for item in contradictions:
+        left = item["left"]
+        right = item["right"]
+        terms = ", ".join(item.get("shared_terms") or [])
+        lines.append(
+            "- Opposing polarity with shared terms"
+            f"{f' ({terms})' if terms else ''}: "
+            f"`{left['segment_id']}` {left['text']} [{left['source_ref']}] vs "
+            f"`{right['segment_id']}` {right['text']} [{right['source_ref']}]"
+        )
     return "\n".join(lines).strip()
 
 
@@ -269,6 +386,64 @@ def render_enhanced_markdown(
     return "\n".join(lines).strip()
 
 
+def render_text_enhanced_markdown(
+    transcript: AudioTranscript,
+    *,
+    title: str,
+    strength: int = 1,
+) -> str:
+    """Render a corrected transcript without changing timeline shape.
+
+    This is deliberately conservative. It performs only deterministic readability
+    cleanup, keeps every segment/source id, and includes a raw transcript appendix
+    plus an audit table for changed segments.
+    """
+
+    lines = [f"# Enhanced Transcript: {title}", ""]
+    lines.append("- **Mode:** local deterministic transcript cleanup")
+    lines.append("- **Rule:** segment order, timestamps, speakers, and source IDs are preserved.")
+    if strength > 1:
+        lines.append(
+            "- **Scope:** strengths above minimal are not LLM-backed in this build; using deterministic cleanup only."
+        )
+    lines.extend(["", "## Transcript", ""])
+    audit_rows: list[tuple[AudioSegment, str, str]] = []
+    if not transcript.segments:
+        lines.append("_No speech segments detected._")
+    for segment in transcript.segments:
+        enhanced = _minimal_text_cleanup(segment.text)
+        if enhanced != segment.text:
+            audit_rows.append((segment, segment.text, enhanced))
+        line = (
+            f"- `{format_timestamp_ms(segment.start_ms)}-{format_timestamp_ms(segment.end_ms)}` "
+            f"{enhanced} _({segment.segment_id}, {segment.speaker})_"
+        )
+        line += f" [{segment.source_ref()} | `{segment.segment_id}`]"
+        if segment.confidence is not None:
+            line += f" confidence={segment.confidence:.2f}"
+        if segment.warnings:
+            line += f" warnings={','.join(segment.warnings)}"
+        lines.append(line)
+    lines.extend(["", "## Enhancement Audit", ""])
+    if audit_rows:
+        lines.append("| Segment | Change Type | Raw | Enhanced | Review |")
+        lines.append("|---|---|---|---|---|")
+        for segment, raw, enhanced in audit_rows:
+            review = "yes" if segment.warnings else "no"
+            lines.append(
+                f"| `{segment.segment_id}` | deterministic cleanup | "
+                f"{_table_cell(raw)} | {_table_cell(enhanced)} | {review} |"
+            )
+    else:
+        lines.append("- No text changes made.")
+    lines.extend(["", "## Source Map", ""])
+    for segment in transcript.segments:
+        lines.append(f"- `{segment.segment_id}` -> {segment.source_ref()}")
+    lines.extend(["", "## Original Transcript", ""])
+    lines.append(render_transcript_markdown(transcript, title=title))
+    return "\n".join(lines).strip()
+
+
 def build_extractive_notes(transcript: AudioTranscript) -> dict[str, list[str]]:
     """Build conservative notes using only transcript text plus citations."""
     non_empty = [segment for segment in transcript.segments if segment.text]
@@ -295,6 +470,80 @@ def build_extractive_notes(transcript: AudioTranscript) -> dict[str, list[str]]:
         "key_points": key_points,
         "actions": actions,
         "questions": questions,
+    }
+
+
+def detect_possible_contradictions(transcript: AudioTranscript) -> list[dict[str, Any]]:
+    """Find obvious opposing claims without pretending to prove truth.
+
+    The detector is intentionally conservative: it only compares segments that
+    have explicit positive/negative polarity and at least two shared meaningful
+    terms. The output is a review queue, not an auto-resolution.
+    """
+
+    candidates = [
+        {
+            "segment": segment,
+            "tokens": _meaningful_tokens(segment.text),
+            "polarity": _segment_polarity(segment.text),
+        }
+        for segment in transcript.segments
+        if segment.text
+    ]
+    findings: list[dict[str, Any]] = []
+    for left_index, left in enumerate(candidates):
+        if left["polarity"] == "neutral":
+            continue
+        for right in candidates[left_index + 1 :]:
+            if right["polarity"] == "neutral" or left["polarity"] == right["polarity"]:
+                continue
+            shared = sorted(left["tokens"] & right["tokens"])
+            if len(shared) < 2:
+                continue
+            findings.append(
+                {
+                    "type": "opposing_polarity_shared_terms",
+                    "shared_terms": shared[:8],
+                    "left": _contradiction_segment_payload(left["segment"]),
+                    "right": _contradiction_segment_payload(right["segment"]),
+                }
+            )
+    return findings
+
+
+def _segment_polarity(text: str) -> str:
+    tokens = set(_WORDS_RE.findall(text.lower()))
+    has_negative = bool(tokens & _NEGATION_WORDS)
+    has_positive = bool(tokens & _AFFIRMATION_WORDS)
+    if has_negative and not has_positive:
+        return "negative"
+    if has_positive and not has_negative:
+        return "positive"
+    if has_negative and has_positive:
+        # "not approved" should stay negative.
+        return "negative"
+    return "neutral"
+
+
+def _meaningful_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in _WORDS_RE.findall(text.lower())
+        if (
+            len(token) > 2
+            and token not in _STOPWORDS
+            and token not in _NEGATION_WORDS
+            and token not in _AFFIRMATION_WORDS
+        )
+    }
+
+
+def _contradiction_segment_payload(segment: AudioSegment) -> dict[str, Any]:
+    return {
+        "segment_id": segment.segment_id,
+        "source_ref": segment.source_ref(),
+        "speaker": segment.speaker,
+        "text": segment.text,
     }
 
 
@@ -402,12 +651,36 @@ def _normalize_words(value: Any) -> list[dict[str, Any]]:
         words.append(
             {
                 "word": word,
+                "punctuated_word": str(item.get("punctuated_word") or word).strip(),
                 "start_ms": int(round(float(item.get("start") or 0.0) * 1000)),
                 "end_ms": int(round(float(item.get("end") or 0.0) * 1000)),
                 "confidence": _coerce_confidence(item.get("confidence")),
+                "speaker": str(item["speaker"]) if item.get("speaker") is not None else None,
+                "speaker_confidence": _coerce_confidence(item.get("speaker_confidence")),
             }
         )
     return words
+
+
+def _normalize_warning_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(warning) for warning in value if warning]
+
+
+def _confidence_source(item: dict[str, Any], confidence: float | None) -> str | None:
+    explicit = item.get("confidence_source")
+    if explicit:
+        return str(explicit)
+    if confidence is None:
+        return None
+    if item.get("no_speech_prob") is not None:
+        return "no_speech_probability"
+    if item.get("avg_logprob") is not None:
+        return "avg_logprob"
+    return "provider"
 
 
 def _coerce_confidence(value: Any) -> float | None:
@@ -419,15 +692,49 @@ def _coerce_confidence(value: Any) -> float | None:
         return None
 
 
-def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str, Any]:
+def _coerce_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if result != result or result in (float("inf"), float("-inf")):
+        return None
+    return result
+
+
+def _risk_summary(
+    segments: list[AudioSegment],
+    warnings: list[str],
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    config = config or {}
     segment_warning_count = sum(1 for segment in segments if segment.warnings)
     low_confidence_count = sum(1 for segment in segments if "low_confidence" in segment.warnings)
     empty_count = sum(1 for segment in segments if "empty_text" in segment.warnings)
-    overlap_count = sum(1 for segment in segments if "overlaps_previous" in segment.warnings)
+    overlap_count = sum(
+        1
+        for segment in segments
+        if "overlaps_previous" in segment.warnings or "overlap_warning" in segment.warnings
+    )
     long_gap_count = sum(1 for segment in segments if "long_gap_before_segment" in segment.warnings)
+    no_speech_probability_flags = sum(
+        1 for segment in segments if "high_no_speech_probability" in segment.warnings
+    )
+    avg_logprob_flags = sum(1 for segment in segments if "low_avg_logprob" in segment.warnings)
+    compression_ratio_flags = sum(1 for segment in segments if "high_compression_ratio" in segment.warnings)
     if not segments:
         level = "no_speech"
-    elif warnings or low_confidence_count or empty_count:
+    elif (
+        warnings
+        or low_confidence_count
+        or empty_count
+        or no_speech_probability_flags
+        or avg_logprob_flags
+        or compression_ratio_flags
+    ):
         level = "review"
     else:
         level = "clean"
@@ -441,15 +748,18 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
         if confidence_values
         else None
     )
-    # Review verdict (plan §8.2): a transcript needs eyes on it when any segment
-    # is low-confidence, overlaps, has a long preceding gap, or carries unknown
-    # confidence. Surfaced separately from ``level`` so the heatmap can flag weak
-    # evidence even on a "clean" run that happens to have no low_confidence spans.
+    # Review verdict (plan §8.2): serious timing/provider anomalies always need
+    # eyes. Low confidence can be advisory-only unless the user enables the
+    # stricter "require review" toggle exposed in CLI/API/UI.
+    low_confidence_requires_review = _truthy(config.get("audio_review_required_on_low_confidence"))
     review_required = bool(
-        low_confidence_count
+        (low_confidence_count and low_confidence_requires_review)
         or overlap_count
         or long_gap_count
         or empty_count
+        or no_speech_probability_flags
+        or avg_logprob_flags
+        or compression_ratio_flags
         or (unknown_confidence_count and unknown_confidence_count > len(segments) // 2)
     )
     return {
@@ -460,13 +770,26 @@ def _risk_summary(segments: list[AudioSegment], warnings: list[str]) -> dict[str
         "empty_segment_count": empty_count,
         "overlap_count": overlap_count,
         "long_gap_count": long_gap_count,
+        "no_speech_probability_flags": no_speech_probability_flags,
+        "avg_logprob_flags": avg_logprob_flags,
+        "compression_ratio_flags": compression_ratio_flags,
+        "provider_warning_count": len(warnings),
         "mean_confidence": mean_confidence,
         "word_count": word_count,
         "speech_seconds": round(speech_ms / 1000.0, 3),
         "words_per_minute": round(word_count / (speech_ms / 60000.0), 3) if speech_ms else None,
         "speech_coverage": round(speech_ms / duration_ms, 6) if duration_ms else None,
         "review_required": review_required,
+        "low_confidence_requires_review": low_confidence_requires_review,
     }
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _batch_risk_summary(transcripts: list[AudioTranscript]) -> dict[str, Any]:
@@ -539,6 +862,20 @@ def _looks_like_action_or_decision(text: str) -> bool:
 def _looks_like_question(text: str) -> bool:
     stripped = text.strip().lower()
     return stripped.endswith("?") or stripped.startswith(("who ", "what ", "when ", "where ", "why ", "how ", "can ", "could ", "should "))
+
+
+def _minimal_text_cleanup(text: str) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return cleaned
+    cleaned = cleaned[0].upper() + cleaned[1:]
+    if not cleaned.endswith((".", "!", "?", ":", ";")):
+        cleaned += "."
+    return cleaned
+
+
+def _table_cell(value: str) -> str:
+    return str(value).replace("|", "\\|").replace("\n", " ").strip()
 
 
 def _word_overlap(left: str, right: str) -> float:

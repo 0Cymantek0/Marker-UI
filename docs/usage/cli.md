@@ -79,6 +79,7 @@ Local path:
 ```powershell
 python -m app.cli plan "C:\path\to\document.pdf" --conversion-profile auto --json
 python -m app.cli convert "C:\path\to\document.pdf" --output-dir "C:\path\to\out" --json
+python -m app.cli convert "C:\path\to\document.pdf" --output-path "C:\path\to\out\document.md" --overwrite --json
 ```
 
 Safe public URL:
@@ -88,7 +89,31 @@ python -m app.cli convert --source-url "https://docs.example.com/report.pdf" --o
 ```
 
 Use `MARKER_SOURCE_URL_ALLOWLIST` when deployments should restrict URL hosts.
-SSRF guards still block local, private, loopback, and unsafe redirect targets.
+Set `MARKER_SOURCE_URL_REQUIRE_ALLOWLIST=true` for shared deployments where URL
+conversion must never fetch arbitrary public hosts. SSRF guards still block
+local, private, loopback, cross-host redirects, and unsafe redirect targets.
+
+Single-file convert also accepts the shared request contract from a file or
+stdin. This is the safest route for automation with many options:
+
+```json
+{
+  "local_file_path": "C:\\path\\to\\document.pdf",
+  "output_path": "C:\\path\\to\\out\\document.md",
+  "overwrite": false,
+  "max_chars": 20000,
+  "options": {
+    "output_format": "markdown"
+  }
+}
+```
+
+Run it:
+
+```powershell
+python -m app.cli convert --request-json "C:\path\to\convert-request.json" --json
+Get-Content "C:\path\to\convert-request.json" | python -m app.cli convert --stdin-json --json
+```
 
 ## Advanced Options
 
@@ -96,10 +121,26 @@ Common GUI-compatible options have named flags:
 
 ```powershell
 python -m app.cli convert "C:\path\to\meeting.mp3" --audio-output-mode enhanced --audio-word-timestamps --json
+python -m app.cli convert "C:\path\to\meeting.mp3" --audio-provider local_faster_whisper --audio-diarization --audio-speaker-alias speaker_0=Alice --json
+python -m app.cli convert "C:\path\to\meeting.mp3" --audio-text-enhancement --audio-text-enhancement-strength 2 --audio-structural-enhancement --audio-structural-enhancement-mode meeting_notes --audio-contradiction-detection --json
+python -m app.cli convert "C:\path\to\meeting.mp3" --no-audio-confidence-heatmap --audio-quality-diagnostics --audio-fusion-mode audio_first --json
 python -m app.cli convert "C:\path\to\data.tsv" --text-data-max-rows 1000 --json
-python -m app.cli convert "C:\path\to\manuals.zip" --archive-max-files 50 --archive-max-depth 2 --json
+python -m app.cli convert "C:\path\to\manuals.zip" --archive-max-files 50 --archive-max-total-uncompressed-bytes 20971520 --archive-max-compression-ratio 100 --archive-max-depth 2 --json
 python -m app.cli convert "C:\path\to\scan.pdf" --image-handling-mode both --smart-router-level smart --ocr-min-lines 3 --json
+python -m app.cli convert "C:\path\to\notes.md" --output-format chunks --chunking-strategy unstructured_by_title --chunk-max-tokens 512 --allow-chunking-fallback --json
 ```
+
+Audio stays local-first. `--audio-provider local_faster_whisper` is the default.
+Cloud STT provider ids require `--audio-allow-cloud-stt`, and providers whose
+adapters are not shipped yet fail before the job is queued. Unknown provider ids
+are rejected instead of silently falling back to local. For reusable
+vocabulary, use repeated `--audio-vocabulary-pack-id` flags. Provider
+comparison is reserved: `--audio-benchmark-compare` and
+`--audio-compare-provider` are rejected until a benchmark runner and at least
+two shipped STT adapters exist.
+Use `--audio-confidence-heatmap` / `--no-audio-confidence-heatmap`,
+`--audio-quality-diagnostics` / `--no-audio-quality-diagnostics`, and
+`--audio-fusion-mode` for advanced audio audit and context-fusion controls.
 
 Use repeated `--option key=value` or one `--options-json` object for lower-level
 backend options:
@@ -125,7 +166,8 @@ Batch mode accepts a JSON manifest with local paths or source URLs:
   "items": [
     {
       "local_file_path": "C:\\path\\to\\one.pdf",
-      "output_dir": "C:\\path\\to\\out"
+      "output_dir": "C:\\path\\to\\out",
+      "overwrite": false
     },
     {
       "source_url": "https://docs.example.com/two.pdf",

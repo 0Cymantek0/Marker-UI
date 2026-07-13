@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
-import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat } from 'lucide-react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Play, Loader2, Download, Trash2, FileText, Terminal, Repeat, RotateCw, AlertTriangle, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -9,8 +9,9 @@ import { ConversionOptions } from '@/components/features/ConversionOptions'
 import { TerminalLog } from '@/components/features/TerminalLog'
 import { OutputViewer } from '@/components/features/OutputViewer'
 import { ModelSwapDialog } from '@/components/features/conversion/ModelSwapDialog'
+import { LlmTraceViewer } from '@/components/features/conversion/LlmTraceViewer'
 import { useConversionQueue } from '@/hooks/useConversionQueue'
-import type { ConversionConfig } from '@/lib/api'
+import type { ConversionConfig, InputFormatCapability, OutputFormat } from '@/lib/api'
 import { useNavigate } from 'react-router-dom'
 import { planConversion, getCapabilities } from '@/lib/api'
 import type { ConverterPlanResponse } from '@/lib/api'
@@ -79,30 +80,62 @@ function extensionFor(filename: string | undefined) {
   return dot >= 0 ? clean.slice(dot).toLowerCase() : ''
 }
 
-function engineOptionsFor(filename: string | undefined, plan: ConverterPlanResponse | null): SelectOption[] {
+function sourceSupportsMarkerFormats(
+  filename: string,
+  markerMultiFormatExtensions: string[] | null,
+): boolean {
+  if (markerMultiFormatExtensions === null) return true
   const ext = extensionFor(filename)
-  let engines: string[]
-  if (ext === '.pdf') engines = ['liteparse_pdf', 'marker_pdf']
-  else if (['.wav', '.mp3', '.m4a', '.flac', '.ogg', '.aac'].includes(ext)) engines = ['audio']
-  else if (['.mp4', '.mov', '.mkv', '.webm', '.avi'].includes(ext)) engines = ['video']
-  else if (['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(ext)) engines = ['marker_pdf']
-  else if (ext === '.docx') engines = ['office_docx', 'marker_pdf']
-  else if (ext === '.pptx') engines = ['office_pptx', 'marker_pdf']
-  else if (ext === '.msg') engines = ['outlook_msg']
-  else if (['.xlsx', '.xls'].includes(ext)) engines = ['spreadsheet']
-  else if (['.csv', '.tsv', '.json', '.jsonl', '.txt', '.md', '.rst', '.log'].includes(ext)) engines = ['text_data']
-  else if (['.xml', '.rss', '.atom'].includes(ext)) engines = ['xml_rss']
-  else if (['.html', '.htm'].includes(ext)) engines = ['html']
-  else if (ext === '.ipynb') engines = ['notebook']
-  else if (ext === '.zip') engines = ['archive']
-  else engines = plan ? [plan.engine] : []
+  return ext ? markerMultiFormatExtensions.includes(ext) : false
+}
+
+function sourceOutputFormats(
+  filename: string | undefined,
+  inputFormats: InputFormatCapability[] | null,
+  markerMultiFormatExtensions: string[] | null,
+  plan?: ConverterPlanResponse | null,
+): OutputFormat[] {
+  if (plan?.output_formats?.length) return plan.output_formats
+  if (!filename) return ['markdown', 'chunks']
+  const ext = extensionFor(filename)
+  const spec = inputFormats?.find((item) => item.extensions.includes(ext))
+  if (spec?.output_formats?.length) {
+    return spec.output_formats
+  }
+  return sourceSupportsMarkerFormats(filename, markerMultiFormatExtensions)
+    ? ['markdown', 'json', 'html', 'chunks']
+    : ['markdown', 'chunks']
+}
+
+function regeneratableFormatsFor(
+  filename: string | undefined,
+  inputFormats: InputFormatCapability[] | null,
+  markerMultiFormatExtensions: string[] | null,
+): OutputFormat[] {
+  return sourceOutputFormats(filename, inputFormats, markerMultiFormatExtensions)
+    .filter((fmt) => fmt !== 'markdown')
+}
+
+function engineOptionsFor(
+  filename: string | undefined,
+  plan: ConverterPlanResponse | null,
+  inputFormats: InputFormatCapability[] | null,
+): SelectOption[] {
+  const ext = extensionFor(filename)
+  const labelByEngine = new Map<string, string>()
+  const engines: string[] = []
+
+  for (const spec of inputFormats ?? []) {
+    if (!spec.extensions.includes(ext)) continue
+    engines.push(spec.engine)
+    labelByEngine.set(spec.engine, spec.label)
+  }
+  if (ext === '.pdf') engines.unshift('liteparse_pdf')
 
   if (plan && !engines.includes(plan.engine)) engines.unshift(plan.engine)
-  const engineOptions = engines.map((engine) => ({
+  const engineOptions = Array.from(new Set(engines)).map((engine) => ({
     value: engine,
-    label: engine === 'marker_pdf' && ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.bmp', '.gif'].includes(ext)
-      ? 'Marker Image OCR'
-      : ENGINE_LABELS[engine] ?? engine,
+    label: labelByEngine.get(engine) ?? ENGINE_LABELS[engine] ?? engine,
   }))
   return [{ value: AUTO_ENGINE, label: 'Auto' }, ...engineOptions]
 }
@@ -141,13 +174,19 @@ export function ConvertPage() {
   })
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [showConsole, setShowConsole] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const submitInFlightRef = useRef(false)
   // Model-swap dialog: which job it targets, and whether it auto-surfaced.
   const [swapJobId, setSwapJobId] = useState<string | null>(null)
   const [swapAuto, setSwapAuto] = useState(false)
+  // LLM trace viewer: which job's LLM calls to inspect.
+  const [traceJobId, setTraceJobId] = useState<string | null>(null)
 
   const [sourcePlans, setSourcePlans] = useState<Record<string, SourcePlanState>>({})
   const [engineOverrides, setEngineOverrides] = useState<Record<string, string>>({})
   const [capabilities, setCapabilities] = useState<Record<string, string>>({})
+  const [markerMultiFormatExtensions, setMarkerMultiFormatExtensions] = useState<string[] | null>(null)
+  const [inputFormats, setInputFormats] = useState<InputFormatCapability[] | null>(null)
 
   // Fetch capabilities on mount and poll
   useEffect(() => {
@@ -157,6 +196,8 @@ export function ConvertPage() {
         const data = await getCapabilities()
         if (active) {
           setCapabilities(data.engines)
+          setMarkerMultiFormatExtensions(data.marker_multi_format_extensions ?? null)
+          setInputFormats(data.input_formats ?? null)
         }
       } catch (err) {
         console.error('Failed to fetch capabilities:', err)
@@ -184,30 +225,44 @@ export function ConvertPage() {
     [selectedFiles, parsedLocalPaths]
   )
 
-  const supportsMultiFormat = useMemo(() => {
-    if (selectedFiles.length === 0 && parsedLocalPaths.length === 0) return true
-    
-    const checkExt = (filename: string) => {
-      const baseName = filename.split(/[?#]/)[0] ?? ''
-      const ext = baseName.split('.').pop()?.toLowerCase()
-      return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
-    }
+  const supportedOutputFormats = useMemo(() => {
+    const perSourceFormats = [
+      ...selectedFiles.map((entry) => (
+        sourceOutputFormats(
+          entry.file.name,
+          inputFormats,
+          markerMultiFormatExtensions,
+          sourcePlans[entry.id]?.plan,
+        )
+      )),
+      ...parsedLocalPaths.map((path) => (
+        sourceOutputFormats(
+          path,
+          inputFormats,
+          markerMultiFormatExtensions,
+          sourcePlans[`local:${path}`]?.plan,
+        )
+      )),
+    ]
+    if (perSourceFormats.length === 0) return ['markdown', 'json', 'html', 'chunks'] as OutputFormat[]
+    const first = perSourceFormats[0] ?? ['markdown', 'chunks']
+    return perSourceFormats.slice(1).reduce(
+      (common, formats) => common.filter((fmt) => formats.includes(fmt)),
+      first,
+    )
+  }, [selectedFiles, parsedLocalPaths, inputFormats, markerMultiFormatExtensions, sourcePlans])
 
-    const hasFileMulti = selectedFiles.some(f => checkExt(f.file.name))
-    const hasPathMulti = parsedLocalPaths.some(p => checkExt(p))
-    return hasFileMulti || hasPathMulti
-  }, [selectedFiles, parsedLocalPaths])
+  const supportsMultiFormat = supportedOutputFormats.includes('json') || supportedOutputFormats.includes('html')
 
   useEffect(() => {
-    if (!supportsMultiFormat) {
-      setConfig((prev) => {
-        if (prev.output_formats.length > 1 || prev.output_formats[0] !== 'markdown') {
-          return { ...prev, output_formats: ['markdown'] }
-        }
-        return prev
-      })
-    }
-  }, [supportsMultiFormat])
+    setConfig((prev) => {
+      const supported = prev.output_formats.filter((fmt) => supportedOutputFormats.includes(fmt))
+      if (supported.length !== prev.output_formats.length || supported.length === 0) {
+        return { ...prev, output_formats: supported.length > 0 ? supported : ['markdown'] }
+      }
+      return prev
+    })
+  }, [supportedOutputFormats])
 
   // Plan conversion for each source independently. Uploaded PDFs only get a
   // filename-level preview here; backend upload still probes bytes before queueing.
@@ -326,7 +381,7 @@ export function ConvertPage() {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
   }, [config])
 
-  const { jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited } = useConversionQueue()
+  const { jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited, retryJob } = useConversionQueue()
 
   // Auto-surface the swap dialog when a running job reports it's stuck on rate
   // limits (key rotation exhausted) and the user hasn't dismissed it yet.
@@ -389,9 +444,9 @@ export function ConvertPage() {
     return {
       key: entry.id,
       value,
-      options: engineOptionsFor(entry.file.name, planState?.plan ?? null),
+      options: engineOptionsFor(entry.file.name, planState?.plan ?? null, inputFormats),
       status: sourcePlanStatus(planState, value),
-      title: planState?.plan?.reasons.join(' · '),
+      title: planState?.plan?.reasons.join(' | '),
       onChange: (engine: string) => setSourceEngine(entry.id, engine),
       plan: planState?.plan ?? null,
       loading: planState?.loading ?? false,
@@ -406,7 +461,7 @@ export function ConvertPage() {
     return {
       key,
       value,
-      options: engineOptionsFor(path, planState?.plan ?? null),
+      options: engineOptionsFor(path, planState?.plan ?? null, inputFormats),
       status: sourcePlanStatus(planState, value),
       title: path,
       onChange: (engine: string) => setSourceEngine(key, engine),
@@ -417,11 +472,14 @@ export function ConvertPage() {
   })
 
   const handleConvert = useCallback(async () => {
+    if (submitInFlightRef.current) return
     if (files.length === 0 && parsedLocalPaths.length === 0) {
       toast.error('Please select a file first or specify local paths')
       return
     }
 
+    submitInFlightRef.current = true
+    setIsSubmitting(true)
     try {
       await start(files, parsedLocalPaths, config, outputDir, {
         fileKeys: selectedFiles.map((entry) => entry.id),
@@ -436,6 +494,9 @@ export function ConvertPage() {
       toast.success('Conversion queued successfully!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Conversion failed')
+    } finally {
+      submitInFlightRef.current = false
+      setIsSubmitting(false)
     }
   }, [files, parsedLocalPaths, config, outputDir, start, selectedFiles, engineOverrides])
 
@@ -448,6 +509,7 @@ export function ConvertPage() {
   }, [isModelsMissing, navigate, handleConvert])
 
   const getButtonText = () => {
+    if (isSubmitting) return 'Queuing Conversion...'
     if (checkingPlan) return 'Checking File Type...'
     if (isModelsMissing) {
       return 'Install selected engine models to continue'
@@ -500,6 +562,8 @@ export function ConvertPage() {
               onLocalPathsChange={setLocalPaths}
               outputDir={outputDir}
               onOutputDirChange={setOutputDir}
+              inputFormats={inputFormats}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -514,6 +578,7 @@ export function ConvertPage() {
               config={config}
               onChange={setConfig}
               supportsMultiFormat={supportsMultiFormat}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -524,12 +589,17 @@ export function ConvertPage() {
             onClick={handleConvertClick}
             disabled={
               checkingPlan ||
+              isSubmitting ||
               (!isModelsMissing && files.length === 0 && localPaths.trim().length === 0)
             }
             className="w-full h-12 text-xs font-bold uppercase tracking-wider shadow-md rounded-xl hover:scale-[1.002] active:scale-[0.99] transition-all duration-200"
             size="lg"
           >
-            <Play className="w-3.5 h-3.5 mr-2" />
+            {isSubmitting ? (
+              <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+            ) : (
+              <Play className="w-3.5 h-3.5 mr-2" />
+            )}
             {getButtonText()}
           </Button>
         </div>
@@ -547,7 +617,7 @@ export function ConvertPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowConsole(true)}
-                className="h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
+                className="h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
               >
                 <Terminal className="w-3.5 h-3.5" />
                 Open Console
@@ -573,10 +643,10 @@ export function ConvertPage() {
                 </h3>
                 
                 {/* Sleek Universal Progress Info */}
-                <div className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase flex items-center gap-2">
+                <div className="text-xs font-bold text-muted-foreground tracking-wider uppercase flex items-center gap-2">
                   <span>Overall:</span>
                   <span className="text-foreground">{completedJobs.length} of {jobs.length} completed</span>
-                  <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[9px]">
+                  <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-xs">
                     {overallProgress}%
                   </span>
                 </div>
@@ -598,6 +668,7 @@ export function ConvertPage() {
                   const isJobRunning = job.phase === 'uploading' || job.phase === 'processing'
                   const isCompleted = job.phase === 'completed'
                   const isFailed = job.phase === 'failed'
+                  const isCancelled = job.phase === 'cancelled'
                   const isQueued = job.phase === 'idle'
                   const engineMeta = job.conversionMetadata?.engine
 
@@ -625,6 +696,7 @@ export function ConvertPage() {
                         <div className={cn(
                           'p-2 rounded-lg shrink-0 transition-colors duration-300',
                           isCompleted ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+                          isCancelled ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
                           isFailed ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' :
                           isJobRunning ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                         )}>
@@ -633,17 +705,17 @@ export function ConvertPage() {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold truncate text-foreground" title={job.filename}>
+                            <span className="text-sm font-bold truncate text-foreground" title={job.filename}>
                               {job.filename}
                             </span>
                             {(job.availableFormats ?? [job.outputFormat || 'markdown']).map((fmt) => (
-                              <span key={fmt} className="text-[9px] text-muted-foreground font-mono bg-muted/65 px-1 py-0.5 rounded uppercase">
+                              <span key={fmt} className="text-xs text-muted-foreground font-mono bg-muted/65 px-1 py-0.5 rounded uppercase">
                                 {fmt}
                               </span>
                             ))}
                             {engineMeta?.label && (
                               <span
-                                className="text-[9px] text-primary font-mono bg-primary/10 px-1 py-0.5 rounded truncate max-w-[170px]"
+                                className="text-xs text-primary font-mono bg-primary/10 px-1 py-0.5 rounded truncate max-w-[170px]"
                                 title={(engineMeta.reasons ?? []).join(' · ')}
                               >
                                 {engineMeta.label}
@@ -653,8 +725,9 @@ export function ConvertPage() {
 
                           <div className="flex items-center gap-2 mt-1.5">
                             <span className={cn(
-                              'text-[10px] font-bold tracking-wide flex items-center gap-1.5',
+                              'text-xs font-bold tracking-wide flex items-center gap-1.5',
                               isCompleted && 'text-emerald-600 dark:text-emerald-400',
+                              isCancelled && 'text-amber-600 dark:text-amber-400',
                               isFailed && 'text-rose-600 dark:text-rose-400',
                               isJobRunning && 'text-primary',
                               isQueued && 'text-muted-foreground'
@@ -665,14 +738,14 @@ export function ConvertPage() {
 
                             {isJobRunning && (
                               <>
-                                <span className="text-[10px] text-muted-foreground/60 font-mono">•</span>
-                                <span className="text-[10px] font-bold font-mono text-foreground">
+                                <span className="text-xs text-muted-foreground/60 font-mono">•</span>
+                                <span className="text-xs font-bold font-mono text-foreground">
                                   {Math.round(job.progress)}%
                                 </span>
-                                {job.eta !== undefined && job.eta > 0 && (
+                                {typeof job.eta === 'number' && job.eta > 0 && (
                                   <>
-                                    <span className="text-[10px] text-muted-foreground/60 font-mono">•</span>
-                                    <span className="text-[10px] font-mono text-muted-foreground">
+                                    <span className="text-xs text-muted-foreground/60 font-mono">•</span>
+                                    <span className="text-xs font-mono text-muted-foreground">
                                       ETA: {job.eta}s
                                     </span>
                                   </>
@@ -683,6 +756,38 @@ export function ConvertPage() {
                         </div>
                       </div>
 
+                      {/* Rate-limit banner: surfaces sustained throttling on a
+                          running job so the user notices (the auto-dialog is
+                          one-shot). Clickable to open the swap/retry dialog. */}
+                      {isJobRunning && job.rateLimited && (
+                        <button
+                          type="button"
+                          onClick={() => openSwapManual(job.id)}
+                          className="relative z-10 mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors text-left"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-xs font-bold uppercase tracking-wider">
+                            Rate-limited — swap model or retry with another provider
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Partial-failure banner: completed but some LLM steps
+                          were skipped (rate-limited tables/equations). Offers a
+                          one-click Retry that opens the swap dialog. */}
+                      {isCompleted && job.partialFailure && (
+                        <button
+                          type="button"
+                          onClick={() => openSwapManual(job.id)}
+                          className="relative z-10 mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors text-left"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="text-xs font-bold uppercase tracking-wider">
+                            Some LLM steps skipped (rate-limited) — Retry to refine
+                          </span>
+                        </button>
+                      )}
+
                       {/* Actions aligned directly inside the UI card to save space */}
                       <div className="flex items-center gap-1.5 relative z-10" onClick={(e) => e.stopPropagation()}>
                         {isCompleted && (
@@ -690,7 +795,7 @@ export function ConvertPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => download(job.id, job.outputFormat || (job.availableFormats ?? ['markdown'])[0] || 'markdown')}
-                            className="h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border shadow-sm"
+                            className="h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border shadow-sm"
                           >
                             <Download className="w-3.5 h-3.5" />
                             Download
@@ -702,7 +807,7 @@ export function ConvertPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => cancel(job.id)}
-                            className="h-8 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-500/10"
+                            className="h-8 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-500/10"
                           >
                             Cancel
                           </Button>
@@ -715,7 +820,7 @@ export function ConvertPage() {
                             onClick={() => openSwapManual(job.id)}
                             title="Switch model for this running job"
                             className={cn(
-                              'h-8 text-[10px] font-bold uppercase tracking-wider gap-1.5 rounded-lg',
+                              'h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg',
                               job.rateLimited
                                 ? 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
                                 : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
@@ -723,6 +828,34 @@ export function ConvertPage() {
                           >
                             <Repeat className="w-3.5 h-3.5" />
                             Switch Model
+                          </Button>
+                        )}
+
+                        {((isCompleted && job.partialFailure) || job.phase === 'failed') && job.llmProvider && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openSwapManual(job.id)}
+                            title="Retry this job — swap model or use another provider"
+                            className="h-8 text-xs font-bold uppercase tracking-wider gap-1.5 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                          >
+                            <RotateCw className="w-3.5 h-3.5" />
+                            Retry
+                          </Button>
+                        )}
+
+                        {/* Eye icon — opens the LLM call inspector for this job.
+                            Shown for any job that used (or is using) an LLM provider,
+                            so traces can be inspected live during a run or after. */}
+                        {job.llmProvider && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setTraceJobId(job.id)}
+                            title="Inspect LLM calls for this job"
+                            className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
                           </Button>
                         )}
 
@@ -767,11 +900,12 @@ export function ConvertPage() {
                     content={previewText}
                     formats={selectedJob.formats}
                     availableFormats={selectedJob.availableFormats}
+                    regeneratableFormats={regeneratableFormatsFor(selectedJob.filename, inputFormats, markerMultiFormatExtensions)}
                     onRegenerate={(fmt) => regenerateJobFormat(selectedJob.id, fmt)}
                     onDownload={(fmt) => download(selectedJob.id, fmt)}
                     imageUnderstanding={selectedJob.imageUnderstanding}
                     audioMetadata={selectedJob.conversionMetadata?.audio ?? selectedJob.conversionMetadata?.audio_batch ?? null}
-                    filename={selectedJob.filename}
+                    jobId={selectedJob.jobId ?? undefined}
                   />
                 </div>
               </div>
@@ -781,8 +915,8 @@ export function ConvertPage() {
           {jobs.length === 0 && (
             <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border/50 rounded-2xl bg-card/10 text-muted-foreground min-h-[200px]">
               <FileText className="w-8 h-8 text-muted-foreground/45 mb-3 stroke-[1.5]" />
-              <p className="text-xs font-semibold text-muted-foreground">Queue is empty</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-1 max-w-[280px] text-center leading-relaxed">
+              <p className="text-sm font-semibold text-muted-foreground">Queue is empty</p>
+              <p className="text-xs text-muted-foreground/60 mt-1 max-w-[280px] text-center leading-relaxed">
                 Add source files or local paths on the left, then click Convert to start.
               </p>
             </div>
@@ -800,8 +934,25 @@ export function ConvertPage() {
         currentModel={swapJob.llmModel}
         onClose={closeSwap}
         onApplied={() => clearRateLimited(swapJob.id)}
+        onRetry={async (provider, model) => {
+          await retryJob(swapJob.id, provider, model)
+        }}
       />
     )}
+
+    {(() => {
+      const traceJob = jobs.find((j) => j.id === traceJobId) || null
+      if (!traceJob) return null
+      return (
+        <LlmTraceViewer
+          open={!!traceJobId}
+          jobId={traceJob.jobId ?? undefined}
+          filename={traceJob.filename}
+          isRunning={traceJob.phase === 'uploading' || traceJob.phase === 'processing'}
+          onClose={() => setTraceJobId(null)}
+        />
+      )
+    })()}
   </div>
   )
 }

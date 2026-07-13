@@ -10,8 +10,7 @@ All client code resides in `frontend/src/`:
 
 - **`components/`**: Atomic UI parts (buttons, logs, cards, layouts) and progress indicators.
 - **`hooks/`**:
-  - `useSSE.ts`: Subscribes to backend server-sent events for job logs.
-  - `useSettings.ts`: Synchronizes and caches active LLM provider keys and overrides.
+  - `useConversionQueue.tsx`: Owns conversion queue state, backend job recovery, SSE/polling observers, cancellation, downloads, and retry flows.
 - **`pages/`**:
   - `OnboardingPage.tsx`: Gatekeeps the application; monitors neural weight downloads.
   - `ConvertPage.tsx`: Drag-and-drop zone and parameters configuration.

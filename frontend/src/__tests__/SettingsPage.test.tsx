@@ -18,6 +18,11 @@ vi.mock('@/lib/api', () => ({
   selfHealModels: vi.fn(),
   resetModels: vi.fn(),
   updateSetting: vi.fn(),
+  getAudioCapabilities: vi.fn(),
+  getAudioProviders: vi.fn(),
+  saveAudioProviders: vi.fn(),
+  getActiveAudioProvider: vi.fn(),
+  setActiveAudioProvider: vi.fn(),
   getGPUWorkersResolved: vi.fn().mockResolvedValue({
     mode: 'auto',
     detected: 1,
@@ -66,10 +71,10 @@ describe('SettingsPage component', () => {
     model_id: 'gemini-2.0-flash'
   }
 
-  const mockSettings = [
-    { key: 'gpu_acceleration_enabled', value: 'false', category: 'gpu' },
-    { key: 'vlm_model', value: '', category: 'image' },
-    { key: 'max_images_per_doc', value: '50', category: 'image' }
+  const mockSettings: api.SettingsResponse[] = [
+    { key: 'gpu_acceleration_enabled', value: 'false', category: 'gpu', description: null },
+    { key: 'vlm_model', value: '', category: 'image', description: null },
+    { key: 'max_images_per_doc', value: '50', category: 'image', description: null }
   ]
 
   const mockGPUStatus: api.GPUStatus = {
@@ -80,12 +85,83 @@ describe('SettingsPage component', () => {
     cuda_available: true
   }
 
+  const mockAudioCapabilities: api.AudioProviderCapability[] = [
+    {
+      provider_id: 'local_faster_whisper',
+      provider_label: 'Local Faster Whisper',
+      implementation_state: 'implemented',
+      available: true,
+      runtime_type: 'local',
+      cloud: false,
+      requires_api_key: false,
+      requires_model_license_acceptance: false,
+      privacy_level: 'local',
+      supports_word_timestamps: true,
+      supports_segment_timestamps: true,
+      supports_confidence: true,
+      supports_diarization: false,
+      supports_speaker_confidence: false,
+      supports_custom_vocabulary: true,
+      supports_prompt_context: true,
+      supports_translation: true,
+      supports_batch_compare: false,
+      max_file_size_hint_mb: null,
+      default_model: 'base',
+    },
+    {
+      provider_id: 'openai',
+      provider_label: 'OpenAI',
+      implementation_state: 'beta',
+      available: false,
+      runtime_type: 'cloud',
+      cloud: true,
+      requires_api_key: true,
+      requires_model_license_acceptance: false,
+      privacy_level: 'cloud',
+      supports_word_timestamps: true,
+      supports_segment_timestamps: true,
+      supports_confidence: false,
+      supports_diarization: false,
+      supports_speaker_confidence: false,
+      supports_custom_vocabulary: true,
+      supports_prompt_context: true,
+      supports_translation: true,
+      supports_batch_compare: true,
+      max_file_size_hint_mb: 25,
+      default_model: 'gpt-4o-transcribe',
+    },
+  ]
+
+  const mockAudioProviders: api.AudioProviderConfig[] = [
+    {
+      id: 'openai',
+      type: 'openai',
+      label: 'OpenAI',
+      api_key: '********',
+      base_url: '',
+      region: '',
+      deployment: '',
+      concurrency: null,
+      timeout: null,
+      max_retries: null,
+      default_model: 'gpt-4o-transcribe',
+      models: ['gpt-4o-transcribe'],
+      enabled: true,
+      cloud: true,
+    },
+  ]
+
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.mocked(api.getLLMProviders).mockResolvedValue(mockProviders)
     vi.mocked(api.getActiveLLM).mockResolvedValue(mockActive)
-    vi.mocked(api.getSettings).mockResolvedValue(mockSettings as any)
+    vi.mocked(api.getSettings).mockResolvedValue(mockSettings)
     vi.mocked(api.getGPUStatus).mockResolvedValue(mockGPUStatus)
+    vi.mocked(api.getAudioCapabilities).mockResolvedValue(mockAudioCapabilities)
+    vi.mocked(api.getAudioProviders).mockResolvedValue(mockAudioProviders)
+    vi.mocked(api.getActiveAudioProvider).mockResolvedValue({ provider_id: 'openai', model_id: 'gpt-4o-transcribe' })
+    vi.mocked(api.saveAudioProviders).mockResolvedValue(mockAudioProviders)
+    vi.mocked(api.setActiveAudioProvider).mockImplementation(async (active) => active)
   })
 
   it('renders configured providers and handles draft state correctly on cancel', async () => {
@@ -315,5 +391,28 @@ describe('SettingsPage component', () => {
     })
 
     expect(api.updateSetting).toHaveBeenCalledWith('max_images_per_doc', '100', 'image')
+  })
+
+  it('renders and saves audio provider configs', async () => {
+    render(<SettingsPage />)
+
+    const labelInput = await screen.findByRole('textbox', { name: /openai audio provider label/i }) as HTMLInputElement
+    expect(screen.getByText(/saved active audio provider "openai" is not selectable/i)).toBeInTheDocument()
+    await act(async () => {
+      fireEvent.change(labelInput, { target: { value: 'OpenAI Speech' } })
+    })
+
+    const saveButton = screen.getByRole('button', { name: 'Save Audio Providers' })
+    await act(async () => {
+      fireEvent.click(saveButton)
+    })
+
+    expect(api.saveAudioProviders).toHaveBeenCalledTimes(1)
+    const savedArg = vi.mocked(api.saveAudioProviders).mock.calls[0]![0]
+    expect(savedArg[0]).toEqual(expect.objectContaining({
+      id: 'openai',
+      label: 'OpenAI Speech',
+      default_model: 'gpt-4o-transcribe',
+    }))
   })
 })

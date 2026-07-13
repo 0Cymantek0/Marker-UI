@@ -5,7 +5,7 @@ Running Marker UI from source is useful if you want to develop features, inspect
 ---
 
 ## Prerequisites
-- **Python 3.10+** (with `pip` and `venv`).
+- **Python 3.11+** (with `pip` and `venv`).
 - **Node.js 18+** (with `npm` or `pnpm`).
 - **pnpm** (preferred for frontend dependencies, install via `npm i -g pnpm`).
 

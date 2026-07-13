@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.audio.providers.base import AudioTranscriptionProvider, RawTranscript
+from app.audio.providers.base import RawTranscript
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,9 @@ class FasterWhisperProvider:
                 "end": float(segment.end),
                 "text": str(segment.text).strip(),
                 "confidence": _segment_confidence(segment),
+                "no_speech_prob": _coerce_float(getattr(segment, "no_speech_prob", None)),
+                "avg_logprob": _coerce_float(getattr(segment, "avg_logprob", None)),
+                "compression_ratio": _coerce_float(getattr(segment, "compression_ratio", None)),
                 "words": _segment_words(segment),
             }
             for segment in segments_iter

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { FileText, Code, Braces, Layers, HelpCircle, Settings2, X, ChevronDown, FlaskConical, Trash2, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { messageFromUnknownError } from '@/lib/errors'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -19,6 +20,7 @@ import {
   type OutputFormat,
   type ConverterType,
   type ImageHandlingMode,
+  type ChunkingStrategy,
   type OcrEngine,
   type SmartRouterLevel,
   type ActiveLLM,
@@ -37,6 +39,11 @@ const OUTPUT_FORMATS: { value: OutputFormat; label: string; desc: string; icon: 
   { value: 'json', label: 'JSON', desc: 'Structured JSON layout metadata', icon: Braces },
   { value: 'html', label: 'HTML', desc: 'Rendered HTML structure', icon: Code },
   { value: 'chunks', label: 'Chunks', desc: 'Fragmented text layout chunks', icon: Layers },
+]
+
+const CHUNKING_STRATEGIES: { value: ChunkingStrategy; label: string }[] = [
+  { value: 'markdown_heading_blocks_v2', label: 'Markdown headings' },
+  { value: 'unstructured_by_title', label: 'Unstructured by title' },
 ]
 
 const CONVERTERS: { value: ConverterType; label: string; desc: string }[] = [
@@ -210,8 +217,8 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
       setPresetDesc('')
       setIsSavingPreset(false)
       loadPresets()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save preset.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to save preset.'))
     }
   }
 
@@ -223,8 +230,8 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
       await deletePreset(presetId)
       toast.success(`Preset "${name}" deleted.`)
       loadPresets()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete preset.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to delete preset.'))
     }
   }
 
@@ -266,14 +273,14 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
       {/* Presets Selection & Management */}
       <div className="space-y-3 pb-4 border-b border-border/20">
         <div className="flex items-center justify-between">
-          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
             Conversion Preset
           </label>
           {presets.length > 0 && (
             <button
               type="button"
               onClick={() => setShowManage((prev) => !prev)}
-              className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
+              className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors focus:outline-none"
             >
               {showManage ? 'Hide Presets' : `Manage Presets (${presets.length})`}
             </button>
@@ -296,7 +303,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
             variant="outline"
             disabled={disabled}
             onClick={() => setIsSavingPreset((prev) => !prev)}
-            className="h-10 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0"
+            className="h-10 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0"
           >
             {isSavingPreset ? <X className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5 text-primary" />}
             {isSavingPreset ? 'Close' : 'Save Current'}
@@ -308,7 +315,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
           (() => {
             const activePreset = presets.find((p) => p.id === selectedPresetId)
             return activePreset?.description ? (
-              <p className="text-[10px] text-muted-foreground/90 italic leading-normal pl-1">
+              <p className="text-xs text-muted-foreground/90 italic leading-normal pl-1">
                 {activePreset.description}
               </p>
             ) : null
@@ -319,7 +326,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
         {isSavingPreset && (
           <form onSubmit={handleSavePreset} className="mt-3 p-3 rounded-xl border border-primary/20 bg-primary/5 space-y-3 animate-fade-in">
             <div className="space-y-1">
-              <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Preset Name
               </label>
               <Input
@@ -332,7 +339,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Description (optional)
               </label>
               <Input
@@ -349,14 +356,14 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsSavingPreset(false)}
-                className="h-7 text-[9px] uppercase tracking-wider"
+                className="h-7 text-xs uppercase tracking-wider"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 size="sm"
-                className="h-7 text-[9px] uppercase tracking-wider font-bold"
+                className="h-7 text-xs uppercase tracking-wider font-bold"
               >
                 Save Preset
               </Button>
@@ -367,7 +374,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
         {/* Manage Presets Area (Handles the edge case: scroll-contained to prevent UI extension) */}
         {showManage && presets.length > 0 && (
           <div className="mt-2 rounded-xl border border-border/50 bg-card/45 p-2.5 space-y-2">
-            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60 px-1 border-b border-border/20 pb-1">
+            <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground/60 px-1 border-b border-border/20 pb-1">
               Saved Preset Profiles
             </div>
             <div className="max-h-36 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
@@ -376,7 +383,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                   <div className="space-y-0.5 min-w-0">
                     <div className="font-semibold text-xs text-foreground truncate">{p.name}</div>
                     {p.description && (
-                      <div className="text-[10px] text-muted-foreground leading-normal truncate">{p.description}</div>
+                      <div className="text-xs text-muted-foreground leading-normal truncate">{p.description}</div>
                     )}
                   </div>
                   <button
@@ -395,14 +402,14 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
       </div>
       {/* Output Format */}
       <div className="space-y-3">
-        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+        <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
           Output Format
         </label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {OUTPUT_FORMATS.map((fmt) => {
             const selected = config.output_formats ?? ['markdown']
             const isActive = selected.includes(fmt.value)
-            const isFormatDisabled = disabled || (!supportsMultiFormat && fmt.value !== 'markdown')
+            const isFormatDisabled = disabled || (!supportsMultiFormat && fmt.value !== 'markdown' && fmt.value !== 'chunks')
             return (
               <button
                 key={fmt.value}
@@ -430,11 +437,30 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
             )
           })}
         </div>
+        {(config.output_formats ?? ['markdown']).includes('chunks') && (
+          <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-card/35 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                Chunking Strategy
+              </label>
+              <p className="text-xs text-muted-foreground mt-1 leading-normal">
+                Use Markdown-preserving chunks by default, or title-aware Unstructured chunks when installed.
+              </p>
+            </div>
+            <Select
+              value={config.chunking_strategy ?? 'markdown_heading_blocks_v2'}
+              onChange={(value) => update('chunking_strategy', value as ChunkingStrategy)}
+              options={CHUNKING_STRATEGIES}
+              disabled={disabled}
+              className="w-full sm:w-56 md:w-56"
+            />
+          </div>
+        )}
       </div>
 
       {/* Converter Type */}
       <div className="space-y-3">
-        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+        <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
           Converter Engine
         </label>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -454,7 +480,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                 )}
               >
                 <span className={cn('block font-semibold text-xs', isActive ? 'text-primary-foreground' : 'text-foreground')}>{conv.label}</span>
-                <span className={cn('block text-[11px] mt-1 leading-normal', isActive ? 'text-primary-foreground/85' : 'text-muted-foreground/90')}>
+                <span className={cn('block text-xs mt-1 leading-normal', isActive ? 'text-primary-foreground/85' : 'text-muted-foreground/90')}>
                   {conv.desc}
                 </span>
               </button>
@@ -465,7 +491,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
 
       {/* Conversion Profile */}
       <div className="space-y-3">
-        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+        <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
           Conversion Profile
         </label>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -486,7 +512,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
               >
                 <div>
                   <span className={cn('block font-semibold text-xs', isActive ? 'text-primary-foreground' : 'text-foreground')}>{prof.label}</span>
-                  <span className={cn('block text-[10px] mt-1 leading-normal', isActive ? 'text-primary-foreground/85' : 'text-muted-foreground/90')}>
+                  <span className={cn('block text-xs mt-1 leading-normal', isActive ? 'text-primary-foreground/85' : 'text-muted-foreground/90')}>
                     {prof.desc}
                   </span>
                 </div>
@@ -495,7 +521,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
           })}
         </div>
         {(config.conversion_profile ?? 'auto') === 'fast' && (
-          <div className="text-[11px] text-amber-600 dark:text-amber-400 p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 leading-normal">
+          <div className="text-xs text-amber-600 dark:text-amber-400 p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 leading-normal">
             Fast runs LiteParse first even for riskier PDFs. This is faster but may be less accurate; empty or very short output still retries with Marker.
           </div>
         )}
@@ -507,7 +533,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
           type="button"
           onClick={openModal}
           disabled={disabled}
-          className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80 hover:text-foreground transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground/80 hover:text-foreground transition-colors disabled:opacity-50"
         >
           <Settings2 className="w-4 h-4 text-primary" />
           <span>Configure Advanced Settings</span>
@@ -517,7 +543,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
       {/* Popup Dialog Modal */}
       {isModalOpen && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-overlay-fade-in">
-          <div className="glass-card max-w-lg w-full bg-background border border-border/50 rounded-2xl shadow-xl overflow-hidden animate-modal-zoom-in flex flex-col max-h-[90vh] text-left">
+          <div className="glass-card max-w-2xl w-full bg-background border border-border/50 rounded-2xl shadow-xl overflow-hidden animate-modal-zoom-in flex flex-col max-h-[90vh] text-left">
             
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border/20">
@@ -525,7 +551,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                 <Settings2 className="w-5 h-5 text-primary" />
                 <div>
                   <h3 className="font-extrabold text-sm text-foreground uppercase tracking-wider">Advanced Options</h3>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Fine-tune converters, OCR, and model overrides.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Fine-tune converters, OCR, and model overrides.</p>
                 </div>
               </div>
               <button 
@@ -552,10 +578,10 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
               {/* Archive Extraction */}
               <div className="space-y-2.5">
                 <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                  <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                     Archive Extraction
                   </label>
-                  <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+                  <p className="text-xs text-muted-foreground mt-1 leading-normal">
                     Configure extraction options when submitting ZIP archives.
                   </p>
                 </div>
@@ -568,7 +594,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                   disabled={disabled}
                 />
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <NumberField
                     label="Max Archive Files"
                     help="Maximum number of files to scan inside the ZIP archive."
@@ -602,13 +628,59 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                     disabled={disabled}
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <NumberField
+                    label="Inline Text (KB)"
+                    help="Maximum text child size to inline directly in the archive summary."
+                    value={(tempConfig.archive_inline_bytes ?? 64 * 1024) / 1024}
+                    min={1}
+                    max={1024}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_inline_bytes', v * 1024)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Total Budget (MB)"
+                    help="Maximum total uncompressed bytes to inspect across archive entries."
+                    value={(tempConfig.archive_max_total_uncompressed_bytes ?? 50 * 1024 * 1024) / (1024 * 1024)}
+                    min={1}
+                    max={1000}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_total_uncompressed_bytes', v * 1024 * 1024)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Max Ratio"
+                    help="Skip archive entries whose uncompressed/compressed ratio is suspiciously high."
+                    value={tempConfig.archive_max_compression_ratio ?? 100}
+                    min={1}
+                    max={10000}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_compression_ratio', v)}
+                    disabled={disabled}
+                  />
+
+                  <NumberField
+                    label="Max Depth"
+                    help="Maximum nested archive conversion depth."
+                    value={tempConfig.archive_max_depth ?? 2}
+                    min={0}
+                    max={10}
+                    step={1}
+                    onChange={(v) => updateTemp('archive_max_depth', v)}
+                    disabled={disabled}
+                  />
+                </div>
               </div>
 
               <hr className="border-border/20" />
 
               <div className="space-y-2.5">
                 <div className="flex items-center gap-1.5">
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                  <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                     PDF / OCR Engine
                   </label>
                   <HelpIcon text="Engine used to OCR and refine PDF/image text. Surya is the local default. Hybrid OCR adds local specialist engines for tables, formulas, and difficult scans when installed — it never sends crops to the cloud." />
@@ -625,7 +697,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                     className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2"
                     data-testid="hybrid-ocr-warning"
                   >
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-normal">
+                    <p className="text-xs text-amber-700 dark:text-amber-300 leading-normal">
                       Hybrid OCR runs a local multi-engine refinement pipeline. Surya builds the baseline document, then local
                       specialist engines improve selected tables, formulas, and difficult scanned regions when installed. It is
                       slower and may require extra local model setup, but no OCR crop is sent to cloud services by this engine.
@@ -638,10 +710,10 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
 
               <div className="space-y-2.5">
                 <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                  <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                     Image Understanding
                   </label>
-                  <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+                  <p className="text-xs text-muted-foreground mt-1 leading-normal">
                     Choose how extracted document images appear in Markdown.
                   </p>
                 </div>
@@ -668,7 +740,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                 </div>
 
                 {!hasVisionModel && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-normal">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 leading-normal">
                     Enable vision capability for at least one model in Settings to use understanding modes.
                   </p>
                 )}
@@ -695,7 +767,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                     {(tempConfig.router_enabled ?? IU_DEFAULTS.router_enabled) && (
                       <div className="space-y-1.5 px-2.5 pt-1.5">
                         <div className="flex items-center gap-1.5">
-                          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                             Router Intelligence
                           </label>
                           <HelpIcon text="How hard the local router thinks before routing each image. Higher levels cost more local GPU but route more accurately." />
@@ -707,10 +779,10 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                           options={SMART_ROUTER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
                           className="w-full md:w-full"
                         />
-                        <p className="text-[11px] text-muted-foreground leading-normal" data-testid="smart-router-desc">
-                          {((SMART_ROUTER_OPTIONS.find(
+                        <p className="text-xs text-muted-foreground leading-normal" data-testid="smart-router-desc">
+                          {SMART_ROUTER_OPTIONS.find(
                             (o) => o.value === (tempConfig.smart_router_level ?? IU_DEFAULTS.smart_router_level),
-                          ) ?? SMART_ROUTER_OPTIONS[1]) as any).desc}
+                          )?.desc ?? 'Classifies each crop with local layout signals before routing.'}
                         </p>
                       </div>
                     )}
@@ -742,7 +814,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                         type="button"
                         onClick={() => setShowTuning((s) => !s)}
                         aria-expanded={showTuning}
-                        className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80 hover:text-foreground hover:bg-muted/30 transition-colors"
+                        className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest text-muted-foreground/80 hover:text-foreground hover:bg-muted/30 transition-colors"
                       >
                         <FlaskConical className="w-3.5 h-3.5 text-primary" />
                         <span>Experimental / Tuning</span>
@@ -751,7 +823,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
 
                       {showTuning && (
                         <div className="mt-1 pl-3 border-l border-primary/20 space-y-3 animate-fade-in">
-                          <p className="text-[11px] text-muted-foreground leading-normal pt-1">
+                          <p className="text-xs text-muted-foreground leading-normal pt-1">
                             Power-user thresholds. Leave at defaults unless you are tuning routing against your own documents.
                           </p>
                           <SliderField
@@ -830,7 +902,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
               {tempConfig.use_llm && (
                 <div className="pl-4 border-l border-primary/20 space-y-3 animate-fade-in relative z-20">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                    <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                       LLM Provider Override
                     </label>
                     <Select
@@ -860,7 +932,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
 
                   {tempConfig.llm_provider && (
                     <div className="space-y-1.5 animate-fade-in">
-                      <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                      <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                         LLM Model Override
                       </label>
                       <Select
@@ -912,7 +984,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
-                    <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                    <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                       Page Range
                     </label>
                     <HelpIcon text="Convert only specific pages. Format: '1-10', '1,3,5', or '1-5,7-9'." />
@@ -928,7 +1000,7 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
                 
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
-                    <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+                    <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
                       Language Hint
                     </label>
                     <HelpIcon text="Primary language code (e.g., 'en', 'es', 'fr') to improve OCR spelling and character recognition." />
@@ -990,8 +1062,8 @@ export function ConversionOptions({ config, onChange, disabled, supportsMultiFor
 function HelpIcon({ text }: { text: string }) {
   return (
     <div className="group relative">
-      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help" />
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-[10px] leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-20 pointer-events-none text-left">
+      <HelpCircle className="mt-[3px] w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help" />
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-50 pointer-events-none text-left">
         {text}
       </div>
     </div>
@@ -1027,7 +1099,7 @@ function ToggleOption({
       <div className="text-left max-w-[85%]">
         <span className="text-xs font-semibold text-foreground block">{label}</span>
         {description && (
-          <span className="block text-[11px] text-muted-foreground mt-0.5 leading-normal">
+          <span className="block text-xs text-muted-foreground mt-0.5 leading-normal">
             {description}
           </span>
         )}
@@ -1040,8 +1112,8 @@ function ToggleOption({
       >
         <div
           className={cn(
-            'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200',
-            checked ? 'left-[17px]' : 'left-0.5'
+            'absolute top-0.5 w-3.5 h-3.5 rounded-full shadow-sm transition-transform duration-200',
+            checked ? 'left-[17px] bg-primary-foreground' : 'left-0.5 bg-white'
           )}
         />
       </div>
@@ -1087,7 +1159,7 @@ function RadioOption({
       </span>
       <span className="min-w-0">
         <span className="text-xs font-semibold text-foreground block">{label}</span>
-        <span className="block text-[11px] text-muted-foreground mt-0.5 leading-normal">
+        <span className="block text-xs text-muted-foreground mt-0.5 leading-normal">
           {description}
         </span>
       </span>
@@ -1119,13 +1191,13 @@ function SliderField({
   return (
     <div className={cn('space-y-1.5', disabled && 'opacity-50 pointer-events-none')}>
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+        <div className="flex items-start gap-1.5">
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block leading-5">
             {label}
           </label>
           <HelpIcon text={help} />
         </div>
-        <span className="text-[11px] font-bold tabular-nums text-foreground">{value.toFixed(2)}</span>
+        <span className="text-xs font-bold tabular-nums text-foreground">{value.toFixed(2)}</span>
       </div>
       <input
         type="range"
@@ -1171,8 +1243,8 @@ function NumberField({
   }
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+      <div className="flex items-start gap-1.5">
+        <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block leading-5">
           {label}
         </label>
         <HelpIcon text={help} />

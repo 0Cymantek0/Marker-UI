@@ -11,18 +11,38 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.conversion.formats import OUTPUT_FORMATS_DESCRIPTION, OutputFormat
 from app.errors import ERROR_SCHEMA_VERSION
 from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION
 
 
 CONTRACT_SCHEMA_VERSION = "marker.agent_contract.v1"
 
-OutputFormat = Literal["markdown", "json", "html", "chunks"]
 ImageHandlingMode = Literal["extraction", "understanding", "both"]
 ConversionProfile = Literal["auto", "fast", "high_accuracy"]
-AudioOutputMode = Literal["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"]
+AudioOutputMode = Literal[
+    "transcript",
+    "enhanced",
+    "notes",
+    "meeting_notes",
+    "lecture_notes",
+    "interview_qna",
+    "action_decision_log",
+]
 OcrEngine = Literal["surya", "hybrid_ocr"]
 HybridOcrProfile = Literal["balanced", "max_accuracy", "low_vram"]
+SmartRouterLevel = Literal["disabled", "smart", "beeg_brain"]
+ChunkingStrategy = Literal["markdown_heading_blocks_v2", "unstructured_by_title"]
+
+AUDIO_OUTPUT_MODES: tuple[AudioOutputMode, ...] = (
+    "transcript",
+    "enhanced",
+    "notes",
+    "meeting_notes",
+    "lecture_notes",
+    "interview_qna",
+    "action_decision_log",
+)
 
 
 class ContractModel(BaseModel):
@@ -35,6 +55,7 @@ class FlexibleContractModel(BaseModel):
 
 class ConversionOptionsModel(ContractModel):
     output_format: OutputFormat = "markdown"
+    output_formats: list[OutputFormat] = Field(default_factory=list)
     converter_cls: str | None = None
     engine_override: str | None = None
     conversion_profile: ConversionProfile | None = None
@@ -113,9 +134,8 @@ class ConversionOptionsModel(ContractModel):
     # require explicit opt-in before any audio leaves the machine.
     audio_allow_cloud_stt: bool = False
 
-    # Benchmark (plan §13). When enabled, the configured provider and each
-    # comparison provider transcribe the same audio and a comparison report is
-    # attached to job metadata.
+    # Benchmark (plan §13). Reserved until the benchmark runner and at least two
+    # shipped STT adapters exist; current builds reject this flag early.
     audio_benchmark_compare: bool = False
     audio_compare_providers: list[str] = Field(default_factory=list)
     audio_compare_metrics: list[str] = Field(default_factory=list)
@@ -126,6 +146,34 @@ class ConversionOptionsModel(ContractModel):
     hybrid_ocr_profile: HybridOcrProfile = "balanced"
     hybrid_ocr_require_specialists: bool = False
     debug: bool = False
+
+    # Productivity, archive, and image-understanding knobs exposed by CLI/REST/MCP.
+    # Keep them first-class here so JSON agent callers get validation and schema
+    # docs instead of needing to tunnel stable options through extra_options.
+    text_data_max_rows: int | None = Field(default=None, ge=1)
+    chunking_strategy: ChunkingStrategy | None = None
+    chunk_max_tokens: int | None = Field(default=None, ge=16)
+    allow_chunking_fallback: bool = False
+    archive_recursive: bool | None = None
+    archive_max_files: int | None = Field(default=None, ge=1)
+    archive_inline_bytes: int | None = Field(default=None, ge=1)
+    archive_max_child_bytes: int | None = Field(default=None, ge=1)
+    archive_max_total_uncompressed_bytes: int | None = Field(default=None, ge=1)
+    archive_max_compression_ratio: float | None = Field(default=None, ge=1.0)
+    archive_max_depth: int | None = Field(default=None, ge=0)
+    archive_max_converted_children: int | None = Field(default=None, ge=1)
+    router_enabled: bool | None = None
+    smart_router_level: SmartRouterLevel | None = None
+    dedup_enabled: bool | None = None
+    downscale_vlm_crops: bool | None = None
+    batch_enabled: bool | None = None
+    decorative_max_text_density: float | None = Field(default=None, ge=0.0, le=1.0)
+    ocr_min_text_density: float | None = Field(default=None, ge=0.0, le=1.0)
+    ocr_min_lines: int | None = Field(default=None, ge=1)
+    dedup_max_distance: int | None = Field(default=None, ge=0, le=64)
+    vlm_crop_max_px: int | None = Field(default=None, ge=64, le=4096)
+    vlm_batch_size: int | None = Field(default=None, ge=1, le=64)
+    max_batch_retries: int | None = Field(default=None, ge=0, le=5)
     extra_options: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -150,6 +198,7 @@ class ConvertRequestModel(ContractModel):
     source_url: str | None = None
     output_dir: str | None = None
     output_path: str | None = None
+    overwrite: bool = False
     max_chars: int = Field(default=20_000, ge=0, le=100_000)
     options: ConversionOptionsModel = Field(default_factory=ConversionOptionsModel)
 
@@ -269,7 +318,8 @@ class OptionMetadataModel(ContractModel):
 
 
 OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
-    OptionMetadataModel(name="output_format", cli_flag="--output-format", type="enum", default="markdown", category="output", description="Output format: markdown, json, html, or chunks."),
+    OptionMetadataModel(name="output_format", cli_flag="--output-format", type="enum", default="markdown", category="output", description=f"Requested output format: {OUTPUT_FORMATS_DESCRIPTION}. Markdown and chunks are broadly available; json/html require a Marker-backed PDF/image/EPUB route."),
+    OptionMetadataModel(name="output_formats", type="array", default=[], category="output", description=f"Requested multi-format outputs: {OUTPUT_FORMATS_DESCRIPTION}."),
     OptionMetadataModel(name="converter_cls", cli_flag="--converter-cls", type="string", category="routing", description="Optional Marker converter class override."),
     OptionMetadataModel(name="engine_override", cli_flag="--engine-override", type="string", category="routing", description="Optional universal converter engine override."),
     OptionMetadataModel(name="conversion_profile", cli_flag="--conversion-profile", type="enum", category="routing", description="Conversion policy profile."),
@@ -286,6 +336,30 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="ocr_engine", cli_flag="--ocr-engine", type="enum", default="surya", category="ocr", description="Local OCR engine: surya or hybrid_ocr."),
     OptionMetadataModel(name="hybrid_ocr_profile", cli_flag="--hybrid-ocr-profile", type="enum", default="balanced", category="ocr", description="Hybrid OCR profile: balanced, max_accuracy, or low_vram."),
     OptionMetadataModel(name="hybrid_ocr_require_specialists", cli_flag="--hybrid-ocr-require-specialists", type="boolean", default=False, category="ocr", description="Fail if Hybrid OCR specialists are unavailable."),
+    OptionMetadataModel(name="router_enabled", cli_flag="--router-enabled", type="boolean", category="images", description="Override the image-understanding Tier-0 router switch."),
+    OptionMetadataModel(name="smart_router_level", cli_flag="--smart-router-level", type="enum", category="images", description="Image routing brain: disabled, smart, or beeg_brain."),
+    OptionMetadataModel(name="dedup_enabled", cli_flag="--dedup-enabled", type="boolean", category="images", description="Collapse duplicate image crops before extraction."),
+    OptionMetadataModel(name="downscale_vlm_crops", cli_flag="--downscale-vlm-crops", type="boolean", category="images", description="Downscale crops before VLM calls."),
+    OptionMetadataModel(name="batch_enabled", cli_flag="--batch-enabled", type="boolean", category="images", description="Batch image routing and extraction calls."),
+    OptionMetadataModel(name="decorative_max_text_density", cli_flag="--decorative-max-text-density", type="number", category="images", description="Text-density threshold at or below which an image is decorative."),
+    OptionMetadataModel(name="ocr_min_text_density", cli_flag="--ocr-min-text-density", type="number", category="images", description="Text-density threshold at or above which an image routes to local OCR."),
+    OptionMetadataModel(name="ocr_min_lines", cli_flag="--ocr-min-lines", type="integer", category="images", description="Minimum detected text lines before OCR routing."),
+    OptionMetadataModel(name="dedup_max_distance", cli_flag="--dedup-max-distance", type="integer", category="images", description="Maximum aHash Hamming distance treated as duplicate."),
+    OptionMetadataModel(name="vlm_crop_max_px", cli_flag="--vlm-crop-max-px", type="integer", category="images", description="Longest-side pixel cap for crops sent to VLM providers."),
+    OptionMetadataModel(name="vlm_batch_size", cli_flag="--vlm-batch-size", type="integer", category="images", description="Maximum images per batched VLM call."),
+    OptionMetadataModel(name="max_batch_retries", cli_flag="--max-batch-retries", type="integer", category="images", description="Extra batch attempts used to recover missing or malformed VLM responses."),
+    OptionMetadataModel(name="text_data_max_rows", cli_flag="--text-data-max-rows", type="integer", category="text_data", description="Maximum rows rendered for text/data table inputs."),
+    OptionMetadataModel(name="chunking_strategy", cli_flag="--chunking-strategy", type="enum", category="chunks", description="Chunking strategy for derived Markdown chunks: markdown_heading_blocks_v2 or unstructured_by_title."),
+    OptionMetadataModel(name="chunk_max_tokens", cli_flag="--chunk-max-tokens", type="integer", category="chunks", description="Optional tokenizer-backed maximum token budget for derived Markdown chunks."),
+    OptionMetadataModel(name="allow_chunking_fallback", cli_flag="--allow-chunking-fallback", type="boolean", category="chunks", default=False, description="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2 when unavailable."),
+    OptionMetadataModel(name="archive_recursive", cli_flag="--archive-recursive", type="boolean", category="archives", description="Recursively convert deterministic safe children inside archives."),
+    OptionMetadataModel(name="archive_max_files", cli_flag="--archive-max-files", type="integer", category="archives", description="Maximum files scanned inside an archive."),
+    OptionMetadataModel(name="archive_inline_bytes", cli_flag="--archive-inline-bytes", type="integer", category="archives", description="Maximum small child bytes to inline in archive output."),
+    OptionMetadataModel(name="archive_max_child_bytes", cli_flag="--archive-max-child-bytes", type="integer", category="archives", description="Maximum child file size to parse from an archive."),
+    OptionMetadataModel(name="archive_max_total_uncompressed_bytes", cli_flag="--archive-max-total-uncompressed-bytes", type="integer", category="archives", description="Maximum total uncompressed archive bytes to inspect."),
+    OptionMetadataModel(name="archive_max_compression_ratio", cli_flag="--archive-max-compression-ratio", type="number", category="archives", description="Maximum allowed archive entry compression ratio."),
+    OptionMetadataModel(name="archive_max_depth", cli_flag="--archive-max-depth", type="integer", category="archives", description="Maximum recursive archive depth."),
+    OptionMetadataModel(name="archive_max_converted_children", cli_flag="--archive-max-converted-children", type="integer", category="archives", description="Maximum child files converted inside an archive."),
     OptionMetadataModel(name="audio_output_mode", cli_flag="--audio-output-mode", type="enum", category="audio", description="Audio transcript or note mode."),
     OptionMetadataModel(name="audio_model", cli_flag="--audio-model", type="string", category="audio", description="Local audio transcription model."),
     OptionMetadataModel(name="audio_vocabulary", cli_flag="--audio-vocabulary", type="string", category="audio", description="Vocabulary hints for audio transcription."),
@@ -298,22 +372,38 @@ OPTION_METADATA: tuple[OptionMetadataModel, ...] = (
     OptionMetadataModel(name="audio_compute_type", cli_flag="--audio-compute-type", type="string", category="audio", description="CTranslate2 compute type (int8/float16/...)."),
     OptionMetadataModel(name="audio_beam_size", cli_flag="--audio-beam-size", type="integer", category="audio", description="Beam size for decoding."),
     OptionMetadataModel(name="audio_vad_filter", cli_flag="--audio-vad-filter", type="boolean", category="audio", description="Apply Silero VAD silence filtering."),
-    OptionMetadataModel(name="audio_diarization", cli_flag="--audio-diarization", type="boolean", default=False, category="audio", description="Separate speakers when the provider supports it."),
+    OptionMetadataModel(name="audio_gap_warning_ms", type="integer", category="audio", description="Timestamp gap in milliseconds that emits an audio continuity warning."),
+    OptionMetadataModel(name="audio_diarization", cli_flag="--audio-diarization", type="boolean", default=False, category="audio", description="Request provider-backed speaker diarization; rejected unless the selected shipped provider supports diarization."),
     OptionMetadataModel(name="audio_min_speakers", cli_flag="--audio-min-speakers", type="integer", category="audio", description="Minimum expected speaker count."),
     OptionMetadataModel(name="audio_max_speakers", cli_flag="--audio-max-speakers", type="integer", category="audio", description="Maximum expected speaker count."),
-    OptionMetadataModel(name="audio_speaker_aliases", cli_flag="--audio-speaker-aliases", type="object", category="audio", description="Map of speaker labels to confirmed names."),
-    OptionMetadataModel(name="audio_vocabulary_pack_ids", cli_flag="--audio-vocabulary-pack-ids", type="array", category="audio", description="Saved vocabulary pack ids to compile."),
+    OptionMetadataModel(name="audio_speaker_aliases", cli_flag="--audio-speaker-alias", type="object", category="audio", description="Map of speaker labels to confirmed names."),
+    OptionMetadataModel(name="audio_speaker_memory", type="boolean", default=False, category="audio", description="Allow local speaker memory for confirmed speaker mappings."),
+    OptionMetadataModel(name="audio_speaker_memory_scope", type="string", default="machine", category="audio", description="Scope for speaker memory; current default is local machine."),
+    OptionMetadataModel(name="audio_vocabulary_pack_ids", cli_flag="--audio-vocabulary-pack-id", type="array", category="audio", description="Saved vocabulary pack ids to compile."),
     OptionMetadataModel(name="audio_confidence_heatmap", cli_flag="--audio-confidence-heatmap", type="boolean", default=True, category="audio", description="Emit per-segment confidence for the heatmap view."),
     OptionMetadataModel(name="audio_quality_diagnostics", cli_flag="--audio-quality-diagnostics", type="boolean", default=True, category="audio", description="Emit the audio quality diagnostics block."),
+    OptionMetadataModel(name="audio_review_required_on_low_confidence", type="boolean", default=False, category="audio", description="Mark low-confidence transcripts as requiring review."),
     OptionMetadataModel(name="audio_text_enhancement_enabled", cli_flag="--audio-text-enhancement", type="boolean", default=False, category="audio", description="Allow textual enhancement of the transcript."),
     OptionMetadataModel(name="audio_text_enhancement_strength", cli_flag="--audio-text-enhancement-strength", type="integer", default=0, category="audio", description="Textual enhancement strength 0-5."),
+    OptionMetadataModel(name="audio_text_enhancement_provider", type="string", default="local_rule_based", category="audio", description="Provider id for transcript text enhancement."),
+    OptionMetadataModel(name="audio_text_enhancement_model", type="string", category="audio", description="Optional model id for transcript text enhancement."),
     OptionMetadataModel(name="audio_structural_enhancement_enabled", cli_flag="--audio-structural-enhancement", type="boolean", default=False, category="audio", description="Restructure the transcript into a document."),
     OptionMetadataModel(name="audio_structural_enhancement_mode", cli_flag="--audio-structural-enhancement-mode", type="enum", default="auto", category="audio", description="Document structure: auto, meeting_notes, lecture_notes, interview_qna, action_decision_log, timeline."),
+    OptionMetadataModel(name="audio_structural_preserve_words", type="boolean", default=True, category="audio", description="Require structural enhancement to preserve transcript words."),
+    OptionMetadataModel(name="audio_enhancement_require_source_refs", type="boolean", default=True, category="audio", description="Require enhancement output to map back to transcript source references."),
+    OptionMetadataModel(name="audio_enhancement_show_diff", type="boolean", default=True, category="audio", description="Include a raw-vs-enhanced diff when text enhancement is active."),
+    OptionMetadataModel(name="audio_enhancement_include_audit", type="boolean", default=True, category="audio", description="Include enhancement validation and provenance audit metadata."),
+    OptionMetadataModel(name="audio_enhancement_fallback_on_validation_failure", type="boolean", default=True, category="audio", description="Fall back to safe transcript output when enhancement validation fails."),
+    OptionMetadataModel(name="audio_enhancement_allow_cloud", type="boolean", default=False, category="audio", description="Explicit opt-in for cloud audio text enhancement."),
+    OptionMetadataModel(name="audio_enhancement_custom_instructions", type="string", category="audio", description="Optional user instructions for transcript enhancement."),
     OptionMetadataModel(name="audio_fusion_mode", cli_flag="--audio-fusion-mode", type="enum", category="audio", description="Fuse transcript with context documents: audio_first, meeting_followup, lecture_study, research_memo, contradiction_audit, qna_extraction."),
     OptionMetadataModel(name="audio_contradiction_detection", cli_flag="--audio-contradiction-detection", type="boolean", default=False, category="audio", description="Detect contradictory claims across the transcript."),
+    OptionMetadataModel(name="audio_context_trust_policy", type="string", default="transcript_wins", category="audio", description="Policy for resolving transcript/context conflicts."),
     OptionMetadataModel(name="audio_allow_cloud_stt", cli_flag="--audio-allow-cloud-stt", type="boolean", default=False, category="audio", description="Explicit opt-in to send audio to a cloud STT provider."),
-    OptionMetadataModel(name="audio_benchmark_compare", cli_flag="--audio-benchmark-compare", type="boolean", default=False, category="audio", description="Compare providers/models on the same audio."),
-    OptionMetadataModel(name="audio_config", cli_flag="--audio-config", type="object", category="audio", description="JSON blob of advanced audio controls; flat audio_* flags take precedence on conflict."),
+    OptionMetadataModel(name="audio_benchmark_compare", cli_flag="--audio-benchmark-compare", type="boolean", default=False, category="audio", description="Reserved for provider/model comparison; current builds reject it because no benchmark runner ships."),
+    OptionMetadataModel(name="audio_compare_providers", cli_flag="--audio-compare-provider", type="array", default=[], category="audio", description="Provider ids to include in audio comparison mode."),
+    OptionMetadataModel(name="audio_compare_metrics", type="array", default=[], category="audio", description="Metric ids to include in audio comparison mode."),
+    OptionMetadataModel(name="audio_config", type="object", category="audio", description="REST JSON blob of advanced audio controls; CLI callers can use --options-json or --option."),
     OptionMetadataModel(name="disable_multiprocessing", cli_flag="--disable-multiprocessing", type="boolean", default=False, category="runtime", description="Run conversion single-threaded where supported."),
     OptionMetadataModel(name="strip_existing_ocr", cli_flag="--strip-existing-ocr", type="boolean", default=False, category="pdf", description="Strip existing OCR text before re-OCR."),
     OptionMetadataModel(name="redo_inline_math", cli_flag="--redo-inline-math", type="boolean", default=False, category="pdf", description="Reprocess inline math."),

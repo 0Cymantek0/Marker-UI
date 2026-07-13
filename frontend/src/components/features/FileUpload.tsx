@@ -1,14 +1,13 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { UploadCloud, FileText, X, FileImage, FileCode, FileSpreadsheet, FolderOpen, Files, Link, ChevronDown, ChevronUp, Loader2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
-import { browseFiles, browseFolder } from '@/lib/api'
-import type { ConverterPlanResponse } from '@/lib/api'
+import type { ConverterPlanResponse, InputFormatCapability } from '@/lib/api'
 import { RoutingAnalysis } from './conversion/RoutingAnalysis'
-import { toast } from 'sonner'
 
-const ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.msg,.epub,.html,.htm,.csv,.tsv,.json,.jsonl,.txt,.md,.rst,.log,.xml,.rss,.atom,.ipynb,.zip,.wav,.mp3,.m4a,.flac,.ogg,.aac,.mp4,.mov,.mkv,.webm,.avi,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
+const DEFAULT_ACCEPTED_EXTENSIONS = '.pdf,.docx,.xlsx,.xls,.pptx,.msg,.epub,.html,.htm,.csv,.tsv,.json,.jsonl,.txt,.md,.rst,.log,.xml,.rss,.atom,.ipynb,.zip,.wav,.mp3,.m4a,.flac,.ogg,.aac,.mp4,.mov,.mkv,.webm,.avi,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tiff'
+const DEFAULT_SUPPORTED_FORMATS_TEXT = 'Supported: PDF, Word, spreadsheets, slides, email, EPUB, HTML, text/data, archives, audio/video, and images (select multiple)'
 
 interface FileUploadProps {
   onFilesSelect: (files: File[]) => void
@@ -21,6 +20,7 @@ interface FileUploadProps {
   onLocalPathsChange: (paths: string) => void
   outputDir: string
   onOutputDirChange: (dir: string) => void
+  inputFormats?: InputFormatCapability[] | null
   disabled?: boolean
 }
 
@@ -56,10 +56,49 @@ function getFileIcon(name: string) {
   return FileText
 }
 
+function uploadableInputFormats(inputFormats: InputFormatCapability[] | null | undefined): InputFormatCapability[] {
+  return (inputFormats ?? []).filter((format) => format.upload_allowed !== false)
+}
+
+function normalizeExtension(extension: string): string | null {
+  const clean = extension.trim().toLowerCase()
+  if (!clean) return null
+  const withDot = clean.startsWith('.') ? clean : `.${clean}`
+  return /^\.[a-z0-9][a-z0-9.+-]*$/.test(withDot) ? withDot : null
+}
+
+function acceptFromInputFormats(inputFormats: InputFormatCapability[] | null | undefined): string {
+  const extensions = uploadableInputFormats(inputFormats).flatMap((format) => format.extensions)
+  const normalized = extensions
+    .map(normalizeExtension)
+    .filter((extension): extension is string => Boolean(extension))
+  const unique = [...new Set(normalized)]
+  return unique.length > 0 ? unique.join(',') : DEFAULT_ACCEPTED_EXTENSIONS
+}
+
+function supportedFormatsText(inputFormats: InputFormatCapability[] | null | undefined): string {
+  const labels = [
+    ...new Set(
+      uploadableInputFormats(inputFormats)
+        .map((format) => format.label.trim())
+        .filter(Boolean)
+    ),
+  ]
+  if (labels.length === 0) return DEFAULT_SUPPORTED_FORMATS_TEXT
+
+  const visible = labels.slice(0, 6)
+  if (labels.length > visible.length) {
+    return `Supported: ${visible.join(', ')}, and ${labels.length - visible.length} more (select multiple)`
+  }
+  if (visible.length === 1) return `Supported: ${visible[0]} (select multiple)`
+  if (visible.length === 2) return `Supported: ${visible[0]} and ${visible[1]} (select multiple)`
+  return `Supported: ${visible.slice(0, -1).join(', ')}, and ${visible[visible.length - 1]} (select multiple)`
+}
+
 function PlanDetails({ control }: { control: SourceEngineControl }) {
   if (control.loading) {
     return (
-      <div className="flex items-center gap-2 text-[11px] text-muted-foreground rounded-lg border border-border/30 bg-card/30 p-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-lg border border-border/30 bg-card/30 p-3">
         <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
         Checking route...
       </div>
@@ -67,7 +106,7 @@ function PlanDetails({ control }: { control: SourceEngineControl }) {
   }
   if (control.error) {
     return (
-      <div className="flex items-center gap-2 text-[11px] text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+      <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
         {control.error}
       </div>
@@ -87,45 +126,21 @@ export function FileUpload({
   onLocalPathsChange,
   outputDir,
   onOutputDirChange,
+  inputFormats,
   disabled
 }: FileUploadProps) {
   const [activeTab, setActiveTab] = useState<'upload' | 'local'>('upload')
   const [isDragOver, setIsDragOver] = useState(false)
   const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({})
   const inputRef = useRef<HTMLInputElement>(null)
+  const acceptedExtensions = useMemo(() => acceptFromInputFormats(inputFormats), [inputFormats])
+  const supportedText = useMemo(() => supportedFormatsText(inputFormats), [inputFormats])
 
   const toggleExpandPlan = (key: string) => {
     setExpandedPlans((prev) => ({
       ...prev,
       [key]: !prev[key],
     }))
-  }
-
-  const handleBrowseLocalFiles = async () => {
-    try {
-      const res = await browseFiles()
-      if (res.paths && res.paths.length > 0) {
-        const newPaths = res.paths.join('\n')
-        onLocalPathsChange(localPaths ? `${localPaths}\n${newPaths}` : newPaths)
-        toast.success(`Added ${res.paths.length} file path(s)`)
-      }
-    } catch (err) {
-      console.error('Failed to browse files:', err)
-      toast.error('Failed to open file browser')
-    }
-  }
-
-  const handleBrowseOutputDir = async () => {
-    try {
-      const res = await browseFolder()
-      if (res.path) {
-        onOutputDirChange(res.path)
-        toast.success('Output folder updated')
-      }
-    } catch (err) {
-      console.error('Failed to browse folder:', err)
-      toast.error('Failed to open folder browser')
-    }
   }
 
   const handleDrop = useCallback(
@@ -213,7 +228,7 @@ export function FileUpload({
               ref={inputRef}
               type="file"
               multiple
-              accept={ACCEPTED_EXTENSIONS}
+              accept={acceptedExtensions}
               onChange={handleChange}
               className="hidden"
             />
@@ -228,11 +243,11 @@ export function FileUpload({
             </div>
 
             <div className="text-center space-y-1">
-              <p className="text-xs font-bold text-foreground">
+              <p className="text-sm font-bold text-foreground">
                 {isDragOver ? 'Release to upload your files' : 'Drag & drop files here or click to browse'}
               </p>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
-                PDF, DOCX, XLSX, PPTX, EPUB, HTML, or images (select multiple)
+              <p className="text-xs text-muted-foreground leading-relaxed" title={acceptedExtensions}>
+                {supportedText}
               </p>
             </div>
           </div>
@@ -240,7 +255,7 @@ export function FileUpload({
           {/* Selected Files List */}
           {selectedFiles.length > 0 && (
             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-              <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground tracking-wider uppercase">
+              <div className="flex items-center justify-between text-xs font-bold text-muted-foreground tracking-wider uppercase">
                 <span>Selected Files ({selectedFiles.length})</span>
                 <button
                   type="button"
@@ -268,10 +283,10 @@ export function FileUpload({
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold truncate text-foreground">{file.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{formatSize(file.size)}</p>
+                          <p className="text-sm font-semibold truncate text-foreground">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
                           {engineControl && (
-                            <p className="text-[9px] text-muted-foreground truncate" title={engineControl.title}>
+                            <p className="text-xs text-muted-foreground truncate" title={engineControl.title}>
                               {engineControl.status}
                             </p>
                           )}
@@ -323,20 +338,9 @@ export function FileUpload({
       ) : (
         /* Local paths text area */
         <div className="space-y-2 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
-              Absolute Local File Paths (One Per Line)
-            </label>
-            <button
-              type="button"
-              onClick={handleBrowseLocalFiles}
-              disabled={disabled}
-              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-primary hover:text-primary/80 transition-all hover:translate-x-0.5 active:scale-95"
-            >
-              <FolderOpen className="w-3 h-3" />
-              Browse Files...
-            </button>
-          </div>
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block">
+            Absolute Local File Paths (One Per Line)
+          </label>
           <textarea
             disabled={disabled}
             value={localPaths}
@@ -344,7 +348,7 @@ export function FileUpload({
             placeholder="e.g. C:\path\to\document.pdf&#10;e.g. C:\path\to\report.docx"
             className="w-full h-[120px] bg-background/50 border border-border/80 rounded-xl p-3 text-xs placeholder:text-muted-foreground/50 focus:outline-none transition-all font-mono leading-relaxed"
           />
-          <p className="text-[10px] text-muted-foreground/80 leading-normal">
+          <p className="text-xs text-muted-foreground/80 leading-normal">
             * Backend reads files directly from your computer. Outputs will save to the same folder as the input file unless a custom folder is specified below.
           </p>
           {localPathEngineControls && localPathEngineControls.length > 0 && (
@@ -359,10 +363,10 @@ export function FileUpload({
                     >
                       <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-semibold text-foreground truncate" title={control.title}>
+                        <p className="text-sm font-semibold text-foreground truncate" title={control.title}>
                           {control.title}
                         </p>
-                        <p className="text-[9px] text-muted-foreground truncate">
+                        <p className="text-xs text-muted-foreground truncate">
                           {control.status}
                         </p>
                       </div>
@@ -401,29 +405,18 @@ export function FileUpload({
       <div className="space-y-2 pt-2 border-t border-border/10">
         <div className="flex items-center gap-1.5">
           <FolderOpen className="w-3.5 h-3.5 text-primary" />
-          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block mt-0.5">
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block mt-0.5">
             Output Folder Path (Optional)
           </label>
         </div>
-        <div className="flex gap-2">
-          <Input
-            disabled={disabled}
-            value={outputDir}
-            onChange={(e) => onOutputDirChange(e.target.value)}
-            placeholder="e.g. C:\path\to\output_folder"
-            className="bg-background/50 text-xs flex-1 rounded-xl"
-          />
-          <button
-            type="button"
-            onClick={handleBrowseOutputDir}
-            disabled={disabled}
-            className="px-3 text-xs font-bold uppercase tracking-wider border border-border/80 hover:bg-muted/40 rounded-xl transition-all flex items-center gap-1.5 shrink-0 bg-background/50 shadow-sm active:scale-95"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            Browse...
-          </button>
-        </div>
-        <p className="text-[9px] text-muted-foreground/75 leading-normal">
+        <Input
+          disabled={disabled}
+          value={outputDir}
+          onChange={(e) => onOutputDirChange(e.target.value)}
+          placeholder="e.g. C:\path\to\output_folder"
+          className="bg-background/50 text-xs flex-1 rounded-xl"
+        />
+        <p className="text-xs text-muted-foreground/75 leading-normal">
           * Leave blank to save to the default directory (or same folder as the input file when using local paths).
         </p>
       </div>

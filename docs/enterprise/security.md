@@ -13,7 +13,9 @@ implemented controls and what they do not do.
   `allow_cloud_vlm=true` and uses an image-understanding mode.
 - Source URL fetches allow public HTTP(S) by default, but block private,
   loopback, link-local, multicast, and unsafe redirect targets.
-- Local path restrictions are disabled until workspace roots are configured.
+- REST `local_filepath` requires `MARKER_WORKSPACE_ROOTS`, and REST `output_dir`
+  requires `MARKER_OUTPUT_ROOT`, unless unrestricted local paths are explicitly
+  enabled for trusted local development.
 
 ## Static Token Auth
 
@@ -50,6 +52,17 @@ Scopes:
 | `settings:write` | Settings writes and deletes. |
 | `*` | All scopes. |
 
+When REST bearer auth is enabled, route groups enforce matching scopes:
+capabilities/version/model reads use `capabilities:read`; job planning/status
+uses `jobs:read` or `capabilities:read`; upload, cancel, retry, regenerate, and
+delete use `jobs:write`; downloads and job-scoped asset preview URLs use `outputs:read`; settings reads use
+`settings:read`; settings writes and model-management mutations use
+`settings:write`.
+
+`settings:write` scope is not enough to expose MCP settings write/delete tools.
+Set `MARKER_MCP_ENABLE_SETTINGS_WRITE=true` and use `--tool-profile admin` only
+for trusted agents that should be able to modify stored configuration.
+
 Health endpoints `/api/health`, `/api/healthz`, `/api/readyz`, and
 `/api/version` remain unauthenticated so orchestration can probe the service.
 
@@ -72,8 +85,19 @@ $env:MARKER_OUTPUT_ROOT="C:\path\to\marker-output"
 ```
 
 On Linux/macOS, separate roots with `:`. On Windows, separate roots with `;`.
-When these variables are unset, Marker preserves legacy local behavior. When
-set, CLI, MCP, and REST agent paths must stay inside allowed roots.
+When these variables are set, CLI, MCP, and REST agent paths must stay inside
+allowed roots. REST local file conversion refuses `local_filepath` when
+`MARKER_WORKSPACE_ROOTS` is unset, and refuses explicit `output_dir` when
+`MARKER_OUTPUT_ROOT` is unset.
+
+For trusted local development only, this escape hatch restores unrestricted REST
+local path behavior:
+
+```powershell
+$env:MARKER_ALLOW_UNRESTRICTED_LOCAL_PATHS="true"
+```
+
+Do not enable this on shared, containerized, or remotely exposed deployments.
 
 `marker_read_output` can read paths with a valid `.marker.json` manifest. When
 `MARKER_OUTPUT_ROOT` is set, reads must also stay inside that root.
@@ -85,12 +109,18 @@ URL conversion accepts only HTTP(S). The safe fetcher blocks:
 - private, loopback, link-local, multicast, unspecified, and reserved IPs;
 - DNS results resolving to blocked IP ranges;
 - redirects to blocked or disallowed hosts;
+- redirects to a different host by default;
 - hosts outside `MARKER_SOURCE_URL_ALLOWLIST` when an allowlist is configured.
+
+For shared or production deployments, set `MARKER_SOURCE_URL_REQUIRE_ALLOWLIST=true`
+and configure `MARKER_SOURCE_URL_ALLOWLIST` so arbitrary public hosts cannot be
+used as a fetch target.
 
 Allowlist example:
 
 ```powershell
 $env:MARKER_SOURCE_URL_ALLOWLIST="docs.example.com,*.trusted.example"
+$env:MARKER_SOURCE_URL_REQUIRE_ALLOWLIST="true"
 ```
 
 Entries match exact hosts and subdomains. Wildcard entries of the form

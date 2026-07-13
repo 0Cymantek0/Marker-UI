@@ -13,10 +13,10 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
-    getAudioCapabilities: (...args: any[]) => mockGetAudioCapabilities(...args),
-    getVocabularyPacks: (...args: any[]) => mockGetVocabularyPacks(...args),
-    saveVocabularyPack: (...args: any[]) => mockSaveVocabularyPack(...args),
-    deleteVocabularyPack: (...args: any[]) => mockDeleteVocabularyPack(...args),
+    getAudioCapabilities: (...args: unknown[]) => mockGetAudioCapabilities(...args),
+    getVocabularyPacks: (...args: unknown[]) => mockGetVocabularyPacks(...args),
+    saveVocabularyPack: (...args: unknown[]) => mockSaveVocabularyPack(...args),
+    deleteVocabularyPack: (...args: unknown[]) => mockDeleteVocabularyPack(...args),
   }
 })
 
@@ -31,6 +31,7 @@ const mockCapabilities = [
   {
     provider_id: 'local_faster_whisper',
     provider_label: 'Local faster-whisper',
+    implementation_state: 'implemented',
     runtime_type: 'local',
     cloud: false,
     requires_api_key: false,
@@ -51,6 +52,8 @@ const mockCapabilities = [
   {
     provider_id: 'deepgram',
     provider_label: 'Deepgram Nova',
+    implementation_state: 'deferred',
+    available: false,
     runtime_type: 'cloud',
     cloud: true,
     requires_api_key: true,
@@ -127,11 +130,44 @@ describe('AudioAdvancedSettings', () => {
     expect(screen.getByText('Speakers')).toBeInTheDocument()
   })
 
-  it('shows cloud warning when cloud provider selected', async () => {
+  it('lets users map anonymous speaker labels to confirmed names', async () => {
+    let config: ConversionConfig = {
+      ...baseConfig,
+      audio_max_speakers: 3,
+      audio_speaker_aliases: { speaker_2: 'Charlie' },
+    }
+    const onChange = vi.fn((key: keyof ConversionConfig, value: unknown) => {
+      config = { ...config, [key]: value }
+      rerender(<AudioAdvancedSettings config={config} onChange={onChange} />)
+    })
+    const { rerender } = render(<AudioAdvancedSettings config={config} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Speakers'))
+
+    expect(screen.getByText('Speaker Names')).toBeInTheDocument()
+    expect(screen.getByLabelText('speaker_2 name')).toHaveValue('Charlie')
+
+    fireEvent.change(screen.getByLabelText('speaker_0 name'), { target: { value: ' Alice ' } })
+    expect(onChange).toHaveBeenCalledWith('audio_speaker_aliases', {
+      speaker_0: 'Alice',
+      speaker_2: 'Charlie',
+    })
+    expect(screen.getByLabelText('speaker_0 name')).toHaveValue('Alice')
+
+    fireEvent.click(screen.getByRole('button', { name: /remove speaker_2 alias/i }))
+    expect(onChange).toHaveBeenCalledWith('audio_speaker_aliases', { speaker_0: 'Alice' })
+  })
+
+  it('shows deferred provider warning when saved cloud provider is selected', async () => {
     const onChange = vi.fn()
     const cloudConfig: ConversionConfig = {
       ...baseConfig,
-      audio_provider: 'deepgram' as any,
+      audio_provider: 'deepgram',
       audio_allow_cloud_stt: true,
     }
     render(<AudioAdvancedSettings config={cloudConfig} onChange={onChange} />)
@@ -140,9 +176,77 @@ describe('AudioAdvancedSettings', () => {
       expect(mockGetAudioCapabilities).toHaveBeenCalled()
     })
 
+    expect(await screen.findByText(/deferred in this build/i)).toBeInTheDocument()
+    expect(screen.getByText(/Cloud provider/)).toBeInTheDocument()
+  })
+
+  it('does not offer deferred providers in provider picker', async () => {
+    const onChange = vi.fn()
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
     await waitFor(() => {
-      expect(screen.getByText(/Cloud provider/)).toBeInTheDocument()
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
     })
+
+    expect(screen.getByText(/Local faster-whisper/)).toBeInTheDocument()
+    expect(screen.queryByText(/Deepgram Nova/)).not.toBeInTheDocument()
+  })
+
+  it('does not auto-enable cloud STT when selecting an implemented cloud provider', async () => {
+    const onChange = vi.fn()
+    mockGetAudioCapabilities.mockResolvedValue([
+      mockCapabilities[0],
+      {
+        ...mockCapabilities[1],
+        provider_id: 'openai',
+        provider_label: 'OpenAI Speech-to-Text',
+        implementation_state: 'implemented',
+        available: true,
+        supports_diarization: false,
+        default_model: 'gpt-4o-mini-transcribe',
+      },
+    ])
+
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /local faster-whisper/i }))
+    fireEvent.click(screen.getByText(/OpenAI Speech-to-Text \(cloud\)/i))
+
+    expect(onChange).toHaveBeenCalledWith('audio_provider', 'openai')
+    expect(onChange).not.toHaveBeenCalledWith('audio_allow_cloud_stt', true)
+  })
+
+  it('warns when a cloud provider is selected without cloud STT consent', async () => {
+    const onChange = vi.fn()
+    mockGetAudioCapabilities.mockResolvedValue([
+      mockCapabilities[0],
+      {
+        ...mockCapabilities[1],
+        provider_id: 'openai',
+        provider_label: 'OpenAI Speech-to-Text',
+        implementation_state: 'implemented',
+        available: true,
+        supports_diarization: false,
+        default_model: 'gpt-4o-mini-transcribe',
+      },
+    ])
+
+    render(
+      <AudioAdvancedSettings
+        config={{ ...baseConfig, audio_provider: 'openai', audio_allow_cloud_stt: false }}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    expect(screen.getByText(/Cloud STT is selected but not allowed yet/i)).toBeInTheDocument()
   })
 
   it('calls onChange when output style selected', async () => {
@@ -177,5 +281,98 @@ describe('AudioAdvancedSettings', () => {
     fireEvent.click(screen.getByText('Enhancement & Correction'))
 
     expect(screen.getByText('Strength')).toBeInTheDocument()
+  })
+
+  it('sets minimal strength when enabling transcript wording cleanup', async () => {
+    const onChange = vi.fn()
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Enhancement & Correction'))
+    fireEvent.click(screen.getByRole('button', { name: /clean transcript wording/i }))
+
+    expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_enabled', true)
+    expect(onChange).toHaveBeenCalledWith('audio_text_enhancement_strength', 1)
+  })
+
+  it('describes enhancement as local source-bound cleanup, not unrestricted rewriting', async () => {
+    const onChange = vi.fn()
+    const enhancedConfig: ConversionConfig = {
+      ...baseConfig,
+      audio_text_enhancement_enabled: true,
+      audio_text_enhancement_strength: 5,
+    }
+    render(<AudioAdvancedSettings config={enhancedConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Enhancement & Correction'))
+
+    expect(screen.getByText(/Most aggressive local cleanup; no new claims/i)).toBeInTheDocument()
+    expect(screen.getByText(/still use local deterministic cleanup/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Full rewrite/i)).not.toBeInTheDocument()
+  })
+
+  it('disables provider comparison because the benchmark runner is not shipped', async () => {
+    const onChange = vi.fn()
+    mockGetAudioCapabilities.mockResolvedValue([
+      mockCapabilities[0],
+      { ...mockCapabilities[1], implementation_state: 'deferred', available: false },
+    ])
+
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Benchmark / Compare'))
+
+    const compare = screen.getByRole('button', { name: /compare providers/i })
+    expect(compare).toBeDisabled()
+    expect(screen.getByText(/provider comparison is not shipped/i)).toBeInTheDocument()
+  })
+
+  it('disables cloud enhancement because no cloud enhancement adapter ships', async () => {
+    const onChange = vi.fn()
+    render(<AudioAdvancedSettings config={baseConfig} onChange={onChange} />)
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Privacy & Providers'))
+
+    const cloudEnhancement = screen.getByRole('button', { name: /allow cloud enhancement/i })
+    expect(cloudEnhancement).toBeDisabled()
+    expect(screen.getByText(/cloud transcript enhancement is not shipped/i)).toBeInTheDocument()
+  })
+
+  it('warns when a saved fusion mode would be rejected by the backend', async () => {
+    const onChange = vi.fn()
+    render(
+      <AudioAdvancedSettings
+        config={{ ...baseConfig, audio_fusion_mode: 'audio_first' }}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(mockGetAudioCapabilities).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByText('Show Advanced Controls'))
+    fireEvent.click(screen.getByText('Context & Fusion'))
+
+    expect(screen.getByText(/audio context fusion mode "audio_first" is not shipped/i)).toBeInTheDocument()
   })
 })

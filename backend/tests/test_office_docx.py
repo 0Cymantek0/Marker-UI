@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
 
 from app.conversion.converters.office_docx import OfficeDocxConverter
 from app.conversion.result import UniversalConversionResult
 from app.models.image_understanding import ImageType
-from app.conversion.stream_info import StreamInfo
-from tests.test_embedded_image import FakeVLM, FakeOcrEngine, FakeOcrResult
+from tests.test_embedded_image import FakeVLM
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "conversion"
 

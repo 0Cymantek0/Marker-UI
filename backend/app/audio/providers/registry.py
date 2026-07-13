@@ -8,7 +8,6 @@ behind the same :class:`AudioTranscriptionProvider` interface.
 
 from __future__ import annotations
 
-import logging
 from functools import lru_cache
 from typing import Callable
 
@@ -20,14 +19,16 @@ from app.audio.providers.capabilities import (
     get_capability,
 )
 
-logger = logging.getLogger(__name__)
-
 __all__ = [
     "DEFAULT_PROVIDER_ID",
     "all_advertised_provider_ids",
     "available_provider_ids",
     "build_provider",
     "get_capability",
+    "validate_audio_benchmark_selection",
+    "validate_audio_diarization_selection",
+    "validate_audio_fusion_selection",
+    "validate_provider_selection",
 ]
 
 
@@ -86,17 +87,106 @@ def build_provider(provider_id: str | None) -> AudioTranscriptionProvider:
 
     key = (provider_id or DEFAULT_PROVIDER_ID).strip().lower()
     if key in _DEFERRED_PROVIDERS:
-        raise NotImplementedError(
-            f"Audio provider {key!r} ({_DEFERRED_PROVIDERS[key]}) is not shipped yet. "
-            "It is gated behind its adapter + capability flags + provider fixtures "
-            "landing together. Configure it as a provider record and enable cloud STT "
-            "once its adapter ships."
-        )
+        raise NotImplementedError(_deferred_provider_message(key))
     factories = _local_factories()
     factory = factories.get(key)
     if factory is None:
-        logger.warning(
-            "Unknown audio provider %r; falling back to %s", key, DEFAULT_PROVIDER_ID
-        )
-        factory = factories[DEFAULT_PROVIDER_ID]
+        raise ValueError(_unknown_provider_message(key))
     return factory()
+
+
+def validate_provider_selection(
+    provider_id: str | None,
+    *,
+    allow_cloud_stt: bool = False,
+) -> ProviderCapability:
+    """Validate a requested provider before a job is queued.
+
+    Unknown ids and declared-but-deferred providers fail early because selecting
+    them would otherwise create a queued job that either silently changes
+    provider or only fails inside the worker.
+    """
+
+    key = (provider_id or DEFAULT_PROVIDER_ID).strip().lower()
+    if key in _DEFERRED_PROVIDERS:
+        raise NotImplementedError(_deferred_provider_message(key))
+    if key not in PROVIDER_CAPABILITIES:
+        raise ValueError(_unknown_provider_message(key))
+    capability = get_capability(key)
+    if capability.cloud and not allow_cloud_stt:
+        raise PermissionError(
+            f"Audio provider {key!r} is cloud-based but cloud STT is not enabled. "
+            "Enable 'allow cloud STT' to send audio to this provider."
+        )
+    return capability
+
+
+def validate_audio_benchmark_selection(config: dict[str, object]) -> None:
+    """Reject provider comparison until the comparison runner ships.
+
+    Provider capabilities describe STT adapters, not a full benchmark executor.
+    Keeping this explicit prevents CLI/MCP/REST callers from enabling a flag
+    that would otherwise pass through conversion without changing output.
+    """
+
+    if not _truthy(config.get("audio_benchmark_compare")):
+        return
+    raise NotImplementedError(
+        "Audio provider comparison is not shipped in this build. "
+        "It requires a benchmark runner plus at least two shipped STT adapters; "
+        "disable audio_benchmark_compare."
+    )
+
+
+def validate_audio_diarization_selection(
+    config: dict[str, object],
+    capability: ProviderCapability,
+) -> None:
+    """Reject diarization when the selected provider cannot actually do it."""
+
+    if not _truthy(config.get("audio_diarization")):
+        return
+    if capability.supports_diarization:
+        return
+    raise NotImplementedError(
+        f"Audio diarization is not supported by provider {capability.provider_id!r}. "
+        "Diarization requires a shipped provider with supports_diarization=true; "
+        "disable audio_diarization or choose a diarization-capable provider after its adapter ships."
+    )
+
+
+def validate_audio_fusion_selection(config: dict[str, object]) -> None:
+    """Reject context-fusion modes until the fusion executor ships."""
+
+    mode = str(config.get("audio_fusion_mode") or "").strip().lower()
+    if mode in {"", "none", "off", "disabled"}:
+        return
+    raise NotImplementedError(
+        "Audio context fusion is not shipped in this build. "
+        "audio_fusion_mode would be ignored by the converter; "
+        "disable audio_fusion_mode and use audio_context only as renderer context."
+    )
+
+
+def _deferred_provider_message(provider_id: str) -> str:
+    return (
+        f"Audio provider {provider_id!r} ({_DEFERRED_PROVIDERS[provider_id]}) is not shipped yet. "
+        "It is gated behind its adapter + capability flags + provider fixtures "
+        "landing together. Configure it as a provider record and enable cloud STT "
+        "once its adapter ships."
+    )
+
+
+def _unknown_provider_message(provider_id: str) -> str:
+    return (
+        f"Unknown audio provider {provider_id!r}. "
+        f"Known providers: {', '.join(all_advertised_provider_ids())}."
+    )
+
+
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}

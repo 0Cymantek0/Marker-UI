@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict, List, Optional
 from app.database import async_session_factory
 from app.models.settings import Setting
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,10 @@ class GPUService:
             python_exe = sys.executable
             self.add_log(f"Using Python environment: {python_exe}")
 
-            # Reinstall command targeting CUDA 12.1
+            # Reinstall command targeting CUDA 12.6.
+            # cu126 is the only current index that carries torch>=2.7.0 (required
+            # by marker-pdf 1.10.0) through the latest (2.13.0) for win_amd64.
+            # cu121 tops out at torch 2.5.1 and breaks marker-pdf.
             cmd = [
                 python_exe,
                 "-m",
@@ -94,7 +97,7 @@ class GPUService:
                 "torch",
                 "torchvision",
                 "--index-url",
-                "https://download.pytorch.org/whl/cu121",
+                "https://download.pytorch.org/whl/cu126",
                 "--force-reinstall",
                 "--no-warn-script-location",
                 "--no-cache-dir"

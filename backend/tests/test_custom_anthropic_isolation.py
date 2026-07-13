@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import os
 
-import pytest
 
 from app.services.marker_service import LLM_SERVICE_MAP, build_marker_options
 

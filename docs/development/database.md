@@ -1,6 +1,6 @@
 # Database Schema & Migrations
 
-Marker UI uses **SQLite** as its storage engine, managed through **SQLAlchemy** (using asynchronous `aiosqlite`) and versioned with **Alembic** migrations.
+Marker UI uses **SQLite** as its storage engine, managed through **SQLAlchemy** (using asynchronous `aiosqlite`). Runtime startup creates missing tables and self-heals additive column gaps. Alembic migration files are present for developer-managed schema work, but the application does not currently run `alembic upgrade head` automatically on startup.
 
 ---
 
@@ -33,7 +33,7 @@ Stores key-value configurations.
 
 ---
 
-## Migrations (Alembic)
+## Migrations
 
 All schema changes must be versioned. If you add fields to database models in `backend/app/models/job.py` or `backend/app/models/settings.py`:
 
@@ -46,4 +46,8 @@ All schema changes must be versioned. If you add fields to database models in `b
    ```bash
    alembic upgrade head
    ```
-3. The database updates are performed automatically when running the Docker container on startup.
+3. Apply migrations manually for any environment that depends on Alembic version history:
+   ```bash
+   alembic upgrade head
+   ```
+4. For current local runtime startup, `create_tables()` also creates missing tables and applies additive missing-column repairs so older SQLite databases keep working. Non-additive changes still require a real migration.

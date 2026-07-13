@@ -41,7 +41,7 @@ export function DeveloperConsole({ status }: DeveloperConsoleProps) {
           <div className="w-2.5 h-2.5 rounded-full bg-border/40" />
           <div className="w-2.5 h-2.5 rounded-full bg-border/40" />
         </div>
-        <span className="text-[11px] text-muted-foreground/65 font-bold uppercase tracking-widest flex items-center gap-2">
+        <span className="text-xs text-muted-foreground/65 font-bold uppercase tracking-widest flex items-center gap-2">
           <Terminal className="w-3.5 h-3.5 text-muted-foreground/40" />
           engine-diagnostics.sh
         </span>
@@ -76,7 +76,7 @@ export function DeveloperConsole({ status }: DeveloperConsoleProps) {
                 <span className="truncate max-w-[55%] font-mono opacity-80">
                   &gt; {file.filename}
                 </span>
-                <span className="shrink-0 text-foreground font-mono text-[10px] bg-secondary/60 border border-border/40 px-2 py-0.5 rounded">
+                <span className="shrink-0 text-foreground font-mono text-xs bg-secondary/60 border border-border/40 px-2 py-0.5 rounded">
                   {formatBytes(file.downloaded)}
                   {file.total > 0 && ` / ${formatBytes(file.total)}`}
                 </span>

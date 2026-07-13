@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import { ConversionProvider } from '@/hooks/useConversionQueue'
 import { BrowserRouter } from 'react-router-dom'
@@ -9,6 +9,7 @@ import '@testing-library/jest-dom'
 const mockUploadFile = vi.fn()
 const mockGetJobEvents = vi.fn()
 const mockDownloadResult = vi.fn()
+const mockCancelJob = vi.fn()
 const mockDeleteJob = vi.fn()
 const mockGetJobStatus = vi.fn()
 const mockGetHistory = vi.fn()
@@ -19,21 +20,20 @@ const mockSavePreset = vi.fn()
 const mockDeletePreset = vi.fn()
 
 vi.mock('@/lib/api', () => ({
-  uploadFile: (...args: any[]) => mockUploadFile(...args),
-  getJobEvents: (...args: any[]) => mockGetJobEvents(...args),
-  downloadResult: (...args: any[]) => mockDownloadResult(...args),
-  deleteJob: (...args: any[]) => mockDeleteJob(...args),
-  getJobStatus: (...args: any[]) => mockGetJobStatus(...args),
-  getHistory: (...args: any[]) => mockGetHistory(...args),
-  browseFiles: vi.fn(),
-  browseFolder: vi.fn(),
+  uploadFile: (...args: unknown[]) => mockUploadFile(...args),
+  getJobEvents: (...args: unknown[]) => mockGetJobEvents(...args),
+  downloadResult: (...args: unknown[]) => mockDownloadResult(...args),
+  cancelJob: (...args: unknown[]) => mockCancelJob(...args),
+  deleteJob: (...args: unknown[]) => mockDeleteJob(...args),
+  getJobStatus: (...args: unknown[]) => mockGetJobStatus(...args),
+  getHistory: (...args: unknown[]) => mockGetHistory(...args),
   getCapabilities: () => mockGetCapabilities(),
-  planConversion: (...args: any[]) => mockPlanConversion(...args),
+  planConversion: (...args: unknown[]) => mockPlanConversion(...args),
   getLLMProviders: vi.fn().mockResolvedValue([]),
   getActiveLLM: vi.fn().mockResolvedValue(null),
-  getPresets: (...args: any[]) => mockGetPresets(...args),
-  savePreset: (...args: any[]) => mockSavePreset(...args),
-  deletePreset: (...args: any[]) => mockDeletePreset(...args),
+  getPresets: (...args: unknown[]) => mockGetPresets(...args),
+  savePreset: (...args: unknown[]) => mockSavePreset(...args),
+  deletePreset: (...args: unknown[]) => mockDeletePreset(...args),
 }))
 
 // Mock EventSource helper
@@ -59,13 +59,21 @@ describe('ConvertPage Integration with real hook', () => {
       status: 'pending',
       filename: 'test.pdf'
     })
+    mockDownloadResult.mockResolvedValue({
+      blob: new Blob(['# Converted'], { type: 'text/markdown' }),
+      filename: 'converted.md',
+    })
+    mockCancelJob.mockResolvedValue({ status: 'cancelled', job_id: 'job-uuid-123', cancelled: true })
     mockGetJobEvents.mockReturnValue(createMockEventSource())
     mockGetHistory.mockResolvedValue({ jobs: [], total: 0 })
     mockGetCapabilities.mockResolvedValue({
       engines: {
         marker_pdf: 'ready',
         office_docx: 'ready',
-      }
+      },
+      output_formats: ['markdown', 'json', 'html', 'chunks'],
+      marker_multi_format_extensions: ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'],
+      input_formats: [],
     })
     mockPlanConversion.mockResolvedValue({
       engine: 'marker_pdf',
@@ -160,10 +168,9 @@ describe('ConvertPage Integration with real hook', () => {
     expect(mockGetJobEvents).toHaveBeenCalledWith('backend-job-1')
   })
 
-  it('cancels the backend job when the trash/remove button is clicked', async () => {
-    // Regression: deleting a queue item used to only drop it from the UI list,
-    // leaving the conversion running in the background with no way to stop it.
-    // removeJob must now also hit deleteJob (backend cancel + delete).
+  it('removes a queue item locally without deleting backend metadata', async () => {
+    // Remove is a local queue action. Backend cancellation is the explicit
+    // Cancel button so history/output metadata is not silently destroyed.
     mockGetHistory.mockResolvedValue({
       total: 1,
       jobs: [
@@ -182,8 +189,6 @@ describe('ConvertPage Integration with real hook', () => {
         },
       ],
     })
-    mockDeleteJob.mockResolvedValue(undefined)
-
     render(
       <BrowserRouter>
         <ConversionProvider>
@@ -198,11 +203,180 @@ describe('ConvertPage Integration with real hook', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /remove from list/i }))
 
-    // Backend must be told to cancel + delete the still-running job.
-    await waitFor(() => {
-      expect(mockDeleteJob).toHaveBeenCalledWith('backend-job-9')
-    })
-    // And the card disappears from the queue.
     expect(screen.queryByText('running.pdf')).not.toBeInTheDocument()
+    expect(mockCancelJob).not.toHaveBeenCalled()
+    expect(mockDeleteJob).not.toHaveBeenCalled()
+  })
+
+  it('uses the non-destructive cancel endpoint when cancel is clicked', async () => {
+    mockGetHistory.mockResolvedValue({
+      total: 1,
+      jobs: [
+        {
+          id: 'backend-job-10',
+          job_id: 'backend-job-10',
+          filename: 'cancel-only.pdf',
+          status: 'processing',
+          progress: 42,
+          output_format: 'markdown',
+          converter: 'PdfConverter',
+          created_at: '2026-06-14T03:29:54Z',
+          completed_at: null,
+          error_message: null,
+          result_text: null,
+        },
+      ],
+    })
+
+    render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('cancel-only.pdf')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    await waitFor(() => {
+      expect(mockCancelJob).toHaveBeenCalledWith('backend-job-10')
+    })
+    expect(mockDeleteJob).not.toHaveBeenCalled()
+    expect(screen.getByText('Cancelled')).toBeInTheDocument()
+  })
+
+  it('renders backend cancelled SSE status without marking the job failed', async () => {
+    const eventSource = createMockEventSource()
+    mockGetJobEvents.mockReturnValue(eventSource)
+
+    const { container } = render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /local paths/i }))
+    fireEvent.change(container.querySelector('textarea')!, { target: { value: 'C:\\cancelled.pdf' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Convert 1 Document/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('cancelled.pdf')).toBeInTheDocument()
+    })
+
+    const statusHandler = eventSource.addEventListener.mock.calls.find(([event]) => event === 'status')?.[1]
+    expect(statusHandler).toBeDefined()
+
+    act(() => {
+      statusHandler?.({ data: JSON.stringify({ status: 'cancelled' }) })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Cancelled')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Conversion failed')).not.toBeInTheDocument()
+  })
+
+  it('recovers completion by polling when SSE stays open but stops emitting', async () => {
+    const eventSource = createMockEventSource()
+    mockGetJobEvents.mockReturnValue(eventSource)
+    mockGetJobStatus
+      .mockResolvedValueOnce({
+        id: 'job-uuid-123',
+        job_id: 'job-uuid-123',
+        status: 'processing',
+        progress: 33,
+        message: 'Performing OCR and text recognition...',
+        output_format: 'markdown',
+        available_formats: ['markdown'],
+      })
+      .mockResolvedValue({
+        id: 'job-uuid-123',
+        job_id: 'job-uuid-123',
+        status: 'completed',
+        progress: 100,
+        message: null,
+        result_text: '# Converted',
+        output_format: 'markdown',
+        available_formats: ['markdown'],
+      })
+
+    const { container } = render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /local paths/i }))
+    fireEvent.change(container.querySelector('textarea')!, { target: { value: 'C:\\stale-sse.pdf' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Convert 1 Document/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('stale-sse.pdf')).toBeInTheDocument()
+    })
+    expect(mockGetJobEvents).toHaveBeenCalledWith('job-uuid-123')
+
+    await waitFor(() => {
+      expect(screen.getByText('Performing OCR and text recognition...')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Conversion complete')).toBeInTheDocument()
+    })
+    expect(mockDownloadResult).toHaveBeenCalledWith('job-uuid-123')
+    expect(eventSource.close).toHaveBeenCalled()
+  })
+
+  it('clears fallback polling when a disconnected job is removed locally', async () => {
+    const eventSource = createMockEventSource()
+    mockGetJobEvents.mockReturnValue(eventSource)
+    mockGetHistory.mockResolvedValue({
+      total: 1,
+      jobs: [
+        {
+          id: 'backend-job-11',
+          job_id: 'backend-job-11',
+          filename: 'disconnecting.pdf',
+          status: 'processing',
+          progress: 42,
+          output_format: 'markdown',
+          converter: 'PdfConverter',
+          created_at: '2026-06-14T03:29:54Z',
+          completed_at: null,
+          error_message: null,
+          result_text: null,
+        },
+      ],
+    })
+
+    render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('disconnecting.pdf')).toBeInTheDocument()
+    })
+
+    act(() => {
+      eventSource.onerror?.()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /remove from list/i }))
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(screen.queryByText('disconnecting.pdf')).not.toBeInTheDocument()
+    expect(mockGetJobStatus).not.toHaveBeenCalled()
   })
 })

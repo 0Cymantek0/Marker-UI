@@ -22,10 +22,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-# The formats this store knows how to persist and serve. It must stay a subset
-# of marker_service._SUPPORTED_FORMATS (every cached format is one marker can
-# actually render from one document parse).
-SUPPORTED_FORMATS: tuple[str, ...] = ("markdown", "json", "html", "chunks")
+from app.conversion.formats import OUTPUT_FORMATS, OUTPUT_FORMAT_SET, normalize_output_formats
+
+# The formats this store knows how to persist and serve.
+SUPPORTED_FORMATS = OUTPUT_FORMATS
 
 
 def normalize_formats(formats: Any) -> list[str]:
@@ -36,12 +36,7 @@ def normalize_formats(formats: Any) -> list[str]:
     """
     if not formats:
         return []
-    seen: list[str] = []
-    for fmt in formats:
-        fmt_s = str(fmt).strip().lower()
-        if fmt_s in SUPPORTED_FORMATS and fmt_s not in seen:
-            seen.append(fmt_s)
-    return seen
+    return normalize_output_formats(formats)
 
 
 def parse_formats(formats_json: str | None) -> dict[str, str] | None:
@@ -60,7 +55,24 @@ def parse_formats(formats_json: str | None) -> dict[str, str] | None:
         return None
     if not isinstance(parsed, dict) or not parsed:
         return None
-    return {str(k): str(v) for k, v in parsed.items() if v is not None}
+    formats: dict[str, str] = {}
+    for key, value in parsed.items():
+        fmt = str(key).strip().lower()
+        text = _format_text(value)
+        if fmt in OUTPUT_FORMAT_SET and text is not None:
+            formats[fmt] = text
+    return formats or None
+
+
+def _format_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        text = value.get("text")
+        return str(text) if text is not None else None
+    return str(value)
 
 
 def merge_formats(
@@ -75,17 +87,17 @@ def merge_formats(
     """
     merged: dict[str, str] = {}
     for fmt, text in (existing or {}).items():
-        if fmt in SUPPORTED_FORMATS and text is not None:
+        if fmt in OUTPUT_FORMAT_SET and text is not None:
             merged[fmt] = str(text)
     for fmt, text in additions.items():
         fmt_s = str(fmt).strip().lower()
-        if fmt_s in SUPPORTED_FORMATS and text is not None:
+        if fmt_s in OUTPUT_FORMAT_SET and text is not None:
             merged[fmt_s] = str(text)
     return merged
 
 
 def available_formats(formats_json: str | None, fallback: str | None) -> list[str]:
-    """The sorted list of formats currently viewable for a job.
+    """The ordered list of formats currently viewable for a job.
 
     Derived from the cache keys when present; for legacy single-format jobs the
     cache is absent, so we fall back to ``output_format`` so older jobs still
@@ -93,7 +105,7 @@ def available_formats(formats_json: str | None, fallback: str | None) -> list[st
     """
     cached = parse_formats(formats_json)
     if cached is not None:
-        return sorted(cached.keys())
+        return list(cached.keys())
     fmt = (fallback or "markdown").strip().lower()
     return [fmt] if fmt else ["markdown"]
 
@@ -105,7 +117,7 @@ def serialize(formats: dict[str, str] | None) -> str | None:
     """
     if not formats:
         return None
-    cleaned = {str(k): str(v) for k, v in formats.items() if v is not None and k in SUPPORTED_FORMATS}
+    cleaned = {str(k): str(v) for k, v in formats.items() if v is not None and k in OUTPUT_FORMAT_SET}
     if not cleaned:
         return None
     return json.dumps(cleaned, ensure_ascii=False)

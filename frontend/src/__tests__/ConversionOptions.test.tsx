@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ConversionOptions } from '@/components/features/ConversionOptions'
 import type { ConversionConfig, LLMProvider, ActiveLLM } from '@/lib/api'
 import '@testing-library/jest-dom'
@@ -18,15 +18,15 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
-    getLLMProviders: (...args: any[]) => mockGetLLMProviders(...args),
-    getActiveLLM: (...args: any[]) => mockGetActiveLLM(...args),
-    getPresets: (...args: any[]) => mockGetPresets(...args),
-    savePreset: (...args: any[]) => mockSavePreset(...args),
-    deletePreset: (...args: any[]) => mockDeletePreset(...args),
-    getAudioCapabilities: (...args: any[]) => mockGetAudioCapabilities(...args),
-    getVocabularyPacks: (...args: any[]) => mockGetVocabularyPacks(...args),
-    saveVocabularyPack: (...args: any[]) => mockSaveVocabularyPack(...args),
-    deleteVocabularyPack: (...args: any[]) => mockDeleteVocabularyPack(...args),
+    getLLMProviders: (...args: unknown[]) => mockGetLLMProviders(...args),
+    getActiveLLM: (...args: unknown[]) => mockGetActiveLLM(...args),
+    getPresets: (...args: unknown[]) => mockGetPresets(...args),
+    savePreset: (...args: unknown[]) => mockSavePreset(...args),
+    deletePreset: (...args: unknown[]) => mockDeletePreset(...args),
+    getAudioCapabilities: (...args: unknown[]) => mockGetAudioCapabilities(...args),
+    getVocabularyPacks: (...args: unknown[]) => mockGetVocabularyPacks(...args),
+    saveVocabularyPack: (...args: unknown[]) => mockSaveVocabularyPack(...args),
+    deleteVocabularyPack: (...args: unknown[]) => mockDeleteVocabularyPack(...args),
   }
 })
 
@@ -35,6 +35,25 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
   },
 }))
+
+async function settleReactUpdates() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+async function renderAndSettle(ui: Parameters<typeof render>[0]) {
+  const result = render(ui)
+  await settleReactUpdates()
+  return result
+}
+
+async function openAdvancedSettings() {
+  fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+  await waitFor(() => expect(mockGetLLMProviders).toHaveBeenCalled())
+  await settleReactUpdates()
+}
 
 const baseConfig: ConversionConfig = {
   output_formats: ['markdown'],
@@ -75,8 +94,8 @@ describe('ConversionOptions image understanding controls', () => {
     mockGetActiveLLM.mockResolvedValue(active)
     const onChange = vi.fn()
 
-    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
-    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+    await renderAndSettle(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    await openAdvancedSettings()
 
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: /both/i })).toBeInTheDocument()
@@ -108,8 +127,8 @@ describe('ConversionOptions image understanding controls', () => {
     mockGetActiveLLM.mockResolvedValue(active)
     const onChange = vi.fn()
 
-    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
-    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+    await renderAndSettle(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    await openAdvancedSettings()
 
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: /both/i })).toBeInTheDocument()
@@ -137,8 +156,8 @@ describe('ConversionOptions image understanding controls', () => {
     mockGetActiveLLM.mockResolvedValue(active)
     const onChange = vi.fn()
 
-    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
-    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+    await renderAndSettle(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    await openAdvancedSettings()
 
     // Knobs only show once an understanding mode is active.
     await waitFor(() => {
@@ -183,8 +202,8 @@ describe('ConversionOptions image understanding controls', () => {
     mockGetActiveLLM.mockResolvedValue(active)
     const onChange = vi.fn()
 
-    render(<ConversionOptions config={baseConfig} onChange={onChange} />)
-    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+    await renderAndSettle(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    await openAdvancedSettings()
 
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: /both/i })).toBeInTheDocument()
@@ -224,8 +243,8 @@ describe('ConversionOptions image understanding controls', () => {
     mockGetLLMProviders.mockResolvedValue(providers)
     mockGetActiveLLM.mockResolvedValue(active)
 
-    render(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /configure advanced settings/i }))
+    await renderAndSettle(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
+    await openAdvancedSettings()
 
     const understanding = await screen.findByRole('radio', { name: /understanding only/i })
     const extraction = screen.getByRole('radio', { name: /extraction only/i })
@@ -242,7 +261,7 @@ describe('ConversionOptions image understanding controls', () => {
     mockGetActiveLLM.mockResolvedValue(null)
     const onChange = vi.fn()
 
-    const { rerender } = render(<ConversionOptions config={baseConfig} onChange={onChange} />)
+    const { rerender } = await renderAndSettle(<ConversionOptions config={baseConfig} onChange={onChange} />)
 
     expect(screen.getByRole('button', { name: /AutoProbes/i })).toBeInTheDocument()
 
@@ -267,6 +286,76 @@ describe('ConversionOptions image understanding controls', () => {
     )
   })
 
+  it('keeps chunks selectable when marker multi-format renderers are unavailable', async () => {
+    mockGetLLMProviders.mockResolvedValue([])
+    mockGetActiveLLM.mockResolvedValue(null)
+    const onChange = vi.fn()
+
+    await renderAndSettle(<ConversionOptions config={baseConfig} onChange={onChange} supportsMultiFormat={false} />)
+
+    expect(screen.getByRole('button', { name: /markdown/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /chunks/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /json/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /html/i })).toBeDisabled()
+  })
+
+  it('shows and applies chunking strategy when chunks output is selected', async () => {
+    mockGetLLMProviders.mockResolvedValue([])
+    mockGetActiveLLM.mockResolvedValue(null)
+    const onChange = vi.fn()
+
+    const { rerender } = await renderAndSettle(
+      <ConversionOptions
+        config={{ ...baseConfig, output_formats: ['chunks'] }}
+        onChange={onChange}
+        supportsMultiFormat={false}
+      />
+    )
+
+    expect(screen.getByText('Chunking Strategy')).toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: /markdown headings/i })
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('button', { name: /unstructured by title/i }))
+    await settleReactUpdates()
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ chunking_strategy: 'unstructured_by_title' })
+    )
+
+    rerender(
+      <ConversionOptions
+        config={{ ...baseConfig, output_formats: ['markdown'] }}
+        onChange={onChange}
+        supportsMultiFormat={false}
+      />
+    )
+    expect(screen.queryByText('Chunking Strategy')).not.toBeInTheDocument()
+  })
+
+  it('applies full archive budget controls from advanced settings', async () => {
+    mockGetLLMProviders.mockResolvedValue([])
+    mockGetActiveLLM.mockResolvedValue(null)
+    const onChange = vi.fn()
+
+    await renderAndSettle(<ConversionOptions config={baseConfig} onChange={onChange} />)
+
+    await openAdvancedSettings()
+    fireEvent.change(screen.getByLabelText(/inline text/i), { target: { value: '8' } })
+    fireEvent.change(screen.getByLabelText(/total budget/i), { target: { value: '16' } })
+    fireEvent.change(screen.getByLabelText(/max ratio/i), { target: { value: '25' } })
+    fireEvent.change(screen.getByLabelText(/max depth/i), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: /apply settings/i }))
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        archive_inline_bytes: 8 * 1024,
+        archive_max_total_uncompressed_bytes: 16 * 1024 * 1024,
+        archive_max_compression_ratio: 25,
+        archive_max_depth: 1,
+      })
+    )
+  })
+
   describe('Conversion Presets UI flow', () => {
     it('loads and lists presets on mount', async () => {
       const mockPresets = [
@@ -282,7 +371,7 @@ describe('ConversionOptions image understanding controls', () => {
       mockGetLLMProviders.mockResolvedValue([])
       mockGetActiveLLM.mockResolvedValue(null)
 
-      render(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
+      await renderAndSettle(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
 
       // The select element should display custom by default since baseConfig doesn't match preset_1
       expect(await screen.findByRole('button', { name: /custom configuration/i })).toBeInTheDocument()
@@ -299,7 +388,7 @@ describe('ConversionOptions image understanding controls', () => {
         created_at: new Date().toISOString()
       })
 
-      render(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
+      await renderAndSettle(<ConversionOptions config={baseConfig} onChange={vi.fn()} />)
 
       const saveCurrentBtn = screen.getByRole('button', { name: /save current/i })
       fireEvent.click(saveCurrentBtn)

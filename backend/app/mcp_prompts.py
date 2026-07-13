@@ -9,7 +9,7 @@ def register_mcp_prompts(mcp: Any) -> None:
     @mcp.prompt(
         name="convert_for_rag",
         title="Convert For RAG",
-        description="Plan and convert a document into chunk-friendly Markdown for retrieval.",
+        description="Plan and convert a document for retrieval with honest format support.",
     )
     def convert_for_rag(
         input_path: str,
@@ -20,7 +20,8 @@ def register_mcp_prompts(mcp: Any) -> None:
         return (
             f"Convert `{input_path}` for RAG into `{output_dir}` using quality `{quality}`. "
             f"Keep allow_cloud_vlm={allow_cloud_vlm}. Call capabilities, plan, convert or submit, "
-            "then read output chunks and return manifest path, warnings, and retrieval notes."
+            "request output_format=chunks for native Markdown-derived chunks or Marker-backed native chunks; "
+            "otherwise read Markdown with bounded offset pages. Return manifest path, warnings, and retrieval notes."
         )
 
     @mcp.prompt(
@@ -37,11 +38,11 @@ def register_mcp_prompts(mcp: Any) -> None:
     @mcp.prompt(
         name="summarize_converted_document_with_citations",
         title="Summarize Converted Document With Citations",
-        description="Read converted output chunks and produce a cited summary.",
+        description="Read converted output pages and produce a cited summary.",
     )
     def summarize_converted_document_with_citations(output_path: str) -> str:
         return (
-            f"Read `{output_path}` in bounded chunks with marker_read_output_chunk. Summarize only supported "
+            f"Read `{output_path}` in bounded offset pages with marker_read_output_chunk. Summarize only supported "
             "claims, cite section/page cues found in the converted text, and include manifest/assets if relevant."
         )
 
@@ -52,8 +53,8 @@ def register_mcp_prompts(mcp: Any) -> None:
     )
     def convert_and_compare_two_documents(left_path: str, right_path: str, output_dir: str = "") -> str:
         return (
-            f"Plan and convert `{left_path}` and `{right_path}` into `{output_dir}`. Read both outputs in chunks, "
-            "compare structure, tables, figures, and material differences, then cite the relevant output chunks."
+            f"Plan and convert `{left_path}` and `{right_path}` into `{output_dir}`. Read both outputs in offset pages, "
+            "compare structure, tables, figures, and material differences, then cite the relevant output pages."
         )
 
     @mcp.prompt(
@@ -74,7 +75,7 @@ def register_mcp_prompts(mcp: Any) -> None:
     )
     def inspect_conversion_quality(output_path: str) -> str:
         return (
-            f"Inspect `{output_path}` by reading its manifest, assets, and representative output chunks. "
+            f"Inspect `{output_path}` by reading its manifest, assets, and representative output pages. "
             "Report missing text, table issues, image/figure handling, routing warnings, and suggested reconversion options."
         )
 

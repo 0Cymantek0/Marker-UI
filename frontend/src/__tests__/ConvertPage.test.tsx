@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
+import type { ConversionConfig } from '@/lib/api'
 import '@testing-library/jest-dom'
 
 // Mock react-router-dom
@@ -24,8 +25,10 @@ vi.mock('@/components/features/FileUpload', () => ({
   FileUpload: ({
     onFilesSelect,
     fileEngineControls = [],
+    onLocalPathsChange,
   }: {
     onFilesSelect: (files: File[]) => void
+    onLocalPathsChange?: (value: string) => void
     fileEngineControls?: Array<{
       value: string
       status: string
@@ -43,9 +46,24 @@ vi.mock('@/components/features/FileUpload', () => ({
       </button>
       <button
         type="button"
+        onClick={() => onFilesSelect([
+          new File(['pdf'], 'sample.pdf', { type: 'application/pdf' }),
+          new File(['name\tscore\nAda\t10\n'], 'sample.tsv', { type: 'text/tab-separated-values' }),
+        ])}
+      >
+        Mock select PDF and TSV
+      </button>
+      <button
+        type="button"
         onClick={() => onFilesSelect([new File(['name\tscore\nAda\t10\n'], 'sample.tsv', { type: 'text/tab-separated-values' })])}
       >
         Mock select TSV
+      </button>
+      <button
+        type="button"
+        onClick={() => onFilesSelect([new File(['docx'], 'report.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })])}
+      >
+        Mock select DOCX
       </button>
       <button
         type="button"
@@ -71,6 +89,12 @@ vi.mock('@/components/features/FileUpload', () => ({
       >
         Mock select MP4
       </button>
+      <button
+        type="button"
+        onClick={() => onLocalPathsChange?.('C:\\docs\\sample.pdf')}
+      >
+        Mock local PDF
+      </button>
       {fileEngineControls.map((control, index) => (
         <div data-testid={`file-engine-${index}`} key={index}>
           <span>{control.status}</span>
@@ -90,10 +114,19 @@ vi.mock('@/components/features/FileUpload', () => ({
 }))
 
 vi.mock('@/components/features/ConversionOptions', () => ({
-  ConversionOptions: ({ config, onChange }: { config: any; onChange: (cfg: any) => void }) => (
+  ConversionOptions: ({
+    config,
+    onChange,
+    supportsMultiFormat,
+  }: {
+    config: ConversionConfig
+    onChange: (cfg: ConversionConfig) => void
+    supportsMultiFormat?: boolean
+  }) => (
     <div data-testid="conversion-options">
       <span data-testid="config-format">{config.output_formats?.join(',')}</span>
       <span data-testid="config-ocr">{config.force_ocr ? 'ocr-enabled' : 'ocr-disabled'}</span>
+      <span data-testid="supports-multi">{supportsMultiFormat ? 'multi' : 'markdown-only'}</span>
       <button data-testid="trigger-config-change" onClick={() => onChange({ ...config, force_ocr: true })}>
         Trigger Change
       </button>
@@ -128,7 +161,86 @@ const mockGetLLMProviders = vi.fn().mockResolvedValue([
     ],
   },
 ])
-const mockGetCapabilities = vi.fn().mockResolvedValue({
+const mockInputFormats = [
+  {
+    extensions: ['.pdf'],
+    engine: 'marker_pdf',
+    label: 'Marker PDF',
+    category: 'document',
+    needs_marker_models: true,
+    needs_gpu: true,
+    upload_allowed: true,
+    url_allowed: true,
+    output_formats: ['markdown', 'json', 'html', 'chunks'],
+  },
+  {
+    extensions: ['.docx'],
+    engine: 'office_docx',
+    label: 'Fast Office (Word)',
+    category: 'office',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
+  },
+  {
+    extensions: ['.tsv'],
+    engine: 'text_data',
+    label: 'Text / Data',
+    category: 'data',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
+  },
+  {
+    extensions: ['.xls'],
+    engine: 'spreadsheet',
+    label: 'Fast Spreadsheet',
+    category: 'office',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
+  },
+  {
+    extensions: ['.msg'],
+    engine: 'outlook_msg',
+    label: 'Outlook MSG',
+    category: 'email',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
+  },
+  {
+    extensions: ['.wav'],
+    engine: 'audio',
+    label: 'Local Audio Transcript',
+    category: 'audio',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
+  },
+  {
+    extensions: ['.mp4'],
+    engine: 'video',
+    label: 'Local Video Timeline',
+    category: 'video',
+    needs_marker_models: false,
+    needs_gpu: false,
+    upload_allowed: true,
+    url_allowed: true,
+    output_formats: ['markdown', 'chunks'],
+  },
+]
+const defaultCapabilities = {
   engines: {
     marker_pdf: 'ready',
     office_docx: 'ready',
@@ -136,9 +248,13 @@ const mockGetCapabilities = vi.fn().mockResolvedValue({
     spreadsheet: 'ready',
     text_data: 'ready',
     html: 'ready',
-  }
-})
-const mockPlanConversion = vi.fn().mockResolvedValue({
+  },
+  output_formats: ['markdown', 'json', 'html', 'chunks'],
+  marker_multi_format_extensions: ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'],
+  input_formats: mockInputFormats,
+}
+const mockGetCapabilities = vi.fn().mockResolvedValue(defaultCapabilities)
+const defaultPlanConversion = {
   engine: 'marker_pdf',
   label: 'Marker PDF',
   confidence: 1.0,
@@ -151,7 +267,8 @@ const mockPlanConversion = vi.fn().mockResolvedValue({
   fallback_chain: [],
   warnings: [],
   preliminary: true,
-})
+}
+const mockPlanConversion = vi.fn().mockResolvedValue(defaultPlanConversion)
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
   return {
@@ -166,8 +283,32 @@ vi.mock('@/lib/api', async (importOriginal) => {
   }
 })
 
+async function settleReactUpdates() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+async function renderConvertPage() {
+  const result = render(<ConvertPage />)
+  await settleReactUpdates()
+  return result
+}
+
 describe('ConvertPage component', () => {
-  it('renders initial state with empty queue and console closed by default', () => {
+  beforeEach(() => {
+    mockNavigate.mockClear()
+    mockUseConversionQueue.mockReset()
+    mockGetCapabilities.mockReset()
+    mockGetCapabilities.mockResolvedValue(defaultCapabilities)
+    mockPlanConversion.mockReset()
+    mockPlanConversion.mockResolvedValue(defaultPlanConversion)
+    mockApplyLiveOverride.mockClear()
+    mockGetLLMProviders.mockClear()
+  })
+
+  it('renders initial state with empty queue and console closed by default', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [],
       start: vi.fn(),
@@ -180,7 +321,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // Check headers and uploads
     expect(screen.getByRole('heading', { name: 'Convert Document' })).toBeInTheDocument()
@@ -220,7 +361,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select PDF'))
 
     expect(await screen.findByText('Auto: backend will probe on upload')).toBeInTheDocument()
@@ -243,7 +384,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select PDF'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -252,11 +393,48 @@ describe('ConvertPage component', () => {
     await waitFor(() => expect(convertButton).not.toBeDisabled())
     fireEvent.click(convertButton)
 
-    expect(start).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1))
+    await settleReactUpdates()
     const call = start.mock.calls[0]!
     expect(call[0]).toHaveLength(1)
     expect(call[4].fileKeys).toHaveLength(1)
     expect(call[4].fileEngineOverrides[call[4].fileKeys[0]]).toBe('marker_pdf')
+  })
+
+  it('disables submit while queueing so rapid clicks cannot enqueue duplicates', async () => {
+    let resolveStart: (() => void) | undefined
+    const start = vi.fn(() => new Promise<void>((resolve) => {
+      resolveStart = resolve
+    }))
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [],
+      start,
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    await renderConvertPage()
+    fireEvent.click(screen.getByText('Mock select PDF'))
+
+    const convertButton = await screen.findByRole('button', { name: /Convert 1 Document/i })
+    await waitFor(() => expect(convertButton).not.toBeDisabled())
+
+    fireEvent.click(convertButton)
+    fireEvent.click(convertButton)
+
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(convertButton).toBeDisabled()
+    expect(convertButton).toHaveTextContent(/Queuing Conversion/i)
+
+    await act(async () => {
+      resolveStart?.()
+      await Promise.resolve()
+    })
   })
 
   it('offers the text data engine for TSV uploads', async () => {
@@ -286,7 +464,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select TSV'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -320,7 +498,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select XLS'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -354,7 +532,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select MSG'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -388,7 +566,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select WAV'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
@@ -422,14 +600,14 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
     fireEvent.click(screen.getByText('Mock select MP4'))
 
     const select = await screen.findByRole('combobox', { name: /Engine for file 1/i })
     expect(within(select).getByRole('option', { name: 'Local Video Timeline' })).toHaveValue('video')
   })
 
-  it('renders queue items and overall progress without crash', () => {
+  it('renders queue items and overall progress without crash', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [
         {
@@ -457,7 +635,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // Queue list should show 1 job
     expect(screen.getByText('Conversion Queue (1)')).toBeInTheDocument()
@@ -509,7 +687,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // The clean heading renders (ReactMarkdown turns it into an <h1>).
     expect(
@@ -521,7 +699,50 @@ describe('ConvertPage component', () => {
     expect(screen.queryByText(/PK/)).not.toBeInTheDocument()
   })
 
-  it('renders failed job and displays failure status without download button', () => {
+  it('rewrites markdown asset URLs with the backend job id', async () => {
+    mockUseConversionQueue.mockReturnValue({
+      jobs: [
+        {
+          id: 'local-queue-id',
+          filename: 'assets.pdf',
+          file: null,
+          localPath: '',
+          phase: 'completed',
+          progress: 100,
+          statusText: 'Conversion complete',
+          jobId: 'backend-job-id',
+          error: null,
+          resultBlob: new Blob(),
+          resultText: '![diagram](assets/page%201.png)',
+          logs: [],
+          outputFormat: 'markdown',
+          imageUnderstanding: null,
+        }
+      ],
+      start: vi.fn(),
+      cancel: vi.fn(),
+      download: vi.fn(),
+      clearLogs: vi.fn(),
+      removeJob: vi.fn(),
+      regenerateJobFormat: vi.fn(),
+      dismissSwapPrompt: vi.fn(),
+      clearRateLimited: vi.fn(),
+    })
+
+    await renderConvertPage()
+
+    const image = await screen.findByAltText('diagram')
+    expect(image).toHaveAttribute(
+      'src',
+      '/api/convert/assets/backend-job-id/assets/page%201.png'
+    )
+    expect(image).not.toHaveAttribute(
+      'src',
+      expect.stringContaining('local-queue-id')
+    )
+  })
+
+  it('renders failed job and displays failure status without download button', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [
         {
@@ -548,14 +769,14 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     expect(screen.getByText('failed_doc.pdf')).toBeInTheDocument()
     expect(screen.getByText('Conversion failed')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument()
   })
 
-  it('toggles console visibility when clicking the console buttons', () => {
+  it('toggles console visibility when clicking the console buttons', async () => {
     mockUseConversionQueue.mockReturnValue({
       jobs: [],
       start: vi.fn(),
@@ -568,7 +789,7 @@ describe('ConvertPage component', () => {
       clearRateLimited: vi.fn(),
     })
 
-    render(<ConvertPage />)
+    await renderConvertPage()
 
     // Initially console is closed
     expect(screen.queryByTestId('terminal-log')).not.toBeInTheDocument()
@@ -593,7 +814,7 @@ describe('ConvertPage component', () => {
       localStorage.clear()
     })
 
-    it('loads config from localStorage if present', () => {
+    it('loads config from localStorage if present', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [],
         start: vi.fn(),
@@ -602,7 +823,7 @@ describe('ConvertPage component', () => {
         clearLogs: vi.fn(),
         removeJob: vi.fn(),
         regenerateJobFormat: vi.fn(),
-      dismissSwapPrompt: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
         clearRateLimited: vi.fn(),
       })
 
@@ -614,13 +835,266 @@ describe('ConvertPage component', () => {
       }
       localStorage.setItem('marker-conversion-config', JSON.stringify(customConfig))
 
-      render(<ConvertPage />)
+      await renderConvertPage()
 
       expect(screen.getByTestId('config-format')).toHaveTextContent('json')
       expect(screen.getByTestId('config-ocr')).toHaveTextContent('ocr-enabled')
     })
 
-    it('saves config to localStorage when changes are applied', () => {
+    it('collapses saved structured output formats when selected source cannot render them', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['json'] }))
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock select TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('markdown')
+      })
+    })
+
+    it('uses per-input output formats over stale marker extension fallback', async () => {
+      mockGetCapabilities.mockResolvedValueOnce({
+        engines: { text_data: 'ready', marker_pdf: 'ready' },
+        output_formats: ['markdown', 'json', 'html', 'chunks'],
+        marker_multi_format_extensions: ['.pdf', '.tsv'],
+        input_formats: mockInputFormats,
+      })
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['html'] }))
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock select TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('markdown')
+      })
+    })
+
+    it('uses backend local PDF plan output formats over broad PDF capability guesses', async () => {
+      mockPlanConversion.mockResolvedValueOnce({
+        engine: 'liteparse_pdf',
+        label: 'Fast PDF',
+        confidence: 0.95,
+        reasons: ['PDF has selectable text'],
+        needs_marker_models: false,
+        needs_gpu: false,
+        execution_backend: 'cpu_thread',
+        needs_cloud: false,
+        optional_dependencies: [],
+        fallback_chain: ['marker_pdf'],
+        warnings: [],
+        output_formats: ['markdown', 'chunks'],
+        preliminary: true,
+      })
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['html'] }))
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock local PDF'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('markdown')
+      })
+    })
+
+    it('keeps saved chunks output format for native sources', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['chunks'] }))
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock select TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('chunks')
+      })
+    })
+
+    it('does not offer incompatible Marker override for DOCX sources', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+      mockPlanConversion.mockResolvedValueOnce({
+        engine: 'office_docx',
+        label: 'Fast Office (Word)',
+        confidence: 0.95,
+        reasons: [],
+        needs_marker_models: false,
+        needs_gpu: false,
+        execution_backend: 'cpu_thread',
+        needs_cloud: false,
+        optional_dependencies: [],
+        fallback_chain: [],
+        warnings: [],
+        preliminary: true,
+      })
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock select DOCX'))
+
+      const control = await screen.findByLabelText('Engine for file 1')
+      expect(within(control).queryByRole('option', { name: 'Marker PDF' })).not.toBeInTheDocument()
+      expect(within(control).getByRole('option', { name: 'Fast Office (Word)' })).toBeInTheDocument()
+    })
+
+    it('uses backend input format labels for engine options', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+      mockGetCapabilities.mockResolvedValueOnce({
+        engines: { office_docx: 'ready' },
+        output_formats: ['markdown', 'json', 'html', 'chunks'],
+        marker_multi_format_extensions: ['.pdf'],
+        input_formats: [
+          {
+            extensions: ['.docx'],
+            engine: 'office_docx',
+            label: 'Backend Word Engine',
+            category: 'office',
+            needs_marker_models: false,
+            needs_gpu: false,
+            upload_allowed: true,
+            url_allowed: true,
+          },
+        ],
+      })
+      mockPlanConversion.mockResolvedValueOnce({
+        engine: 'office_docx',
+        label: 'Fast Office (Word)',
+        confidence: 0.95,
+        reasons: [],
+        needs_marker_models: false,
+        needs_gpu: false,
+        execution_backend: 'cpu_thread',
+        needs_cloud: false,
+        optional_dependencies: [],
+        fallback_chain: [],
+        warnings: [],
+        preliminary: true,
+      })
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock select DOCX'))
+
+      const control = await screen.findByLabelText('Engine for file 1')
+      expect(within(control).getByRole('option', { name: 'Backend Word Engine' })).toBeInTheDocument()
+    })
+
+    it('requires every selected source to support multi-format rendering', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock select PDF and TSV'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('markdown-only')
+      })
+    })
+
+    it('uses backend capability extensions for multi-format support', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+      })
+      mockGetCapabilities.mockResolvedValueOnce({
+        engines: { office_docx: 'ready' },
+        output_formats: ['markdown', 'json', 'html', 'chunks'],
+        marker_multi_format_extensions: ['.docx'],
+        input_formats: [],
+      })
+      localStorage.setItem('marker-conversion-config', JSON.stringify({ output_formats: ['json'] }))
+
+      await renderConvertPage()
+      fireEvent.click(screen.getByText('Mock select DOCX'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supports-multi')).toHaveTextContent('multi')
+        expect(screen.getByTestId('config-format')).toHaveTextContent('json')
+      })
+    })
+
+    it('saves config to localStorage when changes are applied', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [],
         start: vi.fn(),
@@ -633,7 +1107,7 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
 
       // Verify initial load saves the default config
       expect(localStorage.getItem('marker-conversion-config')).not.toBeNull()
@@ -668,7 +1142,7 @@ describe('ConvertPage component', () => {
       ...overrides,
     })
 
-    it('shows a Switch Model button on a running LLM job', () => {
+    it('shows a Switch Model button on a running LLM job', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [runningLLMJob()],
         start: vi.fn(),
@@ -681,7 +1155,7 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(screen.getByRole('button', { name: /Switch Model/i })).toBeInTheDocument()
     })
 
@@ -698,7 +1172,7 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       fireEvent.click(screen.getByRole('button', { name: /Switch Model/i }))
 
       const dialog = await screen.findByRole('dialog')
@@ -720,12 +1194,12 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(await screen.findByRole('dialog')).toBeInTheDocument()
       expect(screen.getByText(/Hitting Rate Limits/i)).toBeInTheDocument()
     })
 
-    it('does not auto-surface once the prompt was dismissed', () => {
+    it('does not auto-surface once the prompt was dismissed', async () => {
       mockUseConversionQueue.mockReturnValue({
         jobs: [runningLLMJob({ rateLimited: true, swapPromptDismissed: true })],
         start: vi.fn(),
@@ -738,8 +1212,72 @@ describe('ConvertPage component', () => {
         clearRateLimited: vi.fn(),
       })
 
-      render(<ConvertPage />)
+      await renderConvertPage()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('shows a rate-limited banner on a running job that is rateLimited', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob({ rateLimited: true, swapPromptDismissed: true })],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+        retryJob: vi.fn(),
+      })
+
+      await renderConvertPage()
+      expect(screen.getByText(/Rate-limited — swap model or retry/i)).toBeInTheDocument()
+    })
+
+    it('shows a partial-failure banner on a completed job with partialFailure', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [
+          runningLLMJob({
+            phase: 'completed',
+            progress: 100,
+            statusText: 'Done',
+            partialFailure: true,
+            swapPromptDismissed: true,
+          }),
+        ],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+        retryJob: vi.fn(),
+      })
+
+      await renderConvertPage()
+      expect(screen.getByText(/Some LLM steps skipped/i)).toBeInTheDocument()
+      // Both the banner and the action button carry "Retry"; assert at least one.
+      expect(screen.getAllByRole('button', { name: /Retry/i }).length).toBeGreaterThan(0)
+    })
+
+    it('does not show the rate-limited banner when rateLimited is false', async () => {
+      mockUseConversionQueue.mockReturnValue({
+        jobs: [runningLLMJob({ rateLimited: false })],
+        start: vi.fn(),
+        cancel: vi.fn(),
+        download: vi.fn(),
+        clearLogs: vi.fn(),
+        removeJob: vi.fn(),
+        regenerateJobFormat: vi.fn(),
+        dismissSwapPrompt: vi.fn(),
+        clearRateLimited: vi.fn(),
+        retryJob: vi.fn(),
+      })
+
+      await renderConvertPage()
+      expect(screen.queryByText(/Rate-limited — swap model or retry/i)).not.toBeInTheDocument()
     })
   })
 })

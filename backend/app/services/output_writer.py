@@ -102,11 +102,15 @@ def write_conversion_output(
     _write_text_atomic(text_path, text)
 
     asset_entries: list[dict[str, Any]] = []
-    for entry in _write_images(images, asset_dir):
+    used_asset_paths: set[str] = set()
+    for entry in _write_images(images, asset_dir, used_asset_paths=used_asset_paths, overwrite=overwrite):
         asset_entries.append(entry)
-    for entry in _write_assets(assets, asset_dir):
+    for entry in _write_assets(assets, asset_dir, used_asset_paths=used_asset_paths, overwrite=overwrite):
         asset_entries.append(entry)
-    asset_paths = [Path(entry["path"]) for entry in asset_entries]
+    asset_paths = [
+        (asset_dir / str(entry["relative_path"])).resolve()
+        for entry in asset_entries
+    ]
 
     manifest = _build_manifest(
         source_name=source_name,
@@ -119,7 +123,7 @@ def write_conversion_output(
         asset_entries=asset_entries,
         metadata=metadata,
         conversion_config=conversion_config or {},
-        media_type=mimetypes.guess_type(text_path.name)[0] or "text/markdown",
+        media_type=_media_type_from_result(result, output_format, text_path),
     )
     _write_json_atomic(manifest_path, manifest)
     return WrittenOutput(
@@ -134,6 +138,8 @@ def write_conversion_output(
 
 def _extension_from_result(result: dict[str, Any], output_format: str | None) -> str:
     ext = str(result.get("extension") or "").lstrip(".")
+    if output_format == "chunks" and (not ext or ext == "json"):
+        return "chunks.json"
     if not ext and output_format:
         ext = {
             "markdown": "md",
@@ -142,6 +148,22 @@ def _extension_from_result(result: dict[str, Any], output_format: str | None) ->
             "chunks": "json",
         }.get(output_format, output_format)
     return (ext or "md").lstrip(".")
+
+
+def _media_type_from_result(result: dict[str, Any], output_format: str | None, text_path: Path) -> str:
+    ext = _extension_from_result(result, output_format).lower()
+    media_by_ext = {
+        "chunks.json": "application/json",
+        "md": "text/markdown",
+        "markdown": "text/markdown",
+        "html": "text/html",
+        "htm": "text/html",
+        "json": "application/json",
+        "txt": "text/plain",
+    }
+    if ext in media_by_ext:
+        return media_by_ext[ext]
+    return mimetypes.guess_type(text_path.name)[0] or "text/markdown"
 
 
 def _safe_stem(name: str) -> str:
@@ -195,11 +217,23 @@ def _ensure_available(path: Path, *, overwrite: bool) -> None:
         )
 
 
-def _write_images(images: dict[str, Any], asset_dir: Path) -> list[dict[str, Any]]:
+def _write_images(
+    images: dict[str, Any],
+    asset_dir: Path,
+    *,
+    used_asset_paths: set[str],
+    overwrite: bool,
+) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for raw_name, value in images.items():
         name = _safe_leaf_name(raw_name, fallback="image")
-        target = asset_dir / name
+        target = _next_available_asset_path(
+            asset_dir,
+            Path(name),
+            used_paths=used_asset_paths,
+            overwrite=overwrite,
+        )
+        relative_name = target.relative_to(asset_dir).as_posix()
         try:
             if hasattr(value, "save"):
                 _save_pil_atomic(value, target)
@@ -212,11 +246,17 @@ def _write_images(images: dict[str, Any], asset_dir: Path) -> list[dict[str, Any
                 f"Failed to save image asset: {name}",
                 details={"path": str(target), "error": str(exc)},
             ) from exc
-        entries.append(_asset_entry(name=name, path=target, media_type=_guess_media_type(target)))
+        entries.append(_asset_entry(name=relative_name, path=target, media_type=_guess_media_type(target)))
     return entries
 
 
-def _write_assets(assets: list[Any], asset_dir: Path) -> list[dict[str, Any]]:
+def _write_assets(
+    assets: list[Any],
+    asset_dir: Path,
+    *,
+    used_asset_paths: set[str],
+    overwrite: bool,
+) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for raw_asset in assets:
         name, media_type, payload, pil = _asset_parts(raw_asset)
@@ -225,7 +265,13 @@ def _write_assets(assets: list[Any], asset_dir: Path) -> list[dict[str, Any]]:
         relative = _safe_relative_path(name)
         if relative is None:
             continue
-        target = asset_dir / relative
+        target = _next_available_asset_path(
+            asset_dir,
+            relative,
+            used_paths=used_asset_paths,
+            overwrite=overwrite,
+        )
+        relative_name = target.relative_to(asset_dir).as_posix()
         try:
             if pil is not None and hasattr(pil, "save"):
                 _save_pil_atomic(pil, target)
@@ -240,12 +286,46 @@ def _write_assets(assets: list[Any], asset_dir: Path) -> list[dict[str, Any]]:
             ) from exc
         entries.append(
             _asset_entry(
-                name=str(relative).replace("\\", "/"),
+                name=relative_name,
                 path=target,
                 media_type=media_type or "application/octet-stream",
             )
         )
     return entries
+
+
+def _next_available_asset_path(
+    asset_dir: Path,
+    relative_path: Path,
+    *,
+    used_paths: set[str],
+    overwrite: bool,
+) -> Path:
+    candidate = asset_dir / relative_path
+    if _claim_asset_path(candidate, used_paths, overwrite=overwrite):
+        return candidate
+
+    suffix = candidate.suffix
+    stem = candidate.stem if suffix else candidate.name
+    for index in range(1, 10_000):
+        next_name = f"{stem}-{index}{suffix}" if suffix else f"{stem}-{index}"
+        next_candidate = candidate.with_name(next_name)
+        if _claim_asset_path(next_candidate, used_paths, overwrite=overwrite):
+            return next_candidate
+    raise OutputWriteFailedError(
+        f"No available asset filename for: {relative_path}",
+        details={"path": str(asset_dir / relative_path)},
+    )
+
+
+def _claim_asset_path(path: Path, used_paths: set[str], *, overwrite: bool) -> bool:
+    key = os.path.normcase(str(path.resolve(strict=False)))
+    if key in used_paths:
+        return False
+    if path.exists() and not overwrite:
+        return False
+    used_paths.add(key)
+    return True
 
 
 def _asset_parts(raw_asset: Any) -> tuple[str, str, Any, Any]:
@@ -284,10 +364,11 @@ def _safe_relative_path(name: str) -> Path | None:
 
 
 def _asset_entry(*, name: str, path: Path, media_type: str) -> dict[str, Any]:
+    relative_path = Path(name.replace("\\", "/")).as_posix()
     return {
         "name": name,
-        "relative_path": name,
-        "path": str(path.resolve()),
+        "relative_path": relative_path,
+        "path": relative_path,
         "media_type": media_type,
         "sha256": _sha256_file(path),
         "bytes": path.stat().st_size,
@@ -321,9 +402,9 @@ def _build_manifest(
             "source_url": source_url,
         },
         "output": {
-            "final_path": str(final_path.resolve()),
-            "text_path": str(text_path.resolve()),
-            "manifest_path": str(manifest_path.resolve()),
+            "final_path": _manifest_relative_path(final_path, manifest_path),
+            "text_path": _manifest_relative_path(text_path, manifest_path),
+            "manifest_path": _manifest_relative_path(manifest_path, manifest_path),
             "media_type": media_type,
             "text_chars": len(text),
             "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
@@ -335,6 +416,15 @@ def _build_manifest(
             "metadata": _safe_json(metadata),
         },
     }
+
+
+def _manifest_relative_path(path: Path, manifest_path: Path) -> str:
+    try:
+        rel = path.resolve(strict=False).relative_to(manifest_path.parent.resolve(strict=False))
+    except ValueError:
+        rel = Path(path.name)
+    value = rel.as_posix()
+    return value or "."
 
 
 def _redact_config(config: dict[str, Any]) -> dict[str, Any]:

@@ -8,16 +8,31 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
-from app.agent_contract import ConversionOptionsModel as AgentConversionOptions
+from app.agent_contract import AUDIO_OUTPUT_MODES, ConversionOptionsModel as AgentConversionOptions
+from app.agent_surface import DEFAULT_AGENT_TOOL_NAMES
+from app.audio.providers.registry import (
+    validate_audio_benchmark_selection,
+    validate_audio_diarization_selection,
+    validate_audio_fusion_selection,
+    validate_provider_selection,
+)
+from app.conversion.engine_policy import validate_engine_override as _validate_engine_override
+from app.conversion.formats import (
+    INPUT_FORMATS,
+    OUTPUT_FORMATS,
+    UPLOAD_ALLOWED_EXTENSIONS,
+    renderable_output_formats_for_engine,
+    renderable_output_formats_for_extensions,
+)
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
@@ -25,20 +40,19 @@ from app.database import async_session_factory, create_tables
 from app.errors import (
     InputNotAllowedError,
     InputNotFoundError,
-    MarkerError,
     UnsupportedFormatError,
     UsageError,
-    from_exception,
 )
 from app.models.job import ConversionJob
 from app.models.settings import Setting
 from app.routes.convert import (
-    ALLOWED_EXTENSIONS,
     _planned_mixed_segments,
     _validate_page_range,
 )
 from app.services.conversion_service import ConversionService
+from app.services.job_artifacts import job_artifact_paths, remove_paths
 from app.services.marker_service import MarkerService, build_marker_options
+from app.services.output_format_policy import require_supported_output_formats
 from app.services.output_writer import OUTPUT_MANIFEST_SCHEMA_VERSION, write_conversion_output
 from app.services.audit import record_audit_event
 from app.services.policy import (
@@ -52,21 +66,11 @@ from app.utils.secrets import decrypt_value, encrypt_value, is_masked, is_sensit
 
 
 SERVICE_NAME = "marker_mcp"
-TOOL_NAMES = [
-    "marker_list_capabilities",
-    "marker_plan_conversion",
-    "marker_submit_job",
-    "marker_convert_file",
-    "marker_read_output",
-    "marker_list_jobs",
-    "marker_get_job_status",
-    "marker_delete_job",
-    "marker_list_settings",
-    "marker_get_setting",
-    "marker_set_setting",
-    "marker_delete_setting",
-    "marker_self_test",
-]
+ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
+AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
+    {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".avi"}
+)
+TOOL_NAMES = list(DEFAULT_AGENT_TOOL_NAMES)
 
 DEFAULT_PREVIEW_CHARS = 20_000
 MAX_READ_CHARS = 100_000
@@ -112,6 +116,14 @@ def _parse_scalar(value: str) -> Any:
         return value
 
 
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def capabilities() -> dict[str, Any]:
     service = _conversion_service()
     converters = []
@@ -120,25 +132,41 @@ def capabilities() -> dict[str, Any]:
             {
                 "engine": converter.engine_name,
                 "extensions": sorted(converter.supported_extensions),
+                "output_formats": renderable_output_formats_for_engine(
+                    converter.engine_name,
+                    converter.supported_extensions
+                ),
                 "needs_marker_models": converter.requires_marker_models,
                 "needs_gpu": converter.requires_gpu,
             }
         )
+    input_formats = [
+        {
+            "extensions": list(spec.extensions),
+            "engine": spec.engine,
+            "label": spec.label,
+            "category": spec.category,
+            "output_formats": renderable_output_formats_for_extensions(spec.extensions),
+        }
+        for spec in INPUT_FORMATS
+    ]
     return {
         "service": SERVICE_NAME,
         "tools": TOOL_NAMES,
         "allowed_extensions": sorted(ALLOWED_EXTENSIONS),
-        "output_formats": ["markdown", "json", "html", "chunks"],
+        "output_formats": list(OUTPUT_FORMATS),
+        "input_formats": input_formats,
         "conversion_profiles": ["auto", "fast", "high_accuracy"],
         "image_handling_modes": ["extraction", "understanding", "both"],
         "ocr_engines": ["surya", "hybrid_ocr"],
         "hybrid_ocr_profiles": ["balanced", "max_accuracy", "low_vram"],
-        "audio_output_modes": ["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"],
+        "audio_output_modes": list(AUDIO_OUTPUT_MODES),
         "converters": converters,
         "agent_guidance": (
-            "Use marker_plan_conversion before large PDFs. Use marker_convert_file "
-            "with output_dir and a bounded max_chars. Use marker_read_output to page "
-            "through long markdown results."
+            "Use marker_plan before large PDFs or unknown inputs. Prefer marker_submit "
+            "for long conversions, then marker_job_status. Use marker_read_output for "
+            "bounded previews. For RAG chunks, request output_format='chunks' and read "
+            "the returned marker.chunks.v1 JSON artifact."
         ),
     }
 
@@ -153,6 +181,8 @@ def build_conversion_config(
         "output_format": options.output_format,
         "original_name": original_name or "",
     }
+    if options.output_formats:
+        config["output_formats"] = [str(fmt) for fmt in options.output_formats]
     _put(config, "converter_cls", options.converter_cls)
     _put(config, "engine_override", options.engine_override)
     _put(config, "conversion_profile", options.conversion_profile)
@@ -168,7 +198,7 @@ def build_conversion_config(
     _put_true(config, "disable_image_extraction", options.disable_image_extraction)
     _put(config, "page_range", options.page_range)
     _put(config, "lang", options.lang)
-    if options.audio_output_mode in {"transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"}:
+    if options.audio_output_mode in AUDIO_OUTPUT_MODES:
         config["audio_output_mode"] = options.audio_output_mode
     _put(config, "audio_model", options.audio_model)
     _put(config, "audio_vocabulary", options.audio_vocabulary)
@@ -176,6 +206,78 @@ def build_conversion_config(
     if options.audio_low_confidence_threshold is not None:
         config["audio_low_confidence_threshold"] = options.audio_low_confidence_threshold
     _put_true(config, "audio_word_timestamps", options.audio_word_timestamps)
+    _put(config, "audio_provider", options.audio_provider)
+    _put(config, "audio_language", options.audio_language)
+    _put(config, "audio_device", options.audio_device)
+    _put(config, "audio_compute_type", options.audio_compute_type)
+    if options.audio_beam_size is not None:
+        config["audio_beam_size"] = options.audio_beam_size
+    if options.audio_vad_filter is not None:
+        config["audio_vad_filter"] = options.audio_vad_filter
+    if options.audio_gap_warning_ms is not None:
+        config["audio_gap_warning_ms"] = options.audio_gap_warning_ms
+    _put_true(config, "audio_diarization", options.audio_diarization)
+    if options.audio_min_speakers is not None:
+        config["audio_min_speakers"] = options.audio_min_speakers
+    if options.audio_max_speakers is not None:
+        config["audio_max_speakers"] = options.audio_max_speakers
+    if options.audio_speaker_aliases:
+        config["audio_speaker_aliases"] = options.audio_speaker_aliases
+    _put_true(config, "audio_speaker_memory", options.audio_speaker_memory)
+    if options.audio_speaker_memory_scope != "machine":
+        config["audio_speaker_memory_scope"] = options.audio_speaker_memory_scope
+    if options.audio_vocabulary_pack_ids:
+        config["audio_vocabulary_pack_ids"] = options.audio_vocabulary_pack_ids
+    if options.audio_confidence_heatmap is not True:
+        config["audio_confidence_heatmap"] = options.audio_confidence_heatmap
+    if options.audio_quality_diagnostics is not True:
+        config["audio_quality_diagnostics"] = options.audio_quality_diagnostics
+    _put_true(
+        config,
+        "audio_review_required_on_low_confidence",
+        options.audio_review_required_on_low_confidence,
+    )
+    _put_true(config, "audio_text_enhancement_enabled", options.audio_text_enhancement_enabled)
+    if options.audio_text_enhancement_strength:
+        config["audio_text_enhancement_strength"] = options.audio_text_enhancement_strength
+    if options.audio_text_enhancement_provider != "local_rule_based":
+        config["audio_text_enhancement_provider"] = options.audio_text_enhancement_provider
+    _put(config, "audio_text_enhancement_model", options.audio_text_enhancement_model)
+    _put_true(
+        config,
+        "audio_structural_enhancement_enabled",
+        options.audio_structural_enhancement_enabled,
+    )
+    if options.audio_structural_enhancement_mode != "auto":
+        config["audio_structural_enhancement_mode"] = options.audio_structural_enhancement_mode
+    if options.audio_structural_preserve_words is not True:
+        config["audio_structural_preserve_words"] = options.audio_structural_preserve_words
+    if options.audio_enhancement_require_source_refs is not True:
+        config["audio_enhancement_require_source_refs"] = options.audio_enhancement_require_source_refs
+    if options.audio_enhancement_show_diff is not True:
+        config["audio_enhancement_show_diff"] = options.audio_enhancement_show_diff
+    if options.audio_enhancement_include_audit is not True:
+        config["audio_enhancement_include_audit"] = options.audio_enhancement_include_audit
+    if options.audio_enhancement_fallback_on_validation_failure is not True:
+        config["audio_enhancement_fallback_on_validation_failure"] = (
+            options.audio_enhancement_fallback_on_validation_failure
+        )
+    _put_true(config, "audio_enhancement_allow_cloud", options.audio_enhancement_allow_cloud)
+    _put(
+        config,
+        "audio_enhancement_custom_instructions",
+        options.audio_enhancement_custom_instructions,
+    )
+    _put(config, "audio_fusion_mode", options.audio_fusion_mode)
+    _put_true(config, "audio_contradiction_detection", options.audio_contradiction_detection)
+    if options.audio_context_trust_policy != "transcript_wins":
+        config["audio_context_trust_policy"] = options.audio_context_trust_policy
+    _put_true(config, "audio_allow_cloud_stt", options.audio_allow_cloud_stt)
+    _put_true(config, "audio_benchmark_compare", options.audio_benchmark_compare)
+    if options.audio_compare_providers:
+        config["audio_compare_providers"] = options.audio_compare_providers
+    if options.audio_compare_metrics:
+        config["audio_compare_metrics"] = options.audio_compare_metrics
     _put_true(config, "disable_multiprocessing", options.disable_multiprocessing)
     _put_true(config, "strip_existing_ocr", options.strip_existing_ocr)
     _put_true(config, "redo_inline_math", options.redo_inline_math)
@@ -183,6 +285,33 @@ def build_conversion_config(
     config["hybrid_ocr_profile"] = options.hybrid_ocr_profile
     _put_true(config, "hybrid_ocr_require_specialists", options.hybrid_ocr_require_specialists)
     _put_true(config, "debug", options.debug)
+    for key in (
+        "text_data_max_rows",
+        "chunking_strategy",
+        "chunk_max_tokens",
+        "allow_chunking_fallback",
+        "archive_recursive",
+        "archive_max_files",
+        "archive_inline_bytes",
+        "archive_max_child_bytes",
+        "archive_max_total_uncompressed_bytes",
+        "archive_max_compression_ratio",
+        "archive_max_depth",
+        "archive_max_converted_children",
+        "router_enabled",
+        "smart_router_level",
+        "dedup_enabled",
+        "downscale_vlm_crops",
+        "batch_enabled",
+        "decorative_max_text_density",
+        "ocr_min_text_density",
+        "ocr_min_lines",
+        "dedup_max_distance",
+        "vlm_crop_max_px",
+        "vlm_batch_size",
+        "max_batch_retries",
+    ):
+        _put(config, key, getattr(options, key))
     if output_dir:
         config["output_dir"] = output_dir
     config.update(options.extra_options)
@@ -214,6 +343,7 @@ async def plan_conversion(
     if source_path and source_path.is_file():
         path = source_path.resolve()
         _validate_supported_path(path)
+        _validate_engine_override(config, path.suffix)
         if path.suffix.lower() == ".pdf":
             probe_result = await asyncio.to_thread(
                 probe_pdf,
@@ -231,6 +361,7 @@ async def plan_conversion(
         effective_filename = filename or (source_path.name if source_path else "")
         if not effective_filename:
             raise UsageError("Provide local_file_path or filename")
+        _validate_engine_override(config, Path(effective_filename).suffix)
         plan = service.plan_by_metadata(effective_filename, size, config)
         effective_size = size
     return {
@@ -253,6 +384,7 @@ async def convert_document(
     source_url: str | None = None,
     output_dir: str | None = None,
     output_path: str | None = None,
+    overwrite: bool = False,
     max_chars: int = DEFAULT_PREVIEW_CHARS,
     options: AgentConversionOptions | None = None,
 ) -> dict[str, Any]:
@@ -277,6 +409,7 @@ async def convert_document(
                 options,
                 output_base=output_base,
                 output_path=output_path,
+                overwrite=overwrite,
                 max_chars=max_chars,
                 source_url=safe_url,
                 original_name=original_name,
@@ -289,6 +422,7 @@ async def convert_document(
         options,
         output_base=output_base,
         output_path=output_path,
+        overwrite=overwrite,
         max_chars=max_chars,
         original_name=path.name,
     )
@@ -329,6 +463,20 @@ async def submit_conversion_job(
 
     input_format = suffix.lstrip(".")
     config = build_conversion_config(options, original_name=original_name, output_dir=output_dir)
+    _validate_engine_override(config, suffix)
+    if suffix in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
+        try:
+            validate_audio_benchmark_selection(config)
+            validate_audio_fusion_selection(config)
+            capability = validate_provider_selection(
+                config.get("audio_provider"),
+                allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
+            )
+            validate_audio_diarization_selection(config, capability)
+        except (NotImplementedError, PermissionError, ValueError) as exc:
+            if source_url_safe:
+                Path(stored_path).unlink(missing_ok=True)
+            raise UsageError(str(exc)) from exc
     if is_local:
         config["local_filepath"] = stored_path
     if source_url_safe:
@@ -343,16 +491,23 @@ async def submit_conversion_job(
         if options.page_range and probe_result.page_count > 0:
             _validate_page_range_safe(options.page_range, probe_result.page_count)
 
+    app_state = _get_app_state()
+    require_supported_output_formats(
+        stored_path,
+        config,
+        app_state.conversion_service,
+        source_name=original_name,
+    )
+
     job = ConversionJob(
         id=job_id,
         filename=filename,
         original_name=original_name,
         status="pending",
         input_format=input_format,
-        output_format=options.output_format,
+        output_format=config["output_format"],
         config_json=json.dumps(config),
     )
-    app_state = _get_app_state()
     async with _db_session_factory() as session:
         session.add(job)
         from app.services.task_manager import TaskManager
@@ -374,7 +529,7 @@ async def submit_conversion_job(
             status="success",
             payload={
                 "input_format": input_format,
-                "output_format": options.output_format,
+                "output_format": config["output_format"],
                 "source": "local_file" if is_local else "source_url",
                 "allow_cloud_vlm": options.allow_cloud_vlm,
             },
@@ -403,7 +558,7 @@ async def submit_conversion_job(
         "job_id": job_id,
         "status": "pending",
         "filename": original_name,
-        "output_format": options.output_format,
+        "output_format": config["output_format"],
         "next_step": "Call marker_get_job_status until status is completed, failed, or cancelled.",
     }
 
@@ -414,11 +569,24 @@ async def _convert_resolved_path(
     *,
     output_base: Path,
     output_path: str | None,
+    overwrite: bool,
     max_chars: int,
     original_name: str,
     source_url: str | None = None,
 ) -> dict[str, Any]:
     config = build_conversion_config(options, original_name=original_name, output_dir=str(output_base))
+    _validate_engine_override(config, path.suffix)
+    if path.suffix.lower() in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
+        try:
+            validate_audio_benchmark_selection(config)
+            validate_audio_fusion_selection(config)
+            capability = validate_provider_selection(
+                config.get("audio_provider"),
+                allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
+            )
+            validate_audio_diarization_selection(config, capability)
+        except (NotImplementedError, PermissionError, ValueError) as exc:
+            raise UsageError(str(exc)) from exc
     if source_url:
         config["source_url"] = source_url
     if path.suffix.lower() == ".pdf":
@@ -431,18 +599,43 @@ async def _convert_resolved_path(
         if options.page_range and probe_result.page_count > 0:
             _validate_page_range_safe(options.page_range, probe_result.page_count)
 
+    service = _conversion_service()
+    requested_formats = require_supported_output_formats(
+        str(path),
+        config,
+        service,
+        source_name=original_name,
+    )
+
     await _prepare_runtime(config)
     marker_options = build_marker_options(await _load_llm_config_for_options(config), config)
-    service = _conversion_service()
-    result = await asyncio.to_thread(service.convert_file, str(path), marker_options)
+    result, format_results = await _convert_requested_formats(
+        service,
+        str(path),
+        marker_options,
+        requested_formats,
+    )
     saved = _save_result(
         result,
         source_name=original_name,
         output_base=output_base,
         output_path=Path(output_path).expanduser() if output_path else None,
+        output_format=requested_formats[0] if requested_formats else "markdown",
+        overwrite=overwrite,
         conversion_config=config,
         source_url=source_url,
     )
+    if len(format_results) > 1:
+        saved["formats"] = _save_extra_formats(
+            format_results,
+            primary_format=requested_formats[0] if requested_formats else "markdown",
+            primary_text_path=Path(saved["text_path"]),
+            source_name=original_name,
+            output_base=output_base,
+            overwrite=overwrite,
+            conversion_config=config,
+            source_url=source_url,
+        )
     text = result.get("text") or ""
     preview = text[:max_chars]
     return {
@@ -459,6 +652,27 @@ async def _convert_resolved_path(
             else None
         ),
     }
+
+
+async def _convert_requested_formats(
+    service: ConversionService,
+    filepath: str,
+    config: dict[str, Any],
+    requested_formats: list[str],
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    primary_format = requested_formats[0] if requested_formats else "markdown"
+    if len(requested_formats) <= 1 and primary_format == "markdown":
+        result = await asyncio.to_thread(service.convert_file, filepath, config)
+        return result, {primary_format: result}
+    formatted = await asyncio.to_thread(
+        service.convert_file_formats,
+        filepath,
+        config,
+        requested_formats or [primary_format],
+    )
+    if primary_format in formatted:
+        return formatted[primary_format], formatted
+    return next(iter(formatted.values())), formatted
 
 
 def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHARS) -> dict[str, Any]:
@@ -482,7 +696,141 @@ def read_output(path: str, *, offset: int = 0, limit: int = DEFAULT_PREVIEW_CHAR
         "text_chars": text_chars,
         "has_more": next_offset < text_chars,
         "next_offset": next_offset if next_offset < text_chars else None,
+        "chunk_kind": "offset_text",
+        "is_semantic_chunk": False,
     }
+
+
+def read_semantic_chunk(path: str, *, chunk_index: int = 0) -> dict[str, Any]:
+    """Read the Nth semantic chunk from a persisted chunks JSON output file.
+
+    The chunks format is produced by ``build_chunks_envelope`` (native
+    Markdown-only converters + mixed-PDF routing) and persisted as a ``.json``
+    file whose payload matches ``marker.chunks.v1``::
+
+        {
+          "schema_version": "marker.chunks.v1",
+          "chunk_kind": "semantic_markdown",
+          "source": {"name": "...", "sha256": "...", "char_count": 1234},
+          "chunk_count": N,
+          "chunks": [
+            {"id": "chunk_0000_...", "index": 0, "text": "...",
+             "heading_path": ["Title"], "start_line": 1, "end_line": 3,
+             "char_count": 42, "token_estimate": 11,
+            "contextual_text": "Title\n\n...",
+            "content_hash": "sha256:...", "content_types": ["text"],
+            "char_start": 0, "char_end": 120, "source_refs": [...],
+            "previous_id": null, "next_id": "chunk_0001_..."},
+             ...
+          ]
+        }
+
+    Returns a single chunk enriched with ``is_semantic_chunk=True`` so consumers
+    can distinguish it from the offset
+    pager. Raises ``InputNotFoundError`` for a missing file, ``InputNotAllowedError``
+    for a non-permitted path, ``ValueError`` for a non-chunks file or bad index.
+    """
+    output_path = Path(path).expanduser()
+    _assert_output_read_permitted(output_path)
+    if not output_path.is_file():
+        raise InputNotFoundError(
+            f"Output file not found: {path}",
+            details={"path": str(path)},
+        )
+    try:
+        payload = json.loads(output_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"Output file is not valid JSON chunks output: {path}",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Output file is not a chunks envelope: {path}")
+    schema = str(payload.get("schema_version") or "")
+    chunks = payload.get("chunks")
+    if schema != "marker.chunks.v1" or not isinstance(chunks, list):
+        raise ValueError(
+            f"Output file is not a marker.chunks.v1 envelope (schema_version={schema!r}): {path}",
+        )
+    if not chunks:
+        raise InputNotFoundError(
+            "Chunks envelope contains no chunks.",
+            details={"path": str(path), "schema_version": schema},
+        )
+
+    try:
+        chunk_index = int(chunk_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"chunk_index must be an integer, got {chunk_index!r}") from exc
+    if chunk_index < 0:
+        raise ValueError(f"chunk_index must be >= 0, got {chunk_index}")
+    if chunk_index >= len(chunks):
+        raise InputNotFoundError(
+            f"chunk_index {chunk_index} out of range (chunk_count={len(chunks)}).",
+            details={
+                "path": str(path),
+                "chunk_index": chunk_index,
+                "chunk_count": len(chunks),
+            },
+        )
+    chunk = chunks[chunk_index]
+    if not isinstance(chunk, dict) or "text" not in chunk:
+        raise InputNotFoundError(
+            f"Chunk {chunk_index} is malformed.",
+            details={"path": str(path), "chunk_index": chunk_index},
+        )
+
+    envelope_kind = str(payload.get("chunk_kind") or "semantic_markdown")
+    renderer_kind = str(payload.get("renderer_kind") or "derived")
+    source_format = str(payload.get("source_format") or "markdown")
+    semantic_level = str(payload.get("semantic_level") or "markdown_structure")
+    structured_ir = payload.get("structured_ir") is True
+    return {
+        "path": str(output_path.resolve()),
+        "chunk_index": chunk_index,
+        "chunk_count": len(chunks),
+        "schema_version": schema,
+        "chunk_kind": envelope_kind,
+        "renderer_kind": renderer_kind,
+        "source_format": source_format,
+        "semantic_level": semantic_level,
+        "structured_ir": structured_ir,
+        "is_semantic_chunk": True,
+        "chunk": chunk,
+        "text": str(chunk.get("text") or ""),
+        "heading_path": list(chunk.get("heading_path") or []),
+        "id": str(chunk.get("id") or ""),
+        "has_more": chunk_index + 1 < len(chunks),
+        "next_chunk_index": chunk_index + 1 if chunk_index + 1 < len(chunks) else None,
+    }
+
+
+def read_output_chunk(
+    path: str,
+    *,
+    mode: str = "offset",
+    offset: int = 0,
+    limit: int = DEFAULT_PREVIEW_CHARS,
+    chunk_index: int = 0,
+) -> dict[str, Any]:
+    """Read one chunk of a converted output file in either offset or semantic mode.
+
+    ``mode="offset"`` (default, backward compatible) returns a character-offset
+    text page via ``read_output`` — useful for large single-file browsing.
+
+    ``mode="semantic"`` returns the Nth structural chunk from a persisted
+    ``marker.chunks.v1`` envelope via ``read_semantic_chunk`` — the right call
+    for RAG retrieval where chunk boundaries must respect document structure.
+    """
+    mode_norm = (mode or "offset").strip().lower()
+    if mode_norm == "semantic":
+        return read_semantic_chunk(path, chunk_index=chunk_index)
+    if mode_norm != "offset":
+        raise InputNotAllowedError(
+            f"Unknown read mode {mode!r}; expected 'offset' or 'semantic'.",
+            hint="Use mode='offset' for character paging or mode='semantic' for RAG chunks.",
+            details={"mode": str(mode)},
+        )
+    return read_output(path, offset=offset, limit=limit)
 
 
 def _count_text_chars(path: Path) -> int:
@@ -566,7 +914,12 @@ async def get_job_status(
     return data
 
 
-async def delete_job(job_id: str, *, delete_files: bool = True) -> dict[str, Any]:
+async def delete_job(
+    job_id: str,
+    *,
+    delete_files: bool = True,
+    force: bool = False,
+) -> dict[str, Any]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
@@ -575,12 +928,90 @@ async def delete_job(job_id: str, *, delete_files: bool = True) -> dict[str, Any
                 f"Job not found: {job_id}",
                 details={"job_id": job_id},
             )
-        cleanup_paths = _job_cleanup_paths(job) if delete_files else []
-        await _cancel_job_best_effort(job_id)
+        if job.status not in {"completed", "failed", "cancelled"} and not force:
+            raise UsageError(
+                f"Job {job_id} is {job.status}; cancel it first or pass force=true to delete a live job.",
+                details={"job_id": job_id, "status": job.status},
+            )
+        cleanup_paths = job_artifact_paths(job) if delete_files else []
+        if job.status not in {"completed", "failed", "cancelled"}:
+            await _cancel_job_best_effort(job_id)
         await session.delete(job)
         await session.commit()
-    removed = _remove_paths(cleanup_paths) if delete_files else []
+    removed = remove_paths(cleanup_paths) if delete_files else []
     return {"status": "deleted", "job_id": job_id, "files_removed": removed}
+
+
+async def purge_job_files(job_id: str) -> dict[str, Any]:
+    """Remove upload/output artifacts for a terminal job while preserving history."""
+
+    await _ensure_db_tables()
+    async with _db_session_factory() as session:
+        job = await session.get(ConversionJob, job_id)
+        if not job:
+            raise InputNotFoundError(
+                f"Job not found: {job_id}",
+                details={"job_id": job_id},
+            )
+        if job.status not in {"completed", "failed", "cancelled"}:
+            raise UsageError(
+                f"Job {job_id} is {job.status}; cancel or wait for terminal status before purging files.",
+                details={"job_id": job_id, "status": job.status},
+            )
+        cleanup_paths = job_artifact_paths(job)
+        removed = remove_paths(cleanup_paths)
+        metadata = _json_obj(job.result_metadata_json)
+        metadata["purged_artifacts"] = {
+            "files_removed": removed,
+            "purged_at": datetime.now(timezone.utc).isoformat(),
+        }
+        job.result_metadata_json = json.dumps(metadata)
+        if job.result_path and not Path(job.result_path).exists():
+            job.result_path = None
+        await record_audit_event(
+            session,
+            event_type="job.files_purged",
+            surface="agent",
+            resource_type="job",
+            resource_id=job_id,
+            status="success",
+            payload={"files_removed": removed},
+        )
+        await session.commit()
+    return {"status": "purged", "job_id": job_id, "files_removed": removed}
+
+
+async def cancel_job(job_id: str) -> dict[str, Any]:
+    await _ensure_db_tables()
+    async with _db_session_factory() as session:
+        job = await session.get(ConversionJob, job_id)
+        if not job:
+            raise InputNotFoundError(
+                f"Job not found: {job_id}",
+                details={"job_id": job_id},
+            )
+        previous_status = job.status
+        if previous_status in {"completed", "failed", "cancelled"}:
+            return {
+                "status": previous_status,
+                "job_id": job_id,
+                "cancelled": previous_status == "cancelled",
+            }
+        await _cancel_job_best_effort(job_id)
+        await session.refresh(job)
+        job.status = "cancelled"
+        job.progress = 0
+        await record_audit_event(
+            session,
+            event_type="job.cancelled",
+            surface="agent",
+            resource_type="job",
+            resource_id=job_id,
+            status="success",
+            payload={"previous_status": previous_status},
+        )
+        await session.commit()
+    return {"status": "cancelled", "job_id": job_id, "cancelled": True}
 
 
 async def list_settings(*, category: str | None = None) -> dict[str, Any]:
@@ -596,14 +1027,14 @@ async def list_settings(*, category: str | None = None) -> dict[str, Any]:
     return {"settings": grouped, "total": len(rows), "masked": True}
 
 
-async def get_setting(key: str) -> dict[str, Any]:
+async def get_setting(key: str, *, category: str | None = None) -> dict[str, Any]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
-        row = await _get_setting_row(session, key)
+        row = await _get_setting_row(session, key, category=category)
         if not row:
             raise InputNotFoundError(
                 f"Setting not found: {key}",
-                details={"key": key},
+                details={"key": key, "category": category},
             )
         return _setting_to_dict(row)
 
@@ -646,10 +1077,13 @@ async def set_setting(key: str, value: str, *, category: str = "general") -> dic
         return _setting_to_dict(row)
 
 
-async def delete_setting(key: str) -> dict[str, str]:
+async def delete_setting(key: str, *, category: str | None = None) -> dict[str, str]:
     await _ensure_db_tables()
     async with _db_session_factory() as session:
-        await session.execute(delete(Setting).where(Setting.key == key))
+        stmt = delete(Setting).where(Setting.key == key)
+        if category:
+            stmt = stmt.where(Setting.category == category)
+        await session.execute(stmt)
         await record_audit_event(
             session,
             event_type="settings.delete",
@@ -657,7 +1091,7 @@ async def delete_setting(key: str) -> dict[str, str]:
             resource_type="setting",
             resource_id=key,
             status="success",
-            payload={"key": key, "sensitive": is_sensitive_key(key)},
+            payload={"key": key, "category": category, "sensitive": is_sensitive_key(key)},
         )
         await session.commit()
     return {"status": "deleted", "key": key}
@@ -729,6 +1163,7 @@ def _job_to_dict(
                 "image_understanding",
                 "assets",
                 "manifest_path",
+                "purged_artifacts",
             )
             if key in metadata and metadata[key]
         },
@@ -798,8 +1233,11 @@ def _mask_secret_value(raw: str) -> str:
     return mask_value(decrypted)
 
 
-async def _get_setting_row(session: Any, key: str) -> Setting | None:
-    return (await session.execute(select(Setting).where(Setting.key == key))).scalar_one_or_none()
+async def _get_setting_row(session: Any, key: str, *, category: str | None = None) -> Setting | None:
+    stmt = select(Setting).where(Setting.key == key)
+    if category:
+        stmt = stmt.where(Setting.category == category)
+    return (await session.execute(stmt)).scalar_one_or_none()
 
 
 def _json_obj(raw: str | None) -> dict[str, Any]:
@@ -814,16 +1252,6 @@ def _json_obj(raw: str | None) -> dict[str, Any]:
 
 def _iso(value: Any) -> str | None:
     return value.isoformat() if value else None
-
-
-def _job_cleanup_paths(job: ConversionJob) -> list[Path]:
-    paths: list[Path] = []
-    upload_path = UPLOAD_DIR / job.filename
-    if upload_path.exists():
-        paths.append(upload_path)
-    if job.result_path:
-        paths.append(Path(job.result_path))
-    return paths
 
 
 def _assert_output_read_permitted(path: Path) -> None:
@@ -859,28 +1287,21 @@ def _has_marker_output_manifest(path: Path) -> bool:
         output.get("text_path"),
         output.get("final_path"),
     ]
-    return any(_same_resolved_path(resolved, value) for value in allowed if value)
+    return any(
+        _same_resolved_path(resolved, value, base_dir=manifest_path.parent)
+        for value in allowed
+        if value
+    )
 
 
-def _same_resolved_path(path: Path, raw: Any) -> bool:
+def _same_resolved_path(path: Path, raw: Any, *, base_dir: Path | None = None) -> bool:
     try:
-        return path == Path(str(raw)).expanduser().resolve(strict=False)
+        candidate = Path(str(raw)).expanduser()
+        if base_dir is not None and not candidate.is_absolute():
+            candidate = base_dir / candidate
+        return path == candidate.resolve(strict=False)
     except (OSError, ValueError):
         return False
-
-
-def _remove_paths(paths: list[Path]) -> list[str]:
-    removed: list[str] = []
-    for path in paths:
-        try:
-            if path.is_dir():
-                shutil.rmtree(path)
-            elif path.exists():
-                path.unlink()
-            removed.append(str(path.resolve()))
-        except FileNotFoundError:
-            continue
-    return removed
 
 
 async def _cancel_job_best_effort(job_id: str) -> None:
@@ -1008,6 +1429,8 @@ def _save_result(
     source_name: str,
     output_base: Path,
     output_path: Path | None,
+    output_format: str | None,
+    overwrite: bool,
     conversion_config: dict[str, Any],
     source_url: str | None,
 ) -> dict[str, Any]:
@@ -1016,9 +1439,57 @@ def _save_result(
         source_name=source_name,
         output_base=output_base,
         output_path=output_path,
-        output_format=None,
+        output_format=output_format,
         conversion_config=conversion_config,
         layout="file",
         source_url=source_url,
+        overwrite=overwrite,
     )
     return written.to_agent_output()
+
+
+def _save_extra_formats(
+    format_results: dict[str, dict[str, Any]],
+    *,
+    primary_format: str,
+    primary_text_path: Path,
+    source_name: str,
+    output_base: Path,
+    overwrite: bool,
+    conversion_config: dict[str, Any],
+    source_url: str | None,
+) -> dict[str, dict[str, Any]]:
+    saved: dict[str, dict[str, Any]] = {primary_format: {"text_path": str(primary_text_path.resolve())}}
+    for fmt, result in format_results.items():
+        if fmt == primary_format:
+            continue
+        extra_path = _extra_format_output_path(primary_text_path, fmt, result)
+        written = write_conversion_output(
+            result,
+            source_name=source_name,
+            output_base=output_base,
+            output_path=extra_path,
+            output_format=fmt,
+            conversion_config={**conversion_config, "output_format": fmt},
+            layout="file",
+            source_url=source_url,
+            overwrite=overwrite,
+        )
+        saved[fmt] = written.to_agent_output()
+    return saved
+
+
+def _extra_format_output_path(primary_text_path: Path, fmt: str, result: dict[str, Any]) -> Path:
+    extension = str(result.get("extension") or "").strip().lstrip(".")
+    if not extension:
+        extension = {
+            "markdown": "md",
+            "html": "html",
+            "json": "json",
+            "chunks": "chunks.json",
+        }.get(fmt, fmt)
+    if fmt == "chunks" and extension == "json":
+        suffix = ".chunks.json"
+    else:
+        suffix = f".{extension}"
+    return primary_text_path.with_suffix(suffix)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from app.crypto import encrypt_value, decrypt_value, is_encrypted_field
 

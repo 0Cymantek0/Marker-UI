@@ -13,12 +13,15 @@ Marker UI backend is configured using standard environment variables. You can se
 | `MARKER_DEBUG` | Enables verbose FastAPI debugging and stack traces. | `false` |
 | `MARKER_MAX_UPLOAD_SIZE_MB` | Maximum file size allowed for uploads (in Megabytes). | `100` |
 | `MARKER_SOURCE_URL_ALLOWLIST` | Optional comma-separated host allowlist for `source_url` downloads. Empty allows any public, non-local HTTP(S) host that passes SSRF checks. Entries match exact hosts and subdomains; `*.example.com` is also supported. | unset |
-| `MARKER_WORKSPACE_ROOTS` | Optional `os.pathsep`-separated list of local filesystem roots allowed for `local_filepath`/agent local file conversion. On Windows use `;`; on Linux/macOS use `:`. Empty preserves legacy unrestricted local-path behavior. | unset |
-| `MARKER_OUTPUT_ROOT` | Optional root that output reads and explicit output directories/paths must stay inside. When unset, `marker_read_output` only reads Marker outputs that carry a valid `.marker.json` manifest. | unset |
+| `MARKER_SOURCE_URL_REQUIRE_ALLOWLIST` | Require `MARKER_SOURCE_URL_ALLOWLIST` before any `source_url` download is accepted. Recommended for shared or production deployments. | `false` |
+| `MARKER_WORKSPACE_ROOTS` | Optional `os.pathsep`-separated list of local filesystem roots allowed for `local_filepath`/agent local file conversion. On Windows use `;`; on Linux/macOS use `:`. REST `local_filepath` requires this unless unrestricted local paths are explicitly enabled. | unset |
+| `MARKER_OUTPUT_ROOT` | Optional root that output reads and explicit output directories/paths must stay inside. REST `output_dir` requires this unless unrestricted local paths are explicitly enabled. When unset, `marker_read_output` only reads Marker outputs that carry a valid `.marker.json` manifest. | unset |
+| `MARKER_ALLOW_UNRESTRICTED_LOCAL_PATHS` | Development-only escape hatch that allows REST `local_filepath` and `output_dir` without `MARKER_WORKSPACE_ROOTS`/`MARKER_OUTPUT_ROOT`. Do not enable on shared or exposed deployments. | `false` |
 | `MARKER_DATABASE_URL` | SQLAlchemy connection URL for database persistence. | `sqlite+aiosqlite:///data/marker_ui.db` |
 | `MARKER_PRELOAD_MODELS` | Preload Marker models at worker startup when `true`; keep lazy for lightweight CLI/MCP startup with `false`. | `false` |
 | `MARKER_MCP_AUTH_TOKEN` | Bearer token required when MCP Streamable HTTP binds to any non-loopback host. Localhost stdio and loopback HTTP do not require it. | unset |
 | `MARKER_MCP_AUTH_SCOPES` | Space- or comma-separated scopes granted to `MARKER_MCP_AUTH_TOKEN`. | all MCP scopes |
+| `MARKER_MCP_ENABLE_SETTINGS_WRITE` | Registers MCP settings write/delete tools in the `admin` tool profile. Keep unset unless a trusted agent should modify stored settings. | `false` |
 | `MARKER_REST_AUTH_TOKEN` | Enables REST bearer auth for `/api/*` except health/version endpoints. | unset |
 | `MARKER_AUTH_TOKEN` | Legacy alias used as a REST token when `MARKER_REST_AUTH_TOKEN` is unset. | unset |
 | `MARKER_REST_AUTH_SCOPES` | Space- or comma-separated scopes granted to the REST token. | REST scopes |

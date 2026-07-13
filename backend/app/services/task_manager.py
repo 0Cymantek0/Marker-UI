@@ -41,6 +41,7 @@ from typing import Any, AsyncGenerator, Optional
 from fastapi import Request
 from sse_starlette.event import ServerSentEvent
 
+from app.conversion.formats import OUTPUT_FORMAT_SET
 from app.database import async_session_factory
 from app.models.job import ConversionJob
 from app.services.output_writer import write_conversion_output
@@ -54,7 +55,23 @@ from app.services.job_transport import (
 
 logger = logging.getLogger(__name__)
 
+
+def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
 SSE_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+DB_METADATA_AUDIO_SEGMENT_LIMIT = 200
+DB_METADATA_WORDS_PER_SEGMENT_LIMIT = 20
+DB_METADATA_VIDEO_FRAME_LIMIT = 50
 
 
 def _resolve_requested_formats(config: dict[str, Any]) -> list[str]:
@@ -65,14 +82,13 @@ def _resolve_requested_formats(config: dict[str, Any]) -> list[str]:
     are honoured so the legacy single-format path keeps working unchanged.
     Unknown formats are dropped so a malformed request never crashes a render.
     """
-    supported = {"markdown", "json", "html", "chunks"}
     raw = config.get("output_formats")
     if isinstance(raw, list) and raw:
-        cleaned = [str(f) for f in dict.fromkeys(raw) if str(f) in supported]
+        cleaned = [str(f) for f in dict.fromkeys(raw) if str(f) in OUTPUT_FORMAT_SET]
         if cleaned:
             return cleaned
     single = str(config.get("output_format", "markdown") or "markdown")
-    return [single] if single in supported else ["markdown"]
+    return [single] if single in OUTPUT_FORMAT_SET else ["markdown"]
 
 
 def _formats_payload_for_finalize(
@@ -99,6 +115,163 @@ def _formats_payload_for_finalize(
     if primary_format not in payload:
         payload[primary_format] = str(primary_result.get("text") or "")
     return json.dumps(payload) if payload else None
+
+
+def _actual_output_format_for_finalize(
+    primary_result: dict[str, Any],
+    requested_format: str,
+) -> str:
+    """Return the format the converter actually produced.
+
+    Native converters currently produce Markdown even when old clients request
+    json/html/chunks. Trust the result extension for that collapse so the UI and
+    downloads do not label Markdown as a structured format. Marker still keeps
+    explicit json/chunks requests because both use a JSON file extension.
+    """
+
+    requested = str(requested_format or "markdown").strip().lower()
+    extension = str(primary_result.get("extension") or "").strip().lower().lstrip(".")
+    if extension in {"md", "markdown"}:
+        return "markdown"
+    if extension in {"html", "htm"}:
+        return "html"
+    if extension == "json":
+        return requested if requested in {"json", "chunks"} else "json"
+    return requested if requested in OUTPUT_FORMAT_SET else "markdown"
+
+
+def _resolved_asset_entries_for_metadata(
+    asset_entries: list[dict[str, Any]],
+    asset_paths: list[Path],
+) -> list[dict[str, Any]]:
+    """Return DB metadata assets with readable absolute paths.
+
+    Output manifests keep portable relative paths for downloads and bundles.
+    Job metadata is local status data, so callers should not have to infer the
+    output bundle directory before reading a persisted sidecar.
+    """
+    resolved: list[dict[str, Any]] = []
+    for index, entry in enumerate(asset_entries):
+        item = dict(entry)
+        if index < len(asset_paths):
+            item["path"] = str(asset_paths[index].resolve())
+        resolved.append(item)
+    return resolved
+
+
+def _result_metadata_for_db(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Build bounded status metadata for the database row.
+
+    Full converter metadata is preserved in the output manifest. The DB row is
+    used for job/status UI, so large per-word transcripts and video frame lists
+    must be capped to keep history queries cheap.
+    """
+    result_metadata = {
+        "image_understanding": metadata.get("image_understanding") or [],
+    }
+    if metadata.get("engine"):
+        result_metadata["engine"] = metadata["engine"]
+    if metadata.get("probe_result"):
+        result_metadata["probe_result"] = metadata["probe_result"]
+    if metadata.get("mixed_engine_segments"):
+        result_metadata["mixed_engine_segments"] = metadata["mixed_engine_segments"]
+    if metadata.get("audio"):
+        result_metadata["audio"] = _compact_audio_metadata(metadata["audio"])
+    if metadata.get("audio_batch"):
+        result_metadata["audio_batch"] = _compact_audio_batch_metadata(metadata["audio_batch"])
+    if metadata.get("video"):
+        result_metadata["video"] = _compact_video_metadata(metadata["video"])
+    if metadata.get("chunking"):
+        result_metadata["chunking"] = metadata["chunking"]
+    return result_metadata
+
+
+def _compact_audio_metadata(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = {
+        key: item
+        for key, item in value.items()
+        if key != "raw_provider_metadata"
+    }
+    if "transcript" in compact:
+        compact["transcript"] = _compact_transcript_payload(compact["transcript"])
+    if "raw_provider_metadata" in value:
+        compact["raw_provider_metadata_omitted"] = True
+    return compact
+
+
+def _compact_audio_batch_metadata(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    sources = value.get("sources")
+    if isinstance(sources, list):
+        remaining = DB_METADATA_AUDIO_SEGMENT_LIMIT
+        compact_sources: list[Any] = []
+        for source in sources:
+            if not isinstance(source, dict):
+                compact_sources.append(source)
+                continue
+            next_source = _compact_transcript_payload(source, max_segments=max(0, remaining))
+            compact_sources.append(next_source)
+            remaining -= min(len(source.get("segments") or []), max(0, remaining))
+        compact["sources"] = compact_sources
+        source_segment_count = sum(
+            len(source.get("segments") or [])
+            for source in sources
+            if isinstance(source, dict)
+        )
+        if source_segment_count > DB_METADATA_AUDIO_SEGMENT_LIMIT:
+            compact["segments_truncated"] = True
+            compact["db_segment_limit"] = DB_METADATA_AUDIO_SEGMENT_LIMIT
+    return compact
+
+
+def _compact_video_metadata(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    if "transcript" in compact:
+        compact["transcript"] = _compact_transcript_payload(compact["transcript"])
+    frames = compact.get("frames")
+    if isinstance(frames, list) and len(frames) > DB_METADATA_VIDEO_FRAME_LIMIT:
+        compact["frames"] = frames[:DB_METADATA_VIDEO_FRAME_LIMIT]
+        compact["frame_count"] = len(frames)
+        compact["frames_truncated"] = True
+        compact["db_frame_limit"] = DB_METADATA_VIDEO_FRAME_LIMIT
+    return compact
+
+
+def _compact_transcript_payload(value: Any, *, max_segments: int = DB_METADATA_AUDIO_SEGMENT_LIMIT) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    segments = value.get("segments")
+    if isinstance(segments, list):
+        compact_segments = [
+            _compact_audio_segment_payload(segment)
+            for segment in segments[:max_segments]
+        ]
+        compact["segments"] = compact_segments
+        compact["segment_count"] = len(segments)
+        if len(segments) > max_segments:
+            compact["segments_truncated"] = True
+            compact["db_segment_limit"] = max_segments
+    return compact
+
+
+def _compact_audio_segment_payload(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    words = value.get("words")
+    if isinstance(words, list) and len(words) > DB_METADATA_WORDS_PER_SEGMENT_LIMIT:
+        compact["words"] = words[:DB_METADATA_WORDS_PER_SEGMENT_LIMIT]
+        compact["word_count"] = len(words)
+        compact["words_truncated"] = True
+        compact["db_words_per_segment_limit"] = DB_METADATA_WORDS_PER_SEGMENT_LIMIT
+    return compact
 
 
 # Registry of thread ID to job ID (ThreadExecutorBackend only).
@@ -194,7 +367,7 @@ class ThreadExecutorBackend(ExecutorBackend):
         config: dict[str, Any],
         marker_service: Any,
     ) -> Optional[asyncio.Future]:
-        loop = asyncio.get_event_loop()
+        loop = _get_or_create_event_loop()
 
         def _run_with_start() -> Any:
             self._task_manager._mark_job_started(job_id)
@@ -355,7 +528,18 @@ class TaskManager:
         # job_id -> backend that owns its Future, so cleanup/cancel works for
         # both marker and CPU pools.
         self._job_backends: dict[str, ExecutorBackend] = {}
+        # ThreadPoolExecutor cannot kill a running Python thread. This flag
+        # makes cancellation sticky so a worker that finishes later cannot
+        # overwrite a cancelled DB row with completed/failed.
+        self._cancel_requested: set[str] = set()
         self._durable_queue = durable_queue
+        # Lease TTL for durable jobs. Long enough that a healthy conversion is
+        # never wrongly flagged as stuck, short enough that a crashed worker is
+        # recoverable within a reasonable window. Overridable via env for ops.
+        try:
+            self._lease_seconds = int(os.getenv("MARKER_DURABLE_LEASE_SECONDS", "1800"))
+        except (TypeError, ValueError):
+            self._lease_seconds = 1800
 
         self._lock = threading.Lock()
         self._drain_stop = threading.Event()
@@ -384,12 +568,155 @@ class TaskManager:
     def backend_name(self) -> str:
         return self._backend.name
 
-    async def recover_durable_jobs(self) -> list[Any]:
-        """Return queued/expired durable jobs for an external resubmitter."""
+    async def recover_durable_jobs(self, conversion_service: Any) -> list[str]:
+        """Reclaim queued/expired durable jobs and resubmit them.
+
+        Called at startup (before the stale-job sweeper) so durable rows
+        survive a crash/restart instead of being marked failed. For each
+        recoverable item we:
+
+        1. Respect the retry budget — jobs at/over ``max_retries`` are marked
+           failed with a clear reason, not retried forever.
+        2. Verify the source file still exists — a job whose input vanished
+           cannot succeed and is marked failed rather than silently dropped.
+        3. Re-enqueue with an incremented ``retry_count`` and a fresh lease,
+           then submit to a worker.
+
+        Returns the list of job_ids that were actually resubmitted (excluding
+        those marked failed for budget/missing-file reasons).
+        """
         if self._durable_queue is None:
             return []
+        from sqlalchemy import update
+        from app.services.queue_backends import append_job_event
+
+        async with async_session_factory() as recover_session:
+            items = await self._durable_queue.recover_queued(recover_session)
+        resubmitted: list[str] = []
         async with async_session_factory() as session:
-            return await self._durable_queue.recover_queued(session)
+            for item in items:
+                # Budget check: retry_count already consumed all attempts.
+                if item.max_retries > 0 and item.retry_count >= item.max_retries:
+                    await self._durable_queue.mark_terminal(
+                        session,
+                        job_id=item.job_id,
+                        status="failed",
+                        message=(
+                            f"Durable job exceeded retry budget "
+                            f"(retry_count={item.retry_count}, max_retries={item.max_retries})."
+                        ),
+                    )
+                    continue
+
+                # Source file must still exist or recovery is data loss.
+                filepath = item.filepath
+                if not filepath or not Path(filepath).is_file():
+                    await self._durable_queue.mark_terminal(
+                        session,
+                        job_id=item.job_id,
+                        status="failed",
+                        message=f"Durable job source file not found: {filepath}",
+                    )
+                    continue
+
+                # Re-enqueue with incremented retry_count and a fresh lease so a
+                # duplicate recovery cannot double-submit the same job.
+                config = dict(item.config or {})
+                config.setdefault("original_name", item.job_id)
+                await self._durable_queue.enqueue(
+                    session,
+                    job_id=item.job_id,
+                    filepath=filepath,
+                    config=config,
+                    idempotency_key=item.idempotency_key,
+                    max_retries=item.max_retries,
+                )
+                # Increment retry_count for this recovery attempt (enqueue resets
+                # it to 0, so we set it explicitly to item.retry_count + 1).
+                await session.execute(
+                    update(ConversionJob)
+                    .where(ConversionJob.id == item.job_id)
+                    .values(retry_count=item.retry_count + 1)
+                )
+                await append_job_event(
+                    session,
+                    job_id=item.job_id,
+                    event_type="queue.recovered",
+                    status="pending",
+                    payload={
+                        "retry_count": item.retry_count + 1,
+                        "max_retries": item.max_retries,
+                        "filepath": filepath,
+                    },
+                )
+                resubmitted.append(item.job_id)
+            await session.commit()
+
+        # Submit each reclaimed job to a worker. Done after the commit so the
+        # row is durable before any worker can finalize it.
+        for job_id in resubmitted:
+            # Look up the committed row to rebuild the submit args.
+            async with async_session_factory() as session:
+                row = await session.get(ConversionJob, job_id)
+                if row is None or row.status != "pending":
+                    continue
+                try:
+                    config = json.loads(row.config_json) if row.config_json else {}
+                except (TypeError, ValueError):
+                    config = {}
+                if not isinstance(config, dict):
+                    config = {}
+                filepath = config.get("durable_filepath") or config.get("local_filepath") or ""
+            if not filepath:
+                continue
+            self.submit_job(job_id, filepath, config, conversion_service)
+        return resubmitted
+
+    async def recover_and_sweep_durable_jobs(self, conversion_service: Any) -> dict[str, list[str]]:
+        """Startup reconciliation: recover durable jobs, then sweep the rest.
+
+        This is the single entry point ``lifespan`` calls at boot. It must run
+        BEFORE any unconditional stale-job sweeper, otherwise the sweeper marks
+        every recoverable durable row ``failed`` before recovery can see it.
+
+        Order:
+        1. Recover durable jobs (resubmit those within retry budget whose source
+           file still exists; mark the rest failed with a clear reason).
+        2. Sweep non-durable ``pending``/``processing`` rows left from a prior
+           crashed session to ``failed`` — but ONLY non-durable rows, so durable
+           rows that were intentionally preserved in step 1 survive.
+
+        Returns ``{"recovered": [...job_ids], "swept": [...job_ids]}`` so callers
+        (and tests) can observe exactly what happened.
+        """
+        recovered = await self.recover_durable_jobs(conversion_service)
+
+        from sqlalchemy import select, update
+
+        swept: list[str] = []
+        async with async_session_factory() as session:
+            # Select non-durable pending/processing rows. Durable rows
+            # (queue_backend IS NOT NULL) are owned by the durable queue and
+            # were handled above; sweeping them here would defeat recovery.
+            stmt = (
+                select(ConversionJob.id)
+                .where(ConversionJob.status.in_(["pending", "processing"]))
+                .where(ConversionJob.queue_backend.is_(None))
+            )
+            stale_ids = [row for row in (await session.execute(stmt)).scalars().all()]
+            if stale_ids:
+                await session.execute(
+                    update(ConversionJob)
+                    .where(ConversionJob.id.in_(stale_ids))
+                    .values(
+                        status="failed",
+                        error_message="Interrupted by server restart",
+                        completed_at=datetime.now(timezone.utc),
+                    )
+                )
+                await session.commit()
+                swept.extend(stale_ids)
+        return {"recovered": recovered, "swept": swept}
 
     async def enqueue_durable_job(
         self,
@@ -465,10 +792,14 @@ class TaskManager:
     def _finalize_proc_job(self, job_id: str, result: dict[str, Any]) -> None:
         """Persist a worker-completed job and mark it done (process backend)."""
         config = self._proc_configs.pop(job_id, {})
+        formats_payload = None
+        if isinstance(result, dict) and "result" in result:
+            formats_payload = result.get("formats_payload")
+            result = result.get("result") or {}
         self._progress[job_id] = 90
         self._job_status_text[job_id] = "Finalizing results..."
         try:
-            self._run_async(self._finalize_job(job_id, result, config))
+            self._run_async(self._finalize_job(job_id, result, config, formats_payload))
         except Exception:  # noqa: BLE001
             logger.exception("finalize failed for process job %s", job_id)
         self._progress[job_id] = 100
@@ -501,6 +832,11 @@ class TaskManager:
                 reset_stuck_counter(provider_id)
             except Exception:  # noqa: BLE001 - cleanup is best effort
                 pass
+        # Deferred eviction of per-job in-memory state. The drain thread is
+        # sync-only (no event loop), so use a threading.Timer instead of
+        # loop.call_later. The SSE poller has usually already observed the
+        # terminal _proc_jobs entry by the time the delay elapses.
+        self._cleanup_job_memory(job_id, delay=30.0)
 
     @staticmethod
     def _run_async(coro: Any) -> Any:
@@ -530,6 +866,54 @@ class TaskManager:
         """Called by thread backends when a queued job begins executing."""
         self._job_started[job_id] = True
 
+    # Dicts that must survive briefly past terminal status so the SSE
+    # stream can emit the final event. The values are evicted by
+    # ``_cleanup_job_memory`` after a short grace period.
+    _DEFERRED_CLEANUP_KEYS = (
+        "_progress",
+        "_job_logs",
+        "_job_status_text",
+        "_job_start_time",
+        "_job_has_real_progress",
+        "_job_providers",
+    )
+
+    def _purge_job_memory(self, job_id: str) -> None:
+        """Remove all in-memory tracking entries for *job_id*.
+
+        Safe to call multiple times — each pop has a default. Also clears
+        LLM call traces (see CACHE-3).
+        """
+        for attr in self._DEFERRED_CLEANUP_KEYS:
+            getattr(self, attr).pop(job_id, None)
+        try:
+            from app.core import llm_trace
+            llm_trace.reset_traces(job_id)
+        except Exception:  # noqa: BLE001 - trace cleanup must never block
+            pass
+
+    def _cleanup_job_memory(self, job_id: str, delay: float = 30.0) -> None:
+        """Evict in-memory job dicts to prevent unbounded growth.
+
+        ``delay=0`` purges immediately (cancel path). Non-zero delay gives the
+        SSE terminal event a grace window to read progress/logs/status before
+        eviction (completion/failure path). Thread backend uses the event
+        loop's ``call_later``; process backend uses ``threading.Timer``.
+        """
+        if delay <= 0:
+            self._purge_job_memory(job_id)
+            return
+        try:
+            loop = _get_or_create_event_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            loop.call_later(delay, self._purge_job_memory, job_id)
+        else:
+            timer = threading.Timer(delay, self._purge_job_memory, args=(job_id,))
+            timer.daemon = True
+            timer.start()
+
     # ------------------------------------------------------------------
     # Submit
     # ------------------------------------------------------------------
@@ -549,6 +933,12 @@ class TaskManager:
         self._job_has_real_progress[job_id] = False
         self._job_started[job_id] = False
         self._job_providers[job_id] = config.get("llm_provider")
+        # Clear any LLM call traces from a previous run of this job id.
+        try:
+            from app.core import llm_trace
+            llm_trace.reset_traces(job_id)
+        except Exception:  # noqa: BLE001 - trace reset must never block a job
+            pass
 
         backend = self._select_backend(filepath, config, marker_service)
         queued_message = getattr(backend, "queued_message", "Waiting for conversion worker...")
@@ -578,6 +968,7 @@ class TaskManager:
                         smooth.cancel()
                     if isinstance(backend, ThreadExecutorBackend):
                         backend.pop(job_id)
+                    self._cleanup_job_memory(job_id)
                     return
                 exc = fut.exception()
                 if exc:
@@ -591,6 +982,7 @@ class TaskManager:
                     smooth.cancel()
                 if isinstance(backend, ThreadExecutorBackend):
                     backend.pop(job_id)
+                self._cleanup_job_memory(job_id)
 
             # Synthetic crawl only until real tqdm-derived progress kicks in.
             async def _smooth_progress():
@@ -605,7 +997,7 @@ class TaskManager:
                     if current < 12:
                         self._progress[job_id] = current + 1
 
-            loop = asyncio.get_event_loop()
+            loop = _get_or_create_event_loop()
             if loop.is_running():
                 self._smooth_tasks[job_id] = loop.create_task(_smooth_progress())
             future.add_done_callback(_on_done)
@@ -670,8 +1062,12 @@ class TaskManager:
             status = "completed" if progress >= 100 else "pending"
         elif future is not None:
             if future.done():
-                exc = future.exception()
-                status = "failed" if exc else "completed"
+                if future.cancelled() is True:
+                    status = "cancelled"
+                    exc = None
+                else:
+                    exc = future.exception()
+                    status = "failed" if exc else "completed"
             else:
                 status = "processing"
         else:
@@ -716,13 +1112,11 @@ class TaskManager:
         # Calculate elapsed and ETA
         start_time = self._job_start_time.get(job_id)
         elapsed = int(time.time() - start_time) if start_time else 0
-        eta = 0
-        if status == "processing":
+        eta: int | None = None
+        if status == "processing" and self._job_has_real_progress.get(job_id):
             if progress > 10 and progress < 100:
                 estimated_total = elapsed * 100 / progress
                 eta = max(1, int(estimated_total - elapsed))
-            else:
-                eta = 45  # Default fallback
 
         return {
             "job_id": job_id,
@@ -746,20 +1140,28 @@ class TaskManager:
         cancelled = False
 
         if future and not future.done():
-            cancelled = future.cancel()
-            self._progress.pop(job_id, None)
-            self._tasks.pop(job_id, None)
-            backend = self._job_backends.pop(job_id, None)
-            if isinstance(backend, ThreadExecutorBackend):
-                backend.pop(job_id)
+            self._cancel_requested.add(job_id)
+            self._job_status_text[job_id] = "Cancellation requested..."
+            was_started = self._job_started.get(job_id, False)
+            future_cancelled = future.cancel()
+            cancelled = True
+            if future_cancelled and not was_started:
+                self._progress.pop(job_id, None)
+                self._tasks.pop(job_id, None)
+                backend = self._job_backends.pop(job_id, None)
+                if isinstance(backend, ThreadExecutorBackend):
+                    backend.pop(job_id)
+                self._cancel_requested.discard(job_id)
             self._job_has_real_progress.pop(job_id, None)
-            self._job_started.pop(job_id, None)
-            self._job_queued_message.pop(job_id, None)
+            if future_cancelled and not was_started:
+                self._job_started.pop(job_id, None)
+                self._job_queued_message.pop(job_id, None)
             smooth = self._smooth_tasks.pop(job_id, None)
             if smooth is not None:
                 smooth.cancel()
         elif proc_state is not None:
             cancelled = True
+            self._cancel_requested.add(job_id)
             with self._lock:
                 self._proc_jobs.pop(job_id, None)
                 self._proc_configs.pop(job_id, None)
@@ -772,10 +1174,13 @@ class TaskManager:
                 smooth.cancel()
 
         if cancelled:
+            # Cancelled jobs don't need the SSE grace window — evict immediately.
+            self._cleanup_job_memory(job_id, delay=0.0)
             pid = self._pids.pop(job_id, None)
             if pid is not None:
                 self._kill_pid(pid)
             await self._update_job_status(job_id, "cancelled")
+            await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
         return cancelled
 
     def shutdown(self, wait: bool = False) -> None:
@@ -785,6 +1190,8 @@ class TaskManager:
             smooth.cancel()
         self._smooth_tasks.clear()
         self._cpu_backend.shutdown(wait=wait)
+        for logger_name in ("marker", "app"):
+            logging.getLogger(logger_name).removeHandler(self._log_handler)
         # Unblock a blocking drain by pushing the stop sentinel.
         transport = getattr(self._backend, "transport", None)
         if transport is not None:
@@ -884,6 +1291,19 @@ class TaskManager:
         self._pids[job_id] = os.getpid()
         thread_ident = threading.get_ident()
         active_conversion_threads[thread_ident] = job_id
+        # Record a durable lease so a crash mid-conversion is detectable by
+        # recover_queued's expired-lease branch. No-op when no durable backend.
+        try:
+            asyncio.run(self._mark_job_started_durable(job_id))
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self._mark_job_started_durable(job_id))
+            finally:
+                loop.close()
+        except Exception:  # noqa: BLE001 - lease start must never block a job
+            logger.exception("mark_started dispatch failed for job %s", job_id)
         try:
             self._progress[job_id] = 10
             self._job_status_text[job_id] = "Starting conversion..."
@@ -896,7 +1316,7 @@ class TaskManager:
             formats_requested = _resolve_requested_formats(config)
             formats_envelopes: dict[str, dict[str, Any]] | None = None
             if (
-                len(formats_requested) > 1
+                (len(formats_requested) > 1 or formats_requested[0] != "markdown")
                 and conversion_service.supports_multiple_formats(filepath, dict(config))
             ):
                 formats_envelopes = conversion_service.convert_file_formats(
@@ -907,6 +1327,19 @@ class TaskManager:
                 )
             else:
                 result = conversion_service.convert_file(filepath, dict(config))
+
+            if job_id in self._cancel_requested:
+                self._progress[job_id] = 0
+                self._job_status_text[job_id] = "Conversion cancelled."
+                self._run_async(self._update_job_status(job_id, "cancelled"))
+                self._run_async(
+                    self._mark_job_terminal_durable(
+                        job_id,
+                        status="cancelled",
+                        message="Cancelled by user",
+                    )
+                )
+                return {"cancelled": True}
 
             self._progress[job_id] = 90
             self._job_status_text[job_id] = "Finalizing results..."
@@ -925,10 +1358,26 @@ class TaskManager:
                     )
                 finally:
                     loop.close()
+            if job_id in self._cancel_requested:
+                self._progress[job_id] = 0
+                self._job_status_text[job_id] = "Conversion cancelled."
+                return {"cancelled": True}
             self._progress[job_id] = 100
             self._job_status_text[job_id] = "Conversion completed successfully."
             return result
         except Exception as exc:
+            if job_id in self._cancel_requested:
+                self._progress[job_id] = 0
+                self._job_status_text[job_id] = "Conversion cancelled."
+                self._run_async(self._update_job_status(job_id, "cancelled"))
+                self._run_async(
+                    self._mark_job_terminal_durable(
+                        job_id,
+                        status="cancelled",
+                        message="Cancelled by user",
+                    )
+                )
+                return {"cancelled": True}
             logger.exception("Conversion failed for job %s", job_id)
             self._progress[job_id] = 0
             self._job_status_text[job_id] = f"Conversion failed: {exc}"
@@ -947,6 +1396,7 @@ class TaskManager:
         finally:
             active_conversion_threads.pop(thread_ident, None)
             self._pids.pop(job_id, None)
+            self._cancel_requested.discard(job_id)
             # Drop any live model hot-swap for this job's provider so it never
             # bleeds into an unrelated later job.
             provider_id = config.get("llm_provider")
@@ -973,6 +1423,91 @@ class TaskManager:
             )
             await session.commit()
 
+    async def _read_job_status_with_commit_race_retry(
+        self,
+        job_id: str,
+        *,
+        action: str,
+    ) -> Optional[str]:
+        """Read a job's status, tolerating the commit-before-submit race.
+
+        ``submit_job`` can start a fast CPU/native converter that reaches
+        ``_finalize_job``/``_fail_job`` inside a worker thread before the
+        request's ``get_db`` dependency commits the ``ConversionJob`` row.
+        A single ``SELECT`` on a fresh session then returns ``None`` and the
+        terminal write is silently skipped — the job hangs at ``pending``
+        forever. The REST upload route now commits before submit, but we keep
+        this retry as defense-in-depth so a future regression cannot lose a
+        job silently.
+
+        Bounded: a few short sleeps, total well under one second. If the row
+        is still missing we return ``None`` and the caller logs a distinct
+        WARNING (not the misleading "cancelled or deleted" message).
+        """
+        from sqlalchemy import select
+
+        total_attempts = 6
+        for attempt in range(total_attempts):
+            async with async_session_factory() as session:
+                stmt = select(ConversionJob.status).where(ConversionJob.id == job_id)
+                res = await session.execute(stmt)
+                status = res.scalar_one_or_none()
+            if status is not None:
+                return status
+            # Last attempt: no sleep, just fall through to the missing-row log.
+            if attempt < total_attempts - 1:
+                await asyncio.sleep(0.1)
+
+        logger.warning(
+            "Job %s not visible after %s attempts; %s skipped (row not yet committed or deleted).",
+            job_id,
+            total_attempts,
+            action,
+        )
+        return None
+
+    async def _mark_job_started_durable(self, job_id: str) -> None:
+        """Record a lease when a durable job begins executing.
+
+        Without this the lease columns never get populated in production, so
+        ``recover_queued``'s expired-lease branch (the one that detects jobs
+        that crashed mid-conversion) can never match. Idempotent and a no-op
+        when no durable backend is configured.
+        """
+        if self._durable_queue is None:
+            return
+        try:
+            async with async_session_factory() as session:
+                await self._durable_queue.mark_started(
+                    session,
+                    job_id=job_id,
+                    lease_owner=f"task-manager:{os.getpid()}",
+                    lease_seconds=self._lease_seconds,
+                )
+                await session.commit()
+        except Exception:  # noqa: BLE001 - lease bookkeeping must never break a job
+            logger.exception("mark_started failed for durable job %s", job_id)
+
+    async def _mark_job_terminal_durable(self, job_id: str, *, status: str, message: str | None = None) -> None:
+        """Clear the lease and emit a terminal queue event for durable jobs.
+
+        Called after the terminal UPDATE has already committed. Idempotent and
+        a no-op when no durable backend is configured.
+        """
+        if self._durable_queue is None:
+            return
+        try:
+            async with async_session_factory() as session:
+                await self._durable_queue.mark_terminal(
+                    session,
+                    job_id=job_id,
+                    status=status,
+                    message=message,
+                )
+                await session.commit()
+        except Exception:  # noqa: BLE001 - lease bookkeeping must never break a job
+            logger.exception("mark_terminal failed for durable job %s", job_id)
+
     async def _finalize_job(
         self,
         job_id: str,
@@ -980,37 +1515,32 @@ class TaskManager:
         config: dict[str, Any],
         formats_payload: dict[str, dict[str, Any]] | None = None,
     ) -> None:
-        # Check if job still exists and is not cancelled
-        async with async_session_factory() as session:
-            from sqlalchemy import select
-            stmt = select(ConversionJob.status).where(ConversionJob.id == job_id)
-            res = await session.execute(stmt)
-            status = res.scalar_one_or_none()
-            if not status or status == "cancelled":
-                logger.info("Job %s was cancelled or deleted. Skipping finalization.", job_id)
-                return
+        if job_id in self._cancel_requested:
+            logger.info("Job %s was cancelled. Skipping finalization.", job_id)
+            await self._update_job_status(job_id, "cancelled")
+            await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
+            return
+
+        # Check if job still exists and is not cancelled. Tolerate the
+        # commit-before-submit race: the request transaction may still be
+        # flushing when a fast converter reaches us in a worker thread.
+        status = await self._read_job_status_with_commit_race_retry(
+            job_id, action="finalization"
+        )
+        if status is None:
+            return
+        if status == "cancelled":
+            logger.info("Job %s was cancelled. Skipping finalization.", job_id)
+            return
 
         result_text = result.get("text", "")
         metadata = result.get("metadata") or {}
-        # Only persist the image-understanding sidecar (a small list); drop any
-        # large/binary metadata the renderer may have returned.
-        result_metadata = {
-            "image_understanding": metadata.get("image_understanding") or [],
-        }
-        if metadata.get("engine"):
-            result_metadata["engine"] = metadata["engine"]
-        if metadata.get("probe_result"):
-            result_metadata["probe_result"] = metadata["probe_result"]
-        if metadata.get("mixed_engine_segments"):
-            result_metadata["mixed_engine_segments"] = metadata["mixed_engine_segments"]
-        if metadata.get("audio"):
-            result_metadata["audio"] = metadata["audio"]
-        if metadata.get("audio_batch"):
-            result_metadata["audio_batch"] = metadata["audio_batch"]
-        if metadata.get("video"):
-            result_metadata["video"] = metadata["video"]
+        result_metadata = _result_metadata_for_db(metadata)
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
-        output_format = config.get("output_format", "markdown")
+        requested_output_format = config.get("output_format", "markdown")
+        output_format = _actual_output_format_for_finalize(result, requested_output_format)
+        effective_config = dict(config)
+        effective_config["output_format"] = output_format
         original_name = config.get("original_name", "output")
         local_filepath = config.get("local_filepath")
         output_dir = config.get("output_dir")
@@ -1028,14 +1558,17 @@ class TaskManager:
             source_name=original_name or job_id,
             output_base=target_dir,
             output_format=output_format,
-            conversion_config=config,
+            conversion_config=effective_config,
             layout="directory_if_assets",
             disable_image_extraction=bool(config.get("disable_image_extraction", False)),
             job_id=job_id,
             source_url=config.get("source_url"),
         )
         if written.asset_entries:
-            result_metadata["assets"] = written.asset_entries
+            result_metadata["assets"] = _resolved_asset_entries_for_metadata(
+                written.asset_entries,
+                written.asset_paths,
+            )
         result_metadata["manifest_path"] = str(written.manifest_path.resolve())
         result_metadata_json = json.dumps(result_metadata) if any(result_metadata.values()) else None
 
@@ -1048,7 +1581,7 @@ class TaskManager:
         async with async_session_factory() as session:
             from sqlalchemy import update
 
-            await session.execute(
+            update_result = await session.execute(
                 update(ConversionJob)
                 .where(ConversionJob.id == job_id)
                 .where(ConversionJob.status != "cancelled")
@@ -1057,25 +1590,44 @@ class TaskManager:
                     result_text=result_text,
                     result_metadata_json=result_metadata_json,
                     formats_json=formats_json,
+                    output_format=output_format,
                     result_path=str(written.final_path),
                     progress=100,
                     completed_at=datetime.now(timezone.utc),
+                    # Clear lease columns on terminal so recover_queued never
+                    # sees a completed durable job as "stuck".
+                    lease_owner=None,
+                    lease_expires_at=None,
                 )
             )
             await session.commit()
+            if (update_result.rowcount or 0) < 1:
+                logger.info("Job %s was cancelled during finalization. Skipping completed terminal mark.", job_id)
+                return
+        await self._mark_job_terminal_durable(job_id, status="completed")
 
     async def _fail_job(self, job_id: str, error_message: str) -> None:
-        async with async_session_factory() as session:
-            from sqlalchemy import select, update
-            stmt = select(ConversionJob.status).where(ConversionJob.id == job_id)
-            res = await session.execute(stmt)
-            status = res.scalar_one_or_none()
-            if not status or status == "cancelled":
-                logger.info("Job %s was cancelled or deleted. Skipping failure recording.", job_id)
-                return
+        if job_id in self._cancel_requested:
+            logger.info("Job %s was cancelled. Skipping failure recording.", job_id)
+            await self._update_job_status(job_id, "cancelled")
+            await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
+            return
 
-            # Only mark as failed if not already in a terminal state (e.g. cancelled)
-            await session.execute(
+        # Same commit-race tolerance as _finalize_job: a fast converter can
+        # reach the failure path before the request session commits the row.
+        status = await self._read_job_status_with_commit_race_retry(
+            job_id, action="failure recording"
+        )
+        if status is None:
+            return
+        if status == "cancelled":
+            logger.info("Job %s was cancelled. Skipping failure recording.", job_id)
+            return
+
+        # Only mark as failed if not already in a terminal state (e.g. cancelled)
+        async with async_session_factory() as session:
+            from sqlalchemy import update
+            update_result = await session.execute(
                 update(ConversionJob)
                 .where(ConversionJob.id == job_id)
                 .where(ConversionJob.status != "cancelled")
@@ -1083,7 +1635,15 @@ class TaskManager:
                     status="failed",
                     error_message=error_message,
                     completed_at=datetime.now(timezone.utc),
+                    # Clear lease columns on terminal so recover_queued never
+                    # sees a failed durable job as "stuck".
+                    lease_owner=None,
+                    lease_expires_at=None,
                 )
             )
             await session.commit()
+            if (update_result.rowcount or 0) < 1:
+                logger.info("Job %s was cancelled during failure recording. Skipping failed terminal mark.", job_id)
+                return
+        await self._mark_job_terminal_durable(job_id, status="failed", message=error_message)
 

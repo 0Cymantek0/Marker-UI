@@ -2,6 +2,10 @@
 
 This document outlines the planned evolutionary phases for Marker UI. We focus on improving the accuracy of document conversions, enhancing system flexibility, and integrating the platform into modern AI development workflows.
 
+For shipped-vs-planned status, see [Known Limitations & Maturity](limitations.md).
+Roadmap items are forward-looking unless that page and the README maturity table
+mark the area as working.
+
 ---
 
 ## Short-Term Roadmap

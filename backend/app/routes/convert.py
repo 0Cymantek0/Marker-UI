@@ -8,43 +8,66 @@ import tempfile
 import uuid
 import zipfile
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
 
 import aiofiles
 
-from app.core.config import MAX_UPLOAD_SIZE, OUTPUT_DIR, UPLOAD_DIR
+from app.core.config import MAX_UPLOAD_SIZE, UPLOAD_DIR
+from app.agent_contract import AUDIO_OUTPUT_MODES
+from app.conversion.dependencies import get_engine_status
+from app.conversion.engine_policy import validate_engine_override
+from app.conversion.formats import (
+    OUTPUT_FORMAT_SET,
+    OUTPUT_FORMATS_DESCRIPTION,
+    UPLOAD_ALLOWED_EXTENSIONS,
+    renderable_output_formats_for_engine,
+)
 from app.conversion.probe import PdfProbeResult, plan_pdf_routing_segments, probe_pdf
 from app.database import get_db
-from app.errors import InputNotAllowedError
+from app.errors import InputNotAllowedError, UnsupportedFormatError, UsageError
 from app.models.job import ConversionJob
-from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse
-from app.services.policy import assert_local_input_allowed, assert_output_write_allowed
+from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse, RetryJobRequest
+from app.audio.providers.registry import (
+    validate_audio_benchmark_selection,
+    validate_audio_diarization_selection,
+    validate_audio_fusion_selection,
+    validate_provider_selection,
+)
+from app.services.policy import (
+    assert_rest_local_input_allowed,
+    assert_rest_output_write_allowed,
+)
 from app.services.audit import record_audit_event
 from app.services.safe_url_fetcher import (
     SafeUrlFetchError,
     assert_safe_source_url,
     download_source_url,
 )
+from app.services.format_store import (
+    available_formats as available_cached_formats,
+    normalize_formats,
+    parse_formats as parse_cached_formats,
+)
+from app.services.output_format_policy import require_supported_output_formats
+from app.services.job_artifacts import job_artifact_paths, remove_paths
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_EXTENSIONS = {
-    ".pdf", ".docx", ".pptx", ".msg", ".xlsx", ".xls", ".epub", ".html",
-    ".htm", ".csv", ".tsv", ".json", ".jsonl", ".txt", ".md", ".rst",
-    ".log", ".xml", ".rss", ".atom", ".ipynb", ".zip",
-    ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac",
-    ".mp4", ".mov", ".mkv", ".webm", ".avi",
-    ".jpg", ".jpeg", ".png", ".webp", ".tiff", ".bmp"
-}
+ALLOWED_EXTENSIONS = UPLOAD_ALLOWED_EXTENSIONS
 MAX_PAGE_RANGE_PAGES = 500
 HARD_MAX_PAGE_RANGE_PAGES = 2000
+AUDIO_PROVIDER_VALIDATED_EXTENSIONS = frozenset(
+    {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".mp4", ".mov", ".mkv", ".webm", ".avi"}
+)
+HISTORY_STATUS_ALIASES = {"queued": "pending"}
 
 # MAX_UPLOAD_SIZE is imported from app.core.config so the upload + source_url
 # download paths share a single source of truth driven by
@@ -53,6 +76,10 @@ HARD_MAX_PAGE_RANGE_PAGES = 2000
 router = APIRouter(prefix="/api/convert", tags=["convert"])
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 
 def _count_requested_pages(page_range: str) -> int:
     count = 0
@@ -73,6 +100,14 @@ def _count_requested_pages(page_range: str) -> int:
                 raise ValueError
             count += 1
     return count
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _assert_safe_source_url(raw_url: str) -> None:
@@ -164,15 +199,7 @@ def _parse_formats(formats_json: str | None) -> dict[str, str] | None:
     or jobs that never completed), so the response omits the field and the UI
     falls back to the single-format preview.
     """
-    if not formats_json:
-        return None
-    try:
-        parsed = json.loads(formats_json)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    if not isinstance(parsed, dict) or not parsed:
-        return None
-    return {str(k): str(v) for k, v in parsed.items() if v is not None}
+    return parse_cached_formats(formats_json)
 
 
 def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | None:
@@ -196,6 +223,7 @@ def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | No
             "video",
             "assets",
             "manifest_path",
+            "purged_artifacts",
         )
         if key in parsed and parsed[key]
     }
@@ -273,28 +301,105 @@ def _parse_available_formats(job: ConversionJob) -> list[str]:
     For legacy single-format jobs the cached list is absent, so we fall back to
     the job's ``output_format`` column so older jobs still expose one tab.
     """
-    cached = _parse_formats_json(job.formats_json)
-    if cached is not None:
-        return list(cached.keys())
-    fmt = (job.output_format or "markdown").strip()
-    return [fmt] if fmt else ["markdown"]
+    return available_cached_formats(job.formats_json, job.output_format)
 
 
 def _parse_formats_json(formats_json: str | None) -> dict[str, str] | None:
     """Parse the ``{format: text}`` cache written at finalize/regenerate."""
-    if not formats_json:
+    return parse_cached_formats(formats_json)
+
+
+def _safe_asset_request_path(asset_path: str) -> str | None:
+    raw = str(asset_path or "").replace("\\", "/").strip()
+    if not raw or raw.startswith("/"):
         return None
+    parts = [part for part in raw.split("/") if part]
+    if not parts or any(part in {".", ".."} or ":" in part for part in parts):
+        return None
+    return "/".join(parts)
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
     try:
-        parsed = json.loads(formats_json)
-    except (json.JSONDecodeError, TypeError):
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _manifest_candidates_for_result(result_path: Path) -> list[Path]:
+    if result_path.is_dir():
+        return [
+            result_path / f"{result_path.name}.marker.json",
+            *sorted(result_path.glob("*.marker.json")),
+        ]
+    return [result_path.with_name(f"{result_path.stem}.marker.json")]
+
+
+def _load_result_manifest(result_path: Path) -> dict[str, Any] | None:
+    for candidate in _manifest_candidates_for_result(result_path):
+        if not candidate.is_file():
+            continue
+        try:
+            parsed = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _portable_manifest_for_zip(manifest_path: Path, result_root: Path) -> str:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "{}"
+    if not isinstance(manifest, dict):
+        return "{}"
+    output = manifest.get("output")
+    if isinstance(output, dict):
+        for key in ("final_path", "text_path", "manifest_path"):
+            if key in output:
+                output[key] = _portable_manifest_member(output[key], result_root)
+        assets = output.get("assets")
+        if isinstance(assets, list):
+            for entry in assets:
+                if not isinstance(entry, dict):
+                    continue
+                relative = _safe_asset_request_path(str(entry.get("relative_path") or entry.get("name") or ""))
+                if relative is None:
+                    relative = _portable_manifest_member(entry.get("path"), result_root)
+                entry["relative_path"] = relative
+                entry["path"] = relative
+    return json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _portable_manifest_member(raw_path: Any, result_root: Path) -> str:
+    value = str(raw_path or "").strip()
+    if not value:
+        return ""
+    path = Path(value)
+    if path.is_absolute():
+        try:
+            return path.resolve(strict=False).relative_to(result_root.resolve(strict=False)).as_posix()
+        except ValueError:
+            return path.name
+    safe = _safe_asset_request_path(value)
+    return safe or Path(value.replace("\\", "/")).name
+
+
+def _asset_entry_for_request(manifest: dict[str, Any], asset_path: str) -> dict[str, Any] | None:
+    output = manifest.get("output") if isinstance(manifest, dict) else None
+    assets = output.get("assets") if isinstance(output, dict) else None
+    if not isinstance(assets, list):
         return None
-    if not isinstance(parsed, dict) or not parsed:
-        return None
-    return {
-        str(fmt): str(text)
-        for fmt, text in parsed.items()
-        if fmt and text is not None
-    }
+    for entry in assets:
+        if not isinstance(entry, dict):
+            continue
+        name = _safe_asset_request_path(str(entry.get("relative_path") or entry.get("name") or ""))
+        if name == asset_path:
+            return entry
+    return None
 
 
 def _planned_mixed_segments(probe_data: Any) -> list[dict[str, Any]] | None:
@@ -371,8 +476,21 @@ async def upload_file(
     local_filepath: Optional[str] = Query(None, description="Optional local absolute file path on the server"),
     source_url: Optional[str] = Query(None, description="Optional public http(s) document URL"),
     output_dir: Optional[str] = Query(None, description="Optional custom output directory path"),
-    output_format: str = Query("markdown", description="Output format: markdown, json, html, chunks"),
+    output_format: str = Query("markdown", description=f"Output format: {OUTPUT_FORMATS_DESCRIPTION}"),
     output_formats: Optional[str] = Query(None, description="Comma-separated output formats for multi-format rendering (e.g. markdown,json)"),
+    chunking_strategy: Optional[str] = Query(
+        None,
+        description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title",
+    ),
+    chunk_max_tokens: Optional[int] = Query(
+        None,
+        ge=16,
+        description="Optional tokenizer-backed maximum token budget for derived Markdown chunks",
+    ),
+    allow_chunking_fallback: bool = Query(
+        False,
+        description="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2 when unavailable",
+    ),
     converter: Optional[str] = Query(None, description="Converter class: PdfConverter, TableConverter, OCRConverter"),
     engine_override: Optional[str] = Query(None, description="Optional explicit conversion engine override"),
     conversion_profile: Optional[str] = Query(None, description="Conversion profile: auto, fast, high_accuracy"),
@@ -392,7 +510,7 @@ async def upload_file(
     disable_image_extraction: bool = Query(False, description="Skip extracting images"),
     page_range: Optional[str] = Query(None, description="Page range e.g. '1-5,8,10-12'"),
     lang: Optional[str] = Query(None, description="Document language hint"),
-    audio_output_mode: Optional[str] = Query(None, description="Audio output: transcript, meeting_notes, lecture_notes, or enhanced"),
+    audio_output_mode: Optional[str] = Query(None, description="Audio output mode."),
     audio_model: Optional[str] = Query(None, description="Local STT model name for faster-whisper"),
     audio_vocabulary: Optional[str] = Query(None, description="Comma/newline-separated vocabulary hints for audio transcription"),
     audio_context: Optional[str] = Query(None, description="Context used only to organize audio batch output"),
@@ -432,8 +550,12 @@ async def upload_file(
     max_batch_retries: Optional[int] = Query(None, ge=0, le=5, description="Max extra batch calls to recover missing/garbled indices"),
     archive_recursive: Optional[bool] = Query(None, description="Recursively convert safe deterministic children inside archives"),
     archive_max_files: Optional[int] = Query(None, ge=1, le=1000, description="Max files to scan inside the archive"),
+    archive_inline_bytes: Optional[int] = Query(None, ge=1, description="Max bytes to inline per archive text child"),
     archive_max_converted_children: Optional[int] = Query(None, ge=1, le=100, description="Max child files to convert inside the archive"),
     archive_max_child_bytes: Optional[int] = Query(None, ge=1, description="Max file size limit per child to parse (bytes)"),
+    archive_max_total_uncompressed_bytes: Optional[int] = Query(None, ge=1, description="Max total uncompressed archive bytes to inspect"),
+    archive_max_compression_ratio: Optional[float] = Query(None, ge=1.0, description="Max allowed compression ratio for archive entries"),
+    archive_max_depth: Optional[int] = Query(None, ge=0, le=10, description="Max recursive archive conversion depth"),
     enable_mixed_pdf_routing: bool = Query(False, description="Enable mixed PDF routing; requires a full-page probe"),
     full_page_probe: bool = Query(False, description="Probe every PDF page before planning/routing"),
     db: AsyncSession = Depends(get_db),
@@ -468,7 +590,7 @@ async def upload_file(
                 detail=f"Local file not found: {local_filepath}",
             )
         try:
-            assert_local_input_allowed(path)
+            assert_rest_local_input_allowed(path)
         except InputNotAllowedError as exc:
             await record_audit_event(
                 db,
@@ -507,6 +629,29 @@ async def upload_file(
         )
     input_format = suffix.lstrip(".")
 
+    # Pre-flight capability gate: reject uploads whose engine reports a missing
+    # native dependency BEFORE the file is stored/queued. Prevents the user from
+    # waiting for a full upload + worker dispatch only to get a generic failure.
+    _NATIVE_DEP_ENGINES: dict[str, frozenset[str]] = {
+        "video": frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"}),
+    }
+    for engine_name, engine_exts in _NATIVE_DEP_ENGINES.items():
+        if suffix in engine_exts:
+            engine_status = get_engine_status().get(engine_name, "ready")
+            if engine_status in ("missing_optional_dependency", "missing_native_dependency"):
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "NATIVE_DEPENDENCY_MISSING",
+                        "engine": engine_name,
+                        "message": (
+                            f"The {engine_name} engine cannot process this file because "
+                            f"required native dependencies (ffmpeg/ffprobe) are not available."
+                        ),
+                        "install_hint": "Install ffmpeg (ships ffprobe) on the host or in the container.",
+                    },
+                )
+
     stored_name = f"{job_id}{suffix}"
 
     if not is_local and file:
@@ -534,18 +679,48 @@ async def upload_file(
                 detail=f"File exceeds maximum size (too large) of {MAX_UPLOAD_SIZE} bytes.",
             )
 
+    primary_format = output_format.strip().lower()
+    if primary_format not in OUTPUT_FORMAT_SET:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported output_format '{output_format}'. Expected one of: {OUTPUT_FORMATS_DESCRIPTION}.",
+        )
+
     # Build conversion config from query params
     config: dict[str, Any] = {
-        "output_format": output_format,
+        "output_format": primary_format,
         "original_name": original_name,
     }
     if output_formats:
-        fmt_list = [f.strip().lower() for f in output_formats.split(",") if f.strip()]
-        supported = {"markdown", "json", "html", "chunks"}
-        fmt_list = [f for f in fmt_list if f in supported]
+        raw_formats = [part.strip().lower() for part in output_formats.split(",") if part.strip()]
+        invalid_formats = [fmt for fmt in raw_formats if fmt not in OUTPUT_FORMAT_SET]
+        if invalid_formats:
+            if not is_local:
+                Path(stored_path).unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unsupported output_formats value(s): {', '.join(invalid_formats)}. "
+                    f"Expected one or more of: {OUTPUT_FORMATS_DESCRIPTION}."
+                ),
+            )
+        fmt_list = normalize_formats(raw_formats)
         if fmt_list:
             config["output_formats"] = fmt_list
             config["output_format"] = fmt_list[0]
+    if chunking_strategy:
+        if chunking_strategy not in {"markdown_heading_blocks_v2", "unstructured_by_title"}:
+            if not is_local:
+                Path(stored_path).unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported chunking_strategy. Expected markdown_heading_blocks_v2 or unstructured_by_title.",
+            )
+        config["chunking_strategy"] = chunking_strategy
+    if chunk_max_tokens is not None:
+        config["chunk_max_tokens"] = chunk_max_tokens
+    if allow_chunking_fallback:
+        config["allow_chunking_fallback"] = True
     if converter:
         config["converter_cls"] = converter
     if engine_override:
@@ -571,15 +746,7 @@ async def upload_file(
         config["page_range"] = page_range
     if lang:
         config["lang"] = lang
-    if audio_output_mode in {
-        "transcript",
-        "enhanced",
-        "notes",
-        "meeting_notes",
-        "lecture_notes",
-        "interview_qna",
-        "action_decision_log",
-    }:
+    if audio_output_mode in AUDIO_OUTPUT_MODES:
         config["audio_output_mode"] = audio_output_mode
     if audio_model:
         config["audio_model"] = audio_model
@@ -614,6 +781,12 @@ async def upload_file(
                 continue
             # Flat params already won; never let the blob clobber them.
             config.setdefault(key, value)
+    try:
+        validate_engine_override(config, suffix)
+    except UsageError as exc:
+        if not is_local:
+            Path(stored_path).unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=exc.message) from exc
     active_audio_defaults = await _load_active_audio_defaults(db)
     for key, value in active_audio_defaults.items():
         config.setdefault(key, value)
@@ -623,6 +796,19 @@ async def upload_file(
     )
     if resolved_vocab_packs:
         config["audio_vocabulary_packs"] = resolved_vocab_packs
+    if suffix in AUDIO_PROVIDER_VALIDATED_EXTENSIONS:
+        try:
+            validate_audio_benchmark_selection(config)
+            validate_audio_fusion_selection(config)
+            capability = validate_provider_selection(
+                config.get("audio_provider"),
+                allow_cloud_stt=_truthy(config.get("audio_allow_cloud_stt")),
+            )
+            validate_audio_diarization_selection(config, capability)
+        except (NotImplementedError, PermissionError, ValueError) as exc:
+            if not is_local:
+                Path(stored_path).unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if disable_multiprocessing:
         config["disable_multiprocessing"] = True
     if strip_existing_ocr:
@@ -648,10 +834,18 @@ async def upload_file(
         config["archive_recursive"] = archive_recursive
     if archive_max_files is not None:
         config["archive_max_files"] = archive_max_files
+    if archive_inline_bytes is not None:
+        config["archive_inline_bytes"] = archive_inline_bytes
     if archive_max_converted_children is not None:
         config["archive_max_converted_children"] = archive_max_converted_children
     if archive_max_child_bytes is not None:
         config["archive_max_child_bytes"] = archive_max_child_bytes
+    if archive_max_total_uncompressed_bytes is not None:
+        config["archive_max_total_uncompressed_bytes"] = archive_max_total_uncompressed_bytes
+    if archive_max_compression_ratio is not None:
+        config["archive_max_compression_ratio"] = archive_max_compression_ratio
+    if archive_max_depth is not None:
+        config["archive_max_depth"] = archive_max_depth
     if ocr_engine in ("surya", "hybrid_ocr"):
         config["ocr_engine"] = ocr_engine
     elif ocr_engine in ("glm_ocr", "paddleocr_vl"):
@@ -702,7 +896,7 @@ async def upload_file(
         config["source_url"] = source_url_safe
     if output_dir:
         try:
-            assert_output_write_allowed(Path(output_dir))
+            assert_rest_output_write_allowed(Path(output_dir))
         except InputNotAllowedError as exc:
             await record_audit_event(
                 db,
@@ -727,6 +921,22 @@ async def upload_file(
         if page_range and probe_result.page_count > 0:
             _validate_page_range(page_range, probe_result.page_count)
 
+    from app.main import _app_state
+
+    conversion_service = _app_state.conversion_service
+    try:
+        requested_formats = require_supported_output_formats(
+            stored_path,
+            config,
+            conversion_service,
+            source_name=original_name,
+        )
+    except UnsupportedFormatError as exc:
+        if not is_local:
+            Path(stored_path).unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+    effective_output_format = requested_formats[0]
+
     # DB record
     job = ConversionJob(
         id=job_id,
@@ -734,7 +944,7 @@ async def upload_file(
         original_name=original_name,
         status="pending",
         input_format=input_format,
-        output_format=output_format,
+        output_format=effective_output_format,
         config_json=json.dumps(config),
     )
     db.add(job)
@@ -748,7 +958,7 @@ async def upload_file(
         status="success",
         payload={
             "input_format": input_format,
-            "output_format": output_format,
+            "output_format": effective_output_format,
             "source": "local_file" if is_local else "source_url" if source_url_safe else "upload",
             "allow_cloud_vlm": allow_cloud_vlm,
         },
@@ -764,10 +974,6 @@ async def upload_file(
             payload={"provider": llm_provider, "model": llm_model},
         )
 
-    from app.main import _app_state
-
-    marker_service = _app_state.marker_service
-    conversion_service = _app_state.conversion_service
     task_manager = _app_state.task_manager
 
     llm_config = await _load_llm_config(db)
@@ -786,13 +992,21 @@ async def upload_file(
             max_retries=int(config.get("max_retries") or 0),
         )
 
+    # Commit the job row (and durable-queue metadata) BEFORE scheduling any
+    # work. A fast CPU/native converter can finish in the worker thread and
+    # reach _finalize_job — which opens a fresh session — before the get_db
+    # dependency's implicit post-return commit runs. Without this explicit
+    # commit the worker cannot see the row, silently skips finalization, and
+    # the job hangs at "pending" forever (MUI-003).
+    await db.commit()
+
     task_manager.submit_job(job_id, stored_path, options, conversion_service)
 
     return ConversionResponse(
         job_id=job_id,
         status="pending",
         filename=original_name,
-        output_format=output_format,
+        output_format=effective_output_format,
     )
 
 
@@ -819,11 +1033,13 @@ async def plan_conversion(
         config["enable_mixed_pdf_routing"] = True
     if req.full_page_probe:
         config["full_page_probe"] = True
+    plan_suffix = Path(req.filename).suffix
     if req.local_filepath:
         path = Path(req.local_filepath)
         if path.is_absolute() and path.is_file():
+            plan_suffix = path.suffix
             try:
-                assert_local_input_allowed(path)
+                assert_rest_local_input_allowed(path)
             except InputNotAllowedError as exc:
                 raise HTTPException(status_code=400, detail=exc.message) from exc
         if path.is_absolute() and path.is_file() and path.suffix.lower() == ".pdf":
@@ -834,6 +1050,10 @@ async def plan_conversion(
             )
             config["probe_result"] = probe_result.to_dict()
             preliminary = False
+    try:
+        validate_engine_override(config, plan_suffix)
+    except UsageError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
 
     plan = (
         _app_state.conversion_service.plan(req.local_filepath, config)
@@ -852,6 +1072,7 @@ async def plan_conversion(
         optional_dependencies=plan.optional_dependencies,
         fallback_chain=plan.fallback_chain,
         warnings=plan.warnings,
+        output_formats=renderable_output_formats_for_engine(plan.engine, (plan_suffix.lower(),)),
         preliminary=preliminary,
         probe_result=config.get("probe_result"),
         mixed_engine_segments=(
@@ -946,6 +1167,20 @@ async def job_events(request: Request, job_id: str):
     return EventSourceResponse(_app_state.task_manager.job_events(request, job_id))
 
 
+@router.get("/{job_id}/llm-traces")
+async def llm_traces(job_id: str) -> dict[str, Any]:
+    """Return the captured LLM call traces for a job.
+
+    Each entry is one LLM generation call with structured ``parts`` (text/image)
+    so the frontend trace viewer can render the prompt and preview any images.
+    Polled by the eye-icon viewer while a job is running; traces persist after
+    completion until the job is removed.
+    """
+    from app.core import llm_trace
+
+    return {"job_id": job_id, "traces": llm_trace.get_traces(job_id)}
+
+
 # ------------------------------------------------------------------
 # Download
 # ------------------------------------------------------------------
@@ -967,8 +1202,7 @@ async def download_result(
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Job not yet completed")
 
-    from app.services.format_store import parse_formats
-    formats_map = parse_formats(job.formats_json) or {}
+    formats_map = parse_cached_formats(job.formats_json) or {}
     if "markdown" not in formats_map and job.result_text:
         formats_map["markdown"] = job.result_text
 
@@ -990,7 +1224,7 @@ async def download_result(
         "markdown": "md",
         "html": "html",
         "json": "json",
-        "chunks": "txt",
+        "chunks": "chunks.json",
     }
 
     # Only an explicit all-format download returns an asset package. A specific
@@ -1018,10 +1252,10 @@ async def download_result(
                 if result_path and result_path.is_dir():
                     manifest_file = result_path / f"{result_path.name}.marker.json"
                     if manifest_file.exists():
-                        zf.write(manifest_file, manifest_file.name)
+                        zf.writestr(manifest_file.name, _portable_manifest_for_zip(manifest_file, result_path))
                     else:
                         for f in result_path.glob("*.marker.json"):
-                            zf.write(f, f.name)
+                            zf.writestr(f.name, _portable_manifest_for_zip(f, result_path))
 
                     # 3. Write all assets (images/diagrams/etc.)
                     for file_in_dir in sorted(result_path.rglob("*")):
@@ -1043,24 +1277,86 @@ async def download_result(
         ext = ext_map.get(fmt, fmt)
         text_content = formats_map[fmt]
         
-        tmp_file = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False, mode="w", encoding="utf-8")
-        tmp_path = Path(tmp_file.name)
-        tmp_file.write(text_content)
-        tmp_file.close()
-        
+        try:
+            tmp_file = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False, mode="w", encoding="utf-8")
+            tmp_path = Path(tmp_file.name)
+            tmp_file.write(text_content)
+            tmp_file.close()
+        except Exception:
+            # Guard against a leak if the temp file is created but writing fails.
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except NameError:
+                pass
+            raise
+
         media_types = {
             "md": "text/markdown",
             "html": "text/html",
             "json": "application/json",
+            "chunks.json": "application/json",
             "txt": "text/plain",
         }
-        
+
         return FileResponse(
             path=str(tmp_path),
             filename=f"{stem}.{ext}",
             media_type=media_types.get(ext, "text/plain"),
             background=BackgroundTask(tmp_path.unlink, missing_ok=True),
         )
+
+
+@router.get("/assets/{job_id}/{asset_path:path}")
+async def get_output_asset(
+    job_id: str,
+    asset_path: str,
+    db: AsyncSession = Depends(get_db),
+) -> FileResponse:
+    """Serve one manifest-listed sidecar asset for a completed job.
+
+    The browser preview uses this route for local images referenced by Markdown.
+    Only assets recorded in the job's output manifest are reachable, and the
+    resolved file must stay under the job result directory.
+    """
+
+    safe_asset_path = _safe_asset_request_path(asset_path)
+    if safe_asset_path is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail="Job not yet completed")
+    if not job.result_path:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    result_path = Path(job.result_path)
+    manifest = _load_result_manifest(result_path)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="Asset manifest not found")
+    entry = _asset_entry_for_request(manifest, safe_asset_path)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    asset_file = Path(str(entry.get("path") or ""))
+    if not asset_file.is_absolute():
+        asset_file = (result_path if result_path.is_dir() else result_path.parent) / safe_asset_path
+    try:
+        asset_resolved = asset_file.resolve(strict=True)
+    except OSError:
+        raise HTTPException(status_code=404, detail="Asset not found") from None
+
+    root = (result_path if result_path.is_dir() else result_path.parent).resolve()
+    if not _path_is_within(asset_resolved, root):
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return FileResponse(
+        path=str(asset_resolved),
+        media_type=str(entry.get("media_type") or "application/octet-stream"),
+        filename=asset_resolved.name,
+    )
 
 
 # ------------------------------------------------------------------
@@ -1072,22 +1368,56 @@ async def download_result(
 async def get_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    converter: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> HistoryResponse:
-    """List all conversion jobs (paginated)."""
+    """List all conversion jobs (paginated, with optional filtering)."""
     offset = (page - 1) * page_size
+
+    # Build filter conditions
+    conditions = []
+    if search and (search_term := search.strip()):
+        search_pattern = f"%{_escape_like(search_term)}%"
+        conditions.append(
+            or_(
+                ConversionJob.filename.ilike(search_pattern, escape="\\"),
+                ConversionJob.original_name.ilike(search_pattern, escape="\\"),
+            )
+        )
+    if status and status != "all":
+        conditions.append(ConversionJob.status == HISTORY_STATUS_ALIASES.get(status, status))
+    if converter and converter != "all":
+        converter_pattern = _escape_like(converter.strip())
+        converter_spaced = f'%"converter_cls": "{converter_pattern}"%'
+        converter_compact = f'%"converter_cls":"{converter_pattern}"%'
+        if converter.strip() == "PdfConverter":
+            conditions.append(
+                (ConversionJob.config_json.is_(None)) |
+                (~ConversionJob.config_json.like('%"converter_cls"%')) |
+                (ConversionJob.config_json.like(converter_spaced, escape="\\")) |
+                (ConversionJob.config_json.like(converter_compact, escape="\\"))
+            )
+        else:
+            conditions.append(
+                (ConversionJob.config_json.like(converter_spaced, escape="\\")) |
+                (ConversionJob.config_json.like(converter_compact, escape="\\"))
+            )
 
     # Query total count
     count_stmt = select(func.count(ConversionJob.id))
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
 
-    stmt = (
-        select(ConversionJob)
-        .order_by(ConversionJob.created_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
+    # Query paginated records
+    stmt = select(ConversionJob).order_by(ConversionJob.created_at.desc())
+    if conditions:
+        stmt = stmt.where(*conditions)
+    stmt = stmt.offset(offset).limit(page_size)
+
     result = await db.execute(stmt)
     jobs = result.scalars().all()
 
@@ -1129,12 +1459,12 @@ async def get_history(
 # ------------------------------------------------------------------
 
 
-@router.delete("/{job_id}")
-async def delete_job(
+@router.post("/{job_id}/cancel")
+async def cancel_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
-    """Cancel (if running) and delete a conversion job."""
+) -> dict[str, Any]:
+    """Cancel a pending/running conversion job without deleting its record or files."""
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     result = await db.execute(stmt)
     job = result.scalar_one_or_none()
@@ -1142,29 +1472,118 @@ async def delete_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Cancel if still processing
+    previous_status = job.status
+    if previous_status in {"completed", "failed", "cancelled"}:
+        return {
+            "status": previous_status,
+            "job_id": job_id,
+            "cancelled": previous_status == "cancelled",
+        }
+
     from app.main import _app_state
 
     await _app_state.task_manager.cancel_job(job_id)
+    await db.refresh(job)
+    job.status = "cancelled"
+    job.progress = 0
+    await record_audit_event(
+        db,
+        event_type="job.cancelled",
+        surface="rest",
+        resource_type="job",
+        resource_id=job_id,
+        status="success",
+        payload={"previous_status": previous_status},
+    )
+    await db.commit()
+    return {"status": "cancelled", "job_id": job_id, "cancelled": True}
 
-    # Clean up uploaded file
-    upload_path = UPLOAD_DIR / job.filename
-    if upload_path.exists():
-        upload_path.unlink()
 
-    # Clean up result file
-    if job.result_path:
-        result_path = Path(job.result_path)
-        if result_path.exists():
-            if result_path.is_dir():
-                import shutil
-                shutil.rmtree(result_path)
-            else:
-                result_path.unlink()
+@router.delete("/{job_id}")
+async def delete_job(
+    job_id: str,
+    force: bool = Query(False, description="Explicitly cancel and delete a non-terminal live job."),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Delete a terminal conversion job, or force-delete a live job explicitly."""
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status not in {"completed", "failed", "cancelled"} and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job {job_id} is {job.status}; cancel it first or pass force=true to delete a live job.",
+        )
+    if job.status not in {"completed", "failed", "cancelled"}:
+        from app.main import _app_state
+
+        await _app_state.task_manager.cancel_job(job_id)
+
+    cleanup_paths = job_artifact_paths(job)
+    removed = remove_paths(cleanup_paths)
 
     await db.delete(job)
+    await record_audit_event(
+        db,
+        event_type="job.deleted",
+        surface="rest",
+        resource_type="job",
+        resource_id=job_id,
+        status="success",
+        payload={"force": force, "files_removed": removed},
+    )
 
-    return {"status": "deleted", "job_id": job_id}
+    return {"status": "deleted", "job_id": job_id, "files_removed": removed}
+
+
+@router.post("/{job_id}/purge-files")
+async def purge_job_files(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Remove upload/output files for a terminal job while keeping its history row."""
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    result = await db.execute(stmt)
+    job = result.scalar_one_or_none()
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in {"completed", "failed", "cancelled"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job {job_id} is {job.status}; cancel or wait for terminal status before purging files.",
+        )
+
+    cleanup_paths = job_artifact_paths(job)
+    removed = remove_paths(cleanup_paths)
+    try:
+        metadata = json.loads(job.result_metadata_json or "{}")
+    except (json.JSONDecodeError, TypeError):
+        metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata["purged_artifacts"] = {
+        "files_removed": removed,
+        "purged_at": datetime.now(timezone.utc).isoformat(),
+    }
+    job.result_metadata_json = json.dumps(metadata)
+    if job.result_path and not Path(job.result_path).exists():
+        job.result_path = None
+    await record_audit_event(
+        db,
+        event_type="job.files_purged",
+        surface="rest",
+        resource_type="job",
+        resource_id=job_id,
+        status="success",
+        payload={"files_removed": removed},
+    )
+    await db.commit()
+    return {"status": "purged", "job_id": job_id, "files_removed": removed}
 
 
 # ------------------------------------------------------------------
@@ -1203,7 +1622,7 @@ def _job_source_path(job: ConversionJob) -> Path | None:
 @router.post("/{job_id}/regenerate")
 async def regenerate_format(
     job_id: str,
-    format: str = Query(..., description="Output format to regenerate: markdown|json|html|chunks"),
+    format: str = Query(..., description=f"Output format to regenerate: {OUTPUT_FORMATS_DESCRIPTION}"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Render one additional output format for an existing completed job.
@@ -1213,10 +1632,10 @@ async def regenerate_format(
     ``formats_json`` cache and the format becomes instantly viewable in the
     preview tabs without re-running the primary conversion.
     """
-    if format not in ("markdown", "json", "html", "chunks"):
+    if format not in OUTPUT_FORMAT_SET:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported format '{format}'. Allowed: markdown, json, html, chunks.",
+            detail=f"Unsupported format '{format}'. Allowed: {OUTPUT_FORMATS_DESCRIPTION}.",
         )
 
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
@@ -1245,19 +1664,19 @@ async def regenerate_format(
     # we only override the target output format for this single render.
     config = _read_stored_config(job)
     config["output_format"] = format
-
-    if not conversion_service.supports_multiple_formats(str(source_path), config):
-        suffix = Path(source_path).suffix.lower()
-        from app.conversion.converters.marker_pdf import MarkerPdfConverter
-        if suffix in MarkerPdfConverter._EXTENSIONS:
-            config["engine_override"] = "marker_pdf"
-            config["output_formats"] = [format]
-
-    if not conversion_service.supports_multiple_formats(str(source_path), config):
+    config["output_formats"] = [format]
+    try:
+        require_supported_output_formats(
+            str(source_path),
+            config,
+            conversion_service,
+            source_name=job.original_name,
+        )
+    except UnsupportedFormatError as exc:
         raise HTTPException(
             status_code=409,
-            detail="This job's engine cannot render additional formats.",
-        )
+            detail=exc.message,
+        ) from exc
 
     llm_config = await _load_llm_config(db)
     from app.services.marker_service import build_marker_options
@@ -1302,20 +1721,134 @@ async def regenerate_format(
     }
 
 
-@router.get("/browse-folder")
-async def browse_folder() -> dict[str, str]:
-    """Open a native folder selection dialog and return the selected path."""
-    raise HTTPException(
-        status_code=501,
-        detail="Local file/folder browsing is not supported in server/headless environments."
+@router.post("/{job_id}/retry")
+async def retry_job(
+    job_id: str,
+    body: RetryJobRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Re-run a terminal job from its stored source file, optionally with a
+    different LLM provider or model.
+
+    Creates a NEW job row (the original stays in history for audit). The
+    source file is resolved via ``_job_source_path`` (upload copy or local
+    path). LLM responses already cached for the same prompt are replayed
+    instantly, so only the work that did not complete is re-done.
+
+    A non-terminal job cannot be retried — cancel it first. An unknown
+    provider is rejected with 400. A missing source file is rejected with 409.
+    """
+    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
+    job = (await db.execute(stmt)).scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in ("pending", "processing"):
+        raise HTTPException(
+            status_code=409,
+            detail="Job is still running. Cancel it before retrying.",
+        )
+
+    source_path = _job_source_path(job)
+    if source_path is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Source file is no longer available for this job.",
+        )
+
+    config = _read_stored_config(job)
+    # Link the new job to its origin for audit trail.
+    config["retried_from"] = job_id
+
+    # Validate + apply provider/model overrides.
+    if body.llm_provider or body.llm_model:
+        llm_config = await _load_llm_config(db)
+        providers = llm_config.get("providers", [])
+        if body.llm_provider:
+            prov = next((p for p in providers if p["id"] == body.llm_provider), None)
+            if not prov:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown LLM provider '{body.llm_provider}'.",
+                )
+            config["llm_provider"] = body.llm_provider
+            # Clear a stale model override when the provider changes.
+            if body.llm_model:
+                model_cfg = next(
+                    (m for m in prov.get("models", []) if m["model_id"] == body.llm_model),
+                    None,
+                )
+                if not model_cfg:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Model '{body.llm_model}' not configured for provider '{body.llm_provider}'.",
+                    )
+                config["llm_model"] = body.llm_model
+            else:
+                config.pop("llm_model", None)
+        elif body.llm_model:
+            # Same provider, different model.
+            config["llm_model"] = body.llm_model
+
+    # Reset durable-queue retry state for the new job.
+    config.pop("durable_filepath", None)
+
+    from app.main import _app_state
+    task_manager = _app_state.task_manager
+    conversion_service = _app_state.conversion_service
+
+    llm_config = await _load_llm_config(db)
+    from app.services.marker_service import build_marker_options
+    options = build_marker_options(llm_config, config)
+
+    new_job_id = str(uuid.uuid4())
+    stored_path = str(source_path)
+    original_name = config.get("original_name") or job.original_name
+    input_format = (Path(original_name).suffix.lstrip(".") or job.input_format or "").lower()
+
+    new_job = ConversionJob(
+        id=new_job_id,
+        filename=job.filename,
+        original_name=original_name,
+        status="pending",
+        input_format=input_format,
+        output_format=job.output_format,
+        config_json=json.dumps(config),
+    )
+    db.add(new_job)
+    await db.flush()
+
+    await record_audit_event(
+        db,
+        event_type="job.retry_submitted",
+        surface="rest",
+        resource_type="job",
+        resource_id=new_job_id,
+        status="success",
+        payload={
+            "retried_from": job_id,
+            "llm_provider": config.get("llm_provider"),
+            "llm_model": config.get("llm_model"),
+        },
     )
 
+    from app.services.task_manager import TaskManager
+    if isinstance(task_manager, TaskManager):
+        await task_manager.enqueue_durable_job(
+            db,
+            job_id=new_job_id,
+            filepath=stored_path,
+            config=config,
+            max_retries=int(config.get("max_retries") or 0),
+        )
 
-@router.get("/browse-files")
-async def browse_files() -> dict[str, list[str]]:
-    """Open a native file selection dialog and return the selected paths."""
-    raise HTTPException(
-        status_code=501,
-        detail="Local file/folder browsing is not supported in server/headless environments."
-    )
+    await db.commit()
+
+    task_manager.submit_job(new_job_id, stored_path, options, conversion_service)
+
+    return {
+        "new_job_id": new_job_id,
+        "source_job_id": job_id,
+        "status": "pending",
+    }
+
 

@@ -13,9 +13,11 @@ from PIL import Image, ImageStat
 
 from app.audio.pipeline import format_timestamp_ms
 from app.audio.transcribe import transcribe_audio_file
+from app.conversion.native_requirements import NativeRequirement
 from app.conversion.registry import BaseConverter
 from app.conversion.result import UniversalConversionResult
 from app.conversion.stream_info import StreamInfo
+from app.errors import NativeDependencyMissingError
 
 
 _VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi"})
@@ -28,6 +30,18 @@ class VideoConverter(BaseConverter):
     priority = 10
     requires_marker_models = False
     requires_gpu = False
+    native_requirements = (
+        NativeRequirement(
+            command="ffmpeg",
+            min_version="5.0",
+            install_hint="apt-get install ffmpeg (Debian/Ubuntu) or brew install ffmpeg (macOS)",
+        ),
+        NativeRequirement(
+            command="ffprobe",
+            min_version="5.0",
+            install_hint="Ships with the ffmpeg package on most distros.",
+        ),
+    )
 
     @property
     def supported_extensions(self) -> frozenset[str]:
@@ -42,7 +56,18 @@ class VideoConverter(BaseConverter):
         config: dict[str, Any],
         device: str | None = None,
     ) -> UniversalConversionResult:
-        _require_ffmpeg()
+        missing = self.missing_requirements()
+        if missing:
+            commands = [entry["command"] for entry in missing]
+            raise NativeDependencyMissingError(
+                f"Video conversion requires native binaries that are not "
+                f"available (missing: {', '.join(commands)})",
+                hint="Install the ffmpeg package — it ships both ffmpeg and "
+                     "ffprobe on most distros (apt-get install ffmpeg / "
+                     "brew install ffmpeg).",
+                details={"missing": commands, "engine": self.engine_name},
+                retryable=False,
+            )
         path = Path(filepath)
         probe = _probe_video(path)
         max_frames = int(config.get("video_max_frames", 8))
@@ -118,11 +143,6 @@ class VideoConverter(BaseConverter):
                 },
             },
         )
-
-
-def _require_ffmpeg() -> None:
-    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
-        raise RuntimeError("ffmpeg and ffprobe are required for local video conversion")
 
 
 def _safe_stem(path: Path) -> str:

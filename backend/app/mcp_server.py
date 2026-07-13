@@ -7,18 +7,33 @@ available for multi-client local/remote deployments.
 import ipaddress
 import os
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import quote, unquote, urlparse
 
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agent_contract import CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.agent_contract import AUDIO_OUTPUT_MODES, CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.agent_surface import (
+    MCP_ALL_TOOL_NAMES as SURFACE_MCP_ALL_TOOL_NAMES,
+    MCP_ADMIN_TOOL_NAMES as SURFACE_MCP_ADMIN_TOOL_NAMES,
+    MCP_FULL_TOOL_NAMES as SURFACE_MCP_FULL_TOOL_NAMES,
+    MCP_MINIMAL_TOOL_NAMES as SURFACE_MCP_MINIMAL_TOOL_NAMES,
+    MCP_PROMPT_NAMES as SURFACE_MCP_PROMPT_NAMES,
+    MCP_RESOURCE_URIS as SURFACE_MCP_RESOURCE_URIS,
+    MCP_V1_TOOL_NAMES as SURFACE_MCP_V1_TOOL_NAMES,
+    MCP_V2_TOOL_NAMES as SURFACE_MCP_V2_TOOL_NAMES,
+    tool_annotations,
+    tool_names_for_profile as surface_tool_names_for_profile,
+    tool_title,
+)
+from app.conversion.formats import OUTPUT_FORMATS_DESCRIPTION
 from app.agent_api import (
     AgentConversionOptions,
     MAX_READ_CHARS,
     SERVICE_NAME,
+    cancel_job,
     capabilities,
     convert_document,
     delete_job,
@@ -29,7 +44,9 @@ from app.agent_api import (
     list_settings,
     parse_extra_options_json,
     plan_conversion,
+    purge_job_files,
     read_output,
+    read_output_chunk,
     set_setting,
     self_test,
     submit_conversion_job,
@@ -39,11 +56,14 @@ from app.mcp_resources import register_mcp_resources
 from app.security.auth import ScopedStaticTokenVerifier, configured_static_tokens, require_mcp_scopes
 from app.security.scopes import (
     DEFAULT_MCP_SCOPES,
+    SCOPE_CAPABILITIES_READ,
+    SCOPE_JOBS_READ,
     SCOPE_JOBS_WRITE,
     SCOPE_OUTPUTS_READ,
     SCOPE_SETTINGS_READ,
     SCOPE_SETTINGS_WRITE,
 )
+from app.services.output_manifest_reader import manifest_for_output_path
 from app.services.policy import scoped_client_workspace_roots
 from app.services.safe_url_fetcher import assert_safe_source_url
 
@@ -56,7 +76,18 @@ class CapabilitiesOutput(MarkerOutputModel):
     service: str = Field(description="Service identifier.", examples=[SERVICE_NAME])
     tools: list[str] = Field(description="Available MCP tool names.", examples=[["marker_convert_file"]])
     allowed_extensions: list[str] = Field(description="Supported file extensions.", examples=[[".pdf", ".csv"]])
-    output_formats: list[str] = Field(description="Supported output formats.", examples=[["markdown", "json"]])
+    output_formats: list[str] = Field(
+        description="Public output format ids. Check input_formats/converters for per-input availability.",
+        examples=[["markdown", "json"]],
+    )
+    input_formats: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Input format groups with the output formats each group can actually render.",
+        examples=[[
+            {"extensions": [".docx"], "engine": "office_docx", "output_formats": ["markdown", "chunks"]},
+            {"extensions": [".pdf"], "engine": "marker_pdf", "output_formats": ["markdown", "json", "html", "chunks"]},
+        ]],
+    )
     conversion_profiles: list[str] = Field(description="Conversion profile names.", examples=[["auto", "fast"]])
     image_handling_modes: list[str] = Field(description="Image handling modes.", examples=[["extraction", "understanding"]])
     audio_output_modes: list[str] = Field(description="Audio summary modes.", examples=[["transcript", "notes"]])
@@ -105,12 +136,24 @@ class SubmitJobOutput(MarkerOutputModel):
 
 class ReadOutputResult(MarkerOutputModel):
     path: str = Field(description="Resolved output file path.", examples=["C:\\path\\to\\document.md"])
-    offset: int = Field(description="Returned chunk start offset.", examples=[0])
-    limit: int = Field(description="Requested maximum characters.", examples=[20000])
-    text: str = Field(description="Output text chunk.", examples=["# Converted"])
-    text_chars: int = Field(description="Total text characters in file.", examples=[50000])
-    has_more: bool = Field(description="True when more text remains.", examples=[True])
-    next_offset: int | None = Field(default=None, description="Offset for next page.", examples=[20000])
+    offset: int = Field(default=0, description="Returned text page start offset (offset mode).", examples=[0])
+    limit: int = Field(default=20_000, description="Requested maximum characters (offset mode).", examples=[20000])
+    text: str = Field(description="Output text page (offset mode) or semantic chunk text (semantic mode).", examples=["# Converted"])
+    text_chars: int = Field(default=0, description="Total text characters in file (offset mode).", examples=[50000])
+    has_more: bool = Field(default=False, description="True when more text/chunks remain.", examples=[True])
+    next_offset: int | None = Field(default=None, description="Offset for next page (offset mode).", examples=[20000])
+    chunk_kind: str = Field(description="Chunking mode: offset_text (character-offset paging) or semantic_markdown (structure-aware RAG chunk).", examples=["offset_text", "semantic_markdown"])
+    is_semantic_chunk: bool = Field(description="True when this result is a semantic chunk from a marker.chunks.v1 envelope; false for offset paging.", examples=[False, True])
+    # Semantic-mode fields (absent in offset mode).
+    chunk_index: int | None = Field(default=None, description="Index of the returned semantic chunk (semantic mode).", examples=[0])
+    chunk_count: int | None = Field(default=None, description="Total semantic chunks in the envelope (semantic mode).", examples=[12])
+    next_chunk_index: int | None = Field(default=None, description="Next chunk index, or null if this was the last (semantic mode).", examples=[1])
+    schema_version: str | None = Field(default=None, description="Chunk envelope schema version (semantic mode).", examples=["marker.chunks.v1"])
+    renderer_kind: str | None = Field(default=None, description="Chunk renderer class, currently 'derived' for Markdown-derived chunks (semantic mode).", examples=["derived"])
+    source_format: str | None = Field(default=None, description="Format used as chunking input, currently 'markdown' for derived chunks (semantic mode).", examples=["markdown"])
+    semantic_level: str | None = Field(default=None, description="Semantic boundary level represented by the chunks, currently 'markdown_structure' (semantic mode).", examples=["markdown_structure"])
+    structured_ir: bool | None = Field(default=None, description="True only when chunks came from a structured document IR instead of derived Markdown (semantic mode).", examples=[False])
+    chunk: dict[str, Any] | None = Field(default=None, description="Full semantic chunk object with id/chunk_id, contextual_text, heading_path/section_path, content_types, line and char spans, counts, source_refs, previous_id, and next_id (semantic mode).", examples=[{"id": "chunk_0000_abc123", "heading_path": ["Title"], "content_types": ["text"]}])
 
 
 class ManifestToolOutput(MarkerOutputModel):
@@ -148,10 +191,19 @@ class DeleteJobOutput(MarkerOutputModel):
     )
 
 
+class PurgeJobFilesOutput(MarkerOutputModel):
+    status: str = Field(description="Purge status.", examples=["purged"])
+    job_id: str = Field(description="Purged job id.", examples=["11111111-1111-4111-8111-111111111111"])
+    files_removed: list[str] = Field(
+        description="Resolved paths of upload/output artifacts removed while keeping the job row.",
+        examples=[["C:\\path\\to\\output.md"]],
+    )
+
+
 class CancelJobOutput(MarkerOutputModel):
-    status: str = Field(description="Cancellation status.", examples=["deleted"])
+    status: str = Field(description="Cancellation status.", examples=["cancelled"])
     job_id: str = Field(description="Cancelled job id.", examples=["11111111-1111-4111-8111-111111111111"])
-    cancelled: bool = Field(description="True when cancel/delete request was accepted.", examples=[True])
+    cancelled: bool = Field(description="True when the job was cancelled by this call or was already cancelled.", examples=[True])
 
 
 class SettingsOutput(MarkerOutputModel):
@@ -174,6 +226,8 @@ class DeleteSettingOutput(MarkerOutputModel):
 class SelfTestOutput(MarkerOutputModel):
     service: str = Field(description="Service identifier.", examples=[SERVICE_NAME])
     expected_tools: list[str] = Field(description="Expected tool names.", examples=[["marker_convert_file"]])
+    tool_profile: str | None = Field(default=None, description="Active MCP tool profile.", examples=["minimal"])
+    settings_write_enabled: bool | None = Field(default=None, description="True when settings write/delete tools are registered.", examples=[False])
     capabilities_ok: bool = Field(description="Capability check result.", examples=[True])
     conversion_ok: bool | None = Field(default=None, description="Conversion smoke result when run.", examples=[True])
     notes: list[str] = Field(description="Diagnostic notes.", examples=[[]])
@@ -191,11 +245,45 @@ class SelfTestOutput(MarkerOutputModel):
     schemas_ok: bool | None = Field(default=None, description="JSON schema export check result.", examples=[True])
 
 
+class SourceInput(MarkerOutputModel):
+    kind: Literal["local_path", "url"] = Field(
+        description="Source kind: local_path for workspace files, url for safe public HTTP(S).",
+        examples=["local_path"],
+    )
+    path: str = Field(
+        default="",
+        description="Local file path when kind is local_path.",
+        examples=["C:\\path\\to\\document.pdf"],
+    )
+    url: str = Field(
+        default="",
+        description="Public HTTP(S) URL when kind is url.",
+        examples=["https://example.com/document.pdf"],
+    )
+
+
 PathParam = Annotated[str, Field(description="Local file path. Example: C:\\path\\to\\document.pdf.", examples=["C:\\path\\to\\document.pdf"])]
+SourceParam = Annotated[
+    SourceInput,
+    Field(
+        description="Conversion source object.",
+        examples=[{"kind": "local_path", "path": "C:\\path\\to\\document.pdf"}],
+    ),
+]
 UrlParam = Annotated[str, Field(description="Public http(s) URL. Example: https://example.com/document.pdf.", examples=["https://example.com/document.pdf"])]
 DirParam = Annotated[str, Field(description="Output directory path. Example: C:\\path\\to\\out.", examples=["C:\\path\\to\\out"])]
-OutputPathParam = Annotated[str, Field(description="Exact output file path that must not already exist.", examples=["C:\\path\\to\\out\\document.md"])]
-OutputFormatParam = Annotated[str, Field(description="Output format: markdown, json, html, or chunks.", examples=["markdown"])]
+OutputPathParam = Annotated[str, Field(description="Exact output file path. Existing files are refused unless overwrite is true.", examples=["C:\\path\\to\\out\\document.md"])]
+OverwriteParam = Annotated[bool, Field(description="Replace an existing explicit output path and manifest when true.", examples=[False])]
+OutputFormatParam = Annotated[
+    str,
+    Field(
+        description=(
+            f"Requested output format: {OUTPUT_FORMATS_DESCRIPTION}. "
+            "Markdown and chunks are broadly available; json/html require a Marker-backed PDF/image/EPUB route."
+        ),
+        examples=["markdown"],
+    ),
+]
 ConverterParam = Annotated[str, Field(description="Optional converter class override.", examples=["TableConverter"])]
 EngineParam = Annotated[str, Field(description="Optional engine override such as text_data or marker.", examples=["text_data"])]
 ProfileParam = Annotated[str, Field(description="Conversion profile: auto, fast, or high_accuracy.", examples=["auto"])]
@@ -208,8 +296,12 @@ PreviewCharsParam = Annotated[int, Field(ge=0, le=MAX_READ_CHARS, description="M
 PositiveRowsParam = Annotated[int, Field(ge=0, description="Optional non-negative limit; 0 means unset.", examples=[1000])]
 OptionalDepthParam = Annotated[int, Field(ge=-1, description="Optional depth/retry/distance; -1 means unset.", examples=[-1])]
 PositivePixelsParam = Annotated[int, Field(ge=0, description="Optional positive pixel/count limit; 0 means unset.", examples=[2048])]
+ArchiveCompressionRatioParam = Annotated[float, Field(ge=0.0, description="Optional archive compression ratio limit; 0 means unset.", examples=[100.0])]
 DensityParam = Annotated[float, Field(ge=-1.0, le=1.0, description="Optional density threshold from 0 to 1; -1 means unset.", examples=[0.2])]
 ConfidenceParam = Annotated[float, Field(ge=-1.0, le=1.0, description="Optional confidence threshold from 0 to 1; -1 means unset.", examples=[0.35])]
+AudioProviderParam = Annotated[str, Field(description="Audio STT provider id. Local default is local_faster_whisper; cloud providers require audio_allow_cloud_stt.", examples=["local_faster_whisper"])]
+AudioAliasesParam = Annotated[str, Field(description='JSON object mapping speaker labels to user-confirmed aliases, e.g. {"speaker_0":"Alice"}.', examples=['{"speaker_0":"Alice"}'])]
+AudioListParam = Annotated[str, Field(description="Comma-separated values or JSON string array.", examples=["pack_meeting,pack_product"])]
 JobIdParam = Annotated[str, Field(description="Conversion job id.", examples=["11111111-1111-4111-8111-111111111111"])]
 SettingKeyParam = Annotated[str, Field(description="Settings key.", examples=["openai_api_key"])]
 SettingValueParam = Annotated[str, Field(description="Settings value; sensitive keys are encrypted on write.", examples=["dummy-api-key"])]
@@ -219,13 +311,20 @@ PageSizeParam = Annotated[int, Field(ge=1, le=100, description="Items per page."
 OffsetParam = Annotated[int, Field(ge=0, description="Character offset.", examples=[0])]
 LimitParam = Annotated[int, Field(ge=1, le=MAX_READ_CHARS, description="Maximum characters to return.", examples=[20000])]
 SizeParam = Annotated[int, Field(ge=0, description="Input size in bytes for metadata-only planning.", examples=[1048576])]
+ChunkModeParam = Annotated[
+    Literal["offset", "semantic"],
+    Field(description="Chunk read mode. 'offset' (default) returns character-offset text paging; 'semantic' returns the Nth structure-aware chunk from a marker.chunks.v1 envelope.", examples=["offset"]),
+]
+ChunkIndexParam = Annotated[int, Field(ge=0, description="Zero-based semantic chunk index (mode='semantic' only).", examples=[0])]
 
 
 INSTRUCTIONS = (
     "Marker converts PDFs, Office files, archives, audio, video, images, and "
-    "text/data files to agent-readable Markdown. Plan before large PDFs. Convert "
-    "with output_dir and bounded max_chars, then page long outputs via "
-    "marker_read_output. Cloud/VLM use is opt-in through allow_cloud_vlm."
+    "text/data files to agent-readable outputs. Markdown/chunks are broadly "
+    "available; json/html require Marker-backed PDF/image/EPUB routes. Plan "
+    "before large PDFs. Convert with output_dir and bounded max_chars, then "
+    "page long outputs via marker_read_output. Cloud/VLM use is opt-in through "
+    "allow_cloud_vlm."
 )
 
 mcp = FastMCP(
@@ -235,64 +334,22 @@ mcp = FastMCP(
     stateless_http=True,
 )
 
-MCP_V1_TOOL_NAMES = [
-    "marker_list_capabilities",
-    "marker_get_capabilities",
-    "marker_self_test",
-    "marker_get_health",
-    "marker_get_version",
-    "marker_plan_conversion",
-    "marker_plan_local_file",
-    "marker_plan_url",
-    "marker_convert_file",
-    "marker_convert_local_file",
-    "marker_convert_url",
-    "marker_submit_job",
-    "marker_submit_local_job",
-    "marker_submit_url_job",
-    "marker_read_output",
-    "marker_read_output_chunk",
-    "marker_get_output_manifest",
-    "marker_list_output_assets",
-    "marker_list_jobs",
-    "marker_get_job_status",
-    "marker_cancel_job",
-    "marker_delete_job",
-    "marker_list_settings",
-    "marker_get_setting",
-    "marker_set_setting",
-    "marker_delete_setting",
-]
+MCP_V2_TOOL_NAMES = list(SURFACE_MCP_V2_TOOL_NAMES)
+MCP_V1_TOOL_NAMES = list(SURFACE_MCP_V1_TOOL_NAMES)
+MCP_ALL_TOOL_NAMES = list(SURFACE_MCP_ALL_TOOL_NAMES)
+MCP_MINIMAL_TOOL_NAMES = list(SURFACE_MCP_MINIMAL_TOOL_NAMES)
+MCP_FULL_TOOL_NAMES = list(SURFACE_MCP_FULL_TOOL_NAMES)
+MCP_ADMIN_TOOL_NAMES = list(SURFACE_MCP_ADMIN_TOOL_NAMES)
+MCP_ACTIVE_TOOL_PROFILE = "minimal"
+MCP_ACTIVE_TOOL_NAMES = list(MCP_MINIMAL_TOOL_NAMES)
+_ALL_MCP_TOOLS: dict[str, Any] | None = None
 
-MCP_RESOURCE_URIS = [
-    "marker://capabilities",
-    "marker://health",
-    "marker://version",
-    "marker://jobs",
-    "marker://jobs/{job_id}",
-    "marker://jobs/{job_id}/manifest",
-    "marker://jobs/{job_id}/output",
-    "marker://jobs/{job_id}/assets",
-    "marker://outputs/{output_id}/manifest",
-    "marker://docs/agent-guide",
-    "marker://docs/options",
-    "marker://settings",
-]
-
-MCP_PROMPT_NAMES = [
-    "convert_for_rag",
-    "extract_tables_from_document",
-    "summarize_converted_document_with_citations",
-    "convert_and_compare_two_documents",
-    "batch_convert_folder",
-    "inspect_conversion_quality",
-    "convert_audio_to_meeting_notes",
-    "extract_figures_and_diagrams",
-]
+MCP_RESOURCE_URIS = list(SURFACE_MCP_RESOURCE_URIS)
+MCP_PROMPT_NAMES = list(SURFACE_MCP_PROMPT_NAMES)
 
 register_mcp_resources(
     mcp,
-    tool_names=MCP_V1_TOOL_NAMES,
+    tool_names=MCP_ACTIVE_TOOL_NAMES,
     resource_uris=MCP_RESOURCE_URIS,
     prompt_names=MCP_PROMPT_NAMES,
 )
@@ -300,70 +357,216 @@ register_mcp_prompts(mcp)
 
 
 @mcp.tool(
+    name="marker_capabilities",
+    title=tool_title("marker_capabilities"),
+    annotations=tool_annotations("marker_capabilities"),
+)
+async def marker_capabilities() -> CapabilitiesOutput:
+    """Canonical v2 capability tool."""
+
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
+    return active_profile_capabilities()
+
+
+@mcp.tool(
+    name="marker_plan",
+    title=tool_title("marker_plan"),
+    annotations=tool_annotations("marker_plan"),
+)
+async def marker_plan(
+    source: SourceParam,
+    size: SizeParam = 0,
+    output_format: OutputFormatParam = "markdown",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    force_ocr: Annotated[bool, Field(description="Force OCR during planning and conversion.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> PlanOutput:
+    """Canonical v2 planning tool using one source object."""
+
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=False,
+        extra_options_json=extra_options_json,
+    )
+    options.force_ocr = force_ocr
+    if source.kind == "url":
+        url = _required_source_value(source.url, "source.url")
+        assert_safe_source_url(url)
+        filename = Path(unquote(urlparse(url).path)).name or "document"
+        return await plan_conversion(filename=filename, size=size, options=options)
+    return await plan_conversion(
+        local_file_path=_required_source_value(source.path, "source.path"),
+        size=size,
+        options=options,
+    )
+
+
+@mcp.tool(
+    name="marker_convert",
+    title=tool_title("marker_convert"),
+    annotations=tool_annotations("marker_convert"),
+)
+async def marker_convert(
+    ctx: Context,
+    source: SourceParam,
+    output_dir: DirParam = "",
+    output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
+    output_format: OutputFormatParam = "markdown",
+    max_chars: PreviewCharsParam = 20_000,
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> ConvertOutput:
+    """Canonical v2 conversion tool using one source object."""
+
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    roots = await _client_workspace_roots(ctx)
+    local_file_path, source_url = _source_to_agent_kwargs(source)
+    with scoped_client_workspace_roots(roots):
+        result = await convert_document(
+            local_file_path=local_file_path,
+            source_url=source_url,
+            output_dir=_none_if_blank(output_dir),
+            output_path=_none_if_blank(output_path),
+            overwrite=overwrite,
+            max_chars=max_chars,
+            options=options,
+        )
+    return _with_output_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_submit",
+    title=tool_title("marker_submit"),
+    annotations=tool_annotations("marker_submit"),
+)
+async def marker_submit(
+    ctx: Context,
+    source: SourceParam,
+    output_dir: DirParam = "",
+    output_format: OutputFormatParam = "markdown",
+    conversion_profile: ProfileParam = "",
+    image_handling_mode: ImageModeParam = "extraction",
+    allow_cloud_vlm: Annotated[bool, Field(description="Allow cloud VLM calls for image understanding. Keep false unless user permits.", examples=[False])] = False,
+    extra_options_json: JsonOptionsParam = "",
+) -> SubmitJobOutput:
+    """Canonical v2 async job submission tool using one source object."""
+
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
+    options = _split_conversion_options(
+        output_format=output_format,
+        conversion_profile=conversion_profile,
+        image_handling_mode=image_handling_mode,
+        allow_cloud_vlm=allow_cloud_vlm,
+        extra_options_json=extra_options_json,
+    )
+    local_file_path, source_url = _source_to_agent_kwargs(source)
+    roots = await _client_workspace_roots(ctx)
+    with scoped_client_workspace_roots(roots):
+        result = await submit_conversion_job(
+            local_file_path=local_file_path,
+            source_url=source_url,
+            output_dir=_none_if_blank(output_dir),
+            options=options,
+        )
+    return _with_job_resource_links(result)
+
+
+@mcp.tool(
+    name="marker_job_status",
+    title=tool_title("marker_job_status"),
+    annotations=tool_annotations("marker_job_status"),
+)
+async def marker_job_status(
+    job_id: JobIdParam,
+    include_result_text: Annotated[bool, Field(description="Include full result text when available.", examples=[False])] = False,
+    max_chars: PreviewCharsParam = 20_000,
+) -> JobStatusOutput:
+    """Canonical v2 job status tool."""
+
+    require_mcp_scopes(SCOPE_JOBS_READ)
+    return _with_job_resource_links(
+        await get_job_status(
+            job_id,
+            include_result_text=include_result_text,
+            max_chars=max_chars,
+        )
+    )
+
+
+@mcp.tool(
+    name="marker_output_manifest",
+    title=tool_title("marker_output_manifest"),
+    annotations=tool_annotations("marker_output_manifest"),
+)
+def marker_output_manifest(
+    output_path: Annotated[str, Field(description="Output text path returned by marker_convert.", examples=["C:\\path\\to\\out\\document.md"])]
+) -> ManifestToolOutput:
+    """Canonical v2 output manifest tool."""
+
+    require_mcp_scopes(SCOPE_OUTPUTS_READ)
+    manifest_path, manifest = manifest_for_output_path(Path(output_path))
+    return {"manifest_path": str(manifest_path) if manifest_path else None, "manifest": manifest}
+
+
+@mcp.tool(
     name="marker_list_capabilities",
-    title="List Marker Capabilities",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_capabilities"),
+    annotations=tool_annotations("marker_list_capabilities"),
 )
 async def marker_list_capabilities() -> CapabilitiesOutput:
     """Return supported extensions, engines, output modes, and tool names."""
 
-    data = capabilities()
-    data["tools"] = MCP_V1_TOOL_NAMES
-    data["resources"] = MCP_RESOURCE_URIS
-    data["prompts"] = MCP_PROMPT_NAMES
-    return data
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
+    return active_profile_capabilities()
 
 
 @mcp.tool(
     name="marker_get_capabilities",
-    title="Get Marker Capabilities",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_capabilities"),
+    annotations=tool_annotations("marker_get_capabilities"),
 )
 async def marker_get_capabilities() -> CapabilitiesOutput:
     """Alias for marker_list_capabilities using v1 naming."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     return await marker_list_capabilities()
 
 
 @mcp.tool(
     name="marker_get_health",
-    title="Get Marker Health",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_health"),
+    annotations=tool_annotations("marker_get_health"),
 )
 async def marker_get_health() -> HealthOutput:
     """Return lightweight MCP server health."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     return {"service": SERVICE_NAME, "status": "ok"}
 
 
 @mcp.tool(
     name="marker_get_version",
-    title="Get Marker Version",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_version"),
+    annotations=tool_annotations("marker_get_version"),
 )
 async def marker_get_version() -> VersionOutput:
     """Return package/build and schema version information."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     return {
         "service": SERVICE_NAME,
         "version": os.getenv("MARKER_VERSION", "unknown"),
@@ -373,13 +576,8 @@ async def marker_get_version() -> VersionOutput:
 
 @mcp.tool(
     name="marker_plan_conversion",
-    title="Plan Marker Conversion",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_plan_conversion"),
+    annotations=tool_annotations("marker_plan_conversion"),
 )
 async def marker_plan_conversion(
     ctx: Context,
@@ -398,6 +596,7 @@ async def marker_plan_conversion(
     high-accuracy modes. This tool never writes output files.
     """
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     options = AgentConversionOptions(
         engine_override=_none_if_blank(engine_override),
         conversion_profile=_none_if_blank(conversion_profile),
@@ -417,13 +616,8 @@ async def marker_plan_conversion(
 
 @mcp.tool(
     name="marker_plan_local_file",
-    title="Plan Local File Conversion",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_plan_local_file"),
+    annotations=tool_annotations("marker_plan_local_file"),
 )
 async def marker_plan_local_file(
     ctx: Context,
@@ -436,6 +630,7 @@ async def marker_plan_local_file(
 ) -> PlanOutput:
     """Plan conversion for one local file inside allowed roots."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     options = AgentConversionOptions(
         engine_override=_none_if_blank(engine_override),
         conversion_profile=_none_if_blank(conversion_profile),
@@ -450,13 +645,8 @@ async def marker_plan_local_file(
 
 @mcp.tool(
     name="marker_plan_url",
-    title="Plan URL Conversion",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_plan_url"),
+    annotations=tool_annotations("marker_plan_url"),
 )
 async def marker_plan_url(
     source_url: UrlParam,
@@ -470,6 +660,7 @@ async def marker_plan_url(
 ) -> PlanOutput:
     """Plan conversion for a public URL without downloading it."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     assert_safe_source_url(source_url)
     parsed_name = Path(unquote(urlparse(source_url).path)).name or "document"
     options = AgentConversionOptions(
@@ -488,13 +679,8 @@ async def marker_plan_url(
 
 @mcp.tool(
     name="marker_convert_file",
-    title="Convert File With Marker",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_convert_file"),
+    annotations=tool_annotations("marker_convert_file"),
 )
 async def marker_convert_file(
     ctx: Context,
@@ -502,6 +688,7 @@ async def marker_convert_file(
     source_url: UrlParam = "",
     output_dir: DirParam = "",
     output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
     output_format: OutputFormatParam = "markdown",
     max_chars: PreviewCharsParam = 20_000,
     converter_cls: ConverterParam = "",
@@ -517,12 +704,36 @@ async def marker_convert_file(
     disable_image_extraction: Annotated[bool, Field(description="Disable image extraction from documents.", examples=[False])] = False,
     page_range: Annotated[str, Field(description="Page range for PDF conversion. Example: 1-3,5.", examples=["1-3"])] = "",
     lang: Annotated[str, Field(description="OCR language hint.", examples=["eng"])] = "",
-    audio_output_mode: Annotated[str, Field(description="Audio output mode: transcript, enhanced, notes, meeting_notes, or lecture_notes.", examples=["transcript"])] = "",
+    audio_output_mode: Annotated[str, Field(description=f"Audio output mode: {', '.join(AUDIO_OUTPUT_MODES)}.", examples=["transcript"])] = "",
     audio_model: Annotated[str, Field(description="Audio transcription model id.", examples=["base"])] = "",
     audio_vocabulary: TextParam = "",
     audio_context: TextParam = "",
     audio_low_confidence_threshold: ConfidenceParam = -1.0,
     audio_word_timestamps: Annotated[bool, Field(description="Include word-level timestamps for audio.", examples=[False])] = False,
+    audio_provider: AudioProviderParam = "",
+    audio_language: Annotated[str, Field(description="Spoken language hint for audio transcription.", examples=["en"])] = "",
+    audio_device: Annotated[str, Field(description="Local audio inference device such as cpu or cuda.", examples=["cpu"])] = "",
+    audio_compute_type: Annotated[str, Field(description="Local faster-whisper compute type such as int8 or float16.", examples=["int8"])] = "",
+    audio_beam_size: PositiveRowsParam = 0,
+    audio_vad_filter: OptionalBoolParam = None,
+    audio_diarization: Annotated[bool, Field(description="Request speaker diarization when provider supports it.", examples=[False])] = False,
+    audio_min_speakers: PositiveRowsParam = 0,
+    audio_max_speakers: PositiveRowsParam = 0,
+    audio_speaker_aliases_json: AudioAliasesParam = "",
+    audio_vocabulary_pack_ids: AudioListParam = "",
+    audio_confidence_heatmap: OptionalBoolParam = None,
+    audio_quality_diagnostics: OptionalBoolParam = None,
+    audio_review_required_on_low_confidence: Annotated[bool, Field(description="Flag output for review when low-confidence audio appears.", examples=[False])] = False,
+    audio_text_enhancement_enabled: Annotated[bool, Field(description="Enable deterministic source-bound audio text enhancement.", examples=[False])] = False,
+    audio_text_enhancement_strength: Annotated[int, Field(ge=0, le=5, description="Audio text enhancement strength from 0 to 5.", examples=[1])] = 0,
+    audio_structural_enhancement_enabled: Annotated[bool, Field(description="Restructure transcript into notes while preserving source references.", examples=[False])] = False,
+    audio_structural_enhancement_mode: Annotated[str, Field(description="Audio structure mode: auto, meeting_notes, lecture_notes, interview_qna, action_decision_log, or timeline.", examples=["meeting_notes"])] = "",
+    audio_enhancement_allow_cloud: Annotated[bool, Field(description="Explicit opt-in for cloud audio enhancement. No cloud enhancement adapter ships by default.", examples=[False])] = False,
+    audio_fusion_mode: Annotated[str, Field(description="Audio/context fusion mode such as audio_first or contradiction_audit.", examples=["audio_first"])] = "",
+    audio_contradiction_detection: Annotated[bool, Field(description="Detect possible contradictory spoken claims.", examples=[False])] = False,
+    audio_allow_cloud_stt: Annotated[bool, Field(description="Explicit opt-in to send audio to a cloud STT provider.", examples=[False])] = False,
+    audio_benchmark_compare: Annotated[bool, Field(description="Reserved for audio provider comparison; current builds reject it because no benchmark runner ships.", examples=[False])] = False,
+    audio_compare_providers: AudioListParam = "",
     disable_multiprocessing: Annotated[bool, Field(description="Disable multiprocessing during conversion.", examples=[False])] = False,
     strip_existing_ocr: Annotated[bool, Field(description="Strip existing OCR text before re-OCR.", examples=[False])] = False,
     redo_inline_math: Annotated[bool, Field(description="Reprocess inline math.", examples=[False])] = False,
@@ -543,9 +754,14 @@ async def marker_convert_file(
     vlm_batch_size: PositivePixelsParam = 0,
     max_batch_retries: OptionalDepthParam = -1,
     text_data_max_rows: PositiveRowsParam = 0,
+    chunking_strategy: Annotated[str, Field(description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title.", examples=["markdown_heading_blocks_v2"])] = "",
+    chunk_max_tokens: PositiveRowsParam = 0,
+    allow_chunking_fallback: Annotated[bool, Field(description="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2 when unavailable.", examples=[False])] = False,
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
+    archive_max_total_uncompressed_bytes: PositivePixelsParam = 0,
+    archive_max_compression_ratio: ArchiveCompressionRatioParam = 0.0,
     archive_max_depth: OptionalDepthParam = -1,
     archive_max_converted_children: PositiveRowsParam = 0,
     archive_recursive: OptionalBoolParam = None,
@@ -557,6 +773,7 @@ async def marker_convert_file(
     marker_read_output using output.text_path and the returned offsets.
     """
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = AgentConversionOptions(
         output_format=output_format,
         converter_cls=_none_if_blank(converter_cls),
@@ -582,6 +799,32 @@ async def marker_convert_file(
             else None
         ),
         audio_word_timestamps=audio_word_timestamps,
+        **_advanced_audio_options(
+            audio_provider=audio_provider,
+            audio_language=audio_language,
+            audio_device=audio_device,
+            audio_compute_type=audio_compute_type,
+            audio_beam_size=audio_beam_size,
+            audio_vad_filter=audio_vad_filter,
+            audio_diarization=audio_diarization,
+            audio_min_speakers=audio_min_speakers,
+            audio_max_speakers=audio_max_speakers,
+            audio_speaker_aliases_json=audio_speaker_aliases_json,
+            audio_vocabulary_pack_ids=audio_vocabulary_pack_ids,
+            audio_confidence_heatmap=audio_confidence_heatmap,
+            audio_quality_diagnostics=audio_quality_diagnostics,
+            audio_review_required_on_low_confidence=audio_review_required_on_low_confidence,
+            audio_text_enhancement_enabled=audio_text_enhancement_enabled,
+            audio_text_enhancement_strength=audio_text_enhancement_strength,
+            audio_structural_enhancement_enabled=audio_structural_enhancement_enabled,
+            audio_structural_enhancement_mode=audio_structural_enhancement_mode,
+            audio_enhancement_allow_cloud=audio_enhancement_allow_cloud,
+            audio_fusion_mode=audio_fusion_mode,
+            audio_contradiction_detection=audio_contradiction_detection,
+            audio_allow_cloud_stt=audio_allow_cloud_stt,
+            audio_benchmark_compare=audio_benchmark_compare,
+            audio_compare_providers=audio_compare_providers,
+        ),
         disable_multiprocessing=disable_multiprocessing,
         strip_existing_ocr=strip_existing_ocr,
         redo_inline_math=redo_inline_math,
@@ -606,9 +849,14 @@ async def marker_convert_file(
             ),
             **_agent_productivity_extra_options(
                 text_data_max_rows=text_data_max_rows,
+                chunking_strategy=chunking_strategy,
+                chunk_max_tokens=chunk_max_tokens,
+                allow_chunking_fallback=allow_chunking_fallback,
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
+                archive_max_total_uncompressed_bytes=archive_max_total_uncompressed_bytes,
+                archive_max_compression_ratio=archive_max_compression_ratio,
                 archive_max_depth=archive_max_depth,
                 archive_max_converted_children=archive_max_converted_children,
                 archive_recursive=archive_recursive,
@@ -623,6 +871,7 @@ async def marker_convert_file(
             source_url=_none_if_blank(source_url),
             output_dir=_none_if_blank(output_dir),
             output_path=_none_if_blank(output_path),
+            overwrite=overwrite,
             max_chars=max_chars,
             options=options,
         )
@@ -631,19 +880,15 @@ async def marker_convert_file(
 
 @mcp.tool(
     name="marker_convert_local_file",
-    title="Convert Local File With Marker",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_convert_local_file"),
+    annotations=tool_annotations("marker_convert_local_file"),
 )
 async def marker_convert_local_file(
     ctx: Context,
     local_file_path: PathParam,
     output_dir: DirParam = "",
     output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
     output_format: OutputFormatParam = "markdown",
     max_chars: PreviewCharsParam = 20_000,
     conversion_profile: ProfileParam = "",
@@ -653,6 +898,7 @@ async def marker_convert_local_file(
 ) -> ConvertOutput:
     """Convert one local file inside allowed roots."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -666,6 +912,7 @@ async def marker_convert_local_file(
             local_file_path=local_file_path,
             output_dir=_none_if_blank(output_dir),
             output_path=_none_if_blank(output_path),
+            overwrite=overwrite,
             max_chars=max_chars,
             options=options,
         )
@@ -674,18 +921,14 @@ async def marker_convert_local_file(
 
 @mcp.tool(
     name="marker_convert_url",
-    title="Convert URL With Marker",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_convert_url"),
+    annotations=tool_annotations("marker_convert_url"),
 )
 async def marker_convert_url(
     source_url: UrlParam,
     output_dir: DirParam = "",
     output_path: OutputPathParam = "",
+    overwrite: OverwriteParam = False,
     output_format: OutputFormatParam = "markdown",
     max_chars: PreviewCharsParam = 20_000,
     conversion_profile: ProfileParam = "",
@@ -695,6 +938,7 @@ async def marker_convert_url(
 ) -> ConvertOutput:
     """Download a safe public URL and convert it."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -706,6 +950,7 @@ async def marker_convert_url(
         source_url=source_url,
         output_dir=_none_if_blank(output_dir),
         output_path=_none_if_blank(output_path),
+        overwrite=overwrite,
         max_chars=max_chars,
         options=options,
     )
@@ -714,13 +959,8 @@ async def marker_convert_url(
 
 @mcp.tool(
     name="marker_submit_job",
-    title="Submit Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_submit_job"),
+    annotations=tool_annotations("marker_submit_job"),
 )
 async def marker_submit_job(
     ctx: Context,
@@ -741,20 +981,49 @@ async def marker_submit_job(
     disable_image_extraction: Annotated[bool, Field(description="Disable image extraction from documents.", examples=[False])] = False,
     page_range: Annotated[str, Field(description="Page range for PDF conversion. Example: 1-3,5.", examples=["1-3"])] = "",
     lang: Annotated[str, Field(description="OCR language hint.", examples=["eng"])] = "",
-    audio_output_mode: Annotated[str, Field(description="Audio output mode: transcript, enhanced, notes, meeting_notes, or lecture_notes.", examples=["transcript"])] = "",
+    audio_output_mode: Annotated[str, Field(description=f"Audio output mode: {', '.join(AUDIO_OUTPUT_MODES)}.", examples=["transcript"])] = "",
     audio_model: Annotated[str, Field(description="Audio transcription model id.", examples=["base"])] = "",
     audio_vocabulary: TextParam = "",
     audio_context: TextParam = "",
     audio_low_confidence_threshold: ConfidenceParam = -1.0,
     audio_word_timestamps: Annotated[bool, Field(description="Include word-level timestamps for audio.", examples=[False])] = False,
+    audio_provider: AudioProviderParam = "",
+    audio_language: Annotated[str, Field(description="Spoken language hint for audio transcription.", examples=["en"])] = "",
+    audio_device: Annotated[str, Field(description="Local audio inference device such as cpu or cuda.", examples=["cpu"])] = "",
+    audio_compute_type: Annotated[str, Field(description="Local faster-whisper compute type such as int8 or float16.", examples=["int8"])] = "",
+    audio_beam_size: PositiveRowsParam = 0,
+    audio_vad_filter: OptionalBoolParam = None,
+    audio_diarization: Annotated[bool, Field(description="Request speaker diarization when provider supports it.", examples=[False])] = False,
+    audio_min_speakers: PositiveRowsParam = 0,
+    audio_max_speakers: PositiveRowsParam = 0,
+    audio_speaker_aliases_json: AudioAliasesParam = "",
+    audio_vocabulary_pack_ids: AudioListParam = "",
+    audio_confidence_heatmap: OptionalBoolParam = None,
+    audio_quality_diagnostics: OptionalBoolParam = None,
+    audio_review_required_on_low_confidence: Annotated[bool, Field(description="Flag output for review when low-confidence audio appears.", examples=[False])] = False,
+    audio_text_enhancement_enabled: Annotated[bool, Field(description="Enable deterministic source-bound audio text enhancement.", examples=[False])] = False,
+    audio_text_enhancement_strength: Annotated[int, Field(ge=0, le=5, description="Audio text enhancement strength from 0 to 5.", examples=[1])] = 0,
+    audio_structural_enhancement_enabled: Annotated[bool, Field(description="Restructure transcript into notes while preserving source references.", examples=[False])] = False,
+    audio_structural_enhancement_mode: Annotated[str, Field(description="Audio structure mode: auto, meeting_notes, lecture_notes, interview_qna, action_decision_log, or timeline.", examples=["meeting_notes"])] = "",
+    audio_enhancement_allow_cloud: Annotated[bool, Field(description="Explicit opt-in for cloud audio enhancement. No cloud enhancement adapter ships by default.", examples=[False])] = False,
+    audio_fusion_mode: Annotated[str, Field(description="Audio/context fusion mode such as audio_first or contradiction_audit.", examples=["audio_first"])] = "",
+    audio_contradiction_detection: Annotated[bool, Field(description="Detect possible contradictory spoken claims.", examples=[False])] = False,
+    audio_allow_cloud_stt: Annotated[bool, Field(description="Explicit opt-in to send audio to a cloud STT provider.", examples=[False])] = False,
+    audio_benchmark_compare: Annotated[bool, Field(description="Reserved for audio provider comparison; current builds reject it because no benchmark runner ships.", examples=[False])] = False,
+    audio_compare_providers: AudioListParam = "",
     disable_multiprocessing: Annotated[bool, Field(description="Disable multiprocessing during conversion.", examples=[False])] = False,
     strip_existing_ocr: Annotated[bool, Field(description="Strip existing OCR text before re-OCR.", examples=[False])] = False,
     redo_inline_math: Annotated[bool, Field(description="Reprocess inline math.", examples=[False])] = False,
     debug: Annotated[bool, Field(description="Enable debug conversion artifacts/logging.", examples=[False])] = False,
     text_data_max_rows: PositiveRowsParam = 0,
+    chunking_strategy: Annotated[str, Field(description="Chunking strategy for derived chunks: markdown_heading_blocks_v2 or unstructured_by_title.", examples=["markdown_heading_blocks_v2"])] = "",
+    chunk_max_tokens: PositiveRowsParam = 0,
+    allow_chunking_fallback: Annotated[bool, Field(description="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2 when unavailable.", examples=[False])] = False,
     archive_max_files: PositiveRowsParam = 0,
     archive_inline_bytes: PositivePixelsParam = 0,
     archive_max_child_bytes: PositivePixelsParam = 0,
+    archive_max_total_uncompressed_bytes: PositivePixelsParam = 0,
+    archive_max_compression_ratio: ArchiveCompressionRatioParam = 0.0,
     archive_max_depth: OptionalDepthParam = -1,
     archive_max_converted_children: PositiveRowsParam = 0,
     archive_recursive: OptionalBoolParam = None,
@@ -766,6 +1035,7 @@ async def marker_submit_job(
     history/status parity matters. Poll marker_get_job_status afterwards.
     """
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = AgentConversionOptions(
         output_format=output_format,
         converter_cls=_none_if_blank(converter_cls),
@@ -791,6 +1061,32 @@ async def marker_submit_job(
             else None
         ),
         audio_word_timestamps=audio_word_timestamps,
+        **_advanced_audio_options(
+            audio_provider=audio_provider,
+            audio_language=audio_language,
+            audio_device=audio_device,
+            audio_compute_type=audio_compute_type,
+            audio_beam_size=audio_beam_size,
+            audio_vad_filter=audio_vad_filter,
+            audio_diarization=audio_diarization,
+            audio_min_speakers=audio_min_speakers,
+            audio_max_speakers=audio_max_speakers,
+            audio_speaker_aliases_json=audio_speaker_aliases_json,
+            audio_vocabulary_pack_ids=audio_vocabulary_pack_ids,
+            audio_confidence_heatmap=audio_confidence_heatmap,
+            audio_quality_diagnostics=audio_quality_diagnostics,
+            audio_review_required_on_low_confidence=audio_review_required_on_low_confidence,
+            audio_text_enhancement_enabled=audio_text_enhancement_enabled,
+            audio_text_enhancement_strength=audio_text_enhancement_strength,
+            audio_structural_enhancement_enabled=audio_structural_enhancement_enabled,
+            audio_structural_enhancement_mode=audio_structural_enhancement_mode,
+            audio_enhancement_allow_cloud=audio_enhancement_allow_cloud,
+            audio_fusion_mode=audio_fusion_mode,
+            audio_contradiction_detection=audio_contradiction_detection,
+            audio_allow_cloud_stt=audio_allow_cloud_stt,
+            audio_benchmark_compare=audio_benchmark_compare,
+            audio_compare_providers=audio_compare_providers,
+        ),
         disable_multiprocessing=disable_multiprocessing,
         strip_existing_ocr=strip_existing_ocr,
         redo_inline_math=redo_inline_math,
@@ -798,9 +1094,14 @@ async def marker_submit_job(
         extra_options={
             **_agent_productivity_extra_options(
                 text_data_max_rows=text_data_max_rows,
+                chunking_strategy=chunking_strategy,
+                chunk_max_tokens=chunk_max_tokens,
+                allow_chunking_fallback=allow_chunking_fallback,
                 archive_max_files=archive_max_files,
                 archive_inline_bytes=archive_inline_bytes,
                 archive_max_child_bytes=archive_max_child_bytes,
+                archive_max_total_uncompressed_bytes=archive_max_total_uncompressed_bytes,
+                archive_max_compression_ratio=archive_max_compression_ratio,
                 archive_max_depth=archive_max_depth,
                 archive_max_converted_children=archive_max_converted_children,
                 archive_recursive=archive_recursive,
@@ -821,13 +1122,8 @@ async def marker_submit_job(
 
 @mcp.tool(
     name="marker_submit_local_job",
-    title="Submit Local Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_submit_local_job"),
+    annotations=tool_annotations("marker_submit_local_job"),
 )
 async def marker_submit_local_job(
     ctx: Context,
@@ -841,6 +1137,7 @@ async def marker_submit_local_job(
 ) -> SubmitJobOutput:
     """Submit an async conversion job for one local file inside allowed roots."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -860,13 +1157,8 @@ async def marker_submit_local_job(
 
 @mcp.tool(
     name="marker_submit_url_job",
-    title="Submit URL Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+    title=tool_title("marker_submit_url_job"),
+    annotations=tool_annotations("marker_submit_url_job"),
 )
 async def marker_submit_url_job(
     source_url: UrlParam,
@@ -879,6 +1171,7 @@ async def marker_submit_url_job(
 ) -> SubmitJobOutput:
     """Submit an async conversion job for a safe public URL."""
 
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
     options = _split_conversion_options(
         output_format=output_format,
         conversion_profile=conversion_profile,
@@ -896,13 +1189,8 @@ async def marker_submit_url_job(
 
 @mcp.tool(
     name="marker_read_output",
-    title="Read Marker Output",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_read_output"),
+    annotations=tool_annotations("marker_read_output"),
 )
 async def marker_read_output(
     output_path: Annotated[str, Field(description="Path returned as output.text_path by marker_convert_file or marker_get_job_status.", examples=["C:\\path\\to\\document.md"])],
@@ -917,34 +1205,41 @@ async def marker_read_output(
 
 @mcp.tool(
     name="marker_read_output_chunk",
-    title="Read Marker Output Chunk",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_read_output_chunk"),
+    annotations=tool_annotations("marker_read_output_chunk"),
 )
 async def marker_read_output_chunk(
-    output_path: Annotated[str, Field(description="Path returned as output.text_path by conversion/job status.", examples=["C:\\path\\to\\document.md"])],
+    output_path: Annotated[str, Field(description="Path returned as output.text_path by conversion/job status. For semantic mode, point this at the chunks .json output.", examples=["C:\\path\\to\\document.md"])],
+    mode: ChunkModeParam = "offset",
+    chunk_index: ChunkIndexParam = 0,
     offset: OffsetParam = 0,
     limit: LimitParam = 20_000,
 ) -> ReadOutputResult:
-    """Read one bounded chunk from a converted output file."""
+    """Read one chunk from a converted output file.
+
+    ``mode="offset"`` (default, backward compatible) returns a bounded
+    character-offset text page — useful for streaming large outputs.
+
+    ``mode="semantic"`` reads the Nth semantic chunk (``chunk_index``) from a
+    persisted ``marker.chunks.v1`` envelope, returning structural metadata
+    (heading path, line span, token estimate). Use this for RAG retrieval
+    when the conversion produced a chunks artifact.
+    """
 
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
-    return read_output(output_path, offset=offset, limit=limit)
+    return read_output_chunk(
+        output_path,
+        mode=mode,
+        chunk_index=chunk_index,
+        offset=offset,
+        limit=limit,
+    )
 
 
 @mcp.tool(
     name="marker_get_output_manifest",
-    title="Get Marker Output Manifest",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_output_manifest"),
+    annotations=tool_annotations("marker_get_output_manifest"),
 )
 async def marker_get_output_manifest(
     output_path: Annotated[str, Field(description="Output text path or manifest path.", examples=["C:\\path\\to\\document.md"])],
@@ -952,19 +1247,14 @@ async def marker_get_output_manifest(
     """Read the Marker output manifest associated with an output path."""
 
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
-    manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
+    manifest_path, manifest = manifest_for_output_path(Path(output_path))
     return {"manifest_path": str(manifest_path.resolve()) if manifest_path else None, "manifest": manifest}
 
 
 @mcp.tool(
     name="marker_list_output_assets",
-    title="List Marker Output Assets",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_output_assets"),
+    annotations=tool_annotations("marker_list_output_assets"),
 )
 async def marker_list_output_assets(
     output_path: Annotated[str, Field(description="Output text path or manifest path.", examples=["C:\\path\\to\\document.md"])],
@@ -972,7 +1262,7 @@ async def marker_list_output_assets(
     """List sidecar assets recorded in a Marker output manifest."""
 
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
-    manifest_path, manifest = _manifest_for_output_path(Path(output_path).expanduser())
+    manifest_path, manifest = manifest_for_output_path(Path(output_path))
     output = manifest.get("output") if isinstance(manifest, dict) else {}
     assets = output.get("assets", []) if isinstance(output, dict) else []
     return {"manifest_path": str(manifest_path.resolve()) if manifest_path else None, "assets": assets}
@@ -980,13 +1270,8 @@ async def marker_list_output_assets(
 
 @mcp.tool(
     name="marker_list_jobs",
-    title="List Marker Jobs",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_jobs"),
+    annotations=tool_annotations("marker_list_jobs"),
 )
 async def marker_list_jobs(
     page: PageParam = 1,
@@ -994,18 +1279,14 @@ async def marker_list_jobs(
 ) -> JobsOutput:
     """List conversion history with pagination and without full result text."""
 
+    require_mcp_scopes(SCOPE_JOBS_READ)
     return await list_jobs(page=page, page_size=page_size)
 
 
 @mcp.tool(
     name="marker_get_job_status",
-    title="Get Marker Job Status",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_job_status"),
+    annotations=tool_annotations("marker_get_job_status"),
 )
 async def marker_get_job_status(
     job_id: JobIdParam,
@@ -1014,6 +1295,7 @@ async def marker_get_job_status(
 ) -> JobStatusOutput:
     """Get one job status, metadata, paths, and optional bounded result text."""
 
+    require_mcp_scopes(SCOPE_JOBS_READ)
     result = await get_job_status(
         job_id,
         include_result_text=include_result_text,
@@ -1024,53 +1306,52 @@ async def marker_get_job_status(
 
 @mcp.tool(
     name="marker_cancel_job",
-    title="Cancel Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_cancel_job"),
+    annotations=tool_annotations("marker_cancel_job"),
 )
 async def marker_cancel_job(
     job_id: JobIdParam,
 ) -> CancelJobOutput:
-    """Cancel one job best-effort by removing the job record and keeping files."""
+    """Cancel one job best-effort without deleting its job record or files."""
 
     require_mcp_scopes(SCOPE_JOBS_WRITE)
-    result = await delete_job(job_id, delete_files=False)
-    return {"status": result["status"], "job_id": job_id, "cancelled": True}
+    return await cancel_job(job_id)
 
 
 @mcp.tool(
     name="marker_delete_job",
-    title="Delete Marker Job",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_delete_job"),
+    annotations=tool_annotations("marker_delete_job"),
 )
 async def marker_delete_job(
     job_id: JobIdParam,
     delete_files: Annotated[bool, Field(description="Also delete upload/output files associated with job.", examples=[True])] = True,
+    force: Annotated[bool, Field(description="Explicitly cancel and delete a pending/running job. Leave false to delete terminal history only.", examples=[False])] = False,
 ) -> DeleteJobOutput:
-    """Cancel/delete one job and optionally remove its upload/output files."""
+    """Delete one terminal job, or force-delete a live job explicitly."""
 
     require_mcp_scopes(SCOPE_JOBS_WRITE)
-    return await delete_job(job_id, delete_files=delete_files)
+    return await delete_job(job_id, delete_files=delete_files, force=force)
+
+
+@mcp.tool(
+    name="marker_purge_job_files",
+    title=tool_title("marker_purge_job_files"),
+    annotations=tool_annotations("marker_purge_job_files"),
+)
+async def marker_purge_job_files(
+    job_id: JobIdParam,
+) -> PurgeJobFilesOutput:
+    """Remove upload/output files for a terminal job without deleting history."""
+
+    require_mcp_scopes(SCOPE_JOBS_WRITE)
+    return await purge_job_files(job_id)
 
 
 @mcp.tool(
     name="marker_list_settings",
-    title="List Marker Settings",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_list_settings"),
+    annotations=tool_annotations("marker_list_settings"),
 )
 async def marker_list_settings(
     category: CategoryParam = "",
@@ -1083,32 +1364,23 @@ async def marker_list_settings(
 
 @mcp.tool(
     name="marker_get_setting",
-    title="Get Marker Setting",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_get_setting"),
+    annotations=tool_annotations("marker_get_setting"),
 )
 async def marker_get_setting(
     key: SettingKeyParam,
+    category: Annotated[str, Field(description="Optional settings category guard.", examples=["llm"])] = "",
 ) -> SettingOutput:
     """Read one persisted setting with sensitive values masked."""
 
     require_mcp_scopes(SCOPE_SETTINGS_READ)
-    return await get_setting(key)
+    return await get_setting(key, category=_none_if_blank(category))
 
 
 @mcp.tool(
     name="marker_set_setting",
-    title="Set Marker Setting",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_set_setting"),
+    annotations=tool_annotations("marker_set_setting"),
 )
 async def marker_set_setting(
     key: SettingKeyParam,
@@ -1123,46 +1395,40 @@ async def marker_set_setting(
 
 @mcp.tool(
     name="marker_delete_setting",
-    title="Delete Marker Setting",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_delete_setting"),
+    annotations=tool_annotations("marker_delete_setting"),
 )
 async def marker_delete_setting(
     key: SettingKeyParam,
+    category: Annotated[str, Field(description="Optional settings category guard.", examples=["llm"])] = "",
 ) -> DeleteSettingOutput:
     """Delete one persisted setting key."""
 
     require_mcp_scopes(SCOPE_SETTINGS_WRITE)
-    return await delete_setting(key)
+    return await delete_setting(key, category=_none_if_blank(category))
 
 
 @mcp.tool(
     name="marker_self_test",
-    title="Self-Test Marker MCP",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    title=tool_title("marker_self_test"),
+    annotations=tool_annotations("marker_self_test"),
 )
 async def marker_self_test(
     include_conversion: Annotated[bool, Field(description="Run deterministic conversion smoke check.", examples=[True])] = True,
 ) -> SelfTestOutput:
     """Report expected tools and optionally verify a real deterministic conversion."""
 
+    require_mcp_scopes(SCOPE_CAPABILITIES_READ)
     data = await self_test(include_conversion=include_conversion)
     registered = await mcp.list_tools()
     resources = await mcp.list_resources()
     templates = await mcp.list_resource_templates()
     prompts = await mcp.list_prompts()
-    data["expected_tools"] = MCP_V1_TOOL_NAMES
+    data["expected_tools"] = list(MCP_ACTIVE_TOOL_NAMES)
+    data["tool_profile"] = MCP_ACTIVE_TOOL_PROFILE
+    data["settings_write_enabled"] = mcp_settings_write_enabled()
     data["registered_tools"] = sorted(tool.name for tool in registered)
-    data["tools_ok"] = sorted(MCP_V1_TOOL_NAMES) == data["registered_tools"]
+    data["tools_ok"] = sorted(MCP_ACTIVE_TOOL_NAMES) == data["registered_tools"]
     data["expected_resources"] = MCP_RESOURCE_URIS
     data["registered_resources"] = sorted(
         [str(resource.uri) for resource in resources]
@@ -1196,13 +1462,71 @@ async def marker_self_test(
     return data
 
 
+def tool_names_for_profile(profile: str | None = None) -> list[str]:
+    normalized = (profile or os.getenv("MARKER_MCP_TOOL_PROFILE") or "minimal").strip().lower()
+    return surface_tool_names_for_profile(
+        normalized,
+        settings_write_enabled=mcp_settings_write_enabled(),
+    )
+
+
+def mcp_settings_write_enabled() -> bool:
+    return os.getenv("MARKER_MCP_ENABLE_SETTINGS_WRITE", "false").strip().lower() in {
+        "true",
+        "1",
+        "yes",
+    }
+
+
+def configure_mcp_tool_profile(profile: str | None = None) -> str:
+    """Apply MCP tool profile to the live FastMCP tool registry."""
+
+    global MCP_ACTIVE_TOOL_PROFILE, _ALL_MCP_TOOLS
+    normalized = (profile or os.getenv("MARKER_MCP_TOOL_PROFILE") or "minimal").strip().lower()
+    names = tool_names_for_profile(normalized)
+    manager = getattr(mcp, "_tool_manager", None)
+    tools = getattr(manager, "_tools", None)
+    if not isinstance(tools, dict):  # pragma: no cover - depends on FastMCP internals
+        raise RuntimeError("FastMCP tool manager does not expose a mutable tool registry")
+    if _ALL_MCP_TOOLS is None:
+        _ALL_MCP_TOOLS = dict(tools)
+    missing = [name for name in names if name not in _ALL_MCP_TOOLS]
+    if missing:
+        raise RuntimeError(f"MCP tool profile '{normalized}' references missing tools: {missing}")
+    tools.clear()
+    tools.update({name: _ALL_MCP_TOOLS[name] for name in names})
+    MCP_ACTIVE_TOOL_NAMES[:] = names
+    MCP_ACTIVE_TOOL_PROFILE = normalized
+    return normalized
+
+
+configure_mcp_tool_profile()
+
+
+def active_profile_capabilities() -> dict[str, Any]:
+    """Return capabilities scoped to the currently exposed MCP profile."""
+
+    data = capabilities()
+    data["tools"] = list(MCP_ACTIVE_TOOL_NAMES)
+    data["resources"] = MCP_RESOURCE_URIS
+    data["prompts"] = MCP_PROMPT_NAMES
+    if "marker_read_output_chunk" in MCP_ACTIVE_TOOL_NAMES:
+        data["agent_guidance"] = (
+            f"{data.get('agent_guidance', '')} This MCP profile also exposes "
+            "marker_read_output_chunk with mode='semantic' for chunk-by-index reads."
+        ).strip()
+    return data
+
+
 def run(
     *,
     transport: str = "stdio",
     host: str = "127.0.0.1",
     port: int = 8000,
     auth_token: str | None = None,
+    tool_profile: str | None = None,
 ) -> None:
+    configure_mcp_tool_profile(tool_profile)
     if transport == "streamable-http":
         token = auth_token or os.getenv("MARKER_MCP_AUTH_TOKEN", "").strip()
         if not _is_loopback_host(host) and not token:
@@ -1228,6 +1552,19 @@ def run(
     mcp.run(transport=transport)
 
 
+def _source_to_agent_kwargs(source: SourceInput) -> tuple[str | None, str | None]:
+    if source.kind == "url":
+        return None, _required_source_value(source.url, "source.url")
+    return _required_source_value(source.path, "source.path"), None
+
+
+def _required_source_value(value: str, field_name: str) -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} is required")
+    return cleaned
+
+
 def _none_if_blank(value: str) -> str | None:
     cleaned = value.strip()
     return cleaned or None
@@ -1248,32 +1585,6 @@ def _split_conversion_options(
         allow_cloud_vlm=allow_cloud_vlm,
         extra_options=parse_extra_options_json(extra_options_json),
     )
-
-
-def _manifest_for_output_path(path: Path) -> tuple[Path | None, dict[str, Any]]:
-    candidates = [path]
-    if path.suffix != ".json":
-        candidates.append(path.with_name(f"{path.stem}.marker.json"))
-    if path.is_dir():
-        candidates.extend(sorted(path.glob("*.marker.json")))
-    for candidate in candidates:
-        if not candidate.is_file():
-            continue
-        try:
-            manifest = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(manifest, dict) and manifest.get("schema_version") == "marker.output_manifest.v1":
-            return candidate, manifest
-    return None, {}
-
-
-def _output_text_path_from_manifest(manifest: dict[str, Any]) -> str | None:
-    output = manifest.get("output") if isinstance(manifest, dict) else None
-    if not isinstance(output, dict):
-        return None
-    text_path = output.get("text_path")
-    return str(text_path) if text_path else None
 
 
 def _with_output_resource_links(result: dict[str, Any]) -> dict[str, Any]:
@@ -1305,6 +1616,110 @@ def _with_job_resource_links(result: dict[str, Any]) -> dict[str, Any]:
     }
     result["resource_links"] = links
     return result
+
+
+def _advanced_audio_options(
+    *,
+    audio_provider: str,
+    audio_language: str,
+    audio_device: str,
+    audio_compute_type: str,
+    audio_beam_size: int,
+    audio_vad_filter: bool | None,
+    audio_diarization: bool,
+    audio_min_speakers: int,
+    audio_max_speakers: int,
+    audio_speaker_aliases_json: str,
+    audio_vocabulary_pack_ids: str,
+    audio_confidence_heatmap: bool | None,
+    audio_quality_diagnostics: bool | None,
+    audio_review_required_on_low_confidence: bool,
+    audio_text_enhancement_enabled: bool,
+    audio_text_enhancement_strength: int,
+    audio_structural_enhancement_enabled: bool,
+    audio_structural_enhancement_mode: str,
+    audio_enhancement_allow_cloud: bool,
+    audio_fusion_mode: str,
+    audio_contradiction_detection: bool,
+    audio_allow_cloud_stt: bool,
+    audio_benchmark_compare: bool,
+    audio_compare_providers: str,
+) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    if audio_provider:
+        options["audio_provider"] = audio_provider.strip()
+    if audio_language:
+        options["audio_language"] = audio_language.strip()
+    if audio_device:
+        options["audio_device"] = audio_device.strip()
+    if audio_compute_type:
+        options["audio_compute_type"] = audio_compute_type.strip()
+    if audio_beam_size > 0:
+        options["audio_beam_size"] = audio_beam_size
+    if audio_vad_filter is not None:
+        options["audio_vad_filter"] = audio_vad_filter
+    if audio_diarization:
+        options["audio_diarization"] = True
+    if audio_min_speakers > 0:
+        options["audio_min_speakers"] = audio_min_speakers
+    if audio_max_speakers > 0:
+        options["audio_max_speakers"] = audio_max_speakers
+    aliases = _json_string_map(audio_speaker_aliases_json)
+    if aliases:
+        options["audio_speaker_aliases"] = aliases
+    pack_ids = _string_list(audio_vocabulary_pack_ids)
+    if pack_ids:
+        options["audio_vocabulary_pack_ids"] = pack_ids
+    if audio_confidence_heatmap is not None:
+        options["audio_confidence_heatmap"] = audio_confidence_heatmap
+    if audio_quality_diagnostics is not None:
+        options["audio_quality_diagnostics"] = audio_quality_diagnostics
+    if audio_review_required_on_low_confidence:
+        options["audio_review_required_on_low_confidence"] = True
+    if audio_text_enhancement_enabled:
+        options["audio_text_enhancement_enabled"] = True
+    if audio_text_enhancement_strength:
+        options["audio_text_enhancement_strength"] = audio_text_enhancement_strength
+    if audio_structural_enhancement_enabled:
+        options["audio_structural_enhancement_enabled"] = True
+    if audio_structural_enhancement_mode:
+        options["audio_structural_enhancement_mode"] = audio_structural_enhancement_mode.strip()
+    if audio_enhancement_allow_cloud:
+        options["audio_enhancement_allow_cloud"] = True
+    if audio_fusion_mode:
+        options["audio_fusion_mode"] = audio_fusion_mode.strip()
+    if audio_contradiction_detection:
+        options["audio_contradiction_detection"] = True
+    if audio_allow_cloud_stt:
+        options["audio_allow_cloud_stt"] = True
+    if audio_benchmark_compare:
+        options["audio_benchmark_compare"] = True
+    compare_providers = _string_list(audio_compare_providers)
+    if compare_providers:
+        options["audio_compare_providers"] = compare_providers
+    return options
+
+
+def _json_string_map(raw: str) -> dict[str, str]:
+    if not raw.strip():
+        return {}
+    parsed = parse_extra_options_json(raw)
+    return {
+        str(key).strip(): str(value).strip()
+        for key, value in parsed.items()
+        if str(key).strip() and str(value).strip()
+    }
+
+
+def _string_list(raw: str) -> list[str]:
+    if not raw.strip():
+        return []
+    stripped = raw.strip()
+    if stripped.startswith("["):
+        data = parse_extra_options_json(f'{{"items": {stripped}}}').get("items")
+        if isinstance(data, list):
+            return [str(item).strip() for item in data if str(item).strip()]
+    return [part.strip() for part in stripped.split(",") if part.strip()]
 
 
 async def _client_workspace_roots(ctx: Context | None) -> list[Path] | None:
@@ -1415,9 +1830,14 @@ def _image_understanding_extra_options(
 def _agent_productivity_extra_options(
     *,
     text_data_max_rows: int = 0,
+    chunking_strategy: str = "",
+    chunk_max_tokens: int = 0,
+    allow_chunking_fallback: bool = False,
     archive_max_files: int = 0,
     archive_inline_bytes: int = 0,
     archive_max_child_bytes: int = 0,
+    archive_max_total_uncompressed_bytes: int = 0,
+    archive_max_compression_ratio: float = 0.0,
     archive_max_depth: int = -1,
     archive_max_converted_children: int = 0,
     archive_recursive: bool | None = None,
@@ -1427,12 +1847,22 @@ def _agent_productivity_extra_options(
         options["archive_recursive"] = archive_recursive
     if text_data_max_rows > 0:
         options["text_data_max_rows"] = text_data_max_rows
+    if chunking_strategy:
+        options["chunking_strategy"] = chunking_strategy
+    if chunk_max_tokens > 0:
+        options["chunk_max_tokens"] = chunk_max_tokens
+    if allow_chunking_fallback:
+        options["allow_chunking_fallback"] = True
     if archive_max_files > 0:
         options["archive_max_files"] = archive_max_files
     if archive_inline_bytes > 0:
         options["archive_inline_bytes"] = archive_inline_bytes
     if archive_max_child_bytes > 0:
         options["archive_max_child_bytes"] = archive_max_child_bytes
+    if archive_max_total_uncompressed_bytes > 0:
+        options["archive_max_total_uncompressed_bytes"] = archive_max_total_uncompressed_bytes
+    if archive_max_compression_ratio > 0:
+        options["archive_max_compression_ratio"] = archive_max_compression_ratio
     if archive_max_depth >= 0:
         options["archive_max_depth"] = archive_max_depth
     if archive_max_converted_children > 0:

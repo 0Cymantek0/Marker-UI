@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import sys
+import types
+
+import pytest
+
+from app.audio.providers.base import RawTranscript
 from app.audio.providers.capabilities import (
     ProviderCapability,
     capabilities_payload,
     get_capability,
     list_capabilities,
+)
+from app.audio.providers.registry import (
+    build_provider,
+    validate_audio_benchmark_selection,
+    validate_audio_diarization_selection,
+    validate_audio_fusion_selection,
+    validate_provider_selection,
 )
 from app.audio.pipeline import normalize_transcript
 from app.audio.speakers import (
@@ -20,9 +33,14 @@ from app.audio.vocabulary import (
 )
 
 
-def test_get_capability_returns_local_default_for_unknown_provider() -> None:
-    cap = get_capability("nonexistent")
+def test_get_capability_returns_local_default_for_none_provider() -> None:
+    cap = get_capability(None)
     assert cap.provider_id == "local_faster_whisper"
+
+
+def test_get_capability_rejects_unknown_provider() -> None:
+    with pytest.raises(ValueError, match="Unknown audio provider"):
+        get_capability("nonexistent")
 
 
 def test_all_providers_in_capability_matrix() -> None:
@@ -49,12 +67,123 @@ def test_capabilities_payload_serializes_all_fields() -> None:
     for entry in payload:
         for key in (
             "provider_id",
+            "implementation_state",
             "cloud",
             "supports_diarization",
             "supports_word_timestamps",
             "requires_api_key",
         ):
             assert key in entry
+    by_id = {entry["provider_id"]: entry for entry in payload}
+    assert by_id["local_faster_whisper"]["implementation_state"] == "implemented"
+    assert by_id["local_faster_whisper"]["supports_batch_compare"] is False
+    assert by_id["openai"]["implementation_state"] == "deferred"
+    assert by_id["openai"]["available"] is False
+
+
+def test_validate_provider_selection_rejects_deferred_provider() -> None:
+    with pytest.raises(NotImplementedError, match="not shipped yet"):
+        validate_provider_selection("openai", allow_cloud_stt=True)
+
+
+def test_validate_provider_selection_rejects_unknown_provider() -> None:
+    with pytest.raises(ValueError, match="Unknown audio provider"):
+        validate_provider_selection("does_not_exist", allow_cloud_stt=True)
+
+
+def test_build_provider_rejects_unknown_provider_without_local_fallback() -> None:
+    with pytest.raises(ValueError, match="Unknown audio provider"):
+        build_provider("does_not_exist")
+
+
+def test_validate_audio_benchmark_selection_rejects_unshipped_comparison() -> None:
+    with pytest.raises(NotImplementedError, match="comparison is not shipped"):
+        validate_audio_benchmark_selection({"audio_benchmark_compare": True})
+
+
+def test_validate_audio_diarization_selection_rejects_unsupported_provider() -> None:
+    cap = get_capability("local_faster_whisper")
+
+    with pytest.raises(NotImplementedError, match="not supported by provider 'local_faster_whisper'"):
+        validate_audio_diarization_selection({"audio_diarization": True}, cap)
+
+
+def test_validate_audio_fusion_selection_rejects_unshipped_mode() -> None:
+    with pytest.raises(NotImplementedError, match="context fusion is not shipped"):
+        validate_audio_fusion_selection({"audio_fusion_mode": "audio_first"})
+
+
+def test_faster_whisper_adapter_preserves_segment_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.audio.providers.faster_whisper import FasterWhisperProvider
+
+    class _Word:
+        word = "hello"
+        start = 0.0
+        end = 0.5
+        probability = 0.81
+
+    class _Segment:
+        start = 0.0
+        end = 1.0
+        text = " hello "
+        no_speech_prob = 0.2
+        avg_logprob = -0.4
+        compression_ratio = 1.3
+        words = [_Word()]
+
+    class _Info:
+        language = "en"
+        duration = 1.0
+
+    class _WhisperModel:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def transcribe(self, *args, **kwargs):
+            return [_Segment()], _Info()
+
+    fake_module = types.SimpleNamespace(WhisperModel=_WhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+
+    raw = FasterWhisperProvider().transcribe("audio.wav", {"audio_word_timestamps": True})
+    segment = raw.segments[0]
+
+    assert segment.confidence == 0.8
+    assert segment.no_speech_probability == 0.2
+    assert segment.avg_logprob == -0.4
+    assert segment.compression_ratio == 1.3
+    assert segment.words[0].confidence == 0.81
+
+
+def test_provider_dict_preserves_subsecond_word_timestamps() -> None:
+    raw = RawTranscript.from_provider_dict(
+        {
+            "duration": 2.345,
+            "provider": "local_faster_whisper",
+            "segments": [
+                {
+                    "start": 1.234,
+                    "end": 1.987,
+                    "text": "hello world",
+                    "words": [
+                        {"word": "hello", "start": 1.234, "end": 1.456},
+                        {"word": "world", "start": 1.500, "end": 1.987},
+                    ],
+                },
+                {"start": None, "end": "bad", "text": "malformed timestamps"},
+            ],
+        }
+    )
+
+    assert raw.duration_ms == 2345
+    assert raw.segments[0].start_ms == 1234
+    assert raw.segments[0].end_ms == 1987
+    assert [(word.start_ms, word.end_ms) for word in raw.segments[0].words] == [
+        (1234, 1456),
+        (1500, 1987),
+    ]
+    assert raw.segments[1].start_ms == 0
+    assert raw.segments[1].end_ms == 0
 
 
 def test_cloud_providers_require_api_key() -> None:

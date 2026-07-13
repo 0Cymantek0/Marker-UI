@@ -1,12 +1,68 @@
 # Marker UI
 
-Marker UI is a local-first, production-grade web application and orchestrator designed to convert document types (PDFs, Word documents, spreadsheets, slides, and images) into clean, layout-aware, search-optimized Markdown, HTML, or JSON.
+Marker UI is a local-first document-to-agent-context engine: it converts PDFs,
+Office files, spreadsheets, slides, images, web/data files, archives, audio, and
+experimental video into clean Markdown, manifests, and semantic chunks.
+Marker-backed PDF/image/EPUB routes can also render HTML and JSON; native
+deterministic routes expose only formats they can actually render.
 
-By wrapping deep-learning neural models with lightweight deterministic parsers and an intelligent VLM pipeline, Marker UI offers a seamless, high-throughput document conversion platform on your own hardware.
+Run it as a browser app, a scriptable CLI, or a small MCP server for coding
+agents. Local parsers and local neural models are the default. Cloud VLM paths
+require explicit opt-in; cloud STT providers are listed as planned/deferred
+until their adapters ship. Every conversion writes a `.marker.json`
+manifest with source metadata, output paths, media type, hashes, assets, and
+conversion settings so long outputs can be audited and paged safely.
 
----
+## System Requirements
 
-## Why Marker UI? The Core Strengths
+| Component | Requirement |
+| --- | --- |
+| **Python** | 3.11+ |
+| **Node** | 22+ (frontend build only) |
+| **ffmpeg / ffprobe** | ≥ 5.0 — required for video conversion (`VideoConverter`) and audio preflight (`probe_audio`). The official Docker image installs both via `apt-get install ffmpeg`. |
+| **tesseract-ocr** | Required for video frame OCR fallback. Bundled in the Docker image. |
+| **RAM** | 8 GB minimum (16 GB recommended for marker + faster-whisper concurrency or large documents) |
+
+If video conversion fails with a `NATIVE_DEPENDENCY_MISSING` error, verify the binaries are on `PATH`:
+
+```bash
+command -v ffmpeg && command -v ffprobe
+```
+
+## Current Maturity
+
+Marker UI is alpha software. Some surfaces are already useful for local agent
+workflows, while others are deliberately exposed as planned or experimental.
+
+| Area | Status |
+| --- | --- |
+| CLI, MCP, output manifests, and paged output reads | Working alpha |
+| PDF/image conversion with Marker-backed Markdown, HTML, JSON, and chunks | Working alpha |
+| Native Office/data/archive conversion to Markdown and chunks | Working alpha |
+| Semantic chunking | Working alpha with deterministic source refs and lightweight retrieval gate; larger benchmark corpus still planned |
+| Audio / voice notes | Partial alpha: local faster-whisper route only; cloud STT, real diarization, and provider comparison are deferred |
+| Video | Experimental local demux, transcription, keyframe/OCR provenance |
+| VLM image understanding | Opt-in alpha; cloud calls require explicit consent |
+| Database migrations | Startup creates tables and additive column repairs; Alembic upgrades are developer-managed |
+
+## 30-Second Agent Demo
+
+```powershell
+python -m app.cli self-test --json
+python -m app.cli convert ".\paper.pdf" --output-dir ".\out" --json
+python -m app.cli mcp start --tool-profile minimal
+```
+
+Agents can:
+
+- plan conversions before touching large PDFs or unknown inputs;
+- convert local files or guarded public URLs;
+- submit long jobs, poll status, and cancel without deleting history;
+- page through Markdown or semantic chunks instead of loading huge files;
+- inspect output manifests and asset metadata before summarizing;
+- keep model-controlled settings writes out of the default MCP profile.
+
+## Why Marker UI?
 
 ### 1. Hybrid Conversion Orchestrator
 Unlike raw CLI utilities, Marker UI acts as a smart router that selects the most efficient extraction path based on document file types:
@@ -72,6 +128,7 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Image Understanding](docs/usage/image-understanding.md)
 - [Vision Model Provider Configuration](docs/configuration/vlm-providers.md)
 - [History & Storage Lifecycle](docs/usage/history-and-downloads.md)
+- [Known Limitations & Maturity](docs/limitations.md)
 
 ### Technical Architecture & Reference
 - [High-Level Technical Architecture](docs/development/architecture.md)
@@ -84,6 +141,7 @@ Our documentation is structured to help you get started quickly or dive deep int
 - [Environment Variables Reference](docs/configuration/environment-variables.md)
 - [Enterprise Security](docs/enterprise/security.md)
 - [Enterprise Deployment](docs/enterprise/deployment.md)
+- [Review Status Ledger](docs/planning/review-status-ledger.md)
 - [Agent JSON Schemas](docs/reference/json-schemas.md)
 - [Agent Error Codes](docs/reference/errors.md)
 - [Output Manifest Reference](docs/reference/output-manifest.md)
@@ -109,7 +167,7 @@ Marker UI provides unified launchers that automatically prepare a virtual enviro
   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
   .\start.ps1
   ```
-Vite will serve the client at `http://localhost:5173`.
+The launcher waits for backend and frontend readiness before printing the URLs. Vite normally serves the client at `http://localhost:5173`; if a port is occupied, the launcher selects the next available port and prints it.
 
 ### 2. Docker Compose
 Deploy containerized with a single command:
@@ -122,11 +180,12 @@ The application will be served at `http://localhost:3000` via Nginx.
 
 ## Testing & Code Quality
 
-The backend includes a comprehensive suite of over 540 automated tests validating API endpoints, database operations, worker pool IPC scheduling, and encryption integrity:
+The repository currently collects over 1,300 automated backend and frontend tests, covering API endpoints, database operations, worker scheduling, conversion routing, output integrity, manifests, security controls, and UI behavior:
 
 ```bash
-cd backend
-python -m pytest tests/ -v
+python -m pytest backend/tests -v
+cd frontend
+npm test
 ```
 
 ---

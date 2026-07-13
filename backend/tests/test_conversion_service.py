@@ -8,8 +8,6 @@ or model loads occur.
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from typing import Any
 
 import pytest
@@ -23,6 +21,7 @@ class _FakeMarkerServiceForConversion:
     def __init__(self) -> None:
         self._initialized = False
         self.convert_calls: list[tuple[str, dict]] = []
+        self.convert_format_calls: list[tuple[str, list[str], dict]] = []
 
     def initialize(self) -> None:
         self._initialized = True
@@ -31,12 +30,64 @@ class _FakeMarkerServiceForConversion:
         self, filepath: str, options: dict[str, Any], device: str | None = None
     ) -> dict[str, Any]:
         self.convert_calls.append((filepath, options))
+        output_format = str(options.get("output_format") or "markdown").strip().lower()
+        if output_format == "json":
+            return {
+                "text": '{"document": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            }
+        if output_format == "html":
+            return {
+                "text": "<html><body>Converted.</body></html>",
+                "extension": "html",
+                "images": {},
+                "metadata": {"pages": 2},
+            }
+        if output_format == "chunks":
+            return {
+                "text": '{"marker_native_chunks": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            }
         return {
             "text": "# Fake PDF Output\n\nConverted.",
             "extension": "md",
             "images": {},
             "metadata": {"pages": 2},
         }
+
+    def convert_file_formats(
+        self,
+        filepath: str,
+        options: dict[str, Any],
+        formats: list[str],
+        device: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        self.convert_format_calls.append((filepath, list(formats), dict(options)))
+        payloads = {
+            "markdown": {
+                "text": "# Fake PDF Output\n\nConverted.",
+                "extension": "md",
+                "images": {},
+                "metadata": {"pages": 2},
+            },
+            "json": {
+                "text": '{"document": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            },
+            "chunks": {
+                "text": '{"marker_native_chunks": true}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"pages": 2},
+            },
+        }
+        return {fmt: payloads[fmt] for fmt in formats if fmt in payloads}
 
 
 class TestConversionService:
@@ -111,23 +162,220 @@ class TestConversionService:
         assert engine_meta["needs_marker_models"] is True
         assert isinstance(engine_meta["reasons"], list)
 
-    def test_unregistered_engine_falls_back_to_marker(self, tmp_path: Any) -> None:
-        """If router picks an engine with no registered converter, fall back to marker_pdf."""
+    def test_native_converter_derives_chunks_from_markdown_output(self, tmp_path: Any) -> None:
         svc, fake_ms = self._make_service()
-        # Unregister office_docx to test fallback
+        source = tmp_path / "scores.tsv"
+        source.write_text("name\tscore\nAda\t10\nGrace\t11\n", encoding="utf-8")
+        config = {"output_format": "chunks", "output_formats": ["chunks"]}
+
+        assert svc.supports_multiple_formats(str(source), config) is True
+        result = svc.convert_file_formats(str(source), config, ["chunks"])
+
+        assert len(fake_ms.convert_calls) == 0
+        assert set(result) == {"chunks"}
+        assert result["chunks"]["extension"] == "json"
+        payload = json.loads(result["chunks"]["text"])
+        assert payload["schema_version"] == "marker.chunks.v1"
+        assert payload["chunk_kind"] == "semantic_markdown"
+        assert payload["renderer_kind"] == "derived"
+        assert payload["source_format"] == "markdown"
+        assert payload["semantic_level"] == "markdown_structure"
+        assert payload["structured_ir"] is False
+        assert payload["source"]["name"] == "scores.tsv"
+        assert payload["chunk_count"] >= 1
+        assert "| Ada | 10 |" in payload["chunks"][-1]["text"]
+        assert result["chunks"]["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
+        assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "markdown_heading_blocks_v2"
+        assert result["chunks"]["metadata"]["chunking"]["renderer_kind"] == "derived"
+        assert result["chunks"]["metadata"]["chunking"]["source_format"] == "markdown"
+        assert result["chunks"]["metadata"]["chunking"]["semantic_level"] == "markdown_structure"
+        assert result["chunks"]["metadata"]["chunking"]["structured_ir"] is False
+
+    def test_native_convert_file_rejects_json_output_format(self, tmp_path: Any) -> None:
+        from app.errors import UnsupportedFormatError
+
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "scores.tsv"
+        source.write_text("name\tscore\nAda\t10\n", encoding="utf-8")
+
+        with pytest.raises(UnsupportedFormatError, match="not supported for engine 'text_data'"):
+            svc.convert_file(str(source), {"output_format": "json"})
+
+        assert len(fake_ms.convert_calls) == 0
+
+    def test_native_convert_file_formats_rejects_fake_json_derivation(self, tmp_path: Any) -> None:
+        from app.errors import UnsupportedFormatError
+
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "scores.tsv"
+        source.write_text("name\tscore\nAda\t10\n", encoding="utf-8")
+
+        with pytest.raises(UnsupportedFormatError, match="Markdown-only converters"):
+            svc.convert_file_formats(
+                str(source),
+                {"output_format": "markdown", "output_formats": ["markdown", "json"]},
+                ["markdown", "json"],
+            )
+
+    def test_marker_renderer_rejects_json_with_markdown_extension(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "paper.pdf"
+        source.write_bytes(b"%PDF")
+
+        def bad_convert_file_formats(filepath, options, formats, device=None):
+            fake_ms.convert_format_calls.append((filepath, list(formats), dict(options)))
+            return {
+                "json": {
+                    "text": '{"document": true}',
+                    "extension": "md",
+                    "images": {},
+                    "metadata": {},
+                }
+            }
+
+        fake_ms.convert_file_formats = bad_convert_file_formats  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="produced .md for output_format 'json'"):
+            svc.convert_file_formats(str(source), {"output_format": "json"}, ["json"])
+
+    def test_marker_renderer_rejects_invalid_json_payload(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "paper.pdf"
+        source.write_bytes(b"%PDF")
+
+        def bad_convert_file_formats(filepath, options, formats, device=None):
+            fake_ms.convert_format_calls.append((filepath, list(formats), dict(options)))
+            return {
+                "json": {
+                    "text": "# not json",
+                    "extension": "json",
+                    "images": {},
+                    "metadata": {},
+                }
+            }
+
+        fake_ms.convert_file_formats = bad_convert_file_formats  # type: ignore[method-assign]
+
+        with pytest.raises(RuntimeError, match="invalid JSON"):
+            svc.convert_file_formats(str(source), {"output_format": "json"}, ["json"])
+
+    def test_native_derived_chunks_honor_explicit_chunking_strategy(self, tmp_path: Any) -> None:
+        pytest.importorskip("unstructured.partition.md")
+        pytest.importorskip("unstructured.chunking.title")
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "notes.md"
+        source.write_text("# Title\n\nIntro paragraph.\n\n## Details\n\nFirst fact.", encoding="utf-8")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["chunks"],
+            "chunking_strategy": "unstructured_by_title",
+        }
+
+        result = svc.convert_file_formats(str(source), config, ["chunks"])
+
+        assert len(fake_ms.convert_calls) == 0
+        payload = json.loads(result["chunks"]["text"])
+        assert payload["chunking_strategy"] == "unstructured_by_title"
+        assert result["chunks"]["metadata"]["chunking"]["chunking_strategy"] == "unstructured_by_title"
+        assert result["chunks"]["metadata"]["chunking"]["requested_strategy"] == "unstructured_by_title"
+
+    def test_unstructured_chunking_does_not_silently_fallback_without_opt_in(
+        self,
+        tmp_path: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def fail_import(name: str):
+            if name.startswith("unstructured."):
+                raise ImportError("missing optional dependency")
+            raise AssertionError(f"unexpected import: {name}")
+
+        monkeypatch.setattr("app.services.chunking.importlib.import_module", fail_import)
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "notes.md"
+        source.write_text("# Title\n\nIntro paragraph.", encoding="utf-8")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["chunks"],
+            "chunking_strategy": "unstructured_by_title",
+        }
+
+        with pytest.raises(RuntimeError, match="allow_chunking_fallback=true"):
+            svc.convert_file_formats(str(source), config, ["chunks"])
+
+    def test_unstructured_chunking_fallback_requires_explicit_opt_in(
+        self,
+        tmp_path: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def fail_import(name: str):
+            if name.startswith("unstructured."):
+                raise ImportError("missing optional dependency")
+            raise AssertionError(f"unexpected import: {name}")
+
+        monkeypatch.setattr("app.services.chunking.importlib.import_module", fail_import)
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "notes.md"
+        source.write_text("# Title\n\nIntro paragraph.", encoding="utf-8")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["chunks"],
+            "chunking_strategy": "unstructured_by_title",
+            "allow_chunking_fallback": True,
+        }
+
+        result = svc.convert_file_formats(str(source), config, ["chunks"])
+        payload = json.loads(result["chunks"]["text"])
+
+        assert payload["chunking_strategy"] == "markdown_heading_blocks_v2"
+        assert payload["chunking_strategy_requested"] == "unstructured_by_title"
+        assert "ImportError" in payload["chunking_fallback_reason"]
+
+    def test_marker_chunks_honor_explicit_chunking_strategy_by_deriving_from_markdown(self, tmp_path: Any) -> None:
+        svc, fake_ms = self._make_service()
+        source = tmp_path / "paper.pdf"
+        source.write_bytes(b"%PDF")
+        config = {
+            "output_format": "chunks",
+            "output_formats": ["json", "chunks"],
+            "chunking_strategy": "markdown_heading_blocks_v2",
+        }
+
+        result = svc.convert_file_formats(str(source), config, ["json", "chunks"])
+
+        assert [call[1] for call in fake_ms.convert_format_calls] == [["markdown", "json"]]
+        assert set(result) == {"json", "chunks"}
+        assert result["json"]["text"] == '{"document": true}'
+        payload = json.loads(result["chunks"]["text"])
+        assert payload["schema_version"] == "marker.chunks.v1"
+        assert payload["source"]["name"] == "paper.pdf"
+        assert result["chunks"]["metadata"]["chunking"]["requested_strategy"] == "markdown_heading_blocks_v2"
+
+    def test_unknown_extension_does_not_claim_derived_chunks_support(self, tmp_path: Any) -> None:
+        """Derived chunks still require a converter that accepts the source."""
+        svc, _fake_ms = self._make_service()
+        source = tmp_path / "unknown.binpack"
+        source.write_text("payload", encoding="utf-8")
+
+        assert (
+            svc.supports_multiple_formats(
+                str(source),
+                {"output_format": "chunks", "output_formats": ["chunks"]},
+            )
+            is False
+        )
+
+    def test_unregistered_native_engine_does_not_fall_back_to_marker(self, tmp_path: Any) -> None:
+        """Missing native converters fail directly instead of crossing into Marker."""
+        svc, fake_ms = self._make_service()
         svc.registry.unregister("office_docx")
-        
+
         docx_path = tmp_path / "test.docx"
         docx_path.write_bytes(b"PK docx content")
 
-        result = svc.convert_file(str(docx_path), {})
+        with pytest.raises(RuntimeError, match="No converter registered for engine 'office_docx'"):
+            svc.convert_file(str(docx_path), {})
 
-        # Should fall back to marker_pdf
-        engine_meta = result["metadata"]["engine"]
-        assert engine_meta["engine"] == "marker_pdf"
-        assert "fallback" in engine_meta["label"].lower() or "no converter" in engine_meta["label"].lower()
-        assert len(engine_meta["warnings"]) > 0
-        assert engine_meta["confidence"] <= 0.5
+        assert fake_ms.convert_calls == []
 
     def test_plan_method_returns_converter_plan(self, tmp_path: Any) -> None:
         """plan() returns a ConverterPlan without executing conversion."""
@@ -146,7 +394,6 @@ class TestConversionService:
     def test_plan_for_unregistered_engine(self, tmp_path: Any) -> None:
         """plan() for unregistered engine shows fallback info."""
         svc, _ = self._make_service()
-        # Unregister office_docx to test fallback
         svc.registry.unregister("office_docx")
         
         docx_path = tmp_path / "report.docx"
@@ -154,10 +401,37 @@ class TestConversionService:
 
         plan = svc.plan(str(docx_path), {})
 
-        # Falls back to marker_pdf since office_docx isn't registered
+        assert plan.engine == "office_docx"
+        assert plan.fallback_chain == []
+        assert "not available" in plan.warnings[0]
+
+    def test_plan_for_unregistered_liteparse_pdf_falls_back_to_marker(self, tmp_path: Any) -> None:
+        """PDF fast-path fallback remains available because Marker accepts PDFs."""
+        svc, _ = self._make_service()
+        svc.registry.unregister("liteparse_pdf")
+
+        pdf_path = tmp_path / "clean.pdf"
+        pdf_path.write_bytes(b"%PDF")
+        plan = svc.plan(
+            str(pdf_path),
+            {
+                "probe_result": {
+                    "page_count": 1,
+                    "text_layer_score": 0.9,
+                    "text_quality_score": 0.95,
+                    "scan_likelihood": 0.0,
+                    "sandwich_likelihood": 0.0,
+                    "layout_complexity_score": 0.0,
+                    "visual_complexity_score": 0.0,
+                    "recommended_engine": "liteparse",
+                    "reasons": ["strong extractable text layer"],
+                    "sampled_image_count": 0,
+                }
+            },
+        )
+
         assert plan.engine == "marker_pdf"
-        assert len(plan.fallback_chain) == 2
-        assert plan.fallback_chain == ["office_docx", "marker_pdf"]
+        assert plan.fallback_chain == ["liteparse_pdf", "marker_pdf"]
 
     def test_registry_has_marker_pdf(self) -> None:
         """Registry contains marker_pdf after construction."""
@@ -190,13 +464,12 @@ class TestConversionService:
         serialized = json.dumps(result, default=str)
         assert '"text"' in serialized
 
-    def test_runtime_fallback_to_marker_when_converter_raises(self, tmp_path: Any) -> None:
-        """BUG-B: a failing office converter falls back to marker_pdf at runtime."""
+    def test_native_runtime_failure_does_not_fallback_to_marker(self, tmp_path: Any) -> None:
+        """A failing native converter preserves its own error and does not invoke Marker."""
         svc, fake_ms = self._make_service()
         docx_path = tmp_path / "corrupt.docx"
         docx_path.write_bytes(b"PK not really a docx")
 
-        # Make the office_docx converter raise at runtime (e.g. BadZipFile).
         office = svc.registry.get("office_docx")
         assert office is not None
         original = office.convert
@@ -206,16 +479,12 @@ class TestConversionService:
 
         office.convert = raising_convert  # type: ignore[assignment]
         try:
-            result = svc.convert_file(str(docx_path), {})
+            with pytest.raises(RuntimeError, match="simulated BadZipFile"):
+                svc.convert_file(str(docx_path), {})
         finally:
             office.convert = original  # type: ignore[assignment]
 
-        # The runtime fallback retried via marker_pdf (the fake marker service).
-        assert len(fake_ms.convert_calls) == 1
-        engine_meta = result["metadata"]["engine"]
-        assert engine_meta["engine"] == "marker_pdf"
-        assert "runtime fallback" in engine_meta["label"].lower()
-        assert engine_meta["fallback_chain"] == ["office_docx", "marker_pdf"]
+        assert fake_ms.convert_calls == []
 
     def test_liteparse_runtime_fallback_preserves_probe_metadata(self, tmp_path: Any) -> None:
         svc, fake_ms = self._make_service()

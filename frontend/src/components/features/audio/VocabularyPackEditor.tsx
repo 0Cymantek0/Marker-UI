@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Package, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { messageFromUnknownError } from '@/lib/errors'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -68,8 +69,8 @@ export function VocabularyPackEditor({
       setCreating(false)
       loadPacks()
       onChangePackIds([...selectedPackIds, created.id])
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save vocabulary pack.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to save vocabulary pack.'))
     }
   }
 
@@ -80,22 +81,22 @@ export function VocabularyPackEditor({
       toast.success(`Pack "${packName}" deleted.`)
       onChangePackIds(selectedPackIds.filter((id) => id !== packId))
       loadPacks()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete pack.')
+    } catch (err: unknown) {
+      toast.error(messageFromUnknownError(err, 'Failed to delete pack.'))
     }
   }
 
   return (
     <div className="space-y-2" data-testid="vocabulary-pack-editor">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">
+        <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">
           Vocabulary Packs
         </label>
         <button
           type="button"
           onClick={() => setCreating(!creating)}
           disabled={disabled}
-          className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-primary hover:text-foreground transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-primary hover:text-foreground transition-colors disabled:opacity-50"
         >
           {creating ? 'Cancel' : <><Plus className="w-3 h-3" /> New Pack</>}
         </button>
@@ -121,7 +122,7 @@ export function VocabularyPackEditor({
                   <Package className={cn('w-3.5 h-3.5 shrink-0', isSelected ? 'text-primary' : 'text-muted-foreground/60')} />
                   <div className="min-w-0">
                     <span className="text-xs font-semibold text-foreground block truncate">{pack.name}</span>
-                    <span className="text-[10px] text-muted-foreground block truncate">
+                    <span className="text-xs text-muted-foreground block truncate">
                       {pack.terms.length} term{pack.terms.length !== 1 ? 's' : ''}
                     </span>
                   </div>
@@ -141,7 +142,7 @@ export function VocabularyPackEditor({
       )}
 
       {packs.length === 0 && !creating && (
-        <p className="text-[10px] text-muted-foreground/60 py-1">
+        <p className="text-xs text-muted-foreground/60 py-1">
           No saved packs. Create one to reuse domain terms across recordings.
         </p>
       )}
@@ -165,7 +166,7 @@ export function VocabularyPackEditor({
             className="h-8 text-xs bg-background/50"
           />
           <div className="flex justify-end">
-            <Button type="submit" size="sm" className="h-7 text-[9px] uppercase tracking-wider font-bold">
+            <Button type="submit" size="sm" className="h-7 text-xs uppercase tracking-wider font-bold">
               Save Pack
             </Button>
           </div>
@@ -173,7 +174,7 @@ export function VocabularyPackEditor({
       )}
 
       {!providerSupportsVocab && selectedPackIds.length > 0 && (
-        <div className="text-[10px] text-amber-600 dark:text-amber-400 p-1.5 rounded border border-amber-500/20 bg-amber-500/5 leading-snug flex items-start gap-1.5">
+        <div className="text-xs text-amber-600 dark:text-amber-400 p-1.5 rounded border border-amber-500/20 bg-amber-500/5 leading-snug flex items-start gap-1.5">
           <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
           <span>Provider can't accept prompts. Selected packs will only be used in correction diagnostics.</span>
         </div>

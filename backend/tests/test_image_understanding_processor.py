@@ -448,9 +448,9 @@ def test_render_extraction_empty_mermaid_string_does_not_emit_blank_fence():
 # ---------------------------------------------------------------------------
 
 def _markdownify():
-    from marker.renderers.markdown import Markdownify
+    from app.renderers.image_understanding_renderer import ImageUnderstandingMarkdownify
 
-    return Markdownify(
+    return ImageUnderstandingMarkdownify(
         paginate_output=False,
         page_separator="-" * 48,
         inline_math_delimiters=("$", "$"),
@@ -465,6 +465,12 @@ def _markdownify():
         sub_symbol="<sub>",
         sup_symbol="<sup>",
     )
+
+
+def test_importing_processor_does_not_patch_stock_markdownify():
+    from marker.renderers.markdown import Markdownify
+
+    assert not hasattr(Markdownify, "convert_marker_comment")
 
 
 def test_roundtrip_chart_html_becomes_clean_markdown_table():

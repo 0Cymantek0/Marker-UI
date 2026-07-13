@@ -87,7 +87,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   connected ? 'bg-emerald-500' : 'bg-red-500'
                 )}
               />
-              <span className="text-[10px] text-muted-foreground/80 font-semibold uppercase tracking-wider">
+              <span className="text-xs text-muted-foreground/80 font-bold uppercase tracking-wider">
                 {connected ? 'connected' : 'offline'}
               </span>
             </div>

@@ -29,6 +29,8 @@ Instead, report it privately:
 ## Best Practices for Deployment
 
 To keep your deployment secure:
-- **Binding Ports**: By default, Nginx inside Docker binds to `localhost:3000`. If you bind to `0.0.0.0` or deploy on a Local Area Network (LAN), ensure the server is behind a VPN or protected by local firewalls, as Marker UI does not ship with built-in user authentication.
+- **Binding Ports**: Keep local development bound to loopback whenever possible. If you bind REST or MCP to `0.0.0.0`, a LAN, or any shared network, require `MARKER_REST_AUTH_TOKEN`/`MARKER_MCP_AUTH_TOKEN` or stronger reverse-proxy authentication.
+- **Path Roots**: Configure `MARKER_WORKSPACE_ROOTS` before enabling REST `local_filepath`, and configure `MARKER_OUTPUT_ROOT` before enabling REST `output_dir`. Do not set `MARKER_ALLOW_UNRESTRICTED_LOCAL_PATHS=true` outside trusted local development.
+- **Authentication Model**: Marker UI supports static bearer-token auth with scopes for REST and MCP. Full OIDC/JWT validation is not implemented yet; configured OIDC values fail closed rather than accepting unverified JWTs. See `docs/enterprise/security.md`.
 - **Backing up Secrets**: Back up the `data/.secret_key` and database `data/marker_ui.db` regularly. If the `.secret_key` is lost, your database settings containing LLM API keys will be unrecoverable.
 - **Docker Privileges**: The default Docker image is built using a non-root user when possible, and volume paths inside the container are mapped directly to `/app/backend/data`. Keep folder permissions on the host restricted to the docker execution group.

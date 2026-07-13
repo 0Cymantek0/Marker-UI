@@ -166,6 +166,24 @@ def event_loop():
     loop.close()
 
 
+@pytest.fixture(autouse=True)
+def ensure_current_event_loop():
+    """Keep pytest-asyncio runnable after tests that temporarily swap loops."""
+
+    created_loop = None
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError
+    except RuntimeError:
+        created_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(created_loop)
+    yield
+    if created_loop is not None and not created_loop.is_closed():
+        created_loop.close()
+        asyncio.set_event_loop(None)
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
     """Create tables before each test and drop them after."""

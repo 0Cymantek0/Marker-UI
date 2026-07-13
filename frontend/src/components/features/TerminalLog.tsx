@@ -44,6 +44,7 @@ export function TerminalLog({ logs, phase, onClear, onClose }: TerminalLogProps)
       case 'uploading': return 'UPLOADING'
       case 'processing': return 'CONVERTING'
       case 'completed': return 'FINISHED'
+      case 'cancelled': return 'CANCELLED'
       case 'failed': return 'ERROR'
       default: return 'STANDBY'
     }
@@ -75,11 +76,12 @@ export function TerminalLog({ logs, phase, onClear, onClose }: TerminalLogProps)
             onClose ? "text-zinc-300" : "text-muted-foreground"
           )}>CONSOLE LOGS</span>
           <span className={cn(
-            'ml-2 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-widest',
+            'ml-2 px-1.5 py-0.5 rounded text-xs font-mono font-bold tracking-widest',
             phase === 'idle' && (onClose ? 'bg-zinc-800 text-zinc-400' : 'bg-muted dark:bg-secondary text-muted-foreground'),
             phase === 'uploading' && 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 animate-pulse',
             phase === 'processing' && 'bg-primary/20 text-primary animate-pulse',
             phase === 'completed' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+            phase === 'cancelled' && 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
             phase === 'failed' && 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
           )}>
             {getStatusText()}

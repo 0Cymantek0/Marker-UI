@@ -13,9 +13,17 @@ from types import SimpleNamespace
 import pytest
 from openpyxl import Workbook
 
+from app.audio.providers.base import RawTranscript
 from app.conversion.converters.archive import ArchiveConverter
 from app.conversion.converters.audio import AudioConverter
-from app.audio.providers.base import RawTranscript
+from app.conversion.converters.html import HtmlConverter
+from app.conversion.converters.notebook import NotebookConverter
+from app.conversion.converters.outlook_msg import OutlookMsgConverter
+from app.conversion.converters.spreadsheet import SpreadsheetConverter
+from app.conversion.converters.text_data import TextDataConverter
+from app.conversion.converters.video import VideoConverter
+from app.conversion.converters.xml_rss import XmlRssConverter
+from app.services.conversion_service import ConversionService
 
 
 def _fake_provider(transcribe_fn):
@@ -34,14 +42,6 @@ def _fake_provider(transcribe_fn):
             return RawTranscript.from_provider_dict(transcribe_fn(filepath, config, device=device))
 
     return _FakeProvider()
-from app.conversion.converters.html import HtmlConverter
-from app.conversion.converters.notebook import NotebookConverter
-from app.conversion.converters.outlook_msg import OutlookMsgConverter
-from app.conversion.converters.spreadsheet import SpreadsheetConverter
-from app.conversion.converters.text_data import TextDataConverter
-from app.conversion.converters.video import VideoConverter
-from app.conversion.converters.xml_rss import XmlRssConverter
-from app.services.conversion_service import ConversionService
 
 
 class _FakeMarkerService:
@@ -91,6 +91,25 @@ def test_text_data_converter_turns_tsv_into_markdown_table(tmp_path: Path) -> No
         "rows": 3,
         "truncated": False,
     }
+
+
+def test_conversion_service_derives_markdown_and_chunks_for_native_converter(tmp_path: Path) -> None:
+    path = tmp_path / "scores.tsv"
+    path.write_text("name\tscore\nAda\t10\nLinus\t9\n", encoding="utf-8")
+    svc = ConversionService(_FakeMarkerService())
+    config = {"output_formats": ["markdown", "chunks"], "output_format": "markdown"}
+
+    assert svc.supports_multiple_formats(str(path), config) is True
+    outputs = svc.convert_file_formats(str(path), config, ["markdown", "chunks"])
+
+    assert list(outputs) == ["markdown", "chunks"]
+    assert outputs["markdown"]["extension"] == "md"
+    payload = json.loads(outputs["chunks"]["text"])
+    assert outputs["chunks"]["extension"] == "json"
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert payload["chunk_kind"] == "semantic_markdown"
+    assert "| Ada | 10 |" in payload["chunks"][-1]["text"]
+    assert outputs["chunks"]["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
 
 
 def test_html_converter_drops_scripts_and_emits_markdown(tmp_path: Path) -> None:
@@ -261,11 +280,9 @@ def test_audio_converter_renders_timestamped_local_transcript(monkeypatch, tmp_p
                 }
             )
 
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda pid: FakeProvider())
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider", lambda pid: FakeProvider()
-    )
-    monkeypatch.setattr(
-        "app.conversion.converters.audio.probe_audio",
+        "app.audio.transcribe.probe_audio",
         lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
     )
 
@@ -315,11 +332,11 @@ def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, t
 
     fake = FakeProvider()
     monkeypatch.setattr(
-        "app.conversion.converters.audio.build_provider",
+        "app.audio.transcribe.build_provider",
         lambda provider_id: fake,
     )
     monkeypatch.setattr(
-        "app.conversion.converters.audio.probe_audio",
+        "app.audio.transcribe.probe_audio",
         lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
     )
     result = AudioConverter().convert(str(path), {"audio_output_mode": "meeting_notes"})
@@ -328,11 +345,285 @@ def test_audio_converter_enhanced_mode_requires_source_provenance(monkeypatch, t
     assert "ship the table parser fix [meeting.wav 00:00.000-00:01.000 speaker_0 | `meeting_seg_0001`]" in result.text
     assert "## Original Transcript" in result.text
     assert result.metadata["engine_detail"]["output_mode"] == "meeting_notes"
-    assert result.metadata["audio"]["enhancement"] == {
+    enhancement = result.metadata["audio"]["enhancement"]
+    assert enhancement == {
         "mode": "meeting_notes",
+        "template": "meeting_notes",
+        "trigger": "output_mode",
+        "text_enhancement_enabled": False,
+        "text_enhancement_strength": 0,
+        "structural_enhancement_enabled": False,
+        "structural_enhancement_mode": "auto",
         "provider": "local_deterministic",
         "provenance_required": True,
+        "source_refs_required": True,
+        "source_refs_valid": True,
+        "provenance_validation": {
+            "valid": True,
+            "required": True,
+            "missing": [],
+            "fallback_applied": False,
+        },
     }
+
+
+def test_audio_text_enhancement_toggle_uses_corrected_transcript_renderer(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "call.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "language": "en",
+                    "duration": 1.0,
+                    "model": "tiny.en",
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "please send the follow up", "confidence": 0.88},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr(
+        "app.audio.transcribe.build_provider",
+        lambda provider_id: FakeProvider(),
+    )
+    monkeypatch.setattr(
+        "app.audio.transcribe.probe_audio",
+        lambda filepath: {"available": True, "codec": "pcm_s16le", "sample_rate": 16000, "channels": 1},
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {
+            "audio_output_mode": "transcript",
+            "audio_text_enhancement_enabled": True,
+            "audio_text_enhancement_strength": 2,
+        },
+    )
+
+    assert "# Enhanced Transcript: call" in result.text
+    assert (
+        "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_ "
+        "[call.wav 00:00.000-00:01.000 speaker_0 | `call_seg_0001`]"
+    ) in result.text
+    assert "## Enhancement Audit" in result.text
+    assert "## Original Transcript" in result.text
+    assert result.metadata["engine_detail"]["output_mode"] == "enhanced"
+    assert result.metadata["audio"]["enhancement"]["trigger"] == "text_enhancement"
+    assert result.metadata["audio"]["enhancement"]["text_enhancement_strength"] == 2
+    assert result.metadata["audio"]["enhancement"]["source_refs_valid"] is True
+
+
+def test_audio_enhancement_falls_back_when_source_refs_are_missing(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "bad_refs.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 1.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "needs citation", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda provider_id: FakeProvider())
+    monkeypatch.setattr("app.audio.transcribe.probe_audio", lambda filepath: {"available": True})
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.render_text_enhanced_markdown",
+        lambda transcript, *, title, strength: "# Bad Enhanced\n\n- no citations here",
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {
+            "audio_text_enhancement_enabled": True,
+            "audio_enhancement_fallback_on_validation_failure": True,
+        },
+    )
+
+    assert "# Audio Transcript: bad_refs" in result.text
+    enhancement = result.metadata["audio"]["enhancement"]
+    assert enhancement["trigger"] == "validation_fallback"
+    assert enhancement["provenance_validation"]["fallback_applied"] is True
+
+
+def test_audio_enhancement_can_fail_strictly_when_source_refs_are_missing(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "strict_refs.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 1.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "needs citation", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda provider_id: FakeProvider())
+    monkeypatch.setattr("app.audio.transcribe.probe_audio", lambda filepath: {"available": True})
+    monkeypatch.setattr(
+        "app.conversion.converters.audio.render_text_enhanced_markdown",
+        lambda transcript, *, title, strength: "# Bad Enhanced\n\n- no citations here",
+    )
+
+    with pytest.raises(RuntimeError, match="failed provenance validation"):
+        AudioConverter().convert(
+            str(path),
+            {
+                "audio_text_enhancement_enabled": True,
+                "audio_enhancement_fallback_on_validation_failure": False,
+            },
+        )
+
+
+def test_audio_structural_enhancement_uses_requested_template(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "standup.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 1.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "today we decide to ship", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr(
+        "app.audio.transcribe.build_provider",
+        lambda provider_id: FakeProvider(),
+    )
+    monkeypatch.setattr(
+        "app.audio.transcribe.probe_audio",
+        lambda filepath: {"available": True},
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {
+            "audio_output_mode": "transcript",
+            "audio_structural_enhancement_enabled": True,
+            "audio_structural_enhancement_mode": "meeting_notes",
+        },
+    )
+
+    assert "- **Mode:** local deterministic meeting_notes" in result.text
+    assert result.metadata["audio"]["enhancement"]["trigger"] == "structural_enhancement"
+    assert result.metadata["audio"]["enhancement"]["template"] == "meeting_notes"
+
+
+def test_audio_contradiction_detection_adds_review_findings(monkeypatch, tmp_path: Path) -> None:
+    from app.audio.providers.base import RawTranscript
+
+    path = tmp_path / "decision.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    class FakeProvider:
+        id = "local_faster_whisper"
+
+        def transcribe(self, filepath, config, *, device=None, vocabulary_prompt=None):
+            return RawTranscript.from_provider_dict(
+                {
+                    "duration": 2.0,
+                    "segments": [
+                        {"start": 0.0, "end": 1.0, "text": "The launch is approved today", "confidence": 0.9},
+                        {"start": 1.0, "end": 2.0, "text": "The launch is not approved today", "confidence": 0.9},
+                    ],
+                }
+            )
+
+    monkeypatch.setattr(
+        "app.audio.transcribe.build_provider",
+        lambda provider_id: FakeProvider(),
+    )
+    monkeypatch.setattr(
+        "app.audio.transcribe.probe_audio",
+        lambda filepath: {"available": True},
+    )
+
+    result = AudioConverter().convert(
+        str(path),
+        {"audio_contradiction_detection": True},
+    )
+
+    assert "## Possible Contradictions" in result.text
+    findings = result.metadata["audio"]["contradictions"]
+    assert len(findings) == 1
+    assert findings[0]["left"]["segment_id"] == "decision_seg_0001"
+    assert findings[0]["right"]["segment_id"] == "decision_seg_0002"
+
+
+def test_audio_benchmark_compare_rejected_before_transcription(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "compare.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    def fail_build_provider(provider_id):
+        raise AssertionError("provider should not be built for unsupported benchmark mode")
+
+    monkeypatch.setattr(
+        "app.audio.transcribe.build_provider",
+        fail_build_provider,
+    )
+
+    with pytest.raises(NotImplementedError, match="Audio provider comparison is not shipped"):
+        AudioConverter().convert(
+            str(path),
+            {
+                "audio_provider": "local_faster_whisper",
+                "audio_benchmark_compare": True,
+                "audio_compare_providers": ["local_faster_whisper"],
+            },
+        )
+
+
+def test_audio_fusion_mode_rejected_before_transcription(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "fusion.wav"
+    path.write_bytes(b"RIFF fake wav")
+
+    def fail_build_provider(provider_id):
+        raise AssertionError("provider should not be built for unsupported fusion mode")
+
+    monkeypatch.setattr(
+        "app.audio.transcribe.build_provider",
+        fail_build_provider,
+    )
+
+    with pytest.raises(NotImplementedError, match="Audio context fusion is not shipped"):
+        AudioConverter().convert(
+            str(path),
+            {
+                "audio_provider": "local_faster_whisper",
+                "audio_fusion_mode": "audio_first",
+            },
+        )
 
 
 def test_audio_transcribe_passes_vocabulary_and_word_timestamp_options(monkeypatch, tmp_path: Path) -> None:
@@ -421,6 +712,64 @@ def test_archive_converter_lists_zip_without_extracting(tmp_path: Path) -> None:
     assert detail["skipped_children"] == 2
     assert any(item["path"] == "scan.pdf" and item["action"] == "skipped" for item in detail["manifest"])
     assert any(item["path"] == "../sneaky.txt" and item["reason"] == "suspicious archive path" for item in detail["manifest"])
+    assert detail["archive_budget"]["used_uncompressed_bytes"] > 0
+
+
+def test_archive_converter_enforces_global_budget_and_compression_ratio(tmp_path: Path) -> None:
+    path = tmp_path / "guarded.zip"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("first.txt", "alpha")
+        zf.writestr("second.txt", "beta")
+        zf.writestr("compressed.txt", "A" * 10_000)
+
+    result = ArchiveConverter().convert(
+        str(path),
+        {
+            "archive_max_total_uncompressed_bytes": 7,
+            "archive_max_compression_ratio": 2.0,
+        },
+    )
+
+    manifest = result.metadata["engine_detail"]["manifest"]
+    assert any(
+        item["path"] == "second.txt"
+        and item["reason"] == "archive total uncompressed byte budget reached"
+        for item in manifest
+    )
+    assert any(
+        item["path"] == "compressed.txt"
+        and item["reason"] == "archive child compression ratio exceeds limit"
+        for item in manifest
+    )
+
+
+def test_archive_converter_preserves_namespaced_child_assets(monkeypatch, tmp_path: Path) -> None:
+    from app.conversion.result import Asset, UniversalConversionResult
+    import app.conversion.converters.archive as archive_mod
+
+    path = tmp_path / "assets.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("reports/data.csv", "name,score\nAda,10\n")
+
+    class FakeChildConverter:
+        def convert(self, filepath, config, device=None):
+            return UniversalConversionResult(
+                text="# child",
+                extension="md",
+                images={"chart.png": b"png-bytes"},
+                assets=[Asset(name="export/rows.csv", media_type="text/csv", data=b"a,b\n1,2\n")],
+            )
+
+    monkeypatch.setattr(archive_mod, "_child_converter_for_engine", lambda engine: FakeChildConverter())
+
+    result = ArchiveConverter().convert(str(path), {})
+
+    asset_names = [asset.name for asset in result.assets]
+    assert "children/reports/data.csv/assets/export/rows.csv" in asset_names
+    assert "children/reports/data.csv/assets/chart.png" in asset_names
+    manifest_entry = result.metadata["engine_detail"]["manifest"][0]
+    assert manifest_entry["asset_count"] == 2
+    assert manifest_entry["assets"] == asset_names
 
 
 def test_archive_converter_builds_multi_audio_document(monkeypatch, tmp_path: Path) -> None:
@@ -444,7 +793,7 @@ def test_archive_converter_builds_multi_audio_document(monkeypatch, tmp_path: Pa
                 }
             )
 
-    monkeypatch.setattr("app.conversion.converters.audio.build_provider", lambda pid: FakeProvider())
+    monkeypatch.setattr("app.audio.transcribe.build_provider", lambda pid: FakeProvider())
     path = tmp_path / "audio_batch.zip"
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("calls/part1.wav", b"RIFF fake one")

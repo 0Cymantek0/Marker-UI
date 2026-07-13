@@ -4,6 +4,10 @@ import {
   downloadResult,
   uploadFile,
   normalizeOcrEngine,
+  getAudioProviders,
+  saveAudioProviders,
+  getActiveAudioProvider,
+  setActiveAudioProvider,
 } from '@/lib/api'
 
 const eventSourceUrls: string[] = []
@@ -124,6 +128,51 @@ describe('uploadFile', () => {
     expect(url.searchParams.get('image_handling_mode')).toBe('understanding')
     expect(url.searchParams.get('disable_image_extraction')).toBe('true')
   })
+
+  it('sends chunking strategy when chunks output is requested', async () => {
+    mockFetchOnce(200, { job_id: 'job-chunks', status: 'pending', filename: 'notes.md' }, true)
+
+    await uploadFile(new File(['# Notes'], 'notes.md', { type: 'text/markdown' }), {
+      output_formats: ['chunks'],
+      converter: 'PdfConverter',
+      chunking_strategy: 'unstructured_by_title',
+      allow_chunking_fallback: true,
+    })
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.get('output_format')).toBe('chunks')
+    expect(url.searchParams.get('chunking_strategy')).toBe('unstructured_by_title')
+    expect(url.searchParams.get('allow_chunking_fallback')).toBe('true')
+  })
+
+  it('sends archive budget controls as upload query params', async () => {
+    mockFetchOnce(200, { job_id: 'job-zip', status: 'pending', filename: 'bundle.zip' }, true)
+
+    await uploadFile(new File(['zip'], 'bundle.zip', { type: 'application/zip' }), {
+      output_formats: ['markdown'],
+      converter: 'PdfConverter',
+      archive_recursive: false,
+      archive_max_files: 12,
+      archive_inline_bytes: 4096,
+      archive_max_converted_children: 3,
+      archive_max_child_bytes: 8192,
+      archive_max_total_uncompressed_bytes: 16384,
+      archive_max_compression_ratio: 25,
+      archive_max_depth: 1,
+    })
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.get('archive_recursive')).toBe('false')
+    expect(url.searchParams.get('archive_max_files')).toBe('12')
+    expect(url.searchParams.get('archive_inline_bytes')).toBe('4096')
+    expect(url.searchParams.get('archive_max_converted_children')).toBe('3')
+    expect(url.searchParams.get('archive_max_child_bytes')).toBe('8192')
+    expect(url.searchParams.get('archive_max_total_uncompressed_bytes')).toBe('16384')
+    expect(url.searchParams.get('archive_max_compression_ratio')).toBe('25')
+    expect(url.searchParams.get('archive_max_depth')).toBe('1')
+  })
 })
 
 describe('normalizeOcrEngine', () => {
@@ -134,5 +183,68 @@ describe('normalizeOcrEngine', () => {
     expect(normalizeOcrEngine('paddleocr_vl')).toBe('hybrid_ocr')
     expect(normalizeOcrEngine('mistral_ocr')).toBe('surya')
     expect(normalizeOcrEngine(undefined)).toBe('surya')
+  })
+})
+
+describe('audio provider settings API', () => {
+  it('lists configured audio providers', async () => {
+    mockFetchOnce(200, [
+      {
+        id: 'openai',
+        type: 'openai',
+        label: 'OpenAI',
+        api_key: '********',
+        models: ['gpt-4o-transcribe'],
+        enabled: true,
+        cloud: true,
+      },
+    ], true)
+
+    const providers = await getAudioProviders()
+
+    expect(providers[0]?.id).toBe('openai')
+    expect(global.fetch).toHaveBeenCalledWith('/api/settings/audio/providers', expect.any(Object))
+  })
+
+  it('saves configured audio providers', async () => {
+    const body = [
+      {
+        id: 'deepgram',
+        type: 'deepgram',
+        label: 'Deepgram',
+        api_key: 'secret',
+        base_url: '',
+        region: '',
+        deployment: '',
+        concurrency: 2,
+        timeout: 30,
+        max_retries: 1,
+        default_model: 'nova-2',
+        models: ['nova-2'],
+        enabled: true,
+        cloud: true,
+      },
+    ]
+    mockFetchOnce(200, body, true)
+
+    await saveAudioProviders(body)
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/settings/audio/providers', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }))
+  })
+
+  it('gets and sets active audio provider', async () => {
+    mockFetchOnce(200, { provider_id: 'local_faster_whisper', model_id: '' }, true)
+    await expect(getActiveAudioProvider()).resolves.toEqual({ provider_id: 'local_faster_whisper', model_id: '' })
+
+    mockFetchOnce(200, { provider_id: 'openai', model_id: 'gpt-4o-transcribe' }, true)
+    await setActiveAudioProvider({ provider_id: 'openai', model_id: 'gpt-4o-transcribe' })
+
+    expect(global.fetch).toHaveBeenLastCalledWith('/api/settings/audio/active', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ provider_id: 'openai', model_id: 'gpt-4o-transcribe' }),
+    }))
   })
 })

@@ -12,6 +12,8 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   FileCode,
   AlertCircle,
   Activity,
@@ -23,6 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { getHistory, deleteJob, downloadResult, getJobStatus, type JobStatus } from '@/lib/api'
+import { filenameForDownload } from '@/lib/download'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/datetime'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -37,7 +40,7 @@ const STATUS_VARIANT = {
 }
 
 export function HistoryPage() {
-  const PAGE_SIZE = 50
+  const [pageSize, setPageSize] = useState(10)
   const [jobs, setJobs] = useState<JobStatus[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -45,6 +48,7 @@ export function HistoryPage() {
 
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [converterFilter, setConverterFilter] = useState<string>('all')
 
@@ -55,6 +59,14 @@ export function HistoryPage() {
   // Delete confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
+  // Debounce search query changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   // Reset delete confirmation after 3 seconds of inactivity
   useEffect(() => {
     if (!deleteConfirmId) return
@@ -64,15 +76,26 @@ export function HistoryPage() {
     return () => clearTimeout(timer)
   }, [deleteConfirmId])
 
+  // Reset page to 1 when filters or page size change
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearchQuery, statusFilter, converterFilter, pageSize])
+
   // Reset delete confirmation when filters or page change
   useEffect(() => {
     setDeleteConfirmId(null)
-  }, [searchQuery, statusFilter, converterFilter, page])
+  }, [debouncedSearchQuery, statusFilter, converterFilter, page])
 
   const fetchJobs = useCallback(async () => {
     setIsLoading(true)
     try {
-      const data = await getHistory(page, PAGE_SIZE)
+      const data = await getHistory(
+        page,
+        pageSize,
+        debouncedSearchQuery || undefined,
+        statusFilter || undefined,
+        converterFilter || undefined
+      )
       setJobs(data.jobs)
       setTotal(data.total)
     } catch {
@@ -80,7 +103,7 @@ export function HistoryPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [page])
+  }, [page, pageSize, debouncedSearchQuery, statusFilter, converterFilter])
 
   useEffect(() => {
     void fetchJobs()
@@ -115,17 +138,7 @@ export function HistoryPage() {
       const a = document.createElement('a')
       a.href = url
 
-      if (headerFilename) {
-        a.download = headerFilename
-      } else {
-        const isZip = blob.type === 'application/zip' || blob.type === 'application/x-zip-compressed'
-        const isJson = blob.type === 'application/json'
-        const isHtml = blob.type === 'text/html'
-        const ext = isZip ? 'zip' : isJson ? 'json' : isHtml ? 'html' : 'md'
-
-        const stem = job.filename.includes('.') ? job.filename.split('.').slice(0, -1).join('.') : job.filename
-        a.download = `${stem}.${ext}`
-      }
+      a.download = filenameForDownload(blob, job.filename, headerFilename)
 
       document.body.appendChild(a)
       a.click()
@@ -139,13 +152,8 @@ export function HistoryPage() {
 
   // Local filtering & search
   const filteredJobs = useMemo(() => {
-    return jobs.filter((job) => {
-      const matchesSearch = job.filename.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesStatus = statusFilter === 'all' || job.status === statusFilter
-      const matchesConverter = converterFilter === 'all' || job.converter === converterFilter
-      return matchesSearch && matchesStatus && matchesConverter
-    })
-  }, [jobs, searchQuery, statusFilter, converterFilter])
+    return jobs
+  }, [jobs])
 
   // Statistics calculation
   const stats = useMemo(() => {
@@ -188,7 +196,37 @@ export function HistoryPage() {
     }
   }
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const totalPages = Math.ceil(total / pageSize)
+
+  const getPageNumbers = () => {
+    const pageNumbers: (number | string)[] = []
+    const maxVisiblePages = 5
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i)
+      }
+    } else {
+      pageNumbers.push(1)
+      const start = Math.max(2, page - 1)
+      const end = Math.min(totalPages - 1, page + 1)
+
+      if (start > 2) {
+        pageNumbers.push('ellipsis-start')
+      }
+
+      for (let i = start; i <= end; i++) {
+        pageNumbers.push(i)
+      }
+
+      if (end < totalPages - 1) {
+        pageNumbers.push('ellipsis-end')
+      }
+
+      pageNumbers.push(totalPages)
+    }
+    return pageNumbers
+  }
 
   return (
     <div className="flex flex-col min-h-full">
@@ -207,7 +245,7 @@ export function HistoryPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Total Conversions</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Total Conversions</p>
             <h3 className="text-3xl font-extrabold mt-2 text-foreground">{stats.total}</h3>
           </div>
           <div className="p-3 rounded-xl bg-secondary text-foreground border border-border/30">
@@ -217,7 +255,7 @@ export function HistoryPage() {
 
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Success Rate</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Success Rate</p>
             <h3 className="text-3xl font-extrabold mt-2 text-foreground">{stats.successRate}%</h3>
           </div>
           <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -227,7 +265,7 @@ export function HistoryPage() {
 
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Failed Jobs</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Failed Jobs</p>
             <h3 className="text-3xl font-extrabold mt-2 text-rose-600 dark:text-rose-400">{stats.failed}</h3>
           </div>
           <div className="p-3 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
@@ -237,7 +275,7 @@ export function HistoryPage() {
 
         <div className="glass-card p-5 flex items-center justify-between border border-border/30 shadow-sm">
           <div>
-            <p className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">Active Tasks</p>
+            <p className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">Active Tasks</p>
             <h3 className="text-3xl font-extrabold mt-2 text-amber-600 dark:text-amber-400">{stats.processing}</h3>
           </div>
           <div className="p-3 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
@@ -272,7 +310,7 @@ export function HistoryPage() {
               { value: 'completed', label: 'Completed' },
               { value: 'failed', label: 'Failed' },
               { value: 'processing', label: 'Processing' },
-              { value: 'queued', label: 'Queued' },
+              { value: 'pending', label: 'Queued' },
             ]}
           />
 
@@ -285,6 +323,17 @@ export function HistoryPage() {
               { value: 'TableConverter', label: 'Table Focused' },
               { value: 'OCRConverter', label: 'OCR Extraction' },
               { value: 'ExtractionConverter', label: 'Marker Text Extract' },
+            ]}
+          />
+
+          <Select
+            value={String(pageSize)}
+            onChange={(val) => setPageSize(Number(val))}
+            options={[
+              { value: '10', label: '10 / page' },
+              { value: '20', label: '20 / page' },
+              { value: '50', label: '50 / page' },
+              { value: '100', label: '100 / page' },
             ]}
           />
         </div>
@@ -329,17 +378,17 @@ export function HistoryPage() {
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
                         <p className="text-sm font-semibold truncate text-foreground">{job.filename}</p>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-[10px] py-0.5 px-1.5">
+                          <Badge variant={STATUS_VARIANT[job.status]} className="w-fit text-xs py-0.5 px-3">
                             {job.status}
                           </Badge>
                           {job.conversion_metadata?.engine?.label && (
-                            <Badge variant="outline" className="w-fit text-[9px] py-0 px-1 border-primary/20 bg-primary/5 text-primary">
+                            <Badge variant="outline" className="w-fit text-xs py-0.5 px-3 border-primary/20 bg-primary/5 text-primary">
                               {job.conversion_metadata.engine.label}
                             </Badge>
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-muted-foreground/90 font-medium">
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground/90 font-medium">
                         <span className="uppercase text-primary font-bold">{job.output_format}</span>
                         <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                         <span>{job.converter}</span>
@@ -402,19 +451,19 @@ export function HistoryPage() {
                         <div className="space-y-3 pt-3">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="p-2.5 rounded-lg border border-border/30 bg-background/50">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Job ID</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Job ID</span>
                               <span className="text-xs font-mono break-all text-foreground/90 select-all block mt-1">{job.id}</span>
                             </div>
 
                             <div className="p-2.5 rounded-lg border border-border/30 bg-background/50">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Completed At</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Completed At</span>
                               <span className="text-xs font-medium text-foreground/90 block mt-1">
                                 {job.completed_at ? formatDate(job.completed_at) : 'N/A'}
                               </span>
                             </div>
 
                             <div className="p-2.5 rounded-lg border border-border/30 bg-background/50">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Status Code</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Status Code</span>
                               <span className="text-xs font-mono font-bold capitalize text-foreground/90 block mt-1">{job.status}</span>
                             </div>
                           </div>
@@ -433,7 +482,7 @@ export function HistoryPage() {
                                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
                                 <span>Execution Mismatch (Error Message)</span>
                               </div>
-                              <pre className="text-[11px] font-mono whitespace-pre-wrap leading-relaxed mt-2 p-2 rounded bg-rose-950/20 border border-rose-500/10">
+                              <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed mt-2 p-2 rounded bg-rose-950/20 border border-rose-500/10">
                                 {job.error_message}
                               </pre>
                             </div>
@@ -442,7 +491,7 @@ export function HistoryPage() {
                           {/* Converted text preview (if completed) */}
                           {job.status === 'completed' && (
                             <div className="space-y-1.5">
-                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Document Output Preview</span>
+                              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Document Output Preview</span>
                               <div className="border border-border/40 rounded-xl overflow-hidden shadow-sm bg-slate-950/5/10 max-h-[220px] overflow-y-auto">
                                 {loadingPreviews[job.id] ? (
                                   <div className="p-6 text-center text-xs text-muted-foreground italic bg-background/40 flex items-center justify-center gap-2">
@@ -450,7 +499,7 @@ export function HistoryPage() {
                                     Loading document preview...
                                   </div>
                                 ) : job.result_text ? (
-                                  <pre className="p-4 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text text-slate-800 dark:text-slate-300">
+                                  <pre className="p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap select-text text-slate-800 dark:text-slate-300">
                                     {job.result_text}
                                   </pre>
                                 ) : (
@@ -475,28 +524,57 @@ export function HistoryPage() {
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-4 select-none">
-          <Button
-            variant="outline"
-            size="sm"
+        <div className="flex items-center justify-center gap-4 pt-6 select-none text-xs font-bold">
+          <button
+            type="button"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-lg h-8 px-3"
+            className="text-muted-foreground/60 hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            title="Previous Page"
           >
-            Previous
-          </Button>
-          <span className="text-xs font-semibold text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-center gap-3">
+            {getPageNumbers().map((num, i) => {
+              if (num === 'ellipsis-start' || num === 'ellipsis-end') {
+                return (
+                  <span key={`ellipsis-${i}`} className="text-muted-foreground/45">
+                    •••
+                  </span>
+                )
+              }
+
+              const pageNum = num as number
+              const isActive = pageNum === page
+
+              return (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setPage(pageNum)}
+                  className={cn(
+                    "transition-colors px-1",
+                    isActive
+                      ? "text-foreground font-extrabold"
+                      : "text-muted-foreground/60 hover:text-foreground"
+                  )}
+                >
+                  {pageNum}
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            type="button"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg h-8 px-3"
+            className="text-muted-foreground/60 hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            title="Next Page"
           >
-            Next
-          </Button>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

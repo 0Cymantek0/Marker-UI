@@ -1,18 +1,20 @@
 import { useState, useCallback, useMemo } from 'react'
-import { Download, Copy, Check, FileText, Code, Braces, Eye, FileSpreadsheet, Loader2, Mic, AlertTriangle } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { Download, Copy, Check, FileText, Code, Braces, Eye, FileSpreadsheet, Loader2, Mic, AlertTriangle, type LucideIcon } from 'lucide-react'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ImageUnderstandingBadge } from '@/components/features/image-understanding/ImageUnderstandingBadge'
 import type { ImageUnderstandingMeta } from '@/lib/api'
 
-type OutputTab = 'markdown' | 'html' | 'json' | 'raw' | 'audio'
+type OutputTab = 'markdown' | 'html' | 'json' | 'chunks' | 'raw' | 'audio'
+type JsonRecord = Record<string, unknown>
 
-const ALL_TABS: { value: OutputTab; label: string; icon: any; formatKey?: string }[] = [
+const ALL_TABS: { value: OutputTab; label: string; icon: LucideIcon; formatKey?: string }[] = [
   { value: 'markdown', label: 'Markdown', icon: FileText, formatKey: 'markdown' },
   { value: 'html', label: 'HTML', icon: Code, formatKey: 'html' },
   { value: 'json', label: 'JSON', icon: Braces, formatKey: 'json' },
+  { value: 'chunks', label: 'Chunks', icon: Braces, formatKey: 'chunks' },
   { value: 'raw', label: 'Raw Text', icon: Eye },
   { value: 'audio', label: 'Audio', icon: Mic },
 ]
@@ -21,22 +23,24 @@ interface OutputViewerProps {
   content: string | null
   formats?: Record<string, string> | null
   availableFormats?: string[]
+  regeneratableFormats?: string[]
   onRegenerate?: (format: string) => Promise<void>
   onDownload: (format: string) => void
   imageUnderstanding?: ImageUnderstandingMeta[] | null
-  audioMetadata?: Record<string, any> | null
-  filename?: string
+  audioMetadata?: JsonRecord | null
+  jobId?: string
 }
 
 export function OutputViewer({
   content,
   formats = null,
   availableFormats = [],
+  regeneratableFormats = [],
   onRegenerate,
   onDownload,
   imageUnderstanding,
   audioMetadata,
-  filename
+  jobId,
 }: OutputViewerProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>('markdown')
   const [copied, setCopied] = useState(false)
@@ -51,19 +55,74 @@ export function OutputViewer({
   }, [imageUnderstanding])
   const metaTotal = metaByFilename.size
 
-  const isMultiSupported = useMemo(() => {
-    if (!filename) return true
-    const baseName = filename.split(/[?#]/)[0] ?? ''
-    const ext = baseName.split('.').pop()?.toLowerCase()
-    return ext ? ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.tiff', '.bmp', '.gif', '.epub'].includes(`.${ext}`) : false
-  }, [filename])
+  const markdownComponents = useMemo<Components>(() => ({
+    pre: ({ children }) => (
+      <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed bg-transparent p-0 select-text">
+        {children}
+      </pre>
+    ),
+    code: ({ className, children, ...props }) => (
+      <code className={cn('font-mono text-xs', className)} {...props}>
+        {children}
+      </code>
+    ),
+    p: ({ children, node }) => {
+      const hasImage = Array.isArray(node?.children) && node.children.some((child) => (
+        'tagName' in child && child.tagName === 'img'
+      ))
+      const Component = hasImage ? 'div' : 'p'
+      return <Component>{children}</Component>
+    },
+    img: ({ src, alt, ...props }) => {
+      const safeSrc = safeMarkdownImageSrc(src)
+      if (!safeSrc) {
+        const blockedSrc = String(src ?? '').trim()
+        return (
+          <span
+            role="note"
+            aria-label="External image blocked for privacy"
+            className="not-prose inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-sans text-amber-800 dark:text-amber-200"
+            title={blockedSrc}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">External image blocked</span>
+            {blockedSrc && <code className="max-w-[220px] truncate font-mono">{blockedSrc}</code>}
+          </span>
+        )
+      }
+      const imageSrc = markdownAssetSrc(safeSrc, jobId)
+      const imageFilename = (safeSrc.split(/[?#]/, 1)[0] ?? '').split('/').pop() ?? ''
+      const entry = metaByFilename.get(imageFilename)
+      return (
+        <span data-marker-image className="relative inline-block align-middle my-1">
+          <img src={imageSrc} alt={alt} {...props} />
+          {entry && (
+            <ImageUnderstandingBadge
+              meta={entry.meta}
+              index={entry.index}
+              total={metaTotal}
+            />
+          )}
+        </span>
+      )
+    },
+  }), [jobId, metaByFilename, metaTotal])
+
+  const regeneratableFormatSet = useMemo(
+    () => new Set(regeneratableFormats),
+    [regeneratableFormats],
+  )
 
   const visibleTabs = useMemo(() => {
-    const tabs = isMultiSupported
-      ? ALL_TABS
-      : ALL_TABS.filter((t) => t.value === 'markdown' || t.value === 'raw' || t.value === 'audio')
-    return tabs.filter((t) => t.value !== 'audio' || !!audioMetadata)
-  }, [isMultiSupported, audioMetadata])
+    return ALL_TABS.filter((tab) => {
+      if (tab.value === 'audio') return !!audioMetadata
+      if (tab.value === 'raw') return true
+      if (!tab.formatKey) return true
+      if (tab.value === 'markdown') return true
+      if (availableFormats.includes(tab.formatKey) || !!formats?.[tab.formatKey]) return true
+      return !!onRegenerate && regeneratableFormatSet.has(tab.formatKey)
+    })
+  }, [availableFormats, formats, onRegenerate, audioMetadata, regeneratableFormatSet])
 
   const activeContent = useMemo(() => {
     if (activeTab === 'raw') return content
@@ -71,6 +130,10 @@ export function OutputViewer({
     if (fmtKey && formats?.[fmtKey]) return formats[fmtKey]
     return content
   }, [activeTab, formats, content, visibleTabs])
+
+  const downloadFormat = useMemo(() => {
+    return visibleTabs.find((t) => t.value === activeTab)?.formatKey ?? 'markdown'
+  }, [activeTab, visibleTabs])
 
   const copyToClipboard = useCallback(async () => {
     if (!activeContent) return
@@ -95,7 +158,7 @@ export function OutputViewer({
     }
   }, [formats, regenerating, onRegenerate, visibleTabs])
 
-  if (!content && !formats) {
+  if (!content && !formats && !audioMetadata) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center glass-card border border-border/40 min-h-[300px]">
         <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground/40 mb-4 select-none">
@@ -173,7 +236,7 @@ export function OutputViewer({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onDownload(activeTab === 'audio' ? 'markdown' : activeTab)}
+            onClick={() => onDownload(downloadFormat)}
             className="h-8 px-2.5 rounded-lg text-xs font-semibold hover:bg-muted/50 transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-muted-foreground mr-1.5" />
@@ -195,12 +258,12 @@ export function OutputViewer({
               <div className="prose prose-sm dark:prose-invert max-w-none">
                 {imageUnderstanding && imageUnderstanding.length > 0 && (
                   <div className="not-prose flex flex-wrap items-center gap-x-6 gap-y-3 p-4 mb-5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60 shadow-sm">
-                    <span className="text-[10px] font-extrabold tracking-widest text-slate-400 dark:text-slate-500 uppercase w-full mb-0.5">
+                    <span className="text-xs font-extrabold tracking-widest text-slate-400 dark:text-slate-500 uppercase w-full mb-0.5">
                       VLM Processed Images ({imageUnderstanding.length})
                     </span>
                     {imageUnderstanding.map((meta, i) => (
                       <div key={meta.image_name} className="flex items-center gap-2 pr-4 border-r border-slate-200 dark:border-slate-800 last:border-0">
-                        <span className="text-[10px] font-mono text-muted-foreground max-w-[120px] truncate" title={meta.image_name}>
+                        <span className="text-xs font-mono text-muted-foreground max-w-[120px] truncate" title={meta.image_name}>
                           {meta.image_name}
                         </span>
                         <ImageUnderstandingBadge
@@ -215,34 +278,7 @@ export function OutputViewer({
                 )}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
-                  components={{
-                    pre: ({ children }) => (
-                      <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed bg-transparent p-0 select-text">
-                        {children}
-                      </pre>
-                    ),
-                    code: ({ className, children, ...props }: any) => (
-                      <code className={cn('font-mono text-xs', className)} {...props}>
-                        {children}
-                      </code>
-                    ),
-                    img: ({ src, alt, ...props }: any) => {
-                      const filename = String(src ?? '').split('/').pop() ?? ''
-                      const entry = metaByFilename.get(filename)
-                      return (
-                        <span className="relative inline-block align-middle my-1">
-                          <img src={src} alt={alt} {...props} />
-                          {entry && (
-                            <ImageUnderstandingBadge
-                              meta={entry.meta}
-                              index={entry.index}
-                              total={metaTotal}
-                            />
-                          )}
-                        </span>
-                      )
-                    },
-                  }}
+                  components={markdownComponents}
                 >
                   {activeContent ?? ''}
                 </ReactMarkdown>
@@ -254,6 +290,11 @@ export function OutputViewer({
               </pre>
             )}
             {activeTab === 'json' && (
+              <pre className="whitespace-pre-wrap font-mono text-xs select-text">
+                {activeContent}
+              </pre>
+            )}
+            {activeTab === 'chunks' && (
               <pre className="whitespace-pre-wrap font-mono text-xs select-text">
                 {activeContent}
               </pre>
@@ -273,92 +314,220 @@ export function OutputViewer({
   )
 }
 
-function AudioInspectionPanel({ audio }: { audio: Record<string, any> }) {
-  const transcript = audio.transcript ?? {}
-  const quality = audio.quality ?? transcript.risk_summary ?? {}
-  const segments = Array.isArray(transcript.segments) ? transcript.segments : []
-  const speakers = Array.isArray(audio.speakers?.timeline) ? audio.speakers.timeline : []
-  const vocabulary = audio.vocabulary ?? {}
+function safeMarkdownImageSrc(src: unknown): string | null {
+  const raw = String(src ?? '').trim()
+  if (!raw) return null
+
+  if ([...raw].some((ch) => ch === '<' || ch === '>' || ch.charCodeAt(0) < 32)) return null
+  if (/^(?:https?:)?\/\//i.test(raw)) return null
+  if (/^[\\/]/.test(raw)) return null
+
+  const protocolMatch = raw.match(/^([a-z][a-z0-9+.-]*):/i)
+  if (protocolMatch) return null
+
+  const pathPart = raw.split(/[?#]/, 1)[0] ?? ''
+  if (!pathPart) return null
+  let decodedPath: string
+  try {
+    decodedPath = decodeURIComponent(pathPart)
+  } catch {
+    return null
+  }
+  if (decodedPath.includes('\\') || decodedPath.startsWith('/')) return null
+  const parts = decodedPath.split('/')
+  if (parts.some((part) => part === '' || part === '.' || part === '..')) return null
+  if (!/\.(?:png|jpe?g|gif|webp|bmp|tiff?)$/i.test(parts[parts.length - 1] ?? '')) return null
+  return raw
+}
+
+function markdownAssetSrc(src: string, jobId?: string): string {
+  const raw = String(src ?? '').trim()
+  if (!jobId) return raw
+  const pathPart = raw.split(/[?#]/, 1)[0] ?? ''
+  if (!pathPart) return raw
+  const encodedPath = pathPart
+    .split('/')
+    .map((part) => {
+      try {
+        return encodeURIComponent(decodeURIComponent(part))
+      } catch {
+        return encodeURIComponent(part)
+      }
+    })
+    .join('/')
+  return `/api/convert/assets/${encodeURIComponent(jobId)}/${encodedPath}`
+}
+
+function AudioInspectionPanel({ audio }: { audio: JsonRecord }) {
+  const transcript = asRecord(audio.transcript)
+  const batchSources = asRecordArray(audio.sources)
+  const transcripts = Object.keys(transcript).length > 0 ? [transcript] : batchSources
+  const providerCapability = asRecord(audio.provider_capability)
+  const quality = asRecord(audio.quality ?? transcript.risk_summary ?? audio.risk_summary)
+  const relationship = asRecord(audio.relationship)
+  const sourceCount = numberValue(audio.source_count) ?? transcripts.length
+  const segments: JsonRecord[] = transcripts.flatMap((item, sourceIndex) => {
+    const sourceLabel = displayValue(item.source_label, `source_${sourceIndex + 1}`)
+    return asRecordArray(item.segments).map((segment): JsonRecord => ({
+      ...segment,
+      source_label: segment.source_label ?? sourceLabel,
+      provider: segment.provider ?? item.provider,
+      model: segment.model ?? item.model,
+    }))
+  })
+  const speakersMeta = asRecord(audio.speakers)
+  const speakers = asRecordArray(speakersMeta.timeline)
+  const vocabulary = asRecord(audio.vocabulary)
+  const transcriptWarnings = transcripts.flatMap((item) => stringList(item.warnings))
+  const lowConfidenceCount = numberValue(quality.low_confidence_count) ?? sumTranscriptRisk(transcripts, 'low_confidence_count')
+  const unknownConfidenceCount = numberValue(quality.unknown_confidence_count) ?? sumTranscriptRisk(transcripts, 'unknown_confidence_count')
+  const reviewRequired = quality.review_required === true || transcripts.some((item) => asRecord(item.risk_summary).level === 'review')
+  const requestedVocabularyCount = numberValue(vocabulary.requested_count) ?? 0
+  const vocabularyHits = uniqueStrings(transcripts.flatMap((item) => stringList(item.vocabulary_hits)))
+  const detectedVocabulary = stringList(vocabulary.detected).length > 0 ? stringList(vocabulary.detected) : vocabularyHits
+  const detectedVocabularyCount = numberValue(vocabulary.detected_count) ?? detectedVocabulary.length
+  const missedVocabulary = stringList(vocabulary.likely_missed)
+  const reviewSegments = segments
+    .map((segment, index) => {
+      const segmentWarnings = stringList(segment.warnings)
+      const confidence = numberValue(segment.confidence)
+      const tone = confidenceTone(confidence, segmentWarnings)
+      return {
+        segment,
+        index,
+        segmentId: displayValue(segment.segment_id, `segment_${index + 1}`),
+        warnings: segmentWarnings,
+        confidence,
+        tone,
+      }
+    })
+    .filter((item) => item.tone !== 'ok')
+  const providerValue = sourceCount > 1
+    ? 'multiple'
+    : displayValue(transcript.provider ?? providerCapability.provider_id ?? segments[0]?.provider)
+  const modelValue = sourceCount > 1
+    ? 'multiple'
+    : displayValue(transcript.model ?? segments[0]?.model)
 
   return (
     <div className="space-y-4 font-sans text-xs">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <AudioMetric label="Provider" value={transcript.provider ?? audio.provider_capability?.provider_id ?? 'unknown'} />
-        <AudioMetric label="Model" value={transcript.model ?? 'unknown'} />
+        <AudioMetric label="Provider" value={providerValue} />
+        <AudioMetric label="Model" value={modelValue} />
+        {sourceCount > 1 && <AudioMetric label="Sources" value={String(sourceCount)} />}
         <AudioMetric label="Segments" value={String(segments.length)} />
-        <AudioMetric label="Review" value={quality.review_required ? 'required' : 'not required'} tone={quality.review_required ? 'warn' : 'ok'} />
+        <AudioMetric label="Review" value={reviewRequired ? 'required' : 'not required'} tone={reviewRequired ? 'warn' : 'ok'} />
       </div>
 
-      {(quality.low_confidence_count || quality.unknown_confidence_count || transcript.warnings?.length) && (
+      {Object.keys(relationship).length > 0 && (
+        <section className="space-y-2">
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Relationship</h4>
+          <div className="rounded-lg border border-border/40 bg-card/30 p-3">
+            <div className="font-semibold text-foreground">{displayValue(relationship.label)}</div>
+            <div className="mt-1 text-muted-foreground">Strategy: {displayValue(relationship.strategy)}</div>
+            {relationship.evidence != null && (
+              <div className="mt-1 text-muted-foreground">Evidence: {displayValue(relationship.evidence)}</div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {(lowConfidenceCount > 0 || unknownConfidenceCount > 0 || transcriptWarnings.length > 0) && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-300">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
             <div className="font-bold">Audio review suggested</div>
-            <div className="mt-0.5 text-[11px]">
-              Low confidence: {quality.low_confidence_count ?? 0}; unknown confidence: {quality.unknown_confidence_count ?? 0}
+            <div className="mt-0.5 text-xs">
+              Low confidence: {lowConfidenceCount}; unknown confidence: {unknownConfidenceCount}
             </div>
+            {reviewSegments.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {reviewSegments.map((item) => (
+                  <button
+                    key={`${item.segmentId}-${item.index}`}
+                    type="button"
+                    onClick={() => focusAudioSegment(item.segmentId, item.index)}
+                    className="rounded-md border border-amber-500/25 bg-background/70 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-background dark:text-amber-300"
+                  >
+                    Jump {formatMs(item.segment.start_ms)} {item.warnings[0] ?? item.tone}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {speakers.length > 0 && (
         <section className="space-y-2">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Speaker Timeline</h4>
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Speaker Timeline</h4>
           <div className="flex flex-wrap gap-2">
-            {speakers.map((speaker: any) => (
-              <span key={speaker.speaker} className="rounded-lg border border-border/40 bg-card/40 px-2.5 py-1.5">
-                <span className="font-semibold">{speaker.display_label ?? speaker.speaker}</span>
-                <span className="ml-2 text-muted-foreground">{speaker.segment_count} segments</span>
-              </span>
-            ))}
+            {speakers.map((speaker, index) => {
+              const speakerId = displayValue(speaker.speaker, `speaker_${index}`)
+              return (
+                <span key={`${speakerId}-${index}`} className="rounded-lg border border-border/40 bg-card/40 px-2.5 py-1.5">
+                  <span className="font-semibold">{displayValue(speaker.display_label, speakerId)}</span>
+                  <span className="ml-2 text-muted-foreground">{displayValue(speaker.segment_count, '0')} segments</span>
+                </span>
+              )
+            })}
           </div>
         </section>
       )}
 
-      {(vocabulary.requested_count || vocabulary.detected_count) && (
+      {(requestedVocabularyCount > 0 || detectedVocabularyCount > 0) && (
         <section className="space-y-2">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Vocabulary</h4>
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Vocabulary</h4>
           <div className="rounded-lg border border-border/40 bg-card/30 p-3">
-            <div>Requested: {vocabulary.requested_count ?? 0}; detected: {vocabulary.detected_count ?? 0}</div>
-            {Array.isArray(vocabulary.detected) && vocabulary.detected.length > 0 && (
-              <div className="mt-1 text-emerald-700 dark:text-emerald-300">Hits: {vocabulary.detected.join(', ')}</div>
+            <div>Requested: {requestedVocabularyCount}; detected: {detectedVocabularyCount}</div>
+            {detectedVocabulary.length > 0 && (
+              <div className="mt-1 text-emerald-700 dark:text-emerald-300">Hits: {detectedVocabulary.join(', ')}</div>
             )}
-            {Array.isArray(vocabulary.likely_missed) && vocabulary.likely_missed.length > 0 && (
-              <div className="mt-1 text-muted-foreground">Likely missed: {vocabulary.likely_missed.join(', ')}</div>
+            {missedVocabulary.length > 0 && (
+              <div className="mt-1 text-muted-foreground">Likely missed: {missedVocabulary.join(', ')}</div>
             )}
           </div>
         </section>
       )}
 
       <section className="space-y-2">
-        <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Confidence Timeline</h4>
+        <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Confidence Timeline</h4>
         <div className="space-y-2">
           {segments.length === 0 ? (
             <div className="text-muted-foreground">No audio segments in metadata.</div>
-          ) : segments.map((segment: any) => (
-            <div
-              key={segment.segment_id}
-              className={cn(
-                'rounded-lg border p-3 bg-card/30',
-                confidenceTone(segment.confidence, segment.warnings) === 'low'
-                  ? 'border-red-500/35'
-                  : confidenceTone(segment.confidence, segment.warnings) === 'unknown'
-                    ? 'border-slate-400/35'
-                    : 'border-emerald-500/25'
-              )}
-            >
-              <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-                <code>{formatMs(segment.start_ms)}-{formatMs(segment.end_ms)}</code>
-                <span>{segment.speaker ?? 'speaker_0'}</span>
-                <span>{segment.segment_id}</span>
-                <span>confidence {segment.confidence == null ? 'unknown' : Number(segment.confidence).toFixed(2)}</span>
-                {Array.isArray(segment.warnings) && segment.warnings.length > 0 && (
-                  <span className="text-amber-600 dark:text-amber-300">{segment.warnings.join(', ')}</span>
+          ) : segments.map((segment, index) => {
+            const segmentWarnings = stringList(segment.warnings)
+            const confidence = numberValue(segment.confidence)
+            const tone = confidenceTone(confidence, segmentWarnings)
+            const segmentId = displayValue(segment.segment_id, `segment_${index + 1}`)
+            return (
+              <div
+                id={audioSegmentElementId(segmentId, index)}
+                tabIndex={-1}
+                key={`${segmentId}-${index}`}
+                className={cn(
+                  'rounded-lg border p-3 bg-card/30 outline-none focus:ring-2 focus:ring-primary/50',
+                  tone === 'low'
+                    ? 'border-red-500/35'
+                    : tone === 'unknown'
+                      ? 'border-slate-400/35'
+                      : 'border-emerald-500/25'
                 )}
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <code>{formatMs(segment.start_ms)}-{formatMs(segment.end_ms)}</code>
+                  {sourceCount > 1 && <span>{displayValue(segment.source_label)}</span>}
+                  <span>{displayValue(segment.speaker, 'speaker_0')}</span>
+                  <span>{segmentId}</span>
+                  <span>confidence {confidence == null ? 'unknown' : confidence.toFixed(2)}</span>
+                  {segmentWarnings.length > 0 && (
+                    <span className="text-amber-600 dark:text-amber-300">{segmentWarnings.join(', ')}</span>
+                  )}
+                </div>
+                <div className="mt-2 leading-relaxed text-foreground">{displayValue(segment.text, '')}</div>
               </div>
-              <div className="mt-2 leading-relaxed text-foreground">{segment.text}</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
     </div>
@@ -368,7 +537,7 @@ function AudioInspectionPanel({ audio }: { audio: Record<string, any> }) {
 function AudioMetric({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' }) {
   return (
     <div className="rounded-lg border border-border/40 bg-card/30 p-3 min-w-0">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</div>
       <div className={cn('mt-1 truncate font-semibold', tone === 'ok' && 'text-emerald-600 dark:text-emerald-400', tone === 'warn' && 'text-amber-600 dark:text-amber-400')}>
         {value}
       </div>
@@ -376,10 +545,68 @@ function AudioMetric({ label, value, tone }: { label: string; value: string; ton
   )
 }
 
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function asRecord(value: unknown): JsonRecord {
+  return isRecord(value) ? value : {}
+}
+
+function asRecordArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)]
+}
+
+function sumTranscriptRisk(transcripts: JsonRecord[], key: string): number {
+  return transcripts.reduce((total, item) => {
+    const value = numberValue(asRecord(item.risk_summary)[key])
+    return total + (value ?? 0)
+  }, 0)
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+      .filter((item) => ['string', 'number', 'boolean'].includes(typeof item))
+      .map(String)
+    : []
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function displayValue(value: unknown, fallback = 'unknown'): string {
+  if (typeof value === 'string' && value.trim()) return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'boolean') return String(value)
+  return fallback
+}
+
 function confidenceTone(confidence: unknown, warnings: unknown): 'ok' | 'low' | 'unknown' {
   if (Array.isArray(warnings) && warnings.length > 0) return 'low'
   if (confidence == null) return 'unknown'
   return Number(confidence) < 0.65 ? 'low' : 'ok'
+}
+
+function audioSegmentElementId(segmentId: string, index: number): string {
+  return `audio-segment-${index}-${segmentId.replace(/[^A-Za-z0-9_-]/g, '-')}`
+}
+
+function focusAudioSegment(segmentId: string, index: number) {
+  const element = document.getElementById(audioSegmentElementId(segmentId, index))
+  if (!element) return
+  element.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  element.focus({ preventScroll: true })
 }
 
 function formatMs(raw: unknown): string {

@@ -5,7 +5,7 @@ import queue as _q
 from unittest.mock import MagicMock, patch
 
 from app.services import gpu_worker
-from app.services.job_transport import JobEnvelope, WorkerEvent, WorkerEventType
+from app.services.job_transport import JobEnvelope, WorkerEventType
 
 
 def _drain(qq):
@@ -129,6 +129,49 @@ class TestRunJob:
         assert result_ev.job_id == "job-1"
         # _current_job_id cleared after the job.
         assert gpu_worker._current_job_id is None
+
+    def test_multiformat_job_emits_formats_payload(self):
+        _reset_globals()
+        qq = _q.Queue()
+        gpu_worker._event_queue = qq
+        gpu_worker._worker_id = 2
+        gpu_worker._device_str = "cuda:0"
+
+        fake_marker_svc = MagicMock()
+        fake_conversion_svc = MagicMock()
+        fake_conversion_svc.supports_multiple_formats.return_value = True
+        fake_conversion_svc.convert_file_formats.return_value = {
+            "markdown": {"text": "# Hi", "extension": "md", "images": {}, "metadata": {}},
+            "chunks": {
+                "text": '{"schema_version":"marker.chunks.v1","chunks":[]}',
+                "extension": "json",
+                "images": {},
+                "metadata": {"chunking": {"schema_version": "marker.chunks.v1"}},
+            },
+        }
+
+        env = JobEnvelope(
+            job_id="job-multi",
+            filepath="/tmp/x.pdf",
+            config={"output_format": "markdown", "output_formats": ["markdown", "chunks"]},
+            device_str="cuda:0",
+        )
+
+        with patch("app.services.marker_service.MarkerService", return_value=fake_marker_svc), \
+             patch("app.services.conversion_service.ConversionService", return_value=fake_conversion_svc):
+            ret = gpu_worker.worker_run_job(env)
+
+        assert ret == "job-multi"
+        fake_conversion_svc.convert_file_formats.assert_called_once_with(
+            "/tmp/x.pdf",
+            {"output_format": "markdown", "output_formats": ["markdown", "chunks"]},
+            ["markdown", "chunks"],
+            device="cuda:0",
+        )
+        events = _drain(qq)
+        result_ev = next(e for e in events if e.type == WorkerEventType.result)
+        assert result_ev.payload["result"]["text"] == "# Hi"
+        assert result_ev.payload["formats_payload"]["chunks"]["metadata"]["chunking"]["schema_version"] == "marker.chunks.v1"
 
     def test_failure_emits_error_event(self):
         _reset_globals()

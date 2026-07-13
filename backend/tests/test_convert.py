@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,7 +14,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from sqlalchemy import select
 
-from app.database import get_db
 from app.models.job import ConversionJob
 
 # ---------------------------------------------------------------------------
@@ -144,15 +144,132 @@ async def test_pdf_upload_rejects_empty_page_range(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_upload_valid_docx(client: AsyncClient):
+async def test_upload_docx_rejects_structured_output_format(client: AsyncClient):
     files = {"file": ("report.docx", io.BytesIO(b"PK docx content"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
     resp = await client.post(
         "/api/convert/upload",
         files=files,
         params={"output_format": "html"},
     )
+    assert resp.status_code == 400
+    assert "not supported for engine 'office_docx'" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_docx_rejects_incompatible_engine_override(client: AsyncClient):
+    files = {"file": ("report.docx", io.BytesIO(b"PK docx content"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+    resp = await client.post(
+        "/api/convert/upload",
+        files=files,
+        params={"engine_override": "marker_pdf"},
+    )
+
+    assert resp.status_code == 400
+    assert "engine_override 'marker_pdf' is incompatible with extension '.docx'" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_upload_native_file_accepts_derived_chunks(client: AsyncClient, db_session):
+    files = {"file": ("scores.tsv", io.BytesIO(b"name\tscore\nAda\t10\n"), "text/tab-separated-values")}
+
+    resp = await client.post(
+        "/api/convert/upload",
+        files=files,
+        params={
+            "output_format": "chunks",
+            "chunking_strategy": "unstructured_by_title",
+            "chunk_max_tokens": "384",
+            "allow_chunking_fallback": "true",
+        },
+    )
+
     assert resp.status_code == 200
-    assert resp.json()["output_format"] == "html"
+    body = resp.json()
+    assert body["output_format"] == "chunks"
+
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+    assert job.output_format == "chunks"
+    assert config["output_format"] == "chunks"
+    assert config["chunking_strategy"] == "unstructured_by_title"
+    assert config["chunk_max_tokens"] == 384
+    assert config["allow_chunking_fallback"] is True
+
+
+@pytest.mark.asyncio
+async def test_upload_archive_persists_full_budget_controls(client: AsyncClient, db_session):
+    files = {"file": ("bundle.zip", io.BytesIO(b"PK\x05\x06" + b"\x00" * 18), "application/zip")}
+
+    resp = await client.post(
+        "/api/convert/upload",
+        files=files,
+        params={
+            "archive_recursive": "false",
+            "archive_max_files": "12",
+            "archive_inline_bytes": "4096",
+            "archive_max_converted_children": "3",
+            "archive_max_child_bytes": "8192",
+            "archive_max_total_uncompressed_bytes": "16384",
+            "archive_max_compression_ratio": "25",
+            "archive_max_depth": "1",
+        },
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+    assert config["archive_recursive"] is False
+    assert config["archive_max_files"] == 12
+    assert config["archive_inline_bytes"] == 4096
+    assert config["archive_max_converted_children"] == 3
+    assert config["archive_max_child_bytes"] == 8192
+    assert config["archive_max_total_uncompressed_bytes"] == 16384
+    assert config["archive_max_compression_ratio"] == 25
+    assert config["archive_max_depth"] == 1
+
+
+@pytest.mark.asyncio
+async def test_pdf_structured_output_forces_marker_route(client: AsyncClient, db_session):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(),
+        extra_params={"output_format": "json"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["output_format"] == "json"
+
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+
+    assert job.output_format == "json"
+    assert config["output_format"] == "json"
+    assert config["engine_override"] == "marker_pdf"
+
+
+@pytest.mark.asyncio
+async def test_pdf_chunks_keeps_liteparse_fast_profile(client: AsyncClient, db_session):
+    resp = await _upload_file(
+        client,
+        content=_digital_pdf_bytes(),
+        extra_params={"output_format": "chunks", "conversion_profile": "fast"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["output_format"] == "chunks"
+
+    stmt = select(ConversionJob).where(ConversionJob.id == body["job_id"])
+    job = (await db_session.execute(stmt)).scalar_one()
+    config = json.loads(job.config_json)
+
+    assert job.output_format == "chunks"
+    assert config["output_format"] == "chunks"
+    assert config["conversion_profile"] == "fast"
+    assert "engine_override" not in config
 
 
 @pytest.mark.asyncio
@@ -289,15 +406,54 @@ async def test_download_completed_job_returns_file(
 
 
 @pytest.mark.asyncio
+async def test_cancel_job_marks_cancelled_without_deleting_row(
+    client: AsyncClient, db_session
+):
+    """POST /cancel is non-destructive: row remains for history/status."""
+    job_id = "rest-cancel-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="running.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=42,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/cancel")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "cancelled", "job_id": job_id, "cancelled": True}
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "cancelled"
+    assert row.progress == 0
+
+
+@pytest.mark.asyncio
 async def test_delete_job_removes_from_db(
     client: AsyncClient, db_session
 ):
-    """Create a job, delete it via API, verify it's gone from DB."""
+    """Create a terminal job, delete it via API, verify it's gone from DB."""
     from sqlalchemy import select
 
-    upload_resp = await _upload_file(client)
-    assert upload_resp.status_code == 200
-    job_id = upload_resp.json()["job_id"]
+    job_id = "rest-delete-completed-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="done.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            progress=100,
+        )
+    )
+    await db_session.commit()
 
     del_resp = await client.delete(
         f"/api/convert/{job_id}",
@@ -308,6 +464,173 @@ async def test_delete_job_removes_from_db(
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     result = await db_session.execute(stmt)
     assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_delete_job_rejects_live_job_without_force(
+    client: AsyncClient, db_session
+):
+    job_id = "rest-delete-running-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="running.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.delete(f"/api/convert/{job_id}")
+
+    assert resp.status_code == 409
+    assert "cancel it first or pass force=true" in resp.json()["detail"]
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_delete_job_force_deletes_live_job(
+    client: AsyncClient, db_session
+):
+    job_id = "rest-force-delete-running-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="running.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.delete(f"/api/convert/{job_id}", params={"force": "true"})
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "deleted"
+    assert resp.json()["job_id"] == job_id
+    assert resp.json()["files_removed"] == []
+    assert await db_session.get(ConversionJob, job_id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_job_removes_output_manifest_sidecar(
+    client: AsyncClient,
+    db_session,
+    tmp_path: Path,
+):
+    job_id = "rest-delete-with-manifest"
+    result_file = tmp_path / "rest-delete.md"
+    manifest_file = tmp_path / "rest-delete.marker.json"
+    result_file.write_text("# delete me", encoding="utf-8")
+    manifest_file.write_text("{}", encoding="utf-8")
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.pdf",
+            original_name="done.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            result_path=str(result_file),
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.delete(f"/api/convert/{job_id}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "deleted"
+    assert {Path(path).name for path in body["files_removed"]} == {
+        "rest-delete.md",
+        "rest-delete.marker.json",
+    }
+    assert not result_file.exists()
+    assert not manifest_file.exists()
+    assert await db_session.get(ConversionJob, job_id) is None
+
+
+@pytest.mark.asyncio
+async def test_purge_job_files_removes_artifacts_but_keeps_history(
+    client: AsyncClient,
+    db_session,
+    tmp_path: Path,
+):
+    job_id = "rest-purge-completed-job"
+    result_file = tmp_path / "rest-purge.md"
+    manifest_file = tmp_path / "rest-purge.marker.json"
+    result_file.write_text("# retained in db", encoding="utf-8")
+    manifest_file.write_text("{}", encoding="utf-8")
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.csv",
+            original_name="purge.csv",
+            status="completed",
+            input_format="csv",
+            output_format="markdown",
+            result_text="# retained in db",
+            result_path=str(result_file),
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/purge-files")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "purged"
+    assert {Path(path).name for path in body["files_removed"]} == {
+        "rest-purge.md",
+        "rest-purge.marker.json",
+    }
+    assert not result_file.exists()
+    assert not manifest_file.exists()
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "completed"
+    assert row.result_text == "# retained in db"
+    assert row.result_path is None
+    metadata = json.loads(row.result_metadata_json or "{}")
+    assert metadata["purged_artifacts"]["files_removed"] == body["files_removed"]
+
+
+@pytest.mark.asyncio
+async def test_purge_job_files_rejects_live_job(
+    client: AsyncClient,
+    db_session,
+):
+    job_id = "rest-purge-running-job"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename=f"{job_id}.csv",
+            original_name="running.csv",
+            status="processing",
+            input_format="csv",
+            output_format="markdown",
+            progress=25,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/purge-files")
+
+    assert resp.status_code == 409
+    assert "cancel or wait for terminal status" in resp.json()["detail"]
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "processing"
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +667,81 @@ async def test_history_excludes_result_text(
     assert our_job["result_text"] is None, "result_text should be excluded from history"
 
 
+@pytest.mark.asyncio
+async def test_history_filtering(
+    client: AsyncClient, db_session
+):
+    """Verify history endpoint filters by search, status, and converter."""
+    # Insert multiple jobs
+    job1 = ConversionJob(
+        id="job-filter-1",
+        filename="stored-job-filter-1.pdf",
+        original_name="apple display.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        config_json='{"converter_cls": "PdfConverter"}',
+        progress=100,
+    )
+    job2 = ConversionJob(
+        id="job-filter-2",
+        filename="banana.pdf",
+        original_name="banana.pdf",
+        status="failed",
+        input_format="pdf",
+        output_format="markdown",
+        config_json='{"converter_cls": "LiteParse"}',
+        progress=0,
+    )
+    job3 = ConversionJob(
+        id="job-filter-3",
+        filename="stored-job-filter-3.pdf",
+        original_name="compact-table.pdf",
+        status="pending",
+        input_format="pdf",
+        output_format="markdown",
+        config_json='{"converter_cls":"TableConverter"}',
+        progress=0,
+    )
+    db_session.add_all([job1, job2, job3])
+    await db_session.commit()
+
+    # Test search filter against displayed original filename, not only stored path name
+    resp = await client.get("/api/convert/history?search=apple%20display")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-1"
+
+    # Test status filter
+    resp = await client.get("/api/convert/history?status=failed")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-2"
+
+    # Test queued UI alias maps to persisted pending status
+    resp = await client.get("/api/convert/history?status=queued")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-3"
+
+    # Test converter filter
+    resp = await client.get("/api/convert/history?converter=LiteParse")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-2"
+
+    # Test converter filter against compact JSON serialization
+    resp = await client.get("/api/convert/history?converter=TableConverter")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["jobs"][0]["job_id"] == "job-filter-3"
+
+
 # ---------------------------------------------------------------------------
 # Cancelled jobs stay cancelled
 # ---------------------------------------------------------------------------
@@ -369,9 +767,6 @@ async def test_cancelled_job_stays_cancelled(
     db_session.add(job)
     await db_session.commit()
 
-    from app.main import _app_state
-
-    tm = _app_state.task_manager
     from sqlalchemy import update
 
     await db_session.execute(
@@ -739,7 +1134,7 @@ async def test_status_route_surfaces_image_understanding(client: AsyncClient, db
     db_session.add(job)
     await db_session.commit()
 
-    resp = await client.get(f"/api/convert/status/job-meta-1")
+    resp = await client.get("/api/convert/status/job-meta-1")
     assert resp.status_code == 200
     body = resp.json()
     assert body["image_understanding"] is not None
@@ -767,7 +1162,7 @@ async def test_status_route_omits_image_understanding_for_legacy_jobs(client: As
     db_session.add(job)
     await db_session.commit()
 
-    resp = await client.get(f"/api/convert/status/job-legacy-1")
+    resp = await client.get("/api/convert/status/job-legacy-1")
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("image_understanding") is None
@@ -784,7 +1179,7 @@ async def test_status_route_serializes_timestamps_with_utc_offset(
     client: AsyncClient, db_session
 ):
     """created_at / completed_at JSON must end with Z or +00:00, never naive."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     naive_utc = datetime(2026, 6, 11, 9, 0, 0)  # what SQLite hands back
     job = ConversionJob(
@@ -1000,6 +1395,46 @@ async def test_regenerate_appends_format_to_existing_job(client: AsyncClient, db
     src.unlink(missing_ok=True)
 
 
+@pytest.mark.asyncio
+async def test_regenerate_rejects_native_structured_format(client: AsyncClient, db_session):
+    """Native Markdown-only jobs cannot regenerate fake JSON/HTML/chunks."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.core.config import UPLOAD_DIR
+
+    job_id = "job-regen-native"
+    uploads = Path(UPLOAD_DIR)
+    uploads.mkdir(parents=True, exist_ok=True)
+    src = uploads / f"{job_id}.tsv"
+    src.write_text("name\tscore\nAda\t10\n", encoding="utf-8")
+
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.tsv",
+        original_name="scores.tsv",
+        status="completed",
+        input_format="tsv",
+        output_format="markdown",
+        result_text="| name | score |",
+        config_json=_json.dumps({"output_format": "markdown"}),
+        formats_json=_json.dumps({"markdown": "| name | score |"}),
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.post(f"/api/convert/{job_id}/regenerate", params={"format": "json"})
+
+    assert resp.status_code == 409
+    assert "not supported for engine 'text_data'" in resp.json()["detail"]
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert _json.loads(row.formats_json) == {"markdown": "| name | score |"}
+
+    src.unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # Multi-format upload (output_formats query param)
 # ---------------------------------------------------------------------------
@@ -1023,20 +1458,14 @@ async def test_upload_accepts_output_formats_param(client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
-async def test_upload_output_formats_drops_invalid(client: AsyncClient, db_session):
-    """Invalid format names in output_formats are silently dropped."""
+async def test_upload_output_formats_rejects_invalid(client: AsyncClient):
+    """Invalid output_formats entries are rejected instead of silently dropped."""
     resp = await _upload_file(
         client,
         extra_params={"output_formats": "markdown,nonsense,html"},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    job_id = body["job_id"]
-
-    stmt = select(ConversionJob).where(ConversionJob.id == job_id)
-    job = (await db_session.execute(stmt)).scalar_one()
-    config = json.loads(job.config_json)
-    assert config["output_formats"] == ["markdown", "html"]
+    assert resp.status_code == 400
+    assert "Unsupported output_formats value(s): nonsense" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -1150,7 +1579,24 @@ async def test_download_specific_format_does_not_zip_assets(client: AsyncClient,
     result_dir = tmp_path / "job-assets"
     result_dir.mkdir()
     (result_dir / "image.png").write_bytes(b"fake image bytes")
-    (result_dir / "job-assets.marker.json").write_text("{}", encoding="utf-8")
+    (result_dir / "job-assets.marker.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "marker.output_manifest.v1",
+                "output": {
+                    "final_path": str(result_dir.resolve()),
+                    "text_path": str((result_dir / "job-assets.md").resolve()),
+                    "manifest_path": str((result_dir / "job-assets.marker.json").resolve()),
+                    "assets": [
+                        {
+                            "path": str((result_dir / "image.png").resolve()),
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     job_id = "job-download-md-assets"
     job = ConversionJob(
@@ -1185,6 +1631,206 @@ async def test_download_specific_format_does_not_zip_assets(client: AsyncClient,
     package_resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
     assert package_resp.status_code == 200
     assert package_resp.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(package_resp.content)) as zf:
+        manifest = json.loads(zf.read("job-assets.marker.json").decode("utf-8"))
+    assert manifest["output"]["final_path"] == "."
+    assert manifest["output"]["text_path"] == "job-assets.md"
+    assert manifest["output"]["manifest_path"] == "job-assets.marker.json"
+    assert manifest["output"]["assets"][0]["path"] == "image.png"
+    assert not Path(manifest["output"]["assets"][0]["path"]).is_absolute()
+
+
+@pytest.mark.asyncio
+async def test_output_asset_endpoint_serves_manifest_listed_asset(client: AsyncClient, db_session, tmp_path: Path):
+    result_dir = tmp_path / "job-assets"
+    result_dir.mkdir()
+    asset = result_dir / "assets" / "chart.png"
+    asset.parent.mkdir()
+    asset.write_bytes(b"png-bytes")
+    manifest = {
+        "schema_version": "marker.output_manifest.v1",
+        "output": {
+            "assets": [
+                {
+                    "name": "assets/chart.png",
+                    "relative_path": "assets/chart.png",
+                    "path": str(asset),
+                    "media_type": "image/png",
+                }
+            ]
+        },
+    }
+    (result_dir / "job-assets.marker.json").write_text(json.dumps(manifest), encoding="utf-8")
+    job_id = "job-asset-preview"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="source.pdf",
+            original_name="source.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            result_text="![chart](assets/chart.png)",
+            result_path=str(result_dir),
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/assets/{job_id}/assets/chart.png")
+
+    assert resp.status_code == 200
+    assert resp.content == b"png-bytes"
+    assert resp.headers["content-type"].startswith("image/png")
+
+
+@pytest.mark.asyncio
+async def test_output_asset_endpoint_rejects_unlisted_and_outside_assets(client: AsyncClient, db_session, tmp_path: Path):
+    result_dir = tmp_path / "job-assets"
+    result_dir.mkdir()
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"outside")
+    manifest = {
+        "schema_version": "marker.output_manifest.v1",
+        "output": {
+            "assets": [
+                {
+                    "name": "safe.png",
+                    "relative_path": "safe.png",
+                    "path": str(outside),
+                    "media_type": "image/png",
+                }
+            ]
+        },
+    }
+    (result_dir / "job-assets.marker.json").write_text(json.dumps(manifest), encoding="utf-8")
+    job_id = "job-asset-denied"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="source.pdf",
+            original_name="source.pdf",
+            status="completed",
+            input_format="pdf",
+            output_format="markdown",
+            result_text="![safe](safe.png)",
+            result_path=str(result_dir),
+        )
+    )
+    await db_session.commit()
+
+    outside_resp = await client.get(f"/api/convert/assets/{job_id}/safe.png")
+    unlisted_resp = await client.get(f"/api/convert/assets/{job_id}/missing.png")
+    traversal_resp = await client.get(f"/api/convert/assets/{job_id}/assets/%2e%2e/safe.png")
+
+    assert outside_resp.status_code == 404
+    assert unlisted_resp.status_code == 404
+    assert traversal_resp.status_code in {404, 405}
+
+
+@pytest.mark.asyncio
+async def test_download_chunks_format_uses_json_extension(client: AsyncClient, db_session):
+    """Marker chunks are JSON payloads and should download as .json."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-download-chunks-format"
+    chunks_text = '{"chunks": []}'
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="chunks",
+        result_text=chunks_text,
+        config_json=_json.dumps({"output_format": "chunks"}),
+        formats_json=_json.dumps({"chunks": chunks_text}),
+        result_path=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "chunks"})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.headers["content-disposition"].endswith('filename="doc.chunks.json"')
+    assert resp.text == chunks_text
+
+
+@pytest.mark.asyncio
+async def test_download_all_keeps_json_and_chunks_as_distinct_files(client: AsyncClient, db_session):
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-download-json-and-chunks"
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.pdf",
+        original_name="doc.pdf",
+        status="completed",
+        input_format="pdf",
+        output_format="markdown",
+        result_text="# md",
+        config_json=_json.dumps({"output_format": "markdown", "output_formats": ["markdown", "json", "chunks"]}),
+        formats_json=_json.dumps(
+            {
+                "markdown": "# md",
+                "json": '{"document": true}',
+                "chunks": '{"schema_version":"marker.chunks.v1","chunks":[]}',
+            }
+        ),
+        result_path=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "all"})
+
+    assert resp.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        assert sorted(zf.namelist()) == ["doc.chunks.json", "doc.json", "doc.md"]
+        assert zf.read("doc.json").decode("utf-8") == '{"document": true}'
+        assert zf.read("doc.chunks.json").decode("utf-8").startswith('{"schema_version"')
+
+
+@pytest.mark.asyncio
+async def test_download_chunks_unwraps_legacy_nested_format_cache(client: AsyncClient, db_session):
+    """Older cache writes may store a legacy envelope; download must return the JSON text."""
+    import json as _json
+    from datetime import datetime, timezone
+    from app.models.job import ConversionJob
+
+    job_id = "job-download-legacy-nested-chunks"
+    chunks_text = '{"schema_version":"marker.chunks.v1","chunks":[]}'
+    job = ConversionJob(
+        id=job_id,
+        filename=f"{job_id}.tsv",
+        original_name="scores.tsv",
+        status="completed",
+        input_format="tsv",
+        output_format="chunks",
+        result_text=chunks_text,
+        config_json=_json.dumps({"output_format": "chunks"}),
+        formats_json=_json.dumps({"chunks": {"text": chunks_text, "extension": "json"}}),
+        result_path=None,
+        progress=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    resp = await client.get(f"/api/convert/download/{job_id}", params={"format": "chunks"})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.text == chunks_text
 
 
 # ---------------------------------------------------------------------------
@@ -1197,7 +1843,7 @@ async def test_upload_accepts_audio_config_blob(client: AsyncClient, db_session)
     """The audio_config JSON blob is parsed and merged into the stored config."""
     blob = {
         "audio_provider": "local_faster_whisper",
-        "audio_diarization": True,
+        "audio_speaker_aliases": {"speaker_0": "Alice"},
         "audio_vocabulary_pack_ids": ["medical", "team"],
         "audio_text_enhancement_strength": 3,
     }
@@ -1212,9 +1858,124 @@ async def test_upload_accepts_audio_config_blob(client: AsyncClient, db_session)
     job = (await db_session.execute(stmt)).scalar_one()
     cfg = json.loads(job.config_json)
     assert cfg["audio_provider"] == "local_faster_whisper"
-    assert cfg["audio_diarization"] is True
+    assert cfg["audio_speaker_aliases"] == {"speaker_0": "Alice"}
     assert cfg["audio_vocabulary_pack_ids"] == ["medical", "team"]
     assert cfg["audio_text_enhancement_strength"] == 3
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_unsupported_audio_diarization_before_queue(client: AsyncClient, db_session):
+    """Diarization must fail before queueing when the selected provider cannot do it."""
+    resp = await _upload_file(
+        client,
+        filename="diarize.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {
+                    "audio_provider": "local_faster_whisper",
+                    "audio_diarization": True,
+                }
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Audio diarization is not supported by provider" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "diarize.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_deferred_audio_provider_before_queue(client: AsyncClient, db_session):
+    """Known-but-unshipped STT providers fail before a pending job is created."""
+    resp = await _upload_file(
+        client,
+        filename="call.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {"audio_provider": "openai", "audio_allow_cloud_stt": True}
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "not shipped yet" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "call.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_unknown_audio_provider_before_queue(client: AsyncClient, db_session):
+    """Unknown STT provider ids fail instead of silently falling back to local."""
+    resp = await _upload_file(
+        client,
+        filename="unknown-provider.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {"audio_provider": "does_not_exist", "audio_allow_cloud_stt": True}
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Unknown audio provider" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "unknown-provider.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_unshipped_audio_benchmark_compare_before_queue(client: AsyncClient, db_session):
+    """Benchmark comparison is not wired; do not accept a silent no-op job."""
+    resp = await _upload_file(
+        client,
+        filename="compare.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {
+                    "audio_provider": "local_faster_whisper",
+                    "audio_benchmark_compare": True,
+                    "audio_compare_providers": ["local_faster_whisper"],
+                }
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Audio provider comparison is not shipped" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "compare.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_unshipped_audio_fusion_mode_before_queue(client: AsyncClient, db_session):
+    """Fusion mode is not wired; do not accept a silent no-op job."""
+    resp = await _upload_file(
+        client,
+        filename="fusion.wav",
+        content=b"RIFF fake wav",
+        extra_params={
+            "audio_config": json.dumps(
+                {
+                    "audio_provider": "local_faster_whisper",
+                    "audio_fusion_mode": "audio_first",
+                }
+            )
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Audio context fusion is not shipped" in resp.json()["detail"]
+
+    stmt = select(ConversionJob).where(ConversionJob.original_name == "fusion.wav")
+    assert (await db_session.execute(stmt)).scalar_one_or_none() is None
 
 
 @pytest.mark.asyncio

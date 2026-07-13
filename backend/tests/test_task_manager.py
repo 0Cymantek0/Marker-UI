@@ -2,15 +2,67 @@
 
 import asyncio
 import json
+import logging
+import time
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
-from app.services.task_manager import TaskManager
+from app.services.task_manager import (
+    DB_METADATA_AUDIO_SEGMENT_LIMIT,
+    DB_METADATA_VIDEO_FRAME_LIMIT,
+    DB_METADATA_WORDS_PER_SEGMENT_LIMIT,
+    TaskManager,
+    _actual_output_format_for_finalize,
+    _formats_payload_for_finalize,
+)
 from app.services.job_transport import WorkerEvent, WorkerEventType
+
+
+@contextmanager
+def active_event_loop():
+    try:
+        prev_loop = asyncio.get_event_loop()
+    except RuntimeError:
+        prev_loop = None
+    if prev_loop is not None and prev_loop.is_closed():
+        prev_loop = None
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        yield loop
+    finally:
+        loop.close()
+        if prev_loop is not None:
+            asyncio.set_event_loop(prev_loop)
+        else:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+
+
+def _segment_payload(index: int, *, word_count: int) -> dict:
+    return {
+        "segment_id": f"seg_{index:04d}",
+        "source_id": "long_audio",
+        "source_label": "long-audio.mp4",
+        "start_ms": index * 1000,
+        "end_ms": index * 1000 + 900,
+        "speaker": "speaker_0",
+        "text": f"segment {index}",
+        "confidence": 0.95,
+        "warnings": [],
+        "words": [
+            {
+                "word": f"word_{word_index}",
+                "start": word_index / 10,
+                "end": (word_index + 1) / 10,
+                "confidence": 0.9,
+            }
+            for word_index in range(word_count)
+        ],
+    }
 
 
 @pytest.fixture
@@ -18,6 +70,42 @@ def task_manager():
     tm = TaskManager(max_workers=1)
     yield tm
     tm.shutdown(wait=False)
+
+
+def test_shutdown_removes_job_log_handlers():
+    marker_logger = logging.getLogger("marker")
+    app_logger = logging.getLogger("app")
+    before_marker = list(marker_logger.handlers)
+    before_app = list(app_logger.handlers)
+
+    tm = TaskManager(max_workers=1)
+    assert tm._log_handler in marker_logger.handlers
+    assert tm._log_handler in app_logger.handlers
+
+    tm.shutdown(wait=False)
+
+    assert tm._log_handler not in marker_logger.handlers
+    assert tm._log_handler not in app_logger.handlers
+    assert marker_logger.handlers == before_marker
+    assert app_logger.handlers == before_app
+
+
+def test_finalize_format_uses_result_extension_for_markdown_only_converter():
+    result = {"text": "# Converted", "extension": "md"}
+
+    actual_format = _actual_output_format_for_finalize(result, "json")
+    formats_json = _formats_payload_for_finalize(result, actual_format, None)
+
+    assert actual_format == "markdown"
+    assert json.loads(formats_json) == {"markdown": "# Converted"}
+
+
+def test_finalize_format_keeps_marker_chunks_request_with_json_extension():
+    result = {"text": '{"chunks": []}', "extension": "json"}
+
+    actual_format = _actual_output_format_for_finalize(result, "chunks")
+
+    assert actual_format == "chunks"
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +129,42 @@ class TestGetStatus:
         status = task_manager.get_status("active-job")
         assert status["status"] == "processing"
         assert status["progress"] == 42
+
+    def test_low_progress_eta_is_unknown_not_fake(self, task_manager: TaskManager):
+        mock_future = MagicMock()
+        mock_future.done.return_value = False
+        task_manager._tasks["active-job"] = mock_future
+        task_manager._progress["active-job"] = 10
+        task_manager._job_start_time["active-job"] = time.time() - 120
+
+        status = task_manager.get_status("active-job")
+
+        assert status["eta"] is None
+
+    def test_eta_estimates_after_progress_advances(self, task_manager: TaskManager):
+        mock_future = MagicMock()
+        mock_future.done.return_value = False
+        task_manager._tasks["active-job"] = mock_future
+        task_manager._progress["active-job"] = 50
+        task_manager._job_has_real_progress["active-job"] = True
+        task_manager._job_start_time["active-job"] = time.time() - 60
+
+        status = task_manager.get_status("active-job")
+
+        assert status["eta"] is not None
+        assert 1 <= status["eta"] <= 70
+
+    def test_eta_is_unknown_for_coarse_fallback_progress(self, task_manager: TaskManager):
+        mock_future = MagicMock()
+        mock_future.done.return_value = False
+        task_manager._tasks["active-job"] = mock_future
+        task_manager._progress["active-job"] = 33
+        task_manager._job_has_real_progress["active-job"] = False
+        task_manager._job_start_time["active-job"] = time.time() - 300
+
+        status = task_manager.get_status("active-job")
+
+        assert status["eta"] is None
 
     def test_completed_future_shows_completed(self, task_manager: TaskManager):
         mock_future = MagicMock()
@@ -259,13 +383,9 @@ class TestBackendSelection:
             tm.shutdown(wait=False)
 
     def test_thread_backend_tracks_future(self):
-        # submit_job calls asyncio.get_event_loop().create_task(...), so we need a
-        # loop active. Save/restore the current loop so this test cannot leak
-        # state into later async tests in the same session.
-        prev_loop = asyncio.get_event_loop()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
+        # Thread submission needs an active event loop; keep it isolated so this
+        # test cannot leak loop state into later async tests in the same session.
+        with active_event_loop():
             tm = TaskManager(max_workers=2)
             try:
                 tm.submit_job("j-thread", "/tmp/x", {"llm_provider": None}, object())
@@ -273,33 +393,26 @@ class TestBackendSelection:
                 assert "j-thread" in tm._tasks
             finally:
                 tm.shutdown(wait=False)
-        finally:
-            loop.close()
-            asyncio.set_event_loop(prev_loop)
 
     def test_cancelled_thread_future_cleanup_does_not_raise(self):
-        prev_loop = asyncio.get_event_loop()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        with active_event_loop() as loop:
+            class _CancelledBackend:
+                is_process = False
+                name = "thread"
 
-        class _CancelledBackend:
-            is_process = False
-            name = "thread"
+                def __init__(self):
+                    self.future = loop.create_future()
+                    self.future.cancel()
 
-            def __init__(self):
-                self.future = loop.create_future()
-                self.future.cancel()
+                def submit(self, run_job, job_id, filepath, config, marker_service):
+                    return self.future
 
-            def submit(self, run_job, job_id, filepath, config, marker_service):
-                return self.future
+                def supports_job(self, job_id):
+                    return False
 
-            def supports_job(self, job_id):
-                return False
+                def shutdown(self, wait=False):
+                    pass
 
-            def shutdown(self, wait=False):
-                pass
-
-        try:
             backend = _CancelledBackend()
             tm = TaskManager(max_workers=1, backend=backend)
             try:
@@ -308,38 +421,32 @@ class TestBackendSelection:
                 assert "j-cancelled" not in tm._tasks
             finally:
                 tm.shutdown(wait=False)
-        finally:
-            loop.close()
-            asyncio.set_event_loop(prev_loop)
 
     def test_second_marker_job_reports_waiting_on_one_wide_marker_pool(self):
         from app.conversion.result import ConverterPlan
 
-        prev_loop = asyncio.get_event_loop()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        started = threading.Event()
-        release = threading.Event()
+        with active_event_loop() as loop:
+            started = threading.Event()
+            release = threading.Event()
 
-        class _FakeConversionService:
-            def plan(self, filepath, config):
-                return ConverterPlan(
-                    engine="marker_pdf",
-                    label="Marker PDF",
-                    confidence=1.0,
-                    reasons=[],
-                    needs_marker_models=True,
-                    needs_gpu=True,
-                    execution_backend="marker_worker",
-                )
+            class _FakeConversionService:
+                def plan(self, filepath, config):
+                    return ConverterPlan(
+                        engine="marker_pdf",
+                        label="Marker PDF",
+                        confidence=1.0,
+                        reasons=[],
+                        needs_marker_models=True,
+                        needs_gpu=True,
+                        execution_backend="marker_worker",
+                    )
 
-            def convert_file(self, filepath, config):
-                if filepath == "/tmp/first.pdf":
-                    started.set()
-                    release.wait(timeout=5)
-                return {"text": "ok", "extension": "md", "images": {}}
+                def convert_file(self, filepath, config):
+                    if filepath == "/tmp/first.pdf":
+                        started.set()
+                        release.wait(timeout=5)
+                    return {"text": "ok", "extension": "md", "images": {}}
 
-        try:
             tm = TaskManager(max_workers=2)
             try:
                 svc = _FakeConversionService()
@@ -356,9 +463,6 @@ class TestBackendSelection:
                 release.set()
                 loop.run_until_complete(asyncio.sleep(0.1))
                 tm.shutdown(wait=False)
-        finally:
-            loop.close()
-            asyncio.set_event_loop(prev_loop)
 
 
 class TestWorkerEventDispatch:
@@ -441,13 +545,79 @@ class TestProcessJobStatus:
         assert task_manager.get_status("p2")["status"] == "failed"
 
 
+def test_run_conversion_uses_format_renderer_for_single_chunks_request(task_manager: TaskManager):
+    calls: list[tuple[str, list[str]]] = []
+
+    class FakeConversionService:
+        def supports_multiple_formats(self, filepath, config):
+            return True
+
+        def convert_file_formats(self, filepath, config, formats, device=None):
+            calls.append((filepath, list(formats)))
+            return {
+                "chunks": {
+                    "text": '{"chunks": []}',
+                    "extension": "json",
+                    "images": {},
+                    "metadata": {},
+                }
+            }
+
+        def convert_file(self, filepath, config, device=None):
+            raise AssertionError("single chunks request must use convert_file_formats")
+
+    async def fake_finalize(job_id, result, config, formats_payload=None):
+        assert result["extension"] == "json"
+        assert formats_payload is not None
+
+    with patch.object(task_manager, "_finalize_job", new=fake_finalize):
+        result = task_manager._run_conversion(
+            "chunks-job",
+            "scores.tsv",
+            {"output_format": "chunks"},
+            FakeConversionService(),
+        )
+
+    assert result["text"] == '{"chunks": []}'
+    assert calls == [("scores.tsv", ["chunks"])]
+
+
+def test_finalize_proc_job_preserves_worker_formats_payload(task_manager: TaskManager):
+    captured: dict[str, object] = {}
+
+    async def fake_finalize(job_id, result, config, formats_payload=None):
+        captured["job_id"] = job_id
+        captured["result"] = result
+        captured["config"] = config
+        captured["formats_payload"] = formats_payload
+
+    task_manager._proc_configs["proc-multi"] = {"output_format": "markdown"}
+    task_manager._proc_jobs["proc-multi"] = "running"
+    with patch.object(task_manager, "_finalize_job", new=fake_finalize):
+        task_manager._finalize_proc_job(
+            "proc-multi",
+            {
+                "result": {"text": "# Hi", "extension": "md", "images": {}, "metadata": {}},
+                "formats_payload": {
+                    "markdown": {"text": "# Hi", "extension": "md", "images": {}, "metadata": {}},
+                    "chunks": {"text": '{"chunks":[]}', "extension": "json", "images": {}, "metadata": {}},
+                },
+            },
+        )
+
+    assert captured["job_id"] == "proc-multi"
+    assert captured["result"] == {"text": "# Hi", "extension": "md", "images": {}, "metadata": {}}
+    assert captured["config"] == {"output_format": "markdown"}
+    assert captured["formats_payload"]["chunks"]["extension"] == "json"
+
+
 class TestExecutionBackendRouting:
     """Phase 1 section 15.2: office/text jobs route to the CPU pool, not the
     GPU process workers, when a process backend is configured."""
 
     def test_cpu_plan_routes_to_cpu_backend_on_process_config(self):
         from app.conversion.result import ConverterPlan
-        from app.services.task_manager import TaskManager, ProcessExecutorBackend
+        from app.services.task_manager import TaskManager
 
         tm = TaskManager(max_workers=1)
         # Force the primary backend to look like a process backend without
@@ -611,6 +781,11 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
             "engine": {"engine": "mixed_pdf", "label": "Mixed PDF routing"},
             "probe_result": {"page_count": 3},
             "mixed_engine_segments": segments,
+            "chunking": {
+                "schema_version": "marker.chunks.v1",
+                "chunk_count": 2,
+                "chunking_strategy": "markdown_heading_blocks_v2",
+            },
             "assets": assets,
         },
         "assets": assets,
@@ -634,6 +809,11 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
         assert metadata["mixed_engine_segments"] == segments
         assert metadata["engine"] == {"engine": "mixed_pdf", "label": "Mixed PDF routing"}
         assert metadata["probe_result"] == {"page_count": 3}
+        assert metadata["chunking"] == {
+            "schema_version": "marker.chunks.v1",
+            "chunk_count": 2,
+            "chunking_strategy": "markdown_heading_blocks_v2",
+        }
         assert Path(metadata["manifest_path"]).is_file()
         manifest = json.loads(Path(metadata["manifest_path"]).read_text(encoding="utf-8"))
         assert manifest["schema_version"] == "marker.output_manifest.v1"
@@ -647,3 +827,418 @@ async def test_finalize_job_persists_mixed_engine_segments_and_assets(
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_finalize_job_bounds_large_audio_video_metadata_in_db(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Long media metadata stays in the manifest; DB status metadata is bounded."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'media-metadata.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "66666666-6666-4666-8666-666666666666"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="long-audio.mp4",
+            original_name="long-audio.mp4",
+            status="pending",
+            input_format="mp4",
+            output_format="markdown",
+            config_json=json.dumps(
+                {
+                    "output_format": "markdown",
+                    "original_name": "long-audio.mp4",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    segments = [_segment_payload(index, word_count=DB_METADATA_WORDS_PER_SEGMENT_LIMIT + 5) for index in range(DB_METADATA_AUDIO_SEGMENT_LIMIT + 7)]
+    audio = {
+        "transcript": {
+            "source_id": "long_audio",
+            "source_label": "long-audio.mp4",
+            "provider": "local_faster_whisper",
+            "segments": segments,
+        },
+        "raw_provider_metadata": {"segments": segments, "verbose": "x" * 4096},
+        "quality": {"review_required": False},
+    }
+    audio_batch = {
+        "source_count": 2,
+        "segment_count": len(segments) * 2,
+        "sources": [
+            {"source_id": "a", "source_label": "a.wav", "segments": segments},
+            {"source_id": "b", "source_label": "b.wav", "segments": segments},
+        ],
+    }
+    video = {
+        "transcript": {"segments": segments},
+        "frames": [{"timestamp_ms": index * 1000, "ocr_text": f"frame {index}"} for index in range(DB_METADATA_VIDEO_FRAME_LIMIT + 3)],
+        "provenance": {"audio": True, "frames": True},
+    }
+
+    tm = TaskManager(max_workers=1)
+    try:
+        await tm._finalize_job(
+            job_id,
+            {
+                "text": "# Media\n\nbody",
+                "extension": "md",
+                "images": {},
+                "metadata": {"audio": audio, "audio_batch": audio_batch, "video": video},
+            },
+            {
+                "output_format": "markdown",
+                "original_name": "long-audio.mp4",
+                "output_dir": str(tmp_path / "out"),
+            },
+        )
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        metadata = json.loads(row.result_metadata_json)
+        db_audio = metadata["audio"]
+        db_segments = db_audio["transcript"]["segments"]
+        assert len(db_segments) == DB_METADATA_AUDIO_SEGMENT_LIMIT
+        assert db_audio["transcript"]["segment_count"] == len(segments)
+        assert db_audio["transcript"]["segments_truncated"] is True
+        assert len(db_segments[0]["words"]) == DB_METADATA_WORDS_PER_SEGMENT_LIMIT
+        assert db_segments[0]["word_count"] == DB_METADATA_WORDS_PER_SEGMENT_LIMIT + 5
+        assert db_segments[0]["words_truncated"] is True
+        assert db_audio["raw_provider_metadata_omitted"] is True
+        assert "raw_provider_metadata" not in db_audio
+        assert metadata["audio_batch"]["segments_truncated"] is True
+        assert len(metadata["audio_batch"]["sources"][0]["segments"]) == DB_METADATA_AUDIO_SEGMENT_LIMIT
+        assert metadata["audio_batch"]["sources"][1]["segments"] == []
+        assert len(metadata["video"]["frames"]) == DB_METADATA_VIDEO_FRAME_LIMIT
+        assert metadata["video"]["frames_truncated"] is True
+        manifest = json.loads(Path(metadata["manifest_path"]).read_text(encoding="utf-8"))
+
+    manifest_audio = manifest["conversion"]["metadata"]["audio"]
+    assert len(manifest_audio["transcript"]["segments"]) == len(segments)
+    assert "raw_provider_metadata" in manifest_audio
+    assert len(manifest["conversion"]["metadata"]["video"]["frames"]) == DB_METADATA_VIDEO_FRAME_LIMIT + 3
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_relabels_markdown_only_result_as_markdown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Markdown-only converters must not persist Markdown under a fake JSON key."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'final-format.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "44444444-4444-4444-8444-444444444444"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="report.docx",
+            original_name="report.docx",
+            status="pending",
+            input_format="docx",
+            output_format="json",
+            config_json=json.dumps(
+                {
+                    "output_format": "json",
+                    "original_name": "report.docx",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    result_payload = {
+        "text": "# Report\n\nNative Markdown output",
+        "extension": "md",
+        "images": {},
+        "metadata": {"engine": {"engine": "office_docx", "label": "DOCX"}},
+    }
+    config = {
+        "output_format": "json",
+        "original_name": "report.docx",
+        "output_dir": str(tmp_path / "out"),
+    }
+
+    tm = TaskManager(max_workers=1)
+    try:
+        await tm._finalize_job(job_id, result_payload, config)
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row.status == "completed"
+        assert row.output_format == "markdown"
+        assert json.loads(row.formats_json) == {"markdown": "# Report\n\nNative Markdown output"}
+        assert Path(row.result_path).suffix == ".md"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_persists_primary_chunks_with_chunks_json_suffix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Primary chunk artifacts need a distinct suffix and JSON media type."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'final-chunks.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "66666666-6666-4666-8666-666666666666"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="scores.tsv",
+            original_name="scores.tsv",
+            status="pending",
+            input_format="tsv",
+            output_format="chunks",
+            config_json=json.dumps(
+                {
+                    "output_format": "chunks",
+                    "original_name": "scores.tsv",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    chunk_text = '{"schema_version":"marker.chunks.v1","chunks":[]}'
+    result_payload = {
+        "text": chunk_text,
+        "extension": "json",
+        "images": {},
+        "metadata": {"chunking": {"schema_version": "marker.chunks.v1"}},
+    }
+    config = {
+        "output_format": "chunks",
+        "original_name": "scores.tsv",
+        "output_dir": str(tmp_path / "out"),
+    }
+
+    tm = TaskManager(max_workers=1)
+    try:
+        await tm._finalize_job(job_id, result_payload, config)
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row.status == "completed"
+        assert row.output_format == "chunks"
+        assert json.loads(row.formats_json) == {"chunks": chunk_text}
+        result_path = Path(row.result_path)
+        assert result_path.name == "scores.chunks.json"
+        manifest = json.loads(result_path.with_name("scores.chunks.marker.json").read_text(encoding="utf-8"))
+        assert manifest["output"]["text_path"] == "scores.chunks.json"
+        assert manifest["output"]["media_type"] == "application/json"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_honors_in_memory_cancel_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """A running thread that finishes after cancel must not complete the job."""
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'cancel-finalize.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "55555555-5555-4555-8555-555555555555"
+    async with session_factory() as session:
+        session.add(ConversionJob(
+            id=job_id,
+            filename="cancel.pdf",
+            original_name="cancel.pdf",
+            status="processing",
+            input_format="pdf",
+            output_format="markdown",
+            progress=42,
+            config_json=json.dumps(
+                {
+                    "output_format": "markdown",
+                    "original_name": "cancel.pdf",
+                    "output_dir": str(tmp_path / "out"),
+                }
+            ),
+        ))
+        await session.commit()
+
+    tm = TaskManager(max_workers=1)
+    tm._cancel_requested.add(job_id)
+    try:
+        await tm._finalize_job(
+            job_id,
+            {"text": "# Should not persist", "extension": "md", "images": {}, "metadata": {}},
+            {
+                "output_format": "markdown",
+                "original_name": "cancel.pdf",
+                "output_dir": str(tmp_path / "out"),
+            },
+        )
+    finally:
+        tm.shutdown(wait=False)
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row.status == "cancelled"
+        assert row.result_text is None
+        assert row.result_path is None
+        assert row.progress == 42
+    assert not (tmp_path / "out").exists()
+
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# MUI-003: commit-before-submit race condition
+#
+# Fast CPU/native converters can finish and call _finalize_job inside a worker
+# thread BEFORE the request's get_db dependency commits the job row. The worker
+# opens a fresh session, doesn't see the uncommitted row, and silently skips
+# finalization — leaving the job stuck at "pending" forever.
+#
+# Fix: REST upload must explicitly commit the job row before calling
+# task_manager.submit_job(). Defense-in-depth: _finalize_job should also retry
+# briefly + log a distinct warning when the row is missing, rather than masking
+# the race as "cancelled or deleted."
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_retries_briefly_when_row_not_yet_visible(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """_finalize_job must not silently skip when the job row isn't visible yet.
+
+    The race window between submit_job and get_db's commit is small but real for
+    fast converters. _finalize_job should retry briefly so a just-submitted job
+    whose request transaction is still flushing is finalized, not lost. And the
+    log must distinguish "row missing (possibly mid-commit)" from "user cancelled"
+    so the failure mode is observable.
+    """
+    import app.services.task_manager as tm_mod
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from app.database import Base
+    from app.models.job import ConversionJob  # noqa: F401
+    from app.models.settings import Setting  # noqa: F401
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'race_retry.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(tm_mod, "async_session_factory", session_factory)
+
+    job_id = "55555555-5555-5555-8555-555555555555"
+
+    result_payload = {
+        "text": "# Delayed commit",
+        "extension": "md",
+        "images": {},
+        "metadata": {"engine": {"engine": "text_data", "label": "Text"}},
+    }
+    config = {
+        "output_format": "markdown",
+        "original_name": "data.txt",
+        "output_dir": str(tmp_path / "out"),
+    }
+
+    tm = TaskManager(max_workers=1)
+
+    # Insert the job row AFTER finalize starts, simulating a request commit that
+    # lands slightly after the worker reaches _finalize_job. Without retry,
+    # finalize sees no row and returns immediately.
+    async def _delayed_insert():
+        await asyncio.sleep(0.3)
+        async with session_factory() as session:
+            session.add(ConversionJob(
+                id=job_id,
+                filename="data.txt",
+                original_name="data.txt",
+                status="pending",
+                input_format="txt",
+                output_format="markdown",
+                config_json=json.dumps(config),
+            ))
+            await session.commit()
+
+    insert_task = asyncio.ensure_future(_delayed_insert())
+    try:
+        await tm._finalize_job(job_id, result_payload, config)
+    finally:
+        tm.shutdown(wait=False)
+        await insert_task
+
+    async with session_factory() as session:
+        row = await session.get(ConversionJob, job_id)
+        assert row is not None, "Job row should have been finalized, not lost"
+        assert row.status == "completed"
+        assert row.result_text == "# Delayed commit"
+
+    await engine.dispose()

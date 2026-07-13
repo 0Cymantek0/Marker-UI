@@ -12,6 +12,7 @@ export type ImageHandlingMode = 'understanding' | 'extraction' | 'both'
 export type OcrEngine = 'surya' | 'hybrid_ocr'
 export type HybridOcrProfile = 'balanced' | 'max_accuracy' | 'low_vram'
 export type SmartRouterLevel = 'disabled' | 'smart' | 'beeg_brain'
+export type ChunkingStrategy = 'markdown_heading_blocks_v2' | 'unstructured_by_title'
 export type AudioOutputMode =
   | 'transcript'
   | 'enhanced'
@@ -41,18 +42,10 @@ export type AudioStructuralMode =
   | 'action_decision_log'
   | 'timeline'
 
-export type AudioEnhancementPreset =
-  | 'raw_transcript'
-  | 'clean_transcript'
-  | 'corrected_transcript'
-  | 'readable_notes'
-  | 'evidence_meeting_notes'
-  | 'polished_minutes'
-  | 'strict_structural'
-
 export interface AudioProviderCapability {
   provider_id: AudioProviderType
   provider_label: string
+  implementation_state?: 'implemented' | 'beta' | 'deferred' | 'unsupported'
   available?: boolean
   runtime_type: 'local' | 'cloud' | 'local_optional'
   cloud: boolean
@@ -81,6 +74,28 @@ export interface VocabularyPack {
   created_at: string
 }
 
+export interface AudioProviderConfig {
+  id: string
+  type: AudioProviderType | string
+  label: string
+  api_key?: string | null
+  base_url?: string | null
+  region?: string | null
+  deployment?: string | null
+  concurrency?: number | null
+  timeout?: number | null
+  max_retries?: number | null
+  default_model?: string | null
+  models: string[]
+  enabled: boolean
+  cloud: boolean
+}
+
+export interface ActiveAudioProvider {
+  provider_id: string
+  model_id: string
+}
+
 /**
  * Migrate any stored/legacy ocr_engine value to a currently-valid one.
  *
@@ -97,6 +112,8 @@ export function normalizeOcrEngine(value: unknown): OcrEngine {
 
 export interface ConversionConfig {
   output_formats: OutputFormat[]
+  chunking_strategy?: ChunkingStrategy
+  allow_chunking_fallback?: boolean
   converter: ConverterType
   engine_override?: string
   use_llm?: boolean
@@ -168,8 +185,12 @@ export interface ConversionConfig {
   max_batch_retries?: number
   archive_recursive?: boolean
   archive_max_files?: number
+  archive_inline_bytes?: number
   archive_max_converted_children?: number
   archive_max_child_bytes?: number
+  archive_max_total_uncompressed_bytes?: number
+  archive_max_compression_ratio?: number
+  archive_max_depth?: number
 }
 
 export interface ConversionResponse {
@@ -187,6 +208,23 @@ export interface ImageUnderstandingMeta {
   cost_usd?: number
 }
 
+export interface MixedEngineSegment {
+  page_range?: string | null
+  requested_engine?: string | null
+  actual_engine?: string | null
+  fallback_reason?: string | null
+  pages?: number[] | null
+}
+
+export interface ConversionMetadata {
+  engine?: ConverterPlanResponse | null
+  probe_result?: Record<string, unknown> | null
+  audio?: Record<string, unknown> | null
+  audio_batch?: Record<string, unknown> | null
+  mixed_engine_segments?: MixedEngineSegment[] | null
+  [key: string]: unknown
+}
+
 export interface JobStatus {
   id: string
   job_id: string
@@ -202,7 +240,11 @@ export interface JobStatus {
   formats?: Record<string, string> | null
   available_formats?: string[] | null
   image_understanding?: ImageUnderstandingMeta[] | null
-  conversion_metadata?: Record<string, any> | null
+  conversion_metadata?: ConversionMetadata | null
+  message?: string | null
+  logs?: string[] | null
+  elapsed?: number | null
+  eta?: number | null
 }
 
 export interface SSEEvent {
@@ -275,6 +317,7 @@ export interface BackendLLMConfig {
   claude_api_key?: string | null
   claude_model_name?: string | null
   vertex_project_id?: string | null
+  vertex_location?: string | null
   azure_api_key?: string | null
   azure_endpoint?: string | null
   azure_deployment_name?: string | null
@@ -294,10 +337,10 @@ export interface BackendJobStatus {
   error_message: string | null
   result_text: string | null
   image_understanding?: ImageUnderstandingMeta[] | null
-  conversion_metadata?: Record<string, any> | null
+  conversion_metadata?: ConversionMetadata | null
   filename: string
   message?: string | null
-  logs?: string | null
+  logs?: string[] | null
   elapsed?: number | null
   eta?: number | null
 }
@@ -433,6 +476,8 @@ export async function uploadFile(
   if (config.output_formats.length > 1) {
     params.append('output_formats', config.output_formats.join(','))
   }
+  if (config.chunking_strategy) params.append('chunking_strategy', config.chunking_strategy)
+  if (config.allow_chunking_fallback !== undefined) params.append('allow_chunking_fallback', String(config.allow_chunking_fallback))
   if (config.conversion_profile) params.append('conversion_profile', config.conversion_profile)
   if (config.converter) params.append('converter', config.converter)
   if (config.engine_override) params.append('engine_override', config.engine_override)
@@ -502,8 +547,12 @@ export async function uploadFile(
   if (config.max_batch_retries !== undefined) params.append('max_batch_retries', String(config.max_batch_retries))
   if (config.archive_recursive !== undefined) params.append('archive_recursive', String(config.archive_recursive))
   if (config.archive_max_files !== undefined) params.append('archive_max_files', String(config.archive_max_files))
+  if (config.archive_inline_bytes !== undefined) params.append('archive_inline_bytes', String(config.archive_inline_bytes))
   if (config.archive_max_converted_children !== undefined) params.append('archive_max_converted_children', String(config.archive_max_converted_children))
   if (config.archive_max_child_bytes !== undefined) params.append('archive_max_child_bytes', String(config.archive_max_child_bytes))
+  if (config.archive_max_total_uncompressed_bytes !== undefined) params.append('archive_max_total_uncompressed_bytes', String(config.archive_max_total_uncompressed_bytes))
+  if (config.archive_max_compression_ratio !== undefined) params.append('archive_max_compression_ratio', String(config.archive_max_compression_ratio))
+  if (config.archive_max_depth !== undefined) params.append('archive_max_depth', String(config.archive_max_depth))
   if (localFilepath) params.append('local_filepath', localFilepath)
   if (sourceUrl) params.append('source_url', sourceUrl)
   if (outputDir) params.append('output_dir', outputDir)
@@ -566,11 +615,19 @@ export async function regenerateFormat(jobId: string, format: string): Promise<R
   })
 }
 
-export async function getHistory(page = 1, limit = 20): Promise<{ jobs: JobStatus[]; total: number }> {
-  // Backend returns HistoryResponse: { jobs: JobStatus[], total: number }
-  const res = await request<{ jobs: BackendJobStatus[]; total: number }>(
-    `/convert/history?page=${page}&page_size=${limit}`
-  )
+export async function getHistory(
+  page = 1,
+  limit = 20,
+  search?: string,
+  status?: string,
+  converter?: string
+): Promise<{ jobs: JobStatus[]; total: number }> {
+  let url = `/convert/history?page=${page}&page_size=${limit}`
+  if (search) url += `&search=${encodeURIComponent(search)}`
+  if (status && status !== 'all') url += `&status=${encodeURIComponent(status)}`
+  if (converter && converter !== 'all') url += `&converter=${encodeURIComponent(converter)}`
+
+  const res = await request<{ jobs: BackendJobStatus[]; total: number }>(url)
   return {
     jobs: res.jobs.map((j) => ({
       ...j,
@@ -669,16 +726,69 @@ export async function applyLiveOverride(body: LiveOverrideRequest): Promise<{ st
   })
 }
 
+export interface RetryJobRequestBody {
+  llm_provider?: string
+  llm_model?: string
+}
+
+export interface RetryJobResponse {
+  new_job_id: string
+  source_job_id: string
+  status: string
+}
+
+/** Re-run a terminal job from its stored source file, optionally with a
+ *  different LLM provider/model. Creates a new job; the original stays in
+ *  history. LLM responses cached for the same prompt are replayed, so only
+ *  the work that did not complete is re-done. */
+export async function retryConversionJob(
+  jobId: string,
+  body: RetryJobRequestBody = {}
+): Promise<RetryJobResponse> {
+  return request<RetryJobResponse>(`/convert/${jobId}/retry`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export async function deleteJob(jobId: string): Promise<void> {
   return request<void>(`/convert/${jobId}`, { method: 'DELETE' })
 }
 
-export async function browseFolder(): Promise<{ path: string }> {
-  return request<{ path: string }>('/convert/browse-folder')
+// --- LLM call trace viewer -------------------------------------------------
+
+export interface LlmTracePart {
+  type: 'text' | 'image'
+  text?: string
+  data_url?: string
+  mime?: string
+  size_bytes?: number
+  truncated?: boolean
+  note?: string
 }
 
-export async function browseFiles(): Promise<{ paths: string[] }> {
-  return request<{ paths: string[] }>('/convert/browse-files')
+export interface LlmTrace {
+  index: number
+  ts: number
+  job_id: string
+  host: string
+  model: string
+  parts: LlmTracePart[]
+  image_count: number
+  prompt_chars: number
+  status: number
+  response: string
+  response_chars: number
+  cache_hit: boolean
+  elapsed_ms: number
+}
+
+export async function getLlmTraces(jobId: string): Promise<{ job_id: string; traces: LlmTrace[] }> {
+  return request<{ job_id: string; traces: LlmTrace[] }>(`/convert/${jobId}/llm-traces`)
+}
+
+export async function cancelJob(jobId: string): Promise<{ status: string; job_id: string; cancelled: boolean }> {
+  return request<{ status: string; job_id: string; cancelled: boolean }>(`/convert/${jobId}/cancel`, { method: 'POST' })
 }
 
 export async function healthCheck(): Promise<{ status: string }> {
@@ -816,8 +926,23 @@ export async function resetModels(deleteUserData: boolean): Promise<{ success: b
 
 // ─── Capabilities & Conversion Planning ───────────────────────────────
 
+export interface InputFormatCapability {
+  extensions: string[]
+  engine: string
+  label: string
+  category: string
+  needs_marker_models: boolean
+  needs_gpu: boolean
+  upload_allowed: boolean
+  url_allowed: boolean
+  output_formats?: OutputFormat[]
+}
+
 export interface CapabilitiesResponse {
   engines: Record<string, string>
+  output_formats?: OutputFormat[]
+  marker_multi_format_extensions?: string[]
+  input_formats?: InputFormatCapability[]
 }
 
 export interface ConverterPlanResponse {
@@ -832,9 +957,10 @@ export interface ConverterPlanResponse {
   optional_dependencies: string[]
   fallback_chain: string[]
   warnings: string[]
+  output_formats?: OutputFormat[]
   preliminary: boolean
-  probe_result?: Record<string, any> | null
-  mixed_engine_segments?: Array<Record<string, any>> | null
+  probe_result?: Record<string, unknown> | null
+  mixed_engine_segments?: MixedEngineSegment[] | null
 }
 
 export async function getCapabilities(): Promise<CapabilitiesResponse> {
@@ -904,6 +1030,28 @@ export async function deletePreset(presetId: string): Promise<{ success: boolean
 export async function getAudioCapabilities(): Promise<AudioProviderCapability[]> {
   const res = await request<{ providers: AudioProviderCapability[] }>('/settings/audio/capabilities')
   return res.providers
+}
+
+export async function getAudioProviders(): Promise<AudioProviderConfig[]> {
+  return request<AudioProviderConfig[]>('/settings/audio/providers')
+}
+
+export async function saveAudioProviders(providers: AudioProviderConfig[]): Promise<AudioProviderConfig[]> {
+  return request<AudioProviderConfig[]>('/settings/audio/providers', {
+    method: 'PUT',
+    body: JSON.stringify(providers),
+  })
+}
+
+export async function getActiveAudioProvider(): Promise<ActiveAudioProvider> {
+  return request<ActiveAudioProvider>('/settings/audio/active')
+}
+
+export async function setActiveAudioProvider(active: ActiveAudioProvider): Promise<ActiveAudioProvider> {
+  return request<ActiveAudioProvider>('/settings/audio/active', {
+    method: 'PUT',
+    body: JSON.stringify(active),
+  })
 }
 
 export async function getVocabularyPacks(): Promise<VocabularyPack[]> {

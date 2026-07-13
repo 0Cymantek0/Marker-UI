@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Cloud,
   HardDrive,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -36,11 +38,11 @@ interface AudioAdvancedSettingsProps {
 
 const ENHANCEMENT_LABELS: Record<number, { label: string; desc: string }> = {
   0: { label: 'Off', desc: 'Raw STT output. Best for legal/audit.' },
-  1: { label: 'Minimal', desc: 'Punctuation, casing, spacing only.' },
-  2: { label: 'Conservative', desc: 'Fix likely ASR errors with vocabulary.' },
-  3: { label: 'Balanced', desc: 'Readable notes, filler cleanup, paragraphs.' },
-  4: { label: 'Strong', desc: 'Polished written notes with source refs.' },
-  5: { label: 'Editorial', desc: 'Full rewrite with strict evidence binding.' },
+  1: { label: 'Minimal', desc: 'Punctuation, casing, and spacing cleanup only.' },
+  2: { label: 'Vocabulary', desc: 'Vocabulary-aware cleanup for likely ASR slips.' },
+  3: { label: 'Structured', desc: 'Readable source-bound notes and paragraphs.' },
+  4: { label: 'Polished', desc: 'More polished notes while preserving source refs.' },
+  5: { label: 'Max Local', desc: 'Most aggressive local cleanup; no new claims.' },
 }
 
 const OUTPUT_STYLE_OPTIONS: { value: AudioOutputMode; label: string; desc: string }[] = [
@@ -63,6 +65,9 @@ const STRUCTURAL_MODE_OPTIONS: { value: AudioStructuralMode; label: string }[] =
   { value: 'timeline', label: 'Timeline' },
 ]
 
+const DEFAULT_SPEAKER_ALIAS_ROWS = 2
+const MAX_SPEAKER_ALIAS_ROWS = 12
+
 export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvancedSettingsProps) {
   const [capabilities, setCapabilities] = useState<AudioProviderCapability[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -77,7 +82,14 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
   const cap = capabilities.find((c) => c.provider_id === activeProvider)
   const isCloud = cap?.cloud ?? false
 
-  const selectableCapabilities = capabilities.filter((c) => c.available !== false)
+  const selectableCapabilities = capabilities.filter(
+    (c) => c.available !== false && (c.implementation_state ?? 'implemented') === 'implemented'
+  )
+  const audioBenchmarkAvailable = false
+  const cloudEnhancementAvailable = false
+  const cloudEnhancementEnabled = config.audio_enhancement_allow_cloud ?? false
+  const benchmarkCompareEnabled = config.audio_benchmark_compare ?? false
+  const configuredFusionMode = config.audio_fusion_mode?.trim()
   const providerOptions = selectableCapabilities.length > 0
     ? selectableCapabilities.map((c) => ({
         value: c.provider_id,
@@ -91,11 +103,11 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
       <div className="pb-1">
         <div className="flex items-center gap-2">
           <Mic className="w-4 h-4 text-primary" />
-          <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase">
+          <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase">
             Audio & Voice Notes
           </label>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-1 leading-normal">
+        <p className="text-xs text-muted-foreground mt-1 leading-normal">
           Configure transcription, speakers, vocabulary, enhancement, and more.
         </p>
       </div>
@@ -106,17 +118,13 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
         title="Transcription"
         defaultOpen
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <SectionLabel label="Provider" help="Speech-to-text engine. Local runs on your machine; cloud requires opt-in." />
             <Select
               value={activeProvider}
               onChange={(val) => {
                 onChange('audio_provider', val as AudioProviderType)
-                const selected = capabilities.find((c) => c.provider_id === val)
-                if (selected?.cloud && !config.audio_allow_cloud_stt) {
-                  onChange('audio_allow_cloud_stt', true)
-                }
               }}
               options={providerOptions}
               disabled={disabled}
@@ -125,8 +133,11 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             {isCloud && (
               <CloudBadge />
             )}
-            {cap?.available === false && (
-              <ProviderWarning message={`${cap.provider_label} is listed for future support but its adapter is not shipped in this build.`} />
+            {isCloud && !config.audio_allow_cloud_stt && (
+              <ProviderWarning message="Cloud STT is selected but not allowed yet. Enable Allow Cloud STT in Privacy & Providers before running this job." />
+            )}
+            {(cap?.available === false || cap?.implementation_state === 'deferred') && (
+              <ProviderWarning message={`${cap.provider_label} is ${cap.implementation_state ?? 'deferred'} in this build; its transcription adapter is not shipped.`} />
             )}
           </div>
 
@@ -137,12 +148,12 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               onChange={(e) => onChange('audio_model', e.target.value)}
               placeholder={cap?.default_model || 'tiny.en'}
               disabled={disabled}
-              className="bg-background/50 h-9 text-xs"
+              className="bg-background/50"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
           <div className="space-y-1.5">
             <SectionLabel label="Language" help="Spoken language hint (e.g., en, es, fr, hi). Improves accuracy." />
             <Input
@@ -150,7 +161,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               onChange={(e) => onChange('audio_language', e.target.value || undefined)}
               placeholder="auto-detect"
               disabled={disabled}
-              className="bg-background/50 h-9 text-xs"
+              className="bg-background/50"
             />
           </div>
 
@@ -213,7 +224,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 <span className={cn('text-xs font-semibold block', isActive ? 'text-primary' : 'text-foreground')}>
                   {opt.label}
                 </span>
-                <span className="text-[10px] text-muted-foreground mt-0.5 block leading-snug">
+                <span className="text-xs text-muted-foreground mt-0.5 block leading-snug">
                   {opt.desc}
                 </span>
               </button>
@@ -255,7 +266,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
       <button
         type="button"
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-2 w-full py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 hover:text-foreground transition-colors"
+        className="flex items-center gap-2 w-full py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground/70 hover:text-foreground transition-colors"
       >
         <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showAdvanced && 'rotate-180')} />
         <span>{showAdvanced ? 'Hide Advanced Controls' : 'Show Advanced Controls'}</span>
@@ -279,7 +290,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               <ProviderWarning message={`${cap.provider_label} does not support speaker diarization. All segments will be labeled speaker_0.`} />
             )}
             {config.audio_diarization && cap?.supports_diarization && (
-              <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                 <div className="space-y-1.5">
                   <SectionLabel label="Min Speakers" help="Expected minimum speaker count." />
                   <Input
@@ -290,7 +301,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                     min={1}
                     max={20}
                     disabled={disabled}
-                    className="bg-background/50 h-9 text-xs"
+                    className="bg-background/50"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -303,12 +314,19 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                     min={1}
                     max={20}
                     disabled={disabled}
-                    className="bg-background/50 h-9 text-xs"
+                    className="bg-background/50"
                   />
                 </div>
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground/70 mt-2 leading-snug">
+            <SpeakerAliasEditor
+              aliases={config.audio_speaker_aliases ?? {}}
+              minSpeakers={config.audio_min_speakers}
+              maxSpeakers={config.audio_max_speakers}
+              disabled={disabled}
+              onChange={(aliases) => onChange('audio_speaker_aliases', aliases)}
+            />
+            <p className="text-xs text-muted-foreground/70 mt-2 leading-snug">
               Speaker labels are anonymous by default. Only labels you explicitly map to names are renamed.
             </p>
           </CollapsibleSection>
@@ -368,9 +386,14 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             <div className="space-y-4">
               <div className="space-y-2">
                 <ToggleChip
-                  label="Improve Transcript Wording"
+                  label="Clean Transcript Wording"
                   checked={config.audio_text_enhancement_enabled ?? false}
-                  onChange={(v) => onChange('audio_text_enhancement_enabled', v)}
+                  onChange={(v) => {
+                    onChange('audio_text_enhancement_enabled', v)
+                    if (v && !config.audio_text_enhancement_strength) {
+                      onChange('audio_text_enhancement_strength', 1)
+                    }
+                  }}
                   disabled={disabled}
                 />
                 {config.audio_text_enhancement_enabled && (
@@ -391,12 +414,12 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                         {ENHANCEMENT_LABELS[config.audio_text_enhancement_strength ?? 0]?.label ?? 'Off'}
                       </span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground leading-snug">
+                    <p className="text-xs text-muted-foreground leading-snug">
                       {ENHANCEMENT_LABELS[config.audio_text_enhancement_strength ?? 0]?.desc}
                     </p>
                     {(config.audio_text_enhancement_strength ?? 0) >= 4 && (
-                      <div className="text-[10px] text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug">
-                        Higher levels may paraphrase speech. Raw transcript and source refs preserved for audit.
+                      <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug">
+                        Higher levels still use local deterministic cleanup in this build. Raw transcript and source refs remain preserved for audit.
                       </div>
                     )}
                   </div>
@@ -421,7 +444,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                       className="w-full"
                     />
                     {!config.audio_text_enhancement_enabled && (
-                      <p className="text-[10px] text-blue-600 dark:text-blue-400 leading-snug">
+                      <p className="text-xs text-blue-600 dark:text-blue-400 leading-snug">
                         Structural-only mode will reorganize the transcript but will not rewrite transcript words.
                       </p>
                     )}
@@ -444,7 +467,7 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                   onChange={(e) => onChange('audio_context', e.target.value)}
                   placeholder="optional context for batch processing"
                   disabled={disabled}
-                  className="bg-background/50 h-9 text-xs"
+                  className="bg-background/50"
                 />
               </div>
               <ToggleChip
@@ -453,9 +476,12 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
                 onChange={(v) => onChange('audio_contradiction_detection', v)}
                 disabled={disabled}
               />
-              <p className="text-[10px] text-muted-foreground/70 leading-snug">
+              <p className="text-xs text-muted-foreground/70 leading-snug">
                 When enabled, contradictory claims across segments and speakers are surfaced with source refs. The system will not auto-resolve conflicts.
               </p>
+              {configuredFusionMode && (
+                <ProviderWarning message={`Audio context fusion mode "${configuredFusionMode}" is not shipped in this build. The backend rejects this saved option so it cannot be mistaken for active behavior.`} />
+              )}
             </div>
           </CollapsibleSection>
 
@@ -473,23 +499,26 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
               />
               <ToggleChip
                 label="Allow Cloud Enhancement"
-                checked={config.audio_enhancement_allow_cloud ?? false}
+                checked={cloudEnhancementEnabled}
                 onChange={(v) => onChange('audio_enhancement_allow_cloud', v)}
-                disabled={disabled}
+                disabled={disabled || (!cloudEnhancementAvailable && !cloudEnhancementEnabled)}
               />
+              {!cloudEnhancementAvailable && (
+                <ProviderWarning message="Cloud transcript enhancement is not shipped in this build. Enhancement uses local deterministic source-bound notes only." />
+              )}
               {(config.audio_allow_cloud_stt || config.audio_enhancement_allow_cloud) && (
-                <div className="text-[10px] text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug flex items-start gap-2">
+                <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug flex items-start gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span>Audio data will leave your machine. Cloud usage is recorded in job metadata.</span>
                 </div>
               )}
               <div className="flex items-center gap-2 pt-1">
                 {isCloud ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
                     <Cloud className="w-3 h-3" /> Cloud provider selected
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                     <HardDrive className="w-3 h-3" /> Local processing only
                   </span>
                 )}
@@ -505,12 +534,13 @@ export function AudioAdvancedSettings({ config, onChange, disabled }: AudioAdvan
             <div className="space-y-3">
               <ToggleChip
                 label="Compare Providers"
-                checked={config.audio_benchmark_compare ?? false}
+                checked={benchmarkCompareEnabled}
                 onChange={(v) => onChange('audio_benchmark_compare', v)}
-                disabled={disabled}
+                disabled={disabled || (!audioBenchmarkAvailable && !benchmarkCompareEnabled)}
               />
-              <p className="text-[10px] text-muted-foreground/70 leading-snug">
-                When enabled, the primary and comparison providers both transcribe the same audio. A comparison report (latency, confidence, vocabulary hits, segment count) is attached to job metadata.
+              <ProviderWarning message="Provider comparison is not shipped in this build. The backend rejects this option until a benchmark runner and at least two adapters ship." />
+              <p className="text-xs text-muted-foreground/70 leading-snug">
+                Reserved for future latency, confidence, vocabulary-hit, and segment-count comparison reports.
               </p>
             </div>
           </CollapsibleSection>
@@ -538,18 +568,21 @@ function CollapsibleSection({
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="rounded-xl border border-border/30 bg-card/20 overflow-hidden">
+    <div className="rounded-xl border border-border/30 bg-card/20">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full px-3.5 py-2.5 hover:bg-muted/20 transition-colors"
+        className={cn(
+          'flex items-center gap-2 w-full px-3.5 py-2.5 hover:bg-muted/20 transition-colors',
+          open ? 'rounded-t-xl' : 'rounded-xl'
+        )}
       >
         <Icon className="w-3.5 h-3.5 text-primary/80" />
-        <span className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase flex-1 text-left">
+        <span className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase flex-1 text-left">
           {title}
         </span>
         {badge && (
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+          <span className="text-xs font-semibold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
             {badge}
           </span>
         )}
@@ -568,8 +601,8 @@ function CollapsibleSection({
 
 function SectionLabel({ label, help }: { label: string; help: string }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <label className="text-[10px] font-bold tracking-widest text-muted-foreground/80 uppercase block">
+    <div className="flex items-start gap-1.5">
+      <label className="text-xs font-bold tracking-widest text-muted-foreground/80 uppercase block leading-5">
         {label}
       </label>
       <HelpBubble text={help} />
@@ -580,8 +613,8 @@ function SectionLabel({ label, help }: { label: string; help: string }) {
 function HelpBubble({ text }: { text: string }) {
   return (
     <div className="group relative">
-      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help" />
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-[10px] leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-30 pointer-events-none text-left">
+      <HelpCircle className="mt-[3px] w-3.5 h-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help" />
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-48 p-2 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-normal text-slate-100 shadow-lg border border-slate-800/80 z-50 pointer-events-none text-left">
         {text}
       </div>
     </div>
@@ -620,8 +653,8 @@ function ToggleChip({
       >
         <div
           className={cn(
-            'absolute top-[2px] w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200',
-            checked ? 'left-[15px]' : 'left-[2px]'
+            'absolute top-[2px] w-3 h-3 rounded-full shadow-sm transition-transform duration-200',
+            checked ? 'left-[15px] bg-primary-foreground' : 'left-[2px] bg-white'
           )}
         />
       </div>
@@ -632,9 +665,143 @@ function ToggleChip({
 
 // ─── Warning Badges ────────────────────────────────────────────────
 
+function SpeakerAliasEditor({
+  aliases,
+  minSpeakers,
+  maxSpeakers,
+  disabled,
+  onChange,
+}: {
+  aliases: Record<string, string>
+  minSpeakers?: number
+  maxSpeakers?: number
+  disabled?: boolean
+  onChange: (aliases: Record<string, string>) => void
+}) {
+  const [extraRows, setExtraRows] = useState(0)
+  const labels = buildSpeakerAliasLabels(aliases, minSpeakers, maxSpeakers, extraRows)
+
+  const updateAlias = (label: string, value: string) => {
+    const next = { ...aliases }
+    const trimmed = value.trim()
+    if (trimmed) {
+      next[label] = trimmed
+    } else {
+      delete next[label]
+    }
+    onChange(next)
+  }
+
+  const removeAlias = (label: string) => {
+    const next = { ...aliases }
+    delete next[label]
+    onChange(next)
+  }
+
+  const canAdd = labels.length < MAX_SPEAKER_ALIAS_ROWS
+
+  return (
+    <div className="mt-4 space-y-2">
+      <SectionLabel
+        label="Speaker Names"
+        help="Optional local aliases. speaker_0 remains anonymous unless you enter a name."
+      />
+      <div className="space-y-2">
+        {labels.map((label) => (
+          <div key={label} className="grid grid-cols-[minmax(6.5rem,0.8fr)_minmax(0,1.2fr)_2rem] gap-2 items-center">
+            <Input
+              value={label}
+              readOnly
+              disabled={disabled}
+              aria-label={`${label} label`}
+              className="bg-background/50 h-9 text-xs font-mono"
+            />
+            <Input
+              value={aliases[label] ?? ''}
+              onChange={(e) => updateAlias(label, e.target.value)}
+              placeholder="confirmed name"
+              disabled={disabled}
+              aria-label={`${label} name`}
+              className="bg-background/50 h-9 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => removeAlias(label)}
+              disabled={disabled || !aliases[label]}
+              aria-label={`Remove ${label} alias`}
+              className={cn(
+                'inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+                'hover:bg-muted/30 hover:text-foreground',
+                (disabled || !aliases[label]) && 'opacity-40 pointer-events-none'
+              )}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => setExtraRows((count) => Math.min(count + 1, MAX_SPEAKER_ALIAS_ROWS - labels.length))}
+        disabled={disabled || !canAdd}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground',
+          'hover:bg-muted/30 hover:text-foreground',
+          (disabled || !canAdd) && 'opacity-50 pointer-events-none'
+        )}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add Speaker Label
+      </button>
+    </div>
+  )
+}
+
+function buildSpeakerAliasLabels(
+  aliases: Record<string, string>,
+  minSpeakers?: number,
+  maxSpeakers?: number,
+  extraRows = 0,
+) {
+  const labels = new Set<string>()
+  for (let index = 0; index < DEFAULT_SPEAKER_ALIAS_ROWS; index += 1) {
+    labels.add(`speaker_${index}`)
+  }
+  Object.keys(aliases).forEach((label) => labels.add(label))
+
+  const requestedCount = Math.max(
+    DEFAULT_SPEAKER_ALIAS_ROWS,
+    minSpeakers ?? 0,
+    maxSpeakers ?? 0,
+    highestSpeakerIndex([...labels]) + 1,
+  )
+  const totalRows = Math.min(requestedCount + extraRows, MAX_SPEAKER_ALIAS_ROWS)
+  for (let index = 0; index < totalRows; index += 1) {
+    labels.add(`speaker_${index}`)
+  }
+
+  return [...labels].sort(compareSpeakerLabels).slice(0, MAX_SPEAKER_ALIAS_ROWS)
+}
+
+function highestSpeakerIndex(labels: string[]) {
+  return labels.reduce((max, label) => {
+    const match = /^speaker_(\d+)$/.exec(label)
+    return match ? Math.max(max, Number(match[1])) : max
+  }, -1)
+}
+
+function compareSpeakerLabels(left: string, right: string) {
+  const leftMatch = /^speaker_(\d+)$/.exec(left)
+  const rightMatch = /^speaker_(\d+)$/.exec(right)
+  if (leftMatch && rightMatch) return Number(leftMatch[1]) - Number(rightMatch[1])
+  if (leftMatch) return -1
+  if (rightMatch) return 1
+  return left.localeCompare(right)
+}
+
 function ProviderWarning({ message }: { message: string }) {
   return (
-    <div className="text-[10px] text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug mt-2 flex items-start gap-2">
+    <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-md border border-amber-500/20 bg-amber-500/5 leading-snug mt-2 flex items-start gap-2">
       <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
       <span>{message}</span>
     </div>
@@ -643,7 +810,7 @@ function ProviderWarning({ message }: { message: string }) {
 
 function CloudBadge() {
   return (
-    <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded mt-1">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded mt-1">
       <Cloud className="w-3 h-3" />
       Cloud provider — audio leaves your machine
     </span>

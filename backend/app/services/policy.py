@@ -36,6 +36,15 @@ def output_root() -> Path | None:
     return _resolve(Path(raw).expanduser()) if raw else None
 
 
+def unrestricted_local_paths_enabled() -> bool:
+    return os.getenv("MARKER_ALLOW_UNRESTRICTED_LOCAL_PATHS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def assert_local_input_allowed(path: Path) -> None:
     resolved = _resolve(path)
     server_roots = workspace_roots()
@@ -50,6 +59,26 @@ def assert_local_input_allowed(path: Path) -> None:
             f"Local input path is outside MCP client roots: {path}",
             details={"path": str(path), "client_roots": [str(root) for root in client_roots]},
         )
+
+
+def assert_rest_local_input_allowed(path: Path) -> None:
+    if not workspace_roots() and not unrestricted_local_paths_enabled():
+        raise InputNotAllowedError(
+            "REST local_filepath requires MARKER_WORKSPACE_ROOTS. "
+            "Set MARKER_ALLOW_UNRESTRICTED_LOCAL_PATHS=true only for trusted local development.",
+            details={"path": str(path)},
+        )
+    assert_local_input_allowed(path)
+
+
+def assert_rest_output_write_allowed(path: Path) -> None:
+    if output_root() is None and not unrestricted_local_paths_enabled():
+        raise InputNotAllowedError(
+            "REST output_dir requires MARKER_OUTPUT_ROOT. "
+            "Set MARKER_ALLOW_UNRESTRICTED_LOCAL_PATHS=true only for trusted local development.",
+            details={"path": str(path)},
+        )
+    assert_output_write_allowed(path)
 
 
 def assert_output_write_allowed(path: Path) -> None:

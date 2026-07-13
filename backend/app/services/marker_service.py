@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.conversion.formats import OUTPUT_FORMATS, OUTPUT_FORMAT_SET
 from app.services.model_tracker import tracker
 
 logger = logging.getLogger(__name__)
@@ -115,7 +116,7 @@ _MARKER_CHUNK_RENDERER = "marker.renderers.chunk.ChunkRenderer"
 # Canonical output formats the UI can request. Order is stable for display.
 # These are the only formats the multi-format render path knows how to render
 # from one parsed marker Document — anything else falls back to markdown.
-_SUPPORTED_FORMATS: tuple[str, ...] = ("markdown", "json", "html", "chunks")
+_SUPPORTED_FORMATS = OUTPUT_FORMATS
 
 
 def _renderer_string_for_format(fmt: str, options: dict[str, Any]) -> str:
@@ -604,7 +605,7 @@ class MarkerService:
         from marker.output import text_from_rendered
 
         # Dedupe + drop unknowns so a bad client request never crashes a render.
-        formats = [f for f in dict.fromkeys(formats) if f in _SUPPORTED_FORMATS]
+        formats = [f for f in dict.fromkeys(formats) if f in OUTPUT_FORMAT_SET]
         if not formats:
             formats = ["markdown"]
 

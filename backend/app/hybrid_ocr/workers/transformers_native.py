@@ -12,7 +12,6 @@ from app.hybrid_ocr.setup import expected_model_dir
 
 
 def run_glm_transformers(request: dict[str, Any]) -> dict[str, Any]:
-    import torch
     from transformers import AutoModelForImageTextToText, AutoProcessor
 
     model_dir = expected_model_dir("glm_ocr")

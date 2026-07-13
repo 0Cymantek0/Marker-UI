@@ -61,13 +61,13 @@ export function ImageUnderstandingBadge({ meta, index, total, inline = false }: 
           aria-label={`Image ${index} of ${total}: ${meta.image_type} converted via VLM. Confidence ${confidencePct}%. Click for details.`}
           className={cn(inline ? "relative" : "absolute -top-2 -right-2 z-10")}
         >
-          <Badge variant={variant} className="px-1.5 py-0 text-[9px] font-bold uppercase tracking-wide shadow-sm cursor-pointer">
+          <Badge variant={variant} className="px-3 py-0.5 text-xs font-bold uppercase tracking-wide shadow-sm cursor-pointer">
             {label}
           </Badge>
         </button>
         {/* Hover tooltip */}
-        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 hidden group-hover:block w-56 p-2.5 rounded-lg bg-slate-900 dark:bg-slate-800 text-[10px] leading-relaxed text-slate-100 shadow-lg border border-slate-800/80 z-20 pointer-events-none text-left">
-          <div className="font-bold uppercase tracking-wide text-[9px] text-slate-400 mb-1">
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 hidden group-hover:block w-56 p-2.5 rounded-lg bg-slate-900 dark:bg-slate-800 text-xs leading-relaxed text-slate-100 shadow-lg border border-slate-800/80 z-50 pointer-events-none text-left">
+          <div className="font-bold uppercase tracking-wide text-xs text-slate-400 mb-1">
             Image Understanding
           </div>
           <div className="space-y-0.5">
@@ -108,12 +108,12 @@ export function ImageUnderstandingBadge({ meta, index, total, inline = false }: 
               <Row label="Model" value={meta.model ?? 'auto-resolved'} />
               <Row label="Omitted" value={meta.omitted ? 'Yes' : 'No'} />
               <div className="pt-2 border-t border-border/20">
-                <div className="text-[10px] font-bold tracking-widest text-muted-foreground/70 uppercase mb-1">
+                <div className="text-xs font-bold tracking-widest text-muted-foreground/70 uppercase mb-1">
                   Representation
                 </div>
-                <Badge variant={variant} className="text-[10px]">{label}</Badge>
+                <Badge variant={variant} className="text-xs">{label}</Badge>
               </div>
-              <p className="text-[10px] text-muted-foreground/60 italic pt-1">
+              <p className="text-xs text-muted-foreground/60 italic pt-1">
                 Phase 1 is read-only. Manual correction is planned for a later release.
               </p>
             </div>
@@ -128,7 +128,7 @@ export function ImageUnderstandingBadge({ meta, index, total, inline = false }: 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <span className="text-[10px] font-bold tracking-widest text-muted-foreground/70 uppercase shrink-0 pt-0.5">
+      <span className="text-xs font-bold tracking-widest text-muted-foreground/70 uppercase shrink-0 pt-0.5">
         {label}
       </span>
       <span className={cn('text-foreground text-right break-all', mono && 'font-mono')}>{value}</span>

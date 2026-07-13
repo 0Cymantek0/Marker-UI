@@ -41,6 +41,19 @@ async def test_healthz_version_and_request_id(
 
 
 @pytest.mark.asyncio
+async def test_security_headers_block_external_preview_images(client: AsyncClient):
+    response = await client.get("/api/healthz")
+
+    assert response.status_code == 200
+    csp = response.headers["Content-Security-Policy"]
+    assert "img-src 'self' data: blob:" in csp
+    assert "https:" not in csp.split("img-src", 1)[1].split(";", 1)[0]
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert response.headers["X-Frame-Options"] == "DENY"
+
+
+@pytest.mark.asyncio
 async def test_readyz_fails_when_output_dir_unavailable(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

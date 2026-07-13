@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
@@ -17,6 +16,13 @@ from app.agent_api import (
     read_output,
 )
 from app.agent_contract import CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.agent_surface import resource_scopes
+from app.security.auth import require_mcp_scopes
+from app.services.output_manifest_reader import (
+    manifest_for_job_status,
+    manifest_for_output_path,
+    output_text_path_from_manifest,
+)
 
 
 def register_mcp_resources(
@@ -34,6 +40,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_capabilities_resource() -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://capabilities"))
         data = capabilities()
         if tool_names is not None:
             data["tools"] = tool_names
@@ -51,6 +58,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_health_resource() -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://health"))
         return {"service": SERVICE_NAME, "status": "ok"}
 
     @mcp.resource(
@@ -61,6 +69,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_version_resource() -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://version"))
         return {
             "service": SERVICE_NAME,
             "version": os.getenv("MARKER_VERSION", "unknown"),
@@ -75,6 +84,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_jobs_resource() -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://jobs"))
         return await list_jobs(page=1, page_size=20)
 
     @mcp.resource(
@@ -85,6 +95,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_job_resource(job_id: str) -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://jobs/{job_id}"))
         return await get_job_status(job_id)
 
     @mcp.resource(
@@ -95,20 +106,22 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_job_manifest_resource(job_id: str) -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://jobs/{job_id}/manifest"))
         status = await get_job_status(job_id)
-        return _manifest_for_job_status(status)[1]
+        return manifest_for_job_status(status)[1]
 
     @mcp.resource(
         "marker://jobs/{job_id}/output",
         name="marker_job_output",
         title="Marker Job Output",
-        description="First output text chunk associated with a completed job.",
+        description="First bounded offset page of output text associated with a completed job.",
         mime_type="text/plain",
     )
     async def marker_job_output_resource(job_id: str) -> str:
+        require_mcp_scopes(*resource_scopes("marker://jobs/{job_id}/output"))
         status = await get_job_status(job_id)
-        _, manifest = _manifest_for_job_status(status)
-        text_path = _output_text_path_from_manifest(manifest) or status.get("result_path")
+        manifest_path, manifest = manifest_for_job_status(status)
+        text_path = output_text_path_from_manifest(manifest, manifest_path=manifest_path) or status.get("result_path")
         if not text_path:
             return ""
         if Path(text_path).is_dir():
@@ -123,8 +136,9 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_job_assets_resource(job_id: str) -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://jobs/{job_id}/assets"))
         status = await get_job_status(job_id)
-        manifest_path, manifest = _manifest_for_job_status(status)
+        manifest_path, manifest = manifest_for_job_status(status)
         output = manifest.get("output") if isinstance(manifest, dict) else {}
         assets = output.get("assets", []) if isinstance(output, dict) else []
         return {"manifest_path": str(manifest_path) if manifest_path else None, "assets": assets}
@@ -137,7 +151,8 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_output_manifest_resource(output_id: str) -> dict[str, Any]:
-        _, manifest = _manifest_for_output_path(Path(unquote(output_id)).expanduser())
+        require_mcp_scopes(*resource_scopes("marker://outputs/{output_id}/manifest"))
+        _, manifest = manifest_for_output_path(Path(unquote(output_id)))
         return manifest
 
     @mcp.resource(
@@ -148,13 +163,14 @@ def register_mcp_resources(
         mime_type="text/markdown",
     )
     def marker_agent_guide_resource() -> str:
+        require_mcp_scopes(*resource_scopes("marker://docs/agent-guide"))
         return (
             "# Marker Agent Guide\n\n"
             "1. Read `marker://capabilities`.\n"
-            "2. Plan local files with `marker_plan_local_file` or URLs with `marker_plan_url`.\n"
-            "3. Convert locally with `marker_convert_local_file` or public URLs with `marker_convert_url`.\n"
+            "2. Plan sources with `marker_plan` and a `source` object.\n"
+            "3. Convert sources with `marker_convert` or submit long work with `marker_submit`.\n"
             "4. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.\n"
-            "5. Read long outputs with `marker_read_output_chunk` and inspect manifests/assets before summarizing.\n"
+            "5. Read long outputs as bounded offset pages with `marker_read_output`; request `output_format='chunks'` when semantic RAG chunks are needed.\n"
         )
 
     @mcp.resource(
@@ -165,6 +181,7 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     def marker_options_resource() -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://docs/options"))
         return {"schema_version": CONTRACT_SCHEMA_VERSION, "options": export_json_schemas()["option_metadata"]}
 
     @mcp.resource(
@@ -175,41 +192,5 @@ def register_mcp_resources(
         mime_type="application/json",
     )
     async def marker_settings_resource() -> dict[str, Any]:
+        require_mcp_scopes(*resource_scopes("marker://settings"))
         return await list_settings()
-
-
-def _manifest_for_job_status(status: dict[str, Any]) -> tuple[Path | None, dict[str, Any]]:
-    metadata = status.get("conversion_metadata") if isinstance(status, dict) else {}
-    manifest_path = metadata.get("manifest_path") if isinstance(metadata, dict) else None
-    if manifest_path:
-        return _manifest_for_output_path(Path(str(manifest_path)).expanduser())
-    result_path = status.get("result_path") if isinstance(status, dict) else None
-    if result_path:
-        return _manifest_for_output_path(Path(str(result_path)).expanduser())
-    return None, {}
-
-
-def _manifest_for_output_path(path: Path) -> tuple[Path | None, dict[str, Any]]:
-    candidates = [path]
-    if path.suffix != ".json":
-        candidates.append(path.with_name(f"{path.stem}.marker.json"))
-    if path.is_dir():
-        candidates.extend(sorted(path.glob("*.marker.json")))
-    for candidate in candidates:
-        if not candidate.is_file():
-            continue
-        try:
-            manifest = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(manifest, dict) and manifest.get("schema_version") == "marker.output_manifest.v1":
-            return candidate, manifest
-    return None, {}
-
-
-def _output_text_path_from_manifest(manifest: dict[str, Any]) -> str | None:
-    output = manifest.get("output") if isinstance(manifest, dict) else None
-    if not isinstance(output, dict):
-        return None
-    text_path = output.get("text_path")
-    return str(text_path) if text_path else None

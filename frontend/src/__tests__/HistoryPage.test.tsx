@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { HistoryPage } from '@/pages/HistoryPage'
 import * as api from '@/lib/api'
 import '@testing-library/jest-dom'
@@ -107,5 +107,49 @@ describe('HistoryPage component delete confirmation flow', () => {
 
     // Delete button should reset back to Delete entry
     expect(deleteBtn).toHaveAttribute('title', 'Delete entry')
+  })
+
+  it('uses blob content type to correct stale download filename extensions', async () => {
+    vi.mocked(api.downloadResult).mockResolvedValue({
+      blob: new Blob(['zip'], { type: 'application/zip' }),
+      filename: 'test_file.md',
+    })
+    const anchor = document.createElement('a')
+    const click = vi.fn()
+    anchor.click = click
+    const createElement = vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
+      if (tagName.toLowerCase() === 'a') return anchor
+      return Document.prototype.createElement.call(document, tagName, options)
+    })
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:history-download')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    render(<HistoryPage />)
+
+    const downloadBtn = await screen.findByTitle(/Download Result/i)
+    await act(async () => {
+      fireEvent.click(downloadBtn)
+    })
+
+    expect(api.downloadResult).toHaveBeenCalledWith('job-123')
+    expect(anchor.download).toBe('test_file.zip')
+    expect(click).toHaveBeenCalled()
+
+    createElement.mockRestore()
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
+  })
+
+  it('sends pending status when queued filter is selected', async () => {
+    render(<HistoryPage />)
+
+    await screen.findByText('test_file.pdf')
+
+    fireEvent.click(screen.getByRole('button', { name: /All Statuses/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Queued' }))
+
+    await waitFor(() => {
+      expect(api.getHistory).toHaveBeenLastCalledWith(1, 10, undefined, 'pending', 'all')
+    })
   })
 })

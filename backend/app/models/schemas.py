@@ -123,6 +123,28 @@ class ConversionResponse(BaseModel):
     output_format: str
 
 
+class RetryJobRequest(BaseModel):
+    """Body for POST /api/convert/{job_id}/retry — re-run a terminal job from
+    its stored source file, optionally overriding the LLM provider/model.
+
+    A cross-provider retry creates a NEW job (different client/wire format means
+    the running converter cannot be hot-swapped). Same-provider model swaps
+    should use the live-override endpoint instead. Both fields are optional:
+    omit them to retry with the original config unchanged.
+    """
+
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+
+
+class RetryJobResponse(BaseModel):
+    """Returned after a retry creates a new job."""
+
+    new_job_id: str
+    source_job_id: str
+    status: str
+
+
 # ---------------------------------------------------------------------------
 # Job status
 # ---------------------------------------------------------------------------
@@ -313,10 +335,27 @@ class FetchModelsRequest(BaseModel):
 # Conversion Planning & Capabilities
 # ---------------------------------------------------------------------------
 
+class InputFormatCapability(BaseModel):
+    """One supported input format group exposed to GUI/agents."""
+
+    extensions: list[str]
+    engine: str
+    label: str
+    category: str
+    needs_marker_models: bool
+    needs_gpu: bool
+    upload_allowed: bool
+    url_allowed: bool
+    output_formats: list[str] = Field(default_factory=list)
+
+
 class CapabilitiesResponse(BaseModel):
-    """Supported engines and their status."""
+    """Supported engines, formats, and their status."""
 
     engines: dict[str, str]
+    output_formats: list[str] = Field(default_factory=list)
+    marker_multi_format_extensions: list[str] = Field(default_factory=list)
+    input_formats: list[InputFormatCapability] = Field(default_factory=list)
 
 
 class ConvertPlanRequest(BaseModel):
@@ -348,6 +387,7 @@ class ConverterPlanResponse(BaseModel):
     optional_dependencies: list[str]
     fallback_chain: list[str]
     warnings: list[str]
+    output_formats: list[str] = Field(default_factory=list)
     preliminary: bool = False
     probe_result: Optional[dict] = None
     mixed_engine_segments: Optional[list[dict]] = None

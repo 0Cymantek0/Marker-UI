@@ -16,7 +16,9 @@ Using the quick-start launcher scripts is the recommended method to run Marker U
    - Install backend requirements from `backend/requirements.txt`.
    - Install frontend npm packages.
    - Boot up the Uvicorn backend on port `8000` and the Vite dev server on port `5173`.
-   - Open your browser to `http://localhost:5173`.
+   - Wait for both services to become ready, then print the URLs to open.
+
+If backend startup takes longer than the soft readiness timeout, the launcher keeps waiting while the backend process is still running. The default backend hard timeout is 300 seconds; set `MARKER_BACKEND_READY_HARD_TIMEOUT_SECONDS=0` to disable it or use a larger value on very slow machines.
 
 ### Running with start.ps1
 If you prefer PowerShell, you can run:
@@ -32,8 +34,8 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 If you prefer to configure components manually:
 
 ### 1. Prerequisites
-- **Python 3.10+** (Ensure "Add Python to PATH" is checked during installation).
-- **Node.js 18+** (LTS version recommended).
+- **Python 3.11+** (Ensure "Add Python to PATH" is checked during installation).
+- **Node.js 18+** (LTS version recommended, with Corepack/pnpm available).
 - **C++ Build Tools** (Sometimes required by Python packages compiling C extensions: e.g. [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)).
 
 ### 2. Manual Commands
@@ -41,16 +43,15 @@ Run these in PowerShell from the project root:
 
 ```powershell
 # Setup Backend
-cd backend
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r backend\requirements.txt
 uvicorn app.main:app --reload --port 8000
 
 # Setup Frontend (Open a new terminal)
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 ---
@@ -63,14 +64,19 @@ If PowerShell blocks `start.ps1`, run:
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ```
 
-### 2. Path Length Issues
+### 2. Slow First Startup
+The first startup can take longer while Python packages, database tables, or model metadata initialize. The launcher prints progress after the soft timeout and continues waiting until the backend becomes healthy, exits, or reaches the hard timeout.
+
+The launcher records hashes for `backend/requirements.txt`, `pyproject.toml`, `frontend/package.json`, and `pnpm-lock.yaml`. If any dependency input changes, it refreshes the matching Python or Node environment instead of blindly reusing the old install.
+
+### 3. Path Length Issues
 Windows has a 260-character path length limit. If python package downloads or model weights downloads fail with path errors, enable long paths:
 1. Search "Registry Editor" on Windows.
 2. Navigate to `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem`.
 3. Set `LongPathsEnabled` to `1`.
 
-### 3. Path Escaping in Settings
+### 4. Path Escaping in Settings
 When using the **Local Absolute Paths** feature in the web app, use forward slashes `/` or double backslashes `\\` to avoid escaping issues:
-- **Correct**: `C:/Users/name/Documents/file.pdf`
-- **Correct**: `C:\\Users\\name\\Documents\\file.pdf`
-- **Incorrect**: `C:\Users\name\Documents\file.pdf`
+- **Correct**: `C:/path/to/document.pdf`
+- **Correct**: `C:\\path\\to\\document.pdf`
+- **Incorrect**: `C:\path\to\document.pdf`

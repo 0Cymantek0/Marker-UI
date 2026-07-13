@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.audio.pipeline import (
+    append_contradiction_section,
     build_multi_audio_document,
+    detect_possible_contradictions,
     normalize_transcript,
     render_enhanced_markdown,
+    render_text_enhanced_markdown,
 )
 
 
@@ -47,6 +52,63 @@ def test_normalize_transcript_sorts_segments_tracks_words_and_risk() -> None:
     assert transcript.risk_summary["word_count"] == 7
 
 
+def test_normalize_transcript_preserves_provider_diagnostics_and_warnings() -> None:
+    transcript = normalize_transcript(
+        {
+            "language": "en",
+            "duration": 2.0,
+            "model": "tiny.en",
+            "warnings": ["diarization_requested_but_unsupported_by_provider"],
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "uncertain audio",
+                    "confidence": 0.3,
+                    "confidence_source": "provider_probability",
+                    "speaker": "speaker_1",
+                    "speaker_confidence": 0.62,
+                    "no_speech_prob": 0.72,
+                    "avg_logprob": -1.2,
+                    "compression_ratio": 2.6,
+                    "overlap_warning": True,
+                    "words": [
+                        {
+                            "word": "uncertain",
+                            "punctuated_word": "Uncertain",
+                            "start": 0.0,
+                            "end": 0.5,
+                            "confidence": 0.44,
+                            "speaker": "speaker_1",
+                            "speaker_confidence": 0.66,
+                        }
+                    ],
+                }
+            ],
+        },
+        source_label="diagnostics.wav",
+    )
+
+    assert transcript.warnings == ("diarization_requested_but_unsupported_by_provider",)
+    segment = transcript.segments[0]
+    assert segment.confidence_source == "provider_probability"
+    assert segment.speaker_confidence == 0.62
+    assert segment.no_speech_probability == 0.72
+    assert segment.avg_logprob == -1.2
+    assert segment.compression_ratio == 2.6
+    assert segment.overlap_warning is True
+    assert "high_no_speech_probability" in segment.warnings
+    assert "low_avg_logprob" in segment.warnings
+    assert "high_compression_ratio" in segment.warnings
+    assert segment.words[0]["punctuated_word"] == "Uncertain"
+    assert segment.words[0]["speaker"] == "speaker_1"
+    assert segment.words[0]["speaker_confidence"] == 0.66
+    assert transcript.risk_summary["provider_warning_count"] == 1
+    assert transcript.risk_summary["no_speech_probability_flags"] == 1
+    assert transcript.risk_summary["avg_logprob_flags"] == 1
+    assert transcript.risk_summary["compression_ratio_flags"] == 1
+
+
 def test_enhanced_markdown_builds_extractively_with_source_refs() -> None:
     transcript = normalize_transcript(
         {
@@ -69,6 +131,56 @@ def test_enhanced_markdown_builds_extractively_with_source_refs() -> None:
     assert "## Questions" in text
     assert "What is next? [call.wav 00:01.000-00:02.000 speaker_0 | `call_seg_0002`]" in text
     assert "## Original Transcript" in text
+
+
+def test_text_enhanced_markdown_preserves_timeline_and_adds_audit() -> None:
+    transcript = normalize_transcript(
+        {
+            "duration": 1.0,
+            "segments": [
+                {"start": 0.0, "end": 1.0, "text": "  please send the follow up  ", "confidence": 0.9},
+            ],
+        },
+        source_label="call.wav",
+    )
+
+    text = render_text_enhanced_markdown(transcript, title="call", strength=2)
+
+    assert "# Enhanced Transcript: call" in text
+    assert (
+        "`00:00.000-00:01.000` Please send the follow up. _(call_seg_0001, speaker_0)_ "
+        "[call.wav 00:00.000-00:01.000 speaker_0 | `call_seg_0001`]"
+    ) in text
+    assert "## Enhancement Audit" in text
+    assert "| `call_seg_0001` | deterministic cleanup | please send the follow up | Please send the follow up. | no |" in text
+    assert "## Original Transcript" in text
+    assert "`00:00.000-00:01.000` please send the follow up _(call_seg_0001, speaker_0)_" in text
+
+
+def test_possible_contradictions_require_opposing_polarity_and_shared_terms() -> None:
+    transcript = normalize_transcript(
+        {
+            "duration": 3.0,
+            "segments": [
+                {"start": 0.0, "end": 1.0, "text": "The deployment is approved for Friday", "confidence": 0.9},
+                {"start": 1.0, "end": 2.0, "text": "The deployment is not approved for Friday", "confidence": 0.9},
+                {"start": 2.0, "end": 3.0, "text": "Budget review happens next week", "confidence": 0.9},
+            ],
+        },
+        source_label="meeting.wav",
+    )
+
+    findings = detect_possible_contradictions(transcript)
+
+    assert len(findings) == 1
+    assert findings[0]["type"] == "opposing_polarity_shared_terms"
+    assert findings[0]["left"]["segment_id"] == "meeting_seg_0001"
+    assert findings[0]["right"]["segment_id"] == "meeting_seg_0002"
+    assert "deployment" in findings[0]["shared_terms"]
+
+    rendered = append_contradiction_section("# Notes", findings)
+    assert "## Possible Contradictions" in rendered
+    assert "meeting_seg_0001" in rendered
 
 
 def test_multi_audio_builder_reports_relationship_evidence_and_batch_risk() -> None:
@@ -151,6 +263,31 @@ def test_risk_summary_clean_transcript_needs_no_review() -> None:
     assert risk["review_required"] is False
 
 
+def test_low_confidence_review_required_respects_explicit_toggle() -> None:
+    """Low-confidence spans remain visible but only force review when requested."""
+
+    raw = {
+        "duration": 1.0,
+        "segments": [
+            {"start": 0.0, "end": 1.0, "text": "uncertain but isolated", "confidence": 0.4},
+        ],
+    }
+
+    advisory = normalize_transcript(raw, source_label="low.wav")
+    strict = normalize_transcript(
+        raw,
+        source_label="low.wav",
+        config={"audio_review_required_on_low_confidence": True},
+    )
+
+    assert advisory.risk_summary["level"] == "review"
+    assert advisory.risk_summary["low_confidence_count"] == 1
+    assert advisory.risk_summary["low_confidence_requires_review"] is False
+    assert advisory.risk_summary["review_required"] is False
+    assert strict.risk_summary["low_confidence_requires_review"] is True
+    assert strict.risk_summary["review_required"] is True
+
+
 def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
     """The shared video/audio transcription seam returns a normalized transcript.
 
@@ -197,4 +334,29 @@ def test_transcribe_audio_file_normalizes_and_applies_speaker_aliases() -> None:
     assert transcript.segments[1].speaker == "speaker_1"
     assert transcript.source_id == "video_audio"
     assert transcript.segments[0].confidence == 0.9
+
+
+def test_transcribe_audio_file_rejects_unsupported_diarization_before_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Diarization must fail clearly when the selected provider cannot diarize."""
+
+    from app.audio.transcribe import transcribe_audio_file
+
+    import app.audio.transcribe as transcribe_mod
+
+    def _unexpected_provider(_provider_id):
+        raise AssertionError("provider should not be built for unsupported diarization")
+
+    monkeypatch.setattr(transcribe_mod, "build_provider", _unexpected_provider)
+
+    with pytest.raises(
+        NotImplementedError,
+        match="Audio diarization is not supported by provider 'local_faster_whisper'",
+    ):
+        transcribe_audio_file(
+            "/tmp/fake.wav",
+            {"audio_diarization": True},
+            source_label="video.mp4",
+        )
 

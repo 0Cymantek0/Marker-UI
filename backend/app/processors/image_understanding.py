@@ -21,6 +21,7 @@ from typing import Any
 from marker.processors import BaseProcessor
 from marker.schema import BlockTypes
 
+from app.image_understanding_tokens import IU_HANDLED_PREFIX
 from app.models.image_understanding import (
     ImageHandlingMode,
     ImageType,
@@ -34,62 +35,8 @@ logger = logging.getLogger(__name__)
 # Sentinel for "local OCR service not yet built" (distinct from "built, None").
 _UNSET: Any = object()
 
-# Sentinel comment our processor writes into ``picture.html`` for every block it
-# handles. ImageUnderstandingRenderer keys off it to take ownership of <img>
-# emission for that block (marker force-appends one <img> per image block; we
-# suppress that duplicate). The token also encodes the keep/drop intent:
-#   keep=1 -> renderer keeps marker's single <img> (augment: chart/diagram/...)
-#   keep=0 -> renderer drops it (replace/decorative: image truly omitted)
-# markdownify strips HTML comments, so this never reaches the final markdown.
-IU_HANDLED_PREFIX = "marker-ui-iu-handled"
-
-
 def _handled_marker(keep: bool) -> str:
     return f"<marker-comment>{IU_HANDLED_PREFIX} keep={1 if keep else 0}</marker-comment>"
-
-
-# ---------------------------------------------------------------------------
-# markdownify patches (applied once at import).
-#
-# marker constructs ``Markdownify`` without a ``code_language_callback`` and has
-# no converter for our ``<marker-comment>`` sidecar tag, so we add both here.
-# Patching the class (not an instance) is the only injection point, since the
-# Markdown renderer builds a fresh ``Markdownify`` per call.
-# ---------------------------------------------------------------------------
-
-try:
-    from marker.renderers.markdown import Markdownify
-
-    def _convert_marker_comment(self, el, text, parent_tags):
-        # Carry per-image metadata into the Markdown as an HTML comment so it
-        # survives for downstream LLMs / grep without rendering visibly.
-        content = el.get_text() or ""
-        return f"\n<!-- {content} -->\n"
-
-    Markdownify.convert_marker_comment = _convert_marker_comment
-
-    _orig_convert_pre = Markdownify.convert_pre
-
-    def _convert_pre(self, el, text, parent_tags):
-        # Preserve the ```<lang> info string from <code class="language-xxx">.
-        # Without this, our Mermaid fences collapse to a bare ``` fence and no
-        # renderer (or react-markdown) can identify them as Mermaid.
-        code_el = el.find("code") if hasattr(el, "find") else None
-        lang = ""
-        if code_el is not None and code_el.has_attr("class"):
-            for cls in code_el["class"]:
-                if cls.startswith("language-"):
-                    lang = cls[len("language-"):]
-                    break
-        if not lang:
-            return _orig_convert_pre(self, el, text, parent_tags)
-        if not text:
-            return ""
-        return f"\n\n```{lang}\n{text}\n```\n\n"
-
-    Markdownify.convert_pre = _convert_pre
-except ImportError:
-    pass
 
 
 class ImageUnderstandingProcessor(BaseProcessor):

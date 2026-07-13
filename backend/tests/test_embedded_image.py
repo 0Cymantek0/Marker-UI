@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import io
 from unittest.mock import MagicMock, patch
-import pytest
-from PIL import Image
 
 from app.conversion.embedded_image import EmbeddedImageService
 from app.models.image_understanding import (
     ClassificationResult,
     ExtractionResult,
     ImageType,
-    RouteKind,
 )
 from tests.test_image_router import FakeDetectionModel, FakeDetectionResult, _box, _img
 

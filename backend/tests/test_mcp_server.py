@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -11,12 +13,16 @@ import pytest
 async def test_mcp_registers_v1_tools_resources_templates_and_prompts():
     import app.mcp_server as mcp_server
 
-    tools = {tool.name for tool in await mcp_server.mcp.list_tools()}
-    resources = {str(resource.uri) for resource in await mcp_server.mcp.list_resources()}
-    templates = {str(template.uriTemplate) for template in await mcp_server.mcp.list_resource_templates()}
-    prompts = {prompt.name for prompt in await mcp_server.mcp.list_prompts()}
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        tools = {tool.name for tool in await mcp_server.mcp.list_tools()}
+        resources = {str(resource.uri) for resource in await mcp_server.mcp.list_resources()}
+        templates = {str(template.uriTemplate) for template in await mcp_server.mcp.list_resource_templates()}
+        prompts = {prompt.name for prompt in await mcp_server.mcp.list_prompts()}
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
 
-    assert set(mcp_server.MCP_V1_TOOL_NAMES).issubset(tools)
+    assert set(mcp_server.MCP_FULL_TOOL_NAMES).issubset(tools)
     assert set(mcp_server.MCP_PROMPT_NAMES) == prompts
     assert "marker://capabilities" in resources
     assert "marker://jobs" in resources
@@ -38,9 +44,12 @@ async def test_mcp_static_resources_are_readable():
     assert options_payload["schema_version"] == "marker.agent_contract.v1"
     assert any(item["name"] == "output_format" for item in options_payload["options"])
     capabilities_payload = json.loads(capabilities[0].content)
-    assert "marker_convert_url" in capabilities_payload["tools"]
+    assert "marker_convert" in capabilities_payload["tools"]
     assert "marker://docs/agent-guide" in capabilities_payload["resources"]
     assert "convert_for_rag" in capabilities_payload["prompts"]
+    assert "marker_read_output`" in guide[0].content
+    assert "output_format='chunks'" in guide[0].content
+    assert "marker_read_output_chunk" not in guide[0].content
 
 
 @pytest.mark.asyncio
@@ -61,6 +70,9 @@ async def test_mcp_prompt_template_renders_workflow_text():
     assert "Call capabilities" in text
     assert "/workspace/report.pdf" in text
     assert "allow_cloud_vlm=False" in text
+    assert "output_format=chunks for native Markdown-derived chunks" in text
+    assert "bounded offset pages" in text
+    assert "read output chunks" not in text
 
 
 def test_mcp_resource_link_helpers_add_manifest_and_job_uris():
@@ -79,3 +91,70 @@ def test_mcp_resource_link_helpers_add_manifest_and_job_uris():
         "output": "marker://jobs/job-1/output",
         "assets": "marker://jobs/job-1/assets",
     }
+
+
+@pytest.mark.asyncio
+async def test_mcp_manifest_tools_read_sibling_manifest_for_json_output(tmp_path: Path):
+    import app.mcp_server as mcp_server
+
+    output_path, manifest_path = _write_output_and_manifest(tmp_path)
+
+    manifest_result = await mcp_server.marker_get_output_manifest(str(output_path))
+    assets_result = await mcp_server.marker_list_output_assets(str(output_path))
+
+    assert manifest_result["manifest_path"] == str(manifest_path.resolve())
+    assert manifest_result["manifest"]["output"]["text_path"] == output_path.name
+    assert assets_result["manifest_path"] == str(manifest_path.resolve())
+    assert assets_result["assets"] == [{"name": "asset.txt", "path": "asset.txt"}]
+
+
+@pytest.mark.asyncio
+async def test_mcp_manifest_resources_share_manifest_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import app.mcp_resources as mcp_resources
+    import app.mcp_server as mcp_server
+
+    output_path, manifest_path = _write_output_and_manifest(tmp_path)
+
+    output_id = quote(str(output_path), safe="")
+    output_resource = await mcp_server.mcp.read_resource(f"marker://outputs/{output_id}/manifest")
+    output_manifest = json.loads(output_resource[0].content)
+    assert output_manifest["output"]["text_path"] == output_path.name
+
+    async def fake_get_job_status(job_id: str) -> dict:
+        return {
+            "job_id": job_id,
+            "result_path": str(output_path),
+            "conversion_metadata": {"manifest_path": str(manifest_path)},
+        }
+
+    monkeypatch.setattr(mcp_resources, "get_job_status", fake_get_job_status)
+
+    job_manifest_resource = await mcp_server.mcp.read_resource("marker://jobs/job-1/manifest")
+    job_assets_resource = await mcp_server.mcp.read_resource("marker://jobs/job-1/assets")
+
+    job_manifest = json.loads(job_manifest_resource[0].content)
+    job_assets = json.loads(job_assets_resource[0].content)
+    assert job_manifest["output"]["text_path"] == output_path.name
+    assert job_assets["assets"][0]["name"] == "asset.txt"
+
+
+def _write_output_and_manifest(tmp_path: Path) -> tuple[Path, Path]:
+    output_path = tmp_path / "chunks.json"
+    asset_path = tmp_path / "asset.txt"
+    manifest_path = tmp_path / "chunks.marker.json"
+    output_path.write_text('{"chunks":[]}', encoding="utf-8")
+    asset_path.write_text("asset", encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "marker.output_manifest.v1",
+                "output": {
+                    "text_path": output_path.name,
+                    "manifest_path": manifest_path.name,
+                    "assets": [{"name": "asset.txt", "path": asset_path.name}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return output_path, manifest_path

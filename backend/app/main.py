@@ -2,28 +2,30 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-
-load_dotenv()  # Load .env file if present
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import UPLOAD_DIR, OUTPUT_DIR
-from app.database import create_tables
-from app.models.audit import AuditEvent  # noqa: F401 - register table metadata
-from app.models.job_event import JobEvent  # noqa: F401 - register table metadata
-from app.routes import convert, settings, models, capabilities, diagnostics
-from app.security.auth import RestAuthMiddleware
-from app.services.telemetry import RequestContextMiddleware
-from app.services.marker_service import MarkerService
-from app.services.queue_backends import queue_backend_from_env
-from app.services.task_manager import TaskManager
-from app.services.conversion_service import ConversionService
+load_dotenv()  # Load .env file if present
+
+from app.core.config import OUTPUT_DIR, UPLOAD_DIR  # noqa: E402
+from app.database import create_tables  # noqa: E402
+from app.models.audit import AuditEvent  # noqa: E402, F401 - register table metadata
+from app.models.job_event import JobEvent  # noqa: E402, F401 - register table metadata
+from app.routes import capabilities, convert, diagnostics, models, settings  # noqa: E402
+from app.security.auth import RestAuthMiddleware  # noqa: E402
+from app.security.headers import SecurityHeadersMiddleware  # noqa: E402
+from app.services.conversion_service import ConversionService  # noqa: E402
+from app.services.marker_service import MarkerService  # noqa: E402
+from app.services.queue_backends import queue_backend_from_env  # noqa: E402
+from app.services.task_manager import TaskManager  # noqa: E402
+from app.services.telemetry import RequestContextMiddleware  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +40,6 @@ class _AppState:
 
 
 _app_state = _AppState()
-
-
-import threading
 
 _bg_load_thread: threading.Thread | None = None
 _bg_load_thread_lock = threading.Lock()
@@ -120,7 +119,6 @@ def _configure_task_manager_backend() -> None:
             return
 
         import asyncio
-        from app.models.schemas import GPUWorkerMode
 
         async def _read() -> None:
             async with async_session_factory() as session:
@@ -147,7 +145,13 @@ def _configure_task_manager_backend() -> None:
 
         backend = ProcessExecutorBackend(_app_state.task_manager, detected, num_workers)
         old = _app_state.task_manager
-        _app_state.task_manager = TaskManager(backend=backend)
+        # Preserve the durable queue across the backend swap: the new manager
+        # must keep persisting/recovering durable jobs or a multi-GPU box silently
+        # loses the feature (MARKER_QUEUE_BACKEND would be ignored).
+        _app_state.task_manager = TaskManager(
+            backend=backend,
+            durable_queue=getattr(old, "_durable_queue", None),
+        )
         logger.info(
             "GPU worker scaling: %d GPUs, %d workers -> process backend",
             detected, num_workers,
@@ -182,16 +186,31 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     await load_secrets_from_db()
     setup_api_manager_monkeypatch()
 
-    # Mark stale pending/processing jobs from previous sessions as failed
-    from app.database import async_session_factory
-    from app.models.job import ConversionJob
-    from sqlalchemy import update
-    from datetime import datetime, timezone
-    async with async_session_factory() as session:
-        try:
+    # Recover durable queued jobs from a prior session, then sweep any remaining
+    # non-durable pending/processing rows as failed. Order matters: recovery must
+    # run first so durable rows survive; the sweep only catches non-durable rows
+    # that have no queue backend to recover from.
+    try:
+        from app.services.task_manager import TaskManager
+        if isinstance(_app_state.task_manager, TaskManager):
+            recovered = await _app_state.task_manager.recover_and_sweep_durable_jobs(
+                _app_state.conversion_service
+            )
+            if recovered:
+                logger.info("Recovered %d durable job(s) from prior session: %s", len(recovered), recovered)
+    except Exception:  # noqa: BLE001 - recovery must never block startup
+        logger.exception("Durable job recovery failed on startup; continuing with stale sweep only")
+        # Fall back to the legacy unconditional sweep so non-durable rows still
+        # get cleaned up even if the durable recovery path errored.
+        from app.database import async_session_factory
+        from app.models.job import ConversionJob
+        from sqlalchemy import update
+        from datetime import datetime, timezone
+        async with async_session_factory() as session:
             await session.execute(
                 update(ConversionJob)
                 .where(ConversionJob.status.in_(["pending", "processing"]))
+                .where(ConversionJob.queue_backend.is_(None))
                 .values(
                     status="failed",
                     error_message="Interrupted by server restart",
@@ -199,9 +218,7 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
                 )
             )
             await session.commit()
-            logger.info("Stale pending/processing jobs from prior session marked as failed.")
-        except Exception as e:
-            logger.error("Failed to clean up stale jobs on startup: %s", e)
+            logger.info("Fallback: non-durable stale pending/processing jobs marked as failed.")
 
     # Auto-trigger GPU installation if enabled in settings but CUDA is not ready
     from app.services.gpu_service import gpu_service
@@ -237,9 +254,27 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
             "models will lazy-load on first marker job."
         )
 
+    # Periodic background sweep for the opt-in LLM response cache.
+    # purge_expired() is a no-op when MARKER_LLM_CACHE != 1, so the loop is
+    # harmless on deployments that don't use the cache.
+    from app.core import llm_cache
+
+    async def _llm_cache_sweep() -> None:
+        while True:
+            await asyncio.sleep(6 * 3600)  # every 6 hours
+            try:
+                purged = llm_cache.purge_expired()
+                if purged:
+                    logger.info("LLM cache sweep: removed %d expired entries", purged)
+            except Exception:  # noqa: BLE001 - sweep must never crash the app
+                logger.exception("LLM cache sweep failed")
+
+    _cache_sweep_task = asyncio.create_task(_llm_cache_sweep())
+
     yield
 
     # Shutdown
+    _cache_sweep_task.cancel()
     _app_state.task_manager.shutdown(wait=False)
     logger.info("Shutdown complete")
 
@@ -263,6 +298,7 @@ app.add_middleware(
 )
 app.add_middleware(RestAuthMiddleware)
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Routers
 app.include_router(diagnostics.router)

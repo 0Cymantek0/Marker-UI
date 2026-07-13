@@ -2,7 +2,6 @@
 
 from datetime import datetime, timezone
 
-import pytest
 
 from app.models.job import ConversionJob
 from app.models.job_event import JobEvent

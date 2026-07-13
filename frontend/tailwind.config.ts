@@ -8,6 +8,9 @@ const config: Config = {
       fontFamily: {
         sans: ['Manrope', 'system-ui', 'sans-serif'],
       },
+      fontSize: {
+        xs: ['0.8125rem', { lineHeight: '1.25rem' }],
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

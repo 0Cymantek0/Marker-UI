@@ -2,14 +2,14 @@
 
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 from app.services.gpu_service import gpu_service
 from app.models.settings import Setting
 from sqlalchemy import select
 
-# Reuse the same fixtures from test_settings.py
-from tests.test_settings import settings_engine, settings_session, settings_client  # noqa: F401
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+
+pytest_plugins = ("tests.test_settings",)
 
 
 @pytest.mark.asyncio
@@ -96,9 +96,9 @@ async def test_startup_gpu_install_trigger(settings_session):
     with patch("app.database.async_session_factory") as mock_factory, \
          patch("app.services.gpu_service.GPUService.status_dict", new_callable=PropertyMock) as mock_status, \
          patch("app.services.gpu_service.gpu_service.start_install") as mock_start, \
-         patch("app.main._load_models_background") as mock_load_models, \
-         patch("app.main.create_tables") as mock_create_tables, \
-         patch("app.core.api_manager.load_secrets_from_db") as mock_load_secrets:
+         patch("app.main._load_models_background"), \
+         patch("app.main.create_tables"), \
+         patch("app.core.api_manager.load_secrets_from_db"):
 
         class AsyncContextMock:
             async def __aenter__(self):
@@ -122,7 +122,6 @@ async def test_startup_gpu_install_trigger(settings_session):
 def test_marker_service_waits_for_gpu_install():
     """Verify that MarkerService.initialize() blocks/waits while GPU status is 'installing'."""
     from app.services.marker_service import MarkerService
-    from unittest.mock import PropertyMock, MagicMock
     import sys
 
     marker_service = MagicMock()
@@ -152,14 +151,42 @@ def test_marker_service_waits_for_gpu_install():
 
 
 @pytest.mark.asyncio
+async def test_gpu_install_uses_cu126_index(settings_client: AsyncClient, settings_session):
+    """GPU install command must use cu126 wheel index (cu121 tops out at torch 2.5.1,
+    which is incompatible with marker-pdf's torch>=2.7.0 requirement)."""
+    mock_popen = MagicMock()
+    mock_popen.wait.return_value = 0
+    mock_popen.stdout = []
+
+    mock_run = MagicMock()
+    mock_run.return_value = MagicMock(stdout="True\n", stderr="")
+
+    with patch("subprocess.Popen", return_value=mock_popen) as mock_popen_ctor, \
+         patch("subprocess.run", return_value=mock_run), \
+         patch("app.services.gpu_service.GPUService._check_cuda_available", return_value=True):
+
+        gpu_service.start_install()
+        if gpu_service._thread:
+            gpu_service._thread.join(timeout=5.0)
+
+        assert mock_popen_ctor.called
+        install_cmd = mock_popen_ctor.call_args[0][0]
+
+        # Must include both torch and torchvision (paired CUDA wheels)
+        assert "torch" in install_cmd
+        assert "torchvision" in install_cmd
+
+        # Must use cu126 index — cu121 caps at torch 2.5.1, breaks marker-pdf>=2.7.0
+        assert "https://download.pytorch.org/whl/cu126" in install_cmd
+        assert "cu121" not in " ".join(install_cmd)
+
+
+@pytest.mark.asyncio
 async def test_gpu_install_failure_disables_setting(settings_client: AsyncClient, settings_session):
     """Verify that if GPU installation fails or CUDA verification fails, the database setting is disabled."""
     # Ensure starting clean and set setting to true
     settings_session.add(Setting(key="gpu_acceleration_enabled", value="true", category="gpu"))
     await settings_session.commit()
-
-    import sys
-    from unittest.mock import MagicMock
 
     mock_popen = MagicMock()
     mock_popen.wait.return_value = 0  # pip succeeds
@@ -182,7 +209,7 @@ async def test_gpu_install_failure_disables_setting(settings_client: AsyncClient
          patch("app.services.gpu_service.GPUService._check_cuda_available", return_value=False):
 
         gpu_service.start_install()
-        
+
         # Wait for the background thread to finish
         if gpu_service._thread:
             gpu_service._thread.join(timeout=5.0)
@@ -197,4 +224,3 @@ async def test_gpu_install_failure_disables_setting(settings_client: AsyncClient
             res = await verify_session.execute(stmt)
             row = res.scalar_one()
             assert row.value == "false"
-

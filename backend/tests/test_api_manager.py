@@ -20,13 +20,32 @@ _orig_async_client_send = httpx.AsyncClient.send
 
 
 @pytest.fixture(autouse=True)
-def setup_and_teardown_monkeypatch():
-    """Apply interceptor monkeypatch and clean up after each test."""
+def setup_and_teardown_monkeypatch(monkeypatch):
+    """Apply interceptor monkeypatch and clean up after each test.
+
+    Also no-ops the backoff/cooldown sleeps so the suite stays fast, disables
+    the LLM response cache (Phase 2a tests cover it separately), and clears
+    cooldown state between each test. Tests that assert on sleep timing
+    reinstall their own spy via ``monkeypatch``.
+    """
+    import app.core.llm_cache as llm_cache
+
+    monkeypatch.setattr(llm_cache, "_CACHE_ENABLED", False)
+    monkeypatch.setattr(am, "_sleep_sync", lambda _s: None)
+
+    async def _noop_async(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(am, "_sleep_async", _noop_async)
+    with am._cooldown_lock:
+        am._provider_cooldown_until.clear()
+
     setup_api_manager_monkeypatch()
     yield
-    # Restore original methods
     httpx.Client.send = _orig_client_send
     httpx.AsyncClient.send = _orig_async_client_send
+    with am._cooldown_lock:
+        am._provider_cooldown_until.clear()
 
 
 def test_secrets_cache_crud():
@@ -219,7 +238,7 @@ def test_model_call_log_lines_are_cp1252_safe(caplog):
 
 @pytest.fixture
 def clean_concurrency_state():
-    """Reset the module-level concurrency maps before and after a test."""
+    """Reset the module-level concurrency maps before and after each test."""
     with am._concurrency_lock:
         am._provider_concurrency.clear()
         am._provider_hosts.clear()
@@ -227,6 +246,8 @@ def clean_concurrency_state():
         am._async_semaphores.clear()
     with am._cache_lock:
         am._provider_keys.clear()
+    with am._cooldown_lock:
+        am._provider_cooldown_until.clear()
     yield
     with am._concurrency_lock:
         am._provider_concurrency.clear()
@@ -235,6 +256,8 @@ def clean_concurrency_state():
         am._async_semaphores.clear()
     with am._cache_lock:
         am._provider_keys.clear()
+    with am._cooldown_lock:
+        am._provider_cooldown_until.clear()
 
 
 def test_sync_concurrency_cap_limits_in_flight(clean_concurrency_state):
@@ -535,8 +558,9 @@ def clean_stuck_state():
 
 
 def test_swap_suggested_after_threshold_consecutive_rate_limits(clean_stuck_state, caplog):
-    """With a single key (no rotation possible), N consecutive 429s emit exactly
-    one 'model swap suggested' line - not one per failure."""
+    """With a single key (no rotation possible), N consecutive 429s emit a
+    'model swap suggested' line at every threshold crossing (3, 6, 9, ...) —
+    not just once, so a sustained storm keeps nudging the user."""
     import logging
 
     provider_id = "gemini"
@@ -548,6 +572,7 @@ def test_swap_suggested_after_threshold_consecutive_rate_limits(clean_stuck_stat
 
     transport = httpx.MockTransport(handler)
     with caplog.at_level(logging.WARNING, logger="app.core.api_manager"):
+        # STUCK_THRESHOLD + 2 = 5 calls -> streak hits 5 -> emit at 3 only.
         for _ in range(am._STUCK_THRESHOLD + 2):
             with httpx.Client(transport=transport) as client:
                 client.post(
@@ -557,7 +582,7 @@ def test_swap_suggested_after_threshold_consecutive_rate_limits(clean_stuck_stat
                 )
 
     suggestions = [m.getMessage() for m in caplog.records if "model swap suggested" in m.getMessage()]
-    assert len(suggestions) == 1, f"expected exactly one suggestion, got {len(suggestions)}"
+    assert len(suggestions) == 1, f"expected one suggestion at streak=3, got {len(suggestions)}"
     assert provider_id in suggestions[0]
 
 
@@ -607,4 +632,296 @@ def test_success_resets_rate_limit_streak(clean_stuck_state, caplog):
 
     assert not any("model swap suggested" in m.getMessage() for m in caplog.records)
 
+
+# ---------------------------------------------------------------------------
+# Phase 1: exponential backoff, Retry-After, cooldown, stuck re-emit, 504
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def clean_backoff_state():
+    """Reset backoff/cooldown/stuck state for backoff-focused tests."""
+    with am._cooldown_lock:
+        am._provider_cooldown_until.clear()
+    with am._stuck_lock:
+        am._stuck_counter.clear()
+    with am._concurrency_lock:
+        am._provider_hosts.clear()
+    with am._cache_lock:
+        am._provider_keys.clear()
+    yield
+    with am._cooldown_lock:
+        am._provider_cooldown_until.clear()
+    with am._stuck_lock:
+        am._stuck_counter.clear()
+    with am._concurrency_lock:
+        am._provider_hosts.clear()
+    with am._cache_lock:
+        am._provider_keys.clear()
+
+
+def test_parse_retry_after_seconds(clean_backoff_state):
+    """Retry-After as integer seconds is parsed and capped at _BACKOFF_CAP."""
+    res = httpx.Response(429, headers={"Retry-After": "5"})
+    assert am._parse_retry_after(res) == 5.0
+
+    res = httpx.Response(429, headers={"Retry-After": "999"})
+    assert am._parse_retry_after(res) == am._BACKOFF_CAP
+
+
+def test_parse_retry_after_missing_returns_none(clean_backoff_state):
+    res = httpx.Response(429)
+    assert am._parse_retry_after(res) is None
+
+
+def test_compute_backoff_exponential(clean_backoff_state):
+    """Without Retry-After, backoff follows base * factor^attempt, capped."""
+    assert am._compute_backoff(0, None) == 2.0   # 2 * 2^0
+    assert am._compute_backoff(1, None) == 4.0   # 2 * 2^1
+    assert am._compute_backoff(2, None) == 8.0   # 2 * 2^2
+    assert am._compute_backoff(3, None) == 16.0  # 2 * 2^3
+    assert am._compute_backoff(10, None) == am._BACKOFF_CAP  # capped
+
+
+def test_compute_backoff_retry_after_wins(clean_backoff_state):
+    """Retry-After larger than computed backoff is honored (capped)."""
+    assert am._compute_backoff(0, 10.0) == 10.0
+    assert am._compute_backoff(1, 10.0) == 10.0  # computed 4 < 10
+    assert am._compute_backoff(0, 999.0) == am._BACKOFF_CAP  # capped
+
+
+def test_retry_after_header_honored(clean_backoff_state, monkeypatch):
+    """A 429 with Retry-After: 5 followed by a 200 recovers on the same key."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(am, "_sleep_sync", lambda s: sleeps.append(s))
+
+    state = {"calls": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            return httpx.Response(429, headers={"Retry-After": "5"}, json={"err": "limited"})
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        res = client.post("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
+
+    assert res.status_code == 200
+    assert state["calls"] == 2  # initial + 1 backoff retry
+    assert sleeps == [5.0]  # Retry-After honored
+
+
+def test_exponential_backoff_sequence(clean_backoff_state, monkeypatch):
+    """Four consecutive 429s without Retry-After sleep 2,4,8,16 then give up."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(am, "_sleep_sync", lambda s: sleeps.append(s))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"err": "limited"})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        res = client.post("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
+
+    # Backoff exhausted: 4 sleeps (2,4,8,16), 5 total calls (1 initial + 4 retries).
+    assert sleeps == [2.0, 4.0, 8.0, 16.0]
+    assert res.status_code == 429  # last response returned
+
+
+def test_backoff_recovers_on_third_attempt(clean_backoff_state, monkeypatch):
+    """Two 429s then a 200: backoff recovers, no rotation needed."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    monkeypatch.setattr(am, "_sleep_sync", lambda _s: None)
+
+    state = {"calls": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        if state["calls"] <= 2:
+            return httpx.Response(429, json={"err": "limited"})
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        res = client.post("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
+
+    assert res.status_code == 200
+    assert state["calls"] == 3
+    # Cooldown cleared on success.
+    assert provider_id not in am._provider_cooldown_until
+
+
+def test_cooldown_set_after_backoff_exhausts(clean_backoff_state, monkeypatch):
+    """When backoff exhausts on a single-key provider, cooldown is set."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    monkeypatch.setattr(am, "_sleep_sync", lambda _s: None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"err": "limited"})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        client.post("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
+
+    assert provider_id in am._provider_cooldown_until
+
+
+def test_cooldown_blocks_subsequent_calls(clean_backoff_state, monkeypatch):
+    """During cooldown, a new call returns a synthetic 429 (with Retry-After)
+    instead of hitting the network — so marker's retry loop sleeps rather than
+    hammering the throttled endpoint."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    # Simulate an already-active cooldown with a large remaining window.
+    with am._cooldown_lock:
+        am._provider_cooldown_until[provider_id] = time.time() + 100.0
+
+    monkeypatch.setattr(am, "_sleep_sync", lambda _s: None)
+
+    # Network handler should never be reached — cooldown short-circuits.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("network should not be hit during cooldown")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        res = client.post("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
+
+    assert res.status_code == 429
+    assert res.headers.get("Retry-After") is not None
+
+
+def test_success_clears_cooldown(clean_backoff_state, monkeypatch):
+    """A 2xx response clears any active cooldown for the provider. The
+    short-circuit only fires while the window is positive, so an expired
+    cooldown lets the call through and the 2xx clears the stale entry."""
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+    # Already-expired cooldown: remaining == 0, so the call proceeds to network.
+    with am._cooldown_lock:
+        am._provider_cooldown_until[provider_id] = time.time() - 1.0
+
+    monkeypatch.setattr(am, "_sleep_sync", lambda _s: None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        res = client.post("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
+
+    assert res.status_code == 200
+    assert provider_id not in am._provider_cooldown_until
+
+
+def test_stuck_signal_re_emits_at_every_threshold(clean_backoff_state, caplog, monkeypatch):
+    """Streak 6 emits twice (at 3 and 6), streak 9 emits three times."""
+    import logging
+
+    provider_id = "gemini"
+    with am._concurrency_lock:
+        am._provider_hosts["generativelanguage.googleapis.com"] = provider_id
+
+    monkeypatch.setattr(am, "_sleep_sync", lambda _s: None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"err": "limited"})
+
+    transport = httpx.MockTransport(handler)
+    target = am._STUCK_THRESHOLD * 3  # 9
+    with caplog.at_level(logging.WARNING, logger="app.core.api_manager"):
+        for _ in range(target):
+            with httpx.Client(transport=transport) as client:
+                client.post("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent")
+
+    suggestions = [m for m in caplog.records if "model swap suggested" in m.getMessage()]
+    assert len(suggestions) == 3, f"expected 3 re-emits (at 3,6,9), got {len(suggestions)}"
+
+
+def test_504_triggers_rotation(clean_backoff_state, monkeypatch):
+    """A 504 response triggers fallback-key rotation (was previously a bug:
+    504 was in _RATE_LIMIT_STATUSES but not in the rotation trigger set)."""
+    provider_id = "openai"
+    with am._concurrency_lock:
+        am._provider_hosts["api.openai.com"] = provider_id
+    with am._cache_lock:
+        am._provider_keys[provider_id] = ["key-primary", "key-fallback"]
+        am._active_key_index[provider_id] = 0
+
+    monkeypatch.setattr(am, "_sleep_sync", lambda _s: None)
+
+    state = {"calls": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        auth = request.headers.get("Authorization", "")
+        if "key-primary" in auth:
+            return httpx.Response(504, json={"err": "gateway timeout"})
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        res = client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": "Bearer key-primary"},
+            json={"model": "gpt-4"},
+        )
+
+    assert res.status_code == 200
+    assert state["calls"] >= 2  # initial 504 + rotated retry
+    # Active key advanced to the fallback.
+    assert am._active_key_index[provider_id] == 1
+
+
+def test_backoff_then_rotation_recovers(clean_backoff_state, monkeypatch):
+    """Backoff exhausts (4 attempts, all 429 on primary key), then rotation to a
+    fallback key succeeds — full recovery."""
+    provider_id = "openai"
+    with am._concurrency_lock:
+        am._provider_hosts["api.openai.com"] = provider_id
+    with am._cache_lock:
+        am._provider_keys[provider_id] = ["key-primary", "key-fallback"]
+        am._active_key_index[provider_id] = 0
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(am, "_sleep_sync", lambda s: sleeps.append(s))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auth = request.headers.get("Authorization", "")
+        if "key-primary" in auth:
+            return httpx.Response(429, json={"err": "limited"})
+        return httpx.Response(200, json={"ok": True})
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport) as client:
+        res = client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": "Bearer key-primary"},
+            json={"model": "gpt-4"},
+        )
+
+    assert res.status_code == 200
+    # Backoff ran 4 sleeps before rotation took over.
+    assert len(sleeps) == am._BACKOFF_MAX_ATTEMPTS
+    # Fallback key is now active.
+    assert am._active_key_index[provider_id] == 1
+    # Cooldown cleared on recovery.
+    assert provider_id not in am._provider_cooldown_until
 

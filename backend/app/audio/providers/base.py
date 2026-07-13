@@ -103,8 +103,8 @@ class RawTranscript:
                 continue
             segments.append(
                 RawSegment(
-                    start_ms=max(0, int(round(_coerce_float(item.get("start")) * 1000))),
-                    end_ms=max(0, int(round(_coerce_float(item.get("end")) * 1000))),
+                    start_ms=_seconds_to_ms(item.get("start")),
+                    end_ms=_seconds_to_ms(item.get("end")),
                     text=str(item.get("text") or "").strip(),
                     confidence=_coerce_float(item.get("confidence")),
                     speaker=item.get("speaker"),
@@ -118,7 +118,7 @@ class RawTranscript:
             )
         return cls(
             language=payload.get("language"),
-            duration_ms=max(0, int(round(_coerce_float(payload.get("duration")) * 1000))),
+            duration_ms=_seconds_to_ms(payload.get("duration")),
             model=payload.get("model"),
             provider=str(payload.get("provider") or "local_faster_whisper"),
             segments=segments,
@@ -174,6 +174,13 @@ def _coerce_float(value: Any) -> float | None:
     return result
 
 
+def _seconds_to_ms(value: Any) -> int:
+    seconds = _coerce_float(value)
+    if seconds is None:
+        return 0
+    return max(0, int(round(seconds * 1000)))
+
+
 def _raw_words(raw: Any) -> list[RawWord]:
     """Build RawWord objects from a provider-dict ``words`` list.
 
@@ -193,8 +200,8 @@ def _raw_words(raw: Any) -> list[RawWord]:
         words.append(
             RawWord(
                 word=text,
-                start_ms=max(0, int(round(_coerce_float(item.get("start")) or 0.0) * 1000)),
-                end_ms=max(0, int(round(_coerce_float(item.get("end")) or 0.0) * 1000)),
+                start_ms=_seconds_to_ms(item.get("start")),
+                end_ms=_seconds_to_ms(item.get("end")),
                 confidence=_coerce_float(item.get("confidence")),
                 speaker=item.get("speaker"),
                 speaker_confidence=_coerce_float(item.get("speaker_confidence")),

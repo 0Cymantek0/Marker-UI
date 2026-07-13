@@ -16,23 +16,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.audio.ingest import probe_audio
 from app.audio.pipeline import (
     AudioTranscript,
-    normalize_transcript,
+    append_contradiction_section,
+    detect_possible_contradictions,
     render_enhanced_markdown,
+    render_text_enhanced_markdown,
     render_transcript_markdown,
-    slug_source_id,
 )
-from app.audio.providers import build_provider, get_capability
+from app.audio.transcribe import transcribe_audio_file_detailed
 from app.audio.speakers import (
-    apply_speaker_aliases,
     speaker_timeline,
     summarize_speakers,
 )
 from app.audio.vocabulary import (
-    compile_vocabulary_prompt,
-    resolve_vocabulary_terms,
     vocabulary_report,
 )
 from app.conversion.registry import BaseConverter
@@ -64,63 +61,79 @@ class AudioConverter(BaseConverter):
         config: dict[str, Any],
         device: str | None = None,
     ) -> UniversalConversionResult:
-        provider_id = _resolve_provider(config)
-        capability = get_capability(provider_id)
-        media_info = probe_audio(filepath)
-
-        vocabulary_terms = resolve_vocabulary_terms(config)
-        vocabulary_prompt = compile_vocabulary_prompt(
-            terms=vocabulary_terms, capability=capability
-        )
-        provider = build_provider(provider_id)
-        raw = provider.transcribe(
+        title = Path(filepath).stem
+        source_label = str(config.get("audio_source_label") or Path(filepath).name)
+        run = transcribe_audio_file_detailed(
             filepath,
             config,
             device=device,
-            vocabulary_prompt=vocabulary_prompt if capability.supports_prompt_context else None,
-        )
-        raw_payload = raw.to_dict()
-        raw_payload["media_info"] = media_info
-        # Diarization is provider-specific (plan §10). A provider that can't
-        # diarize surfaces an explicit warning instead of silently faking a single
-        # speaker when the user asked for diarization.
-        if config.get("audio_diarization") and not capability.supports_diarization:
-            raw_payload.setdefault("warnings", []).append(
-                "diarization_requested_but_unsupported_by_provider"
-            )
-
-        title = Path(filepath).stem
-        source_label = str(config.get("audio_source_label") or Path(filepath).name)
-        source_id = str(config.get("audio_source_id") or slug_source_id(source_label))
-        transcript = normalize_transcript(
-            raw_payload,
             source_label=source_label,
-            source_id=source_id,
-            config=config,
+            source_id=config.get("audio_source_id"),
         )
-        # Speaker identity is user-controlled (plan §10): only labels the user
-        # explicitly mapped are renamed; everything else stays anonymous. Diarization
-        # itself is provider-specific — faster-whisper can't, so the warning surfaced
-        # above propagates through normalize into the transcript.
-        transcript = apply_speaker_aliases(transcript, config.get("audio_speaker_aliases"))
+        transcript = run.transcript
+        capability = run.capability
 
-        output_mode = _resolve_output_mode(config)
+        enhancement_plan = _resolve_enhancement_plan(config)
+        output_mode = enhancement_plan["mode"]
         if output_mode == "transcript":
             text = render_transcript_markdown(transcript, title=title)
+        elif enhancement_plan["trigger"] == "text_enhancement" and not enhancement_plan["structural_enabled"]:
+            text = render_text_enhanced_markdown(
+                transcript,
+                title=title,
+                strength=enhancement_plan["text_strength"],
+            )
         else:
             text = render_enhanced_markdown(
                 transcript,
                 title=title,
-                template=output_mode,
+                template=enhancement_plan["template"],
                 context=config.get("audio_context"),
             )
+        provenance_validation = _validate_enhancement_provenance(
+            text,
+            transcript,
+            require_source_refs=_truthy(config.get("audio_enhancement_require_source_refs", True)),
+        )
+        if (
+            output_mode != "transcript"
+            and not provenance_validation["valid"]
+            and _truthy(config.get("audio_enhancement_fallback_on_validation_failure", True))
+        ):
+            text = render_transcript_markdown(transcript, title=title)
+            output_mode = "transcript"
+            enhancement_plan = {
+                **enhancement_plan,
+                "mode": "transcript",
+                "trigger": "validation_fallback",
+            }
+            provenance_validation = {
+                **_validate_enhancement_provenance(
+                    text,
+                    transcript,
+                    require_source_refs=_truthy(config.get("audio_enhancement_require_source_refs", True)),
+                ),
+                "fallback_applied": True,
+            }
+        elif output_mode != "transcript" and not provenance_validation["valid"]:
+            raise RuntimeError(
+                "Audio enhancement failed provenance validation: "
+                + ", ".join(provenance_validation["missing"])
+            )
+        contradictions = (
+            detect_possible_contradictions(transcript)
+            if _truthy(config.get("audio_contradiction_detection"))
+            else []
+        )
+        if contradictions:
+            text = append_contradiction_section(text, contradictions)
 
         transcript_text = " ".join(segment.text for segment in transcript.segments)
         vocab_report = vocabulary_report(
-            terms=vocabulary_terms,
+            terms=run.vocabulary_terms,
             transcript_text=transcript_text,
-            truncated=_vocabulary_was_truncated(vocabulary_terms, vocabulary_prompt),
-            provider_prompted=bool(vocabulary_prompt and capability.supports_prompt_context),
+            truncated=_vocabulary_was_truncated(run.vocabulary_terms, run.vocabulary_prompt),
+            provider_prompted=bool(run.vocabulary_prompt and capability.supports_prompt_context),
         )
         return UniversalConversionResult(
             text=text,
@@ -151,33 +164,25 @@ class AudioConverter(BaseConverter):
                     "vocabulary": vocab_report,
                     "quality": _audio_quality(transcript),
                     "speakers": _speaker_metadata(transcript, config),
+                    "contradictions": contradictions,
                     "enhancement": {
                         "mode": output_mode,
+                        "template": enhancement_plan["template"],
+                        "trigger": enhancement_plan["trigger"],
+                        "text_enhancement_enabled": enhancement_plan["text_enabled"],
+                        "text_enhancement_strength": enhancement_plan["text_strength"],
+                        "structural_enhancement_enabled": enhancement_plan["structural_enabled"],
+                        "structural_enhancement_mode": enhancement_plan["structural_mode"],
                         "provider": "local_deterministic" if output_mode != "transcript" else None,
                         "provenance_required": output_mode != "transcript",
+                        "source_refs_required": _truthy(config.get("audio_enhancement_require_source_refs", True)),
+                        "source_refs_valid": provenance_validation["valid"],
+                        "provenance_validation": provenance_validation,
                     },
-                    "raw_provider_metadata": dict(raw.provider_metadata),
+                    "raw_provider_metadata": run.raw_provider_metadata,
                 },
             },
         )
-
-
-def _resolve_provider(config: dict[str, Any]) -> str:
-    """Resolve the audio provider id, enforcing cloud opt-in (plan §3.1).
-
-    Cloud STT is never used unless ``audio_allow_cloud_stt`` is explicitly true.
-    A cloud provider chosen without opt-in is rejected before transcription so no
-    audio leaves the machine unexpectedly.
-    """
-
-    provider_id = str(config.get("audio_provider") or "local_faster_whisper").strip().lower()
-    capability = get_capability(provider_id)
-    if capability.cloud and not _truthy(config.get("audio_allow_cloud_stt")):
-        raise PermissionError(
-            f"Audio provider {provider_id!r} is cloud-based but cloud STT is not enabled. "
-            "Enable 'allow cloud STT' in Advanced Audio settings to send audio to this provider."
-        )
-    return provider_id
 
 
 def _resolve_output_mode(config: dict[str, Any]) -> str:
@@ -185,6 +190,65 @@ def _resolve_output_mode(config: dict[str, Any]) -> str:
     if mode in {"enhanced", "notes", "meeting_notes", "lecture_notes", "interview_qna", "action_decision_log"}:
         return mode
     return "transcript"
+
+
+def _resolve_enhancement_plan(config: dict[str, Any]) -> dict[str, Any]:
+    """Map UI enhancement toggles to the deterministic evidence-first renderer."""
+
+    requested_mode = _resolve_output_mode(config)
+    text_enabled = _truthy(config.get("audio_text_enhancement_enabled"))
+    text_strength = _clamp_int(config.get("audio_text_enhancement_strength"), minimum=0, maximum=5)
+    structural_enabled = _truthy(config.get("audio_structural_enhancement_enabled"))
+    structural_mode = str(config.get("audio_structural_enhancement_mode") or "auto").strip().lower()
+
+    if requested_mode != "transcript":
+        return {
+            "mode": requested_mode,
+            "template": requested_mode,
+            "trigger": "output_mode",
+            "text_enabled": text_enabled,
+            "text_strength": text_strength,
+            "structural_enabled": structural_enabled,
+            "structural_mode": structural_mode,
+        }
+    if structural_enabled:
+        template = structural_mode if structural_mode and structural_mode != "auto" else "structured_notes"
+        return {
+            "mode": "enhanced",
+            "template": template,
+            "trigger": "structural_enhancement",
+            "text_enabled": text_enabled,
+            "text_strength": text_strength,
+            "structural_enabled": True,
+            "structural_mode": structural_mode,
+        }
+    if text_enabled:
+        return {
+            "mode": "enhanced",
+            "template": "text_enhancement",
+            "trigger": "text_enhancement",
+            "text_enabled": True,
+            "text_strength": max(1, text_strength),
+            "structural_enabled": False,
+            "structural_mode": structural_mode,
+        }
+    return {
+        "mode": "transcript",
+        "template": "transcript",
+        "trigger": None,
+        "text_enabled": text_enabled,
+        "text_strength": text_strength,
+        "structural_enabled": structural_enabled,
+        "structural_mode": structural_mode,
+    }
+
+
+def _clamp_int(value: Any, *, minimum: int, maximum: int) -> int:
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return minimum
+    return max(minimum, min(maximum, coerced))
 
 
 def _truthy(value: Any) -> bool:
@@ -208,6 +272,31 @@ def _vocabulary_was_truncated(terms: list[str], prompt: str | None) -> bool:
         return False
     full = "Vocabulary terms: " + ", ".join(terms)
     return len(prompt) < len(full)
+
+
+def _validate_enhancement_provenance(
+    text: str,
+    transcript: AudioTranscript,
+    *,
+    require_source_refs: bool,
+) -> dict[str, Any]:
+    """Verify enhanced output keeps direct citations for every spoken segment."""
+
+    if not require_source_refs:
+        return {"valid": True, "required": False, "missing": [], "fallback_applied": False}
+
+    missing: list[str] = []
+    for segment in transcript.segments:
+        if not segment.text:
+            continue
+        if segment.segment_id not in text or segment.source_ref() not in text:
+            missing.append(segment.segment_id)
+    return {
+        "valid": not missing,
+        "required": True,
+        "missing": missing,
+        "fallback_applied": False,
+    }
 
 
 def _audio_quality(transcript: AudioTranscript) -> dict[str, Any]:

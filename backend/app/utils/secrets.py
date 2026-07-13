@@ -7,7 +7,8 @@ at-rest encryption without requiring user-managed keys.
 
 import os
 import base64
-from pathlib import Path
+
+from app.crypto import decrypt_value, encrypt_value  # noqa: F401 - compatibility re-export
 
 try:
     from cryptography.fernet import Fernet
@@ -38,7 +39,6 @@ def _get_or_create_key() -> bytes:
     return base64.urlsafe_b64decode(key)
 
 
-from app.crypto import encrypt_value, decrypt_value
 
 
 def is_sensitive_key(key: str) -> bool:

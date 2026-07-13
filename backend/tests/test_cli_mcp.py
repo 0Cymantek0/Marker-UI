@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import os
 import subprocess
 import sys
 import tomllib
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app import agent_api
-from app.errors import OutputExistsError
+from app.errors import OutputExistsError, UnsupportedFormatError, UsageError
 from app.main import _app_state
-from app.agent_api import AgentConversionOptions, convert_document, plan_conversion, read_output, self_test
+from app.agent_api import AgentConversionOptions, convert_document, plan_conversion, read_output, read_output_chunk, self_test
 from app.database import Base
 from app.models.job import ConversionJob
 from app.models.settings import Setting
@@ -24,6 +27,18 @@ from app.services.marker_service import MarkerService
 from app.services.task_manager import TaskManager
 from app.utils.secrets import decrypt_value, encrypt_value
 import app.services.task_manager as task_manager_module
+
+
+@contextmanager
+def mcp_profile(profile: str):
+    import app.mcp_server as mcp_server
+
+    previous = mcp_server.MCP_ACTIVE_TOOL_PROFILE
+    mcp_server.configure_mcp_tool_profile(profile)
+    try:
+        yield mcp_server
+    finally:
+        mcp_server.configure_mcp_tool_profile(previous)
 
 
 @pytest.mark.asyncio
@@ -43,6 +58,387 @@ async def test_agent_api_converts_tsv_through_real_service(tmp_path: Path):
     assert "| alpha | 1 |" in result["text_preview"]
     assert result["metadata"]["engine"]["engine"] == "text_data"
     assert Path(result["output"]["text_path"]).read_text(encoding="utf-8") == result["text_preview"]
+
+
+@pytest.mark.asyncio
+async def test_agent_api_converts_tsv_to_chunks_json(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\nbeta\t2\n", encoding="utf-8")
+
+    result = await convert_document(
+        local_file_path=str(source),
+        output_dir=str(tmp_path / "out"),
+        max_chars=5000,
+        options=AgentConversionOptions(output_format="chunks"),
+    )
+
+    output_path = Path(result["output"]["text_path"])
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert output_path.name == "scores.chunks.json"
+    assert output_path.suffix == ".json"
+    assert result["output"]["media_type"] == "application/json"
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert payload["chunk_kind"] == "semantic_markdown"
+    assert payload["renderer_kind"] == "derived"
+    assert payload["source_format"] == "markdown"
+    assert payload["semantic_level"] == "markdown_structure"
+    assert payload["structured_ir"] is False
+    assert payload["chunk_count"] == len(payload["chunks"])
+    assert "| alpha | 1 |" in payload["chunks"][-1]["text"]
+    assert result["metadata"]["chunking"]["chunk_kind"] == "semantic_markdown"
+
+    chunk = read_output_chunk(str(output_path), mode="semantic", chunk_index=0)
+    assert chunk["is_semantic_chunk"] is True
+    assert chunk["schema_version"] == "marker.chunks.v1"
+    assert chunk["chunk_kind"] == "semantic_markdown"
+    assert chunk["renderer_kind"] == "derived"
+    assert chunk["source_format"] == "markdown"
+    assert chunk["semantic_level"] == "markdown_structure"
+    assert chunk["structured_ir"] is False
+    assert chunk["chunk_index"] == 0
+    assert chunk["chunk_count"] == payload["chunk_count"]
+
+
+@pytest.mark.asyncio
+async def test_agent_api_persists_extra_output_formats_with_markdown_primary(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\nbeta\t2\n", encoding="utf-8")
+
+    result = await convert_document(
+        local_file_path=str(source),
+        output_dir=str(tmp_path / "out"),
+        max_chars=5000,
+        options=AgentConversionOptions(output_format="markdown", output_formats=["markdown", "chunks"]),
+    )
+
+    output = result["output"]
+    markdown_path = Path(output["formats"]["markdown"]["text_path"])
+    chunks_path = Path(output["formats"]["chunks"]["text_path"])
+
+    assert markdown_path == Path(output["text_path"])
+    assert markdown_path.read_text(encoding="utf-8") == result["text_preview"]
+    assert chunks_path.name == "scores.chunks.json"
+    payload = json.loads(chunks_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert "| alpha | 1 |" in payload["chunks"][-1]["text"]
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_unshipped_audio_benchmark_compare(tmp_path: Path):
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"RIFF fake wav")
+
+    with pytest.raises(UsageError, match="Audio provider comparison is not shipped"):
+        await convert_document(
+            local_file_path=str(source),
+            output_dir=str(tmp_path / "out"),
+            options=AgentConversionOptions(
+                output_format="markdown",
+                audio_benchmark_compare=True,
+                audio_compare_providers=["local_faster_whisper"],
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_unshipped_audio_fusion_mode(tmp_path: Path):
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"RIFF fake wav")
+
+    with pytest.raises(UsageError, match="Audio context fusion is not shipped"):
+        await convert_document(
+            local_file_path=str(source),
+            output_dir=str(tmp_path / "out"),
+            options=AgentConversionOptions(
+                output_format="markdown",
+                audio_fusion_mode="audio_first",
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_unsupported_audio_diarization(tmp_path: Path):
+    source = tmp_path / "meeting.wav"
+    source.write_bytes(b"RIFF fake wav")
+
+    with pytest.raises(UsageError, match="Audio diarization is not supported by provider"):
+        await convert_document(
+            local_file_path=str(source),
+            output_dir=str(tmp_path / "out"),
+            options=AgentConversionOptions(
+                output_format="markdown",
+                audio_provider="local_faster_whisper",
+                audio_diarization=True,
+            ),
+        )
+
+
+def test_agent_capabilities_and_config_include_frontend_audio_modes():
+    caps = agent_api.capabilities()
+
+    for mode in ("interview_qna", "action_decision_log"):
+        assert mode in caps["audio_output_modes"]
+        config = agent_api.build_conversion_config(AgentConversionOptions(audio_output_mode=mode))
+        assert config["audio_output_mode"] == mode
+
+
+def test_agent_capabilities_report_per_input_output_formats():
+    caps = agent_api.capabilities()
+
+    docx = next(item for item in caps["input_formats"] if item["extensions"] == [".docx"])
+    pdf = next(item for item in caps["input_formats"] if item["extensions"] == [".pdf"])
+    liteparse = next(item for item in caps["converters"] if item["engine"] == "liteparse_pdf")
+
+    assert docx["output_formats"] == ["markdown", "chunks"]
+    assert pdf["output_formats"] == ["markdown", "json", "html", "chunks"]
+    assert liteparse["output_formats"] == ["markdown", "chunks"]
+
+
+def test_agent_build_conversion_config_preserves_advanced_audio_options():
+    config = agent_api.build_conversion_config(
+        AgentConversionOptions(
+            audio_provider="local_faster_whisper",
+            audio_language="en",
+            audio_vad_filter=False,
+            audio_diarization=True,
+            audio_min_speakers=2,
+            audio_speaker_aliases={"speaker_0": "Alice"},
+            audio_vocabulary_pack_ids=["team"],
+            audio_text_enhancement_enabled=True,
+            audio_text_enhancement_strength=3,
+            audio_structural_enhancement_enabled=True,
+            audio_structural_enhancement_mode="meeting_notes",
+            audio_contradiction_detection=True,
+            audio_allow_cloud_stt=True,
+            audio_benchmark_compare=True,
+            audio_compare_providers=["local_faster_whisper"],
+        )
+    )
+
+    assert config["audio_provider"] == "local_faster_whisper"
+    assert config["audio_language"] == "en"
+    assert config["audio_vad_filter"] is False
+    assert config["audio_diarization"] is True
+    assert config["audio_min_speakers"] == 2
+    assert config["audio_speaker_aliases"] == {"speaker_0": "Alice"}
+    assert config["audio_vocabulary_pack_ids"] == ["team"]
+    assert config["audio_text_enhancement_enabled"] is True
+    assert config["audio_text_enhancement_strength"] == 3
+    assert config["audio_structural_enhancement_enabled"] is True
+    assert config["audio_structural_enhancement_mode"] == "meeting_notes"
+    assert config["audio_contradiction_detection"] is True
+    assert config["audio_allow_cloud_stt"] is True
+    assert config["audio_benchmark_compare"] is True
+    assert config["audio_compare_providers"] == ["local_faster_whisper"]
+
+
+def test_cli_common_options_include_advanced_audio_flags():
+    from app import cli as marker_cli
+
+    parser = marker_cli._build_parser()
+    args = parser.parse_args(
+        [
+            "convert",
+            "meeting.wav",
+            "--audio-provider",
+            "local_faster_whisper",
+            "--audio-language",
+            "en",
+            "--audio-vad-filter",
+            "--audio-diarization",
+            "--audio-min-speakers",
+            "2",
+            "--audio-max-speakers",
+            "4",
+            "--audio-speaker-alias",
+            "speaker_0=Alice",
+            "--audio-vocabulary-pack-id",
+            "team",
+            "--no-audio-confidence-heatmap",
+            "--audio-quality-diagnostics",
+            "--audio-allow-cloud-stt",
+            "--audio-text-enhancement",
+            "--audio-text-enhancement-strength",
+            "2",
+            "--audio-structural-enhancement",
+            "--audio-structural-enhancement-mode",
+            "meeting_notes",
+            "--audio-fusion-mode",
+            "audio_first",
+            "--audio-contradiction-detection",
+            "--audio-benchmark-compare",
+            "--audio-compare-provider",
+            "openai",
+        ]
+    )
+    config = agent_api.build_conversion_config(marker_cli._options_from_args(args))
+
+    assert config["audio_provider"] == "local_faster_whisper"
+    assert config["audio_language"] == "en"
+    assert config["audio_vad_filter"] is True
+    assert config["audio_diarization"] is True
+    assert config["audio_min_speakers"] == 2
+    assert config["audio_max_speakers"] == 4
+    assert config["audio_speaker_aliases"] == {"speaker_0": "Alice"}
+    assert config["audio_vocabulary_pack_ids"] == ["team"]
+    assert config["audio_confidence_heatmap"] is False
+    assert "audio_quality_diagnostics" not in config
+    assert config["audio_allow_cloud_stt"] is True
+    assert config["audio_text_enhancement_enabled"] is True
+    assert config["audio_text_enhancement_strength"] == 2
+    assert config["audio_structural_enhancement_enabled"] is True
+    assert config["audio_structural_enhancement_mode"] == "meeting_notes"
+    assert config["audio_fusion_mode"] == "audio_first"
+    assert config["audio_contradiction_detection"] is True
+    assert config["audio_benchmark_compare"] is True
+    assert config["audio_compare_providers"] == ["openai"]
+
+
+def test_cli_audio_speaker_alias_requires_key_value_pair():
+    from app import cli as marker_cli
+
+    parser = marker_cli._build_parser()
+    args = parser.parse_args(["convert", "meeting.wav", "--audio-speaker-alias", "speaker_0"])
+
+    with pytest.raises(UsageError, match="Expected KEY=VALUE"):
+        marker_cli._options_from_args(args)
+
+
+def test_agent_build_conversion_config_preserves_productivity_options():
+    config = agent_api.build_conversion_config(
+        AgentConversionOptions(
+            text_data_max_rows=12,
+            chunking_strategy="unstructured_by_title",
+            chunk_max_tokens=512,
+            allow_chunking_fallback=True,
+            archive_recursive=False,
+            archive_max_files=25,
+            archive_inline_bytes=4096,
+            archive_max_child_bytes=8192,
+            archive_max_total_uncompressed_bytes=16384,
+            archive_max_compression_ratio=50.0,
+            archive_max_depth=0,
+            archive_max_converted_children=3,
+            router_enabled=False,
+            smart_router_level="smart",
+            dedup_enabled=False,
+            downscale_vlm_crops=True,
+            batch_enabled=False,
+            decorative_max_text_density=0.05,
+            ocr_min_text_density=0.6,
+            ocr_min_lines=2,
+            dedup_max_distance=0,
+            vlm_crop_max_px=512,
+            vlm_batch_size=4,
+            max_batch_retries=0,
+        )
+    )
+
+    assert config["text_data_max_rows"] == 12
+    assert config["chunking_strategy"] == "unstructured_by_title"
+    assert config["chunk_max_tokens"] == 512
+    assert config["allow_chunking_fallback"] is True
+    assert config["archive_recursive"] is False
+    assert config["archive_max_files"] == 25
+    assert config["archive_inline_bytes"] == 4096
+    assert config["archive_max_child_bytes"] == 8192
+    assert config["archive_max_total_uncompressed_bytes"] == 16384
+    assert config["archive_max_compression_ratio"] == 50.0
+    assert config["archive_max_depth"] == 0
+    assert config["archive_max_converted_children"] == 3
+    assert config["router_enabled"] is False
+    assert config["smart_router_level"] == "smart"
+    assert config["dedup_enabled"] is False
+    assert config["downscale_vlm_crops"] is True
+    assert config["batch_enabled"] is False
+    assert config["decorative_max_text_density"] == 0.05
+    assert config["ocr_min_text_density"] == 0.6
+    assert config["ocr_min_lines"] == 2
+    assert config["dedup_max_distance"] == 0
+    assert config["vlm_crop_max_px"] == 512
+    assert config["vlm_batch_size"] == 4
+    assert config["max_batch_retries"] == 0
+
+
+def test_agent_capabilities_expose_minimal_non_admin_tools():
+    caps = agent_api.capabilities()
+
+    assert "marker_cancel_job" in caps["tools"]
+    assert "marker_delete_job" not in caps["tools"]
+    assert "marker_plan before large PDFs" in caps["agent_guidance"]
+    assert "marker_plan_conversion" not in caps["agent_guidance"]
+    assert "marker_read_output_chunk" not in caps["agent_guidance"]
+    assert "output_format='chunks'" in caps["agent_guidance"]
+
+
+def test_agent_surface_registry_drives_agent_capabilities_and_mcp_profiles():
+    import app.agent_surface as agent_surface
+    import app.mcp_server as mcp_server
+
+    caps = agent_api.capabilities()
+
+    assert caps["tools"] == list(agent_surface.DEFAULT_AGENT_TOOL_NAMES)
+    assert mcp_server.MCP_V1_TOOL_NAMES == list(agent_surface.MCP_V1_TOOL_NAMES)
+    assert mcp_server.MCP_MINIMAL_TOOL_NAMES == list(agent_surface.MCP_MINIMAL_TOOL_NAMES)
+    assert mcp_server.MCP_FULL_TOOL_NAMES == list(agent_surface.MCP_FULL_TOOL_NAMES)
+    assert mcp_server.MCP_ADMIN_TOOL_NAMES == list(agent_surface.MCP_ADMIN_TOOL_NAMES)
+    assert set(agent_surface.DEFAULT_AGENT_TOOL_NAMES).issubset(agent_surface.MCP_ALL_TOOL_NAMES)
+    assert mcp_server.MCP_ALL_TOOL_NAMES == list(agent_surface.MCP_ALL_TOOL_NAMES)
+    assert set(agent_surface.MCP_TOOL_SPEC_BY_NAME) == set(agent_surface.MCP_ALL_TOOL_NAMES)
+    for spec in agent_surface.MCP_TOOL_SPECS:
+        assert spec.title
+        assert spec.description
+        assert set(spec.annotations) == {
+            "readOnlyHint",
+            "destructiveHint",
+            "idempotentHint",
+            "openWorldHint",
+        }
+        for alias in spec.aliases:
+            assert agent_surface.MCP_TOOL_SPEC_BY_NAME[alias].canonical_name == spec.name
+            assert agent_surface.MCP_TOOL_SPEC_BY_NAME[alias].deprecated is True
+
+
+@pytest.mark.asyncio
+async def test_agent_surface_registry_matches_live_mcp_tool_metadata():
+    import app.agent_surface as agent_surface
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = {tool.name: tool for tool in await mcp_server.mcp.list_tools()}
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+    assert set(tools) == set(agent_surface.tool_names_for_profile("admin"))
+    for name, tool in tools.items():
+        spec = agent_surface.MCP_TOOL_SPEC_BY_NAME[name]
+        assert tool.title == spec.title
+        assert tool.description and tool.description.startswith(spec.description)
+        assert tool.annotations.readOnlyHint is spec.annotations["readOnlyHint"]
+        assert tool.annotations.destructiveHint is spec.annotations["destructiveHint"]
+        assert tool.annotations.idempotentHint is spec.annotations["idempotentHint"]
+        assert tool.annotations.openWorldHint is spec.annotations["openWorldHint"]
+    assert all(spec.scopes for spec in agent_surface.MCP_TOOL_SPECS)
+    assert set(agent_surface.MCP_RESOURCE_SPEC_BY_URI) == set(agent_surface.MCP_RESOURCE_URIS)
+    assert all(spec.scopes for spec in agent_surface.MCP_RESOURCE_SPECS)
+
+
+def test_mcp_profile_capabilities_do_not_advertise_hidden_chunk_tool():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("minimal")
+    minimal = mcp_server.active_profile_capabilities()
+    assert "marker_read_output_chunk" not in minimal["tools"]
+    assert "marker_read_output_chunk" not in minimal["agent_guidance"]
+
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        full = mcp_server.active_profile_capabilities()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+    assert "marker_read_output_chunk" in full["tools"]
+    assert "marker_read_output_chunk with mode='semantic'" in full["agent_guidance"]
 
 
 @pytest.mark.asyncio
@@ -89,6 +485,157 @@ def test_cli_convert_command_writes_real_output(tmp_path: Path):
     assert data["metadata"]["engine"]["engine"] == "text_data"
 
 
+def test_cli_output_chunk_reads_semantic_chunks(tmp_path: Path):
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\nDhaka,20\n", encoding="utf-8")
+
+    convert = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "convert",
+            str(source),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--output-format",
+            "chunks",
+            "--json",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+    converted = json.loads(convert.stdout)
+
+    read = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "output",
+            "chunk",
+            converted["output"]["text_path"],
+            "--mode",
+            "semantic",
+            "--chunk-index",
+            "0",
+            "--json",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    payload = json.loads(read.stdout)
+    assert payload["is_semantic_chunk"] is True
+    assert payload["schema_version"] == "marker.chunks.v1"
+    assert payload["chunk_kind"] == "semantic_markdown"
+    assert "city" in payload["text"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_v2_convert_uses_source_object(tmp_path: Path):
+    import app.mcp_server as mcp_server
+
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\n", encoding="utf-8")
+
+    result = await mcp_server.marker_convert(
+        None,
+        mcp_server.SourceInput(kind="local_path", path=str(source)),
+        output_dir=str(tmp_path / "out"),
+        max_chars=5000,
+        output_format="markdown",
+    )
+
+    out_path = Path(result["output"]["text_path"])
+    assert out_path.is_file()
+    assert "| Kolkata | 10 |" in out_path.read_text(encoding="utf-8")
+    assert result["resource_links"]["manifest"].startswith("marker://outputs/")
+
+
+def test_cli_convert_accepts_request_json_file(tmp_path: Path):
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\nDhaka,20\n", encoding="utf-8")
+    request_path = tmp_path / "request.json"
+    output_path = tmp_path / "out" / "fixed.md"
+    request_path.write_text(
+        json.dumps(
+            {
+                "local_file_path": str(source),
+                "output_path": str(output_path),
+                "max_chars": 5000,
+                "options": {"output_format": "markdown", "text_data_max_rows": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "convert",
+            "--request-json",
+            str(request_path),
+            "--json",
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    data = json.loads(completed.stdout)
+    assert Path(data["output"]["text_path"]) == output_path
+    assert output_path.is_file()
+    assert "Only first 1 rows shown" in output_path.read_text(encoding="utf-8")
+
+
+def test_cli_convert_accepts_stdin_json_with_overwrite(tmp_path: Path):
+    source = tmp_path / "data.csv"
+    source.write_text("city,value\nKolkata,10\n", encoding="utf-8")
+    output_path = tmp_path / "out" / "fixed.md"
+    output_path.parent.mkdir()
+    output_path.write_text("sentinel", encoding="utf-8")
+    request = {
+        "local_file_path": str(source),
+        "output_path": str(output_path),
+        "overwrite": True,
+        "max_chars": 5000,
+        "options": {"output_format": "markdown"},
+    }
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "convert",
+            "--stdin-json",
+            "--json",
+        ],
+        input=json.dumps(request),
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    data = json.loads(completed.stdout)
+    assert Path(data["output"]["text_path"]) == output_path
+    assert "sentinel" not in output_path.read_text(encoding="utf-8")
+    assert "| Kolkata | 10 |" in output_path.read_text(encoding="utf-8")
+
+
 def test_cli_exposes_agent_productivity_knobs_directly(tmp_path: Path):
     source = tmp_path / "data.csv"
     source.write_text("city,value\nKolkata,10\nDhaka,20\nSylhet,30\n", encoding="utf-8")
@@ -104,6 +651,8 @@ def test_cli_exposes_agent_productivity_knobs_directly(tmp_path: Path):
             str(tmp_path / "out-direct"),
             "--text-data-max-rows",
             "2",
+            "--chunking-strategy",
+            "markdown_heading_blocks_v2",
             "--smart-router-level",
             "smart",
             "--no-router-enabled",
@@ -113,6 +662,10 @@ def test_cli_exposes_agent_productivity_knobs_directly(tmp_path: Path):
             "3",
             "--archive-max-files",
             "50",
+            "--archive-max-total-uncompressed-bytes",
+            "1048576",
+            "--archive-max-compression-ratio",
+            "20",
             "--no-archive-recursive",
             "--json",
         ],
@@ -147,6 +700,8 @@ def test_read_output_reads_bounded_chunk_without_full_file_load(tmp_path: Path, 
     assert result["text_chars"] == 1000
     assert result["has_more"] is True
     assert result["next_offset"] == 25
+    assert result["chunk_kind"] == "offset_text"
+    assert result["is_semantic_chunk"] is False
 
 
 @pytest.mark.asyncio
@@ -184,6 +739,11 @@ async def test_agent_api_settings_and_jobs_use_real_database_paths(
     assert "openai_api_key" in serialized
     assert secret not in serialized
 
+    fetched = await agent_api.get_setting("openai_api_key", category="llm")
+    assert fetched["key"] == "openai_api_key"
+    with pytest.raises(agent_api.InputNotFoundError):
+        await agent_api.get_setting("openai_api_key", category="ui")
+
     db_session.add(
         Setting(
             key="llm_providers",
@@ -207,6 +767,10 @@ async def test_agent_api_settings_and_jobs_use_real_database_paths(
     assert "dummy-fallback-key" not in providers_json
     assert "gAAAA" not in providers_json
     assert "max_output_tokens" in providers_json
+
+    await agent_api.delete_setting("llm_providers", category="ui")
+    still_present = await agent_api.get_setting("llm_providers", category="llm")
+    assert still_present["key"] == "llm_providers"
 
     result_file = tmp_path / "finished.md"
     result_file.write_text("# Converted\n\nDone.", encoding="utf-8")
@@ -296,6 +860,43 @@ async def test_agent_api_submit_job_uses_real_task_manager_and_conversion(
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_agent_submit_rejects_deferred_audio_provider_before_queue(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    source = tmp_path / "call.wav"
+    source.write_bytes(b"RIFF fake wav")
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'agent-audio.db'}",
+        echo=False,
+        future=True,
+        connect_args={"check_same_thread": False},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+    monkeypatch.setattr(agent_api, "_db_tables_ready", False)
+
+    try:
+        with pytest.raises(UsageError, match="not shipped yet"):
+            await agent_api.submit_conversion_job(
+                local_file_path=str(source),
+                options=AgentConversionOptions(
+                    audio_provider="openai",
+                    audio_allow_cloud_stt=True,
+                ),
+            )
+
+        async with session_factory() as session:
+            rows = (await session.execute(select(ConversionJob))).scalars().all()
+        assert rows == []
+    finally:
+        await engine.dispose()
+
+
 
 @pytest.mark.asyncio
 async def test_mcp_delete_job_output_schema_is_files_removed_list(
@@ -330,7 +931,11 @@ async def test_mcp_delete_job_output_schema_is_files_removed_list(
     )
     await db_session.commit()
 
-    tools = await mcp_server.mcp.list_tools()
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
     delete_tool = next(tool for tool in tools if tool.name == "marker_delete_job")
     files_removed_schema = delete_tool.outputSchema["properties"]["files_removed"]
     assert files_removed_schema["type"] == "array"
@@ -342,6 +947,233 @@ async def test_mcp_delete_job_output_schema_is_files_removed_list(
     )
     assert isinstance(result["files_removed"], list)
     assert any(Path(path).name == "deleted.md" for path in result["files_removed"])
+
+
+@pytest.mark.asyncio
+async def test_agent_purge_job_files_preserves_row_and_removes_manifest(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    result_file = tmp_path / "purged.md"
+    manifest_file = tmp_path / "purged.marker.json"
+    result_file.write_text("# keep history", encoding="utf-8")
+    manifest_file.write_text("{}", encoding="utf-8")
+    job_id = "22222222-2222-4222-8222-222222222223"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="purged.csv",
+            original_name="purged.csv",
+            status="completed",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            result_text="# keep history",
+            result_path=str(result_file),
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.purge_job_files(job_id)
+
+    assert result["status"] == "purged"
+    assert {Path(path).name for path in result["files_removed"]} == {
+        "purged.md",
+        "purged.marker.json",
+    }
+    assert not result_file.exists()
+    assert not manifest_file.exists()
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "completed"
+    assert row.result_text == "# keep history"
+    assert row.result_path is None
+    metadata = json.loads(row.result_metadata_json or "{}")
+    assert metadata["purged_artifacts"]["files_removed"] == result["files_removed"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_purge_job_files_is_admin_tool_with_files_removed_schema():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+    purge_tool = next(tool for tool in tools if tool.name == "marker_purge_job_files")
+    files_removed_schema = purge_tool.outputSchema["properties"]["files_removed"]
+    assert files_removed_schema["type"] == "array"
+    assert files_removed_schema["items"]["type"] == "string"
+
+
+@pytest.mark.asyncio
+async def test_agent_cancel_job_marks_cancelled_without_deleting_row(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    cancelled_calls: list[str] = []
+
+    async def fake_cancel(job_id: str) -> None:
+        cancelled_calls.append(job_id)
+
+    monkeypatch.setattr(agent_api, "_cancel_job_best_effort", fake_cancel)
+
+    job_id = "33333333-3333-4333-8333-333333333333"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="pending.csv",
+            original_name="pending.csv",
+            status="pending",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=12,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.cancel_job(job_id)
+
+    assert result == {"status": "cancelled", "job_id": job_id, "cancelled": True}
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "cancelled"
+    assert row.progress == 0
+    assert cancelled_calls == [job_id]
+
+
+@pytest.mark.asyncio
+async def test_agent_cancel_job_does_not_cancel_completed_job(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    cancelled_calls: list[str] = []
+
+    async def fake_cancel(job_id: str) -> None:
+        cancelled_calls.append(job_id)
+
+    monkeypatch.setattr(agent_api, "_cancel_job_best_effort", fake_cancel)
+
+    job_id = "44444444-4444-4444-8444-444444444444"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="done.csv",
+            original_name="done.csv",
+            status="completed",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=100,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.cancel_job(job_id)
+
+    assert result == {"status": "completed", "job_id": job_id, "cancelled": False}
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "completed"
+    assert row.progress == 100
+    assert cancelled_calls == []
+
+
+@pytest.mark.asyncio
+async def test_agent_delete_job_rejects_live_job_without_force(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+
+    job_id = "55555555-5555-4555-8555-555555555555"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="running.csv",
+            original_name="running.csv",
+            status="processing",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    with pytest.raises(agent_api.UsageError) as exc_info:
+        await agent_api.delete_job(job_id)
+
+    assert "cancel it first or pass force=true" in str(exc_info.value)
+    row = await db_session.get(ConversionJob, job_id)
+    assert row is not None
+    assert row.status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_agent_delete_job_force_deletes_live_job(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    @asynccontextmanager
+    async def session_factory():
+        yield db_session
+
+    monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
+    cancelled_calls: list[str] = []
+
+    async def fake_cancel(job_id: str) -> None:
+        cancelled_calls.append(job_id)
+
+    monkeypatch.setattr(agent_api, "_cancel_job_best_effort", fake_cancel)
+
+    job_id = "66666666-6666-4666-8666-666666666666"
+    db_session.add(
+        ConversionJob(
+            id=job_id,
+            filename="running.csv",
+            original_name="running.csv",
+            status="processing",
+            input_format="csv",
+            output_format="markdown",
+            config_json="{}",
+            progress=50,
+        )
+    )
+    await db_session.commit()
+
+    result = await agent_api.delete_job(job_id, force=True, delete_files=False)
+
+    assert result == {"status": "deleted", "job_id": job_id, "files_removed": []}
+    assert await db_session.get(ConversionJob, job_id) is None
+    assert cancelled_calls == [job_id]
 
 
 def test_mcp_streamable_http_refuses_non_loopback_without_auth_token():
@@ -377,11 +1209,139 @@ def test_mcp_streamable_http_configures_bearer_auth_for_non_loopback(monkeypatch
     assert mcp_server.mcp.settings.port == 8765
     assert mcp_server.mcp.settings.auth is not None
     assert mcp_server.mcp._token_verifier is not None
+
+
+@pytest.mark.asyncio
+async def test_mcp_default_tool_profile_is_minimal():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("minimal")
+    tools = await mcp_server.mcp.list_tools()
+    names = [tool.name for tool in tools]
+    caps = await mcp_server.marker_list_capabilities()
+
+    assert len(names) <= 10
+    assert names == mcp_server.MCP_MINIMAL_TOOL_NAMES
+    assert caps["tools"] == names
+    assert "marker_convert" in names
+    assert "marker_convert_file" not in names
+    assert "marker_delete_job" not in names
+    assert "marker_set_setting" not in names
+    assert "marker_delete_setting" not in names
+
+
+@pytest.mark.asyncio
+async def test_mcp_agent_guide_uses_minimal_v2_tool_names():
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("minimal")
+    contents = await mcp_server.mcp.read_resource("marker://docs/agent-guide")
+    text = contents[0].content
+
+    assert "marker_plan" in text
+    assert "marker_convert" in text
+    assert "marker_submit" in text
+    assert "marker_plan_local_file" not in text
+    assert "marker_plan_url" not in text
+    assert "marker_convert_local_file" not in text
+    assert "marker_convert_url" not in text
+
+
+@pytest.mark.asyncio
+async def test_mcp_full_and_admin_profiles_gate_destructive_tools(monkeypatch: pytest.MonkeyPatch):
+    import app.mcp_server as mcp_server
+
+    monkeypatch.delenv("MARKER_MCP_ENABLE_SETTINGS_WRITE", raising=False)
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        full_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_convert_url" in full_names
+        assert "marker_delete_job" not in full_names
+        assert "marker_set_setting" not in full_names
+        assert "marker_delete_setting" not in full_names
+
+        mcp_server.configure_mcp_tool_profile("admin")
+        admin_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_delete_job" in admin_names
+        assert "marker_set_setting" not in admin_names
+        assert "marker_delete_setting" not in admin_names
+
+        monkeypatch.setenv("MARKER_MCP_ENABLE_SETTINGS_WRITE", "true")
+        mcp_server.configure_mcp_tool_profile("admin")
+        write_names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_set_setting" in write_names
+        assert "marker_delete_setting" in write_names
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_profile_env_fallback(monkeypatch: pytest.MonkeyPatch):
+    import app.mcp_server as mcp_server
+
+    monkeypatch.setenv("MARKER_MCP_TOOL_PROFILE", "full")
+    mcp_server.configure_mcp_tool_profile(None)
+    try:
+        names = [tool.name for tool in await mcp_server.mcp.list_tools()]
+        assert "marker_convert_url" in names
+        assert "marker_delete_job" not in names
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+
+
+def test_mcp_inspect_honors_tool_profile():
+    project_root = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(project_root / "backend")
+    env["MARKER_PRELOAD_MODELS"] = "false"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.cli",
+            "mcp",
+            "inspect",
+            "--tool-profile",
+            "admin",
+            "--json",
+        ],
+        cwd=project_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+
+    data = json.loads(completed.stdout)
+    assert data["mcp"]["tool_profile"] == "admin"
+    assert "marker_delete_job" in data["tools"]
+
+
 @pytest.mark.asyncio
 async def test_mcp_tools_have_complete_input_metadata_and_output_schemas():
     import app.mcp_server as mcp_server
 
-    tools = await mcp_server.mcp.list_tools()
+    mcp_server.configure_mcp_tool_profile("admin")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+    tools_by_name = {tool.name: tool for tool in tools}
+    chunk_reader = tools_by_name["marker_read_output_chunk"]
+    assert "offset" in (chunk_reader.description or "").lower()
+    assert "semantic" in (chunk_reader.description or "").lower()
+    assert chunk_reader.outputSchema["properties"]["chunk_kind"]["examples"] == [
+        "offset_text",
+        "semantic_markdown",
+    ]
+    assert chunk_reader.outputSchema["properties"]["is_semantic_chunk"]["examples"] == [False, True]
+    assert chunk_reader.outputSchema["properties"]["renderer_kind"]["examples"] == ["derived"]
+    assert chunk_reader.outputSchema["properties"]["source_format"]["examples"] == ["markdown"]
+    assert chunk_reader.outputSchema["properties"]["semantic_level"]["examples"] == ["markdown_structure"]
+    assert chunk_reader.outputSchema["properties"]["structured_ir"]["examples"] == [False]
+
     for tool in tools:
         assert tool.outputSchema["type"] == "object", tool.name
         assert tool.outputSchema.get("properties"), tool.name
@@ -404,16 +1364,120 @@ async def test_mcp_tools_have_complete_input_metadata_and_output_schemas():
 async def test_mcp_convert_schema_has_rich_descriptions_and_nullable_booleans():
     import app.mcp_server as mcp_server
 
-    tools = await mcp_server.mcp.list_tools()
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
     schema = next(tool for tool in tools if tool.name == "marker_convert_file").inputSchema
     properties = schema["properties"]
 
     assert properties["local_file_path"]["description"]
+    assert properties["overwrite"]["description"]
+    assert properties["overwrite"].get("default") is False
     assert properties["max_chars"]["maximum"] == agent_api.MAX_READ_CHARS
     assert properties["router_enabled"].get("default") is None
     assert {item.get("type") for item in properties["router_enabled"].get("anyOf", [])} == {"boolean", "null"}
+    assert properties["chunking_strategy"]["default"] == ""
+    assert properties["chunk_max_tokens"]["default"] == 0
+    assert properties["allow_chunking_fallback"]["default"] is False
     assert properties["archive_recursive"].get("default") is None
     assert {item.get("type") for item in properties["archive_recursive"].get("anyOf", [])} == {"boolean", "null"}
+    assert properties["archive_max_total_uncompressed_bytes"]["default"] == 0
+    assert properties["archive_max_compression_ratio"]["default"] == 0.0
+    for field in (
+        "audio_provider",
+        "audio_allow_cloud_stt",
+        "audio_diarization",
+        "audio_speaker_aliases_json",
+        "audio_vocabulary_pack_ids",
+        "audio_text_enhancement_enabled",
+        "audio_structural_enhancement_enabled",
+        "audio_contradiction_detection",
+    ):
+        assert field in properties
+        assert properties[field]["description"]
+
+    submit_schema = next(tool for tool in tools if tool.name == "marker_submit_job").inputSchema
+    submit_props = submit_schema["properties"]
+    assert "audio_provider" in submit_props
+    assert "audio_allow_cloud_stt" in submit_props
+
+
+@pytest.mark.asyncio
+async def test_mcp_open_world_annotations_match_url_capability():
+    """URL-capable tools must advertise open-world access to MCP hosts."""
+
+    import app.mcp_server as mcp_server
+
+    mcp_server.configure_mcp_tool_profile("full")
+    try:
+        tools = await mcp_server.mcp.list_tools()
+    finally:
+        mcp_server.configure_mcp_tool_profile("minimal")
+    by_name = {tool.name: tool for tool in tools}
+
+    for name in {
+        "marker_plan",
+        "marker_plan_url",
+        "marker_convert",
+        "marker_convert_file",
+        "marker_convert_url",
+        "marker_submit",
+        "marker_submit_job",
+        "marker_submit_url_job",
+    }:
+        assert by_name[name].annotations.openWorldHint is True, name
+
+    for name in {
+        "marker_plan_local_file",
+        "marker_convert_local_file",
+        "marker_submit_local_job",
+        "marker_read_output",
+        "marker_read_output_chunk",
+    }:
+        assert by_name[name].annotations.openWorldHint is False, name
+
+
+def test_mcp_advanced_audio_options_map_to_agent_contract_fields():
+    import app.mcp_server as mcp_server
+
+    values = mcp_server._advanced_audio_options(
+        audio_provider="openai",
+        audio_language="en",
+        audio_device="cuda",
+        audio_compute_type="float16",
+        audio_beam_size=4,
+        audio_vad_filter=True,
+        audio_diarization=True,
+        audio_min_speakers=2,
+        audio_max_speakers=4,
+        audio_speaker_aliases_json='{"speaker_0":"Alice"}',
+        audio_vocabulary_pack_ids='["pack-a", "pack-b"]',
+        audio_confidence_heatmap=False,
+        audio_quality_diagnostics=True,
+        audio_review_required_on_low_confidence=True,
+        audio_text_enhancement_enabled=True,
+        audio_text_enhancement_strength=2,
+        audio_structural_enhancement_enabled=True,
+        audio_structural_enhancement_mode="meeting_notes",
+        audio_enhancement_allow_cloud=False,
+        audio_fusion_mode="audio_first",
+        audio_contradiction_detection=True,
+        audio_allow_cloud_stt=True,
+        audio_benchmark_compare=True,
+        audio_compare_providers="local_faster_whisper,openai",
+    )
+    opts = agent_api.AgentConversionOptions(**values)
+
+    assert opts.audio_provider == "openai"
+    assert opts.audio_allow_cloud_stt is True
+    assert opts.audio_diarization is True
+    assert opts.audio_speaker_aliases == {"speaker_0": "Alice"}
+    assert opts.audio_vocabulary_pack_ids == ["pack-a", "pack-b"]
+    assert opts.audio_confidence_heatmap is False
+    assert opts.audio_structural_enhancement_mode == "meeting_notes"
+    assert opts.audio_compare_providers == ["local_faster_whisper", "openai"]
 
 
 
@@ -436,6 +1500,92 @@ def test_mcp_extra_options_omit_unspecified_booleans():
         max_batch_retries=-1,
     ) == {}
     assert mcp_server._agent_productivity_extra_options(archive_recursive=None) == {}
+    assert mcp_server._agent_productivity_extra_options(
+        chunking_strategy="unstructured_by_title",
+        chunk_max_tokens=384,
+        allow_chunking_fallback=True,
+    ) == {
+        "chunking_strategy": "unstructured_by_title",
+        "chunk_max_tokens": 384,
+        "allow_chunking_fallback": True,
+    }
+    assert mcp_server._agent_productivity_extra_options(
+        archive_max_total_uncompressed_bytes=4096,
+        archive_max_compression_ratio=25.0,
+    ) == {
+        "archive_max_total_uncompressed_bytes": 4096,
+        "archive_max_compression_ratio": 25.0,
+    }
+
+
+def test_mcp_tools_enforce_declared_scopes():
+    import app.agent_surface as agent_surface
+    import app.mcp_server as mcp_server
+
+    missing: list[str] = []
+    for name in agent_surface.MCP_ALL_TOOL_NAMES:
+        fn = getattr(mcp_server, name)
+        if "require_mcp_scopes(" not in inspect.getsource(fn):
+            missing.append(name)
+
+    assert missing == []
+
+
+@pytest.mark.asyncio
+async def test_mcp_v1_capability_tools_require_capabilities_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["jobs:read"]))
+
+    with pytest.raises(PermissionError, match="capabilities:read"):
+        await mcp_server.marker_get_health()
+
+
+@pytest.mark.asyncio
+async def test_mcp_settings_resource_requires_settings_read_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+    from mcp.server.fastmcp.exceptions import ResourceError
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["capabilities:read"]))
+
+    with pytest.raises(ResourceError, match="settings:read"):
+        await mcp_server.mcp.read_resource("marker://settings")
+
+
+@pytest.mark.asyncio
+async def test_mcp_jobs_resource_requires_jobs_read_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+    from mcp.server.fastmcp.exceptions import ResourceError
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["capabilities:read"]))
+
+    with pytest.raises(ResourceError, match="jobs:read"):
+        await mcp_server.mcp.read_resource("marker://jobs")
+
+
+@pytest.mark.asyncio
+async def test_mcp_output_manifest_resource_requires_outputs_read_scope(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["capabilities:read"]))
+
+    with pytest.raises(ValueError, match="outputs:read"):
+        await mcp_server.mcp.read_resource("marker://outputs/example.md/manifest")
+
+
+@pytest.mark.asyncio
+async def test_mcp_job_output_resource_requires_jobs_and_outputs_scopes(monkeypatch):
+    import app.mcp_server as mcp_server
+    import app.security.auth as auth
+
+    monkeypatch.setattr(auth, "get_access_token", lambda: SimpleNamespace(scopes=["jobs:read"]))
+
+    with pytest.raises(ValueError, match="outputs:read"):
+        await mcp_server.mcp.read_resource("marker://jobs/job-1/output")
 
 
 @pytest.mark.asyncio
@@ -468,7 +1618,70 @@ async def test_agent_api_converts_same_file_without_clobbering_previous_output(t
     assert second_manifest.is_file()
     manifest = json.loads(second_manifest.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == "marker.output_manifest.v1"
-    assert manifest["output"]["text_path"] == str(second_path.resolve())
+    assert manifest["output"]["text_path"] == second_path.name
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_native_structured_output_format(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\n", encoding="utf-8")
+
+    with pytest.raises(UnsupportedFormatError) as exc_info:
+        await convert_document(
+            local_file_path=str(source),
+            output_dir=str(tmp_path / "out"),
+            max_chars=5000,
+            options=AgentConversionOptions(output_format="json"),
+        )
+
+    assert "not supported for engine 'text_data'" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_unknown_engine_override() -> None:
+    with pytest.raises(UsageError) as exc_info:
+        await plan_conversion(
+            filename="scores.tsv",
+            size=12,
+            options=AgentConversionOptions(engine_override="does_not_exist"),
+        )
+
+    assert "Unknown engine_override" in str(exc_info.value)
+    assert "text_data" in exc_info.value.details["known_engines"]
+
+
+@pytest.mark.asyncio
+async def test_agent_api_rejects_incompatible_engine_override() -> None:
+    with pytest.raises(UsageError) as exc_info:
+        await plan_conversion(
+            filename="image.png",
+            size=12,
+            options=AgentConversionOptions(engine_override="liteparse_pdf"),
+        )
+
+    assert "incompatible" in str(exc_info.value)
+    assert exc_info.value.details["extension"] == ".png"
+    assert exc_info.value.details["compatible_extensions"] == [".pdf"]
+
+
+@pytest.mark.asyncio
+async def test_agent_api_allows_compatible_engine_override_and_auto_sentinel(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\n", encoding="utf-8")
+
+    explicit = await convert_document(
+        local_file_path=str(source),
+        output_dir=str(tmp_path / "out-explicit"),
+        options=AgentConversionOptions(engine_override="text_data"),
+    )
+    automatic = await plan_conversion(
+        filename="scores.tsv",
+        size=source.stat().st_size,
+        options=AgentConversionOptions(engine_override="auto"),
+    )
+
+    assert explicit["metadata"]["engine"]["engine"] == "text_data"
+    assert automatic["plan"]["engine"] == "text_data"
 
 
 @pytest.mark.asyncio
@@ -488,6 +1701,28 @@ async def test_agent_api_explicit_output_path_refuses_existing_file(tmp_path: Pa
         )
 
     assert output_path.read_text(encoding="utf-8") == "sentinel"
+
+
+@pytest.mark.asyncio
+async def test_agent_api_explicit_output_path_overwrite_replaces_existing_file(tmp_path: Path):
+    source = tmp_path / "scores.tsv"
+    source.write_text("name\tscore\nalpha\t1\n", encoding="utf-8")
+    output_path = tmp_path / "out" / "fixed.md"
+    output_path.parent.mkdir()
+    output_path.write_text("sentinel", encoding="utf-8")
+
+    result = await convert_document(
+        local_file_path=str(source),
+        output_path=str(output_path),
+        overwrite=True,
+        max_chars=5000,
+        options=AgentConversionOptions(output_format="markdown"),
+    )
+
+    assert Path(result["output"]["text_path"]) == output_path
+    written_text = output_path.read_text(encoding="utf-8")
+    assert "sentinel" not in written_text
+    assert "| alpha | 1 |" in written_text
 
 
 @pytest.mark.asyncio
@@ -516,10 +1751,131 @@ def test_marker_pyproject_exposes_console_entrypoint():
 
     data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
 
+    project = data["project"]
+    assert project["license"] == "GPL-3.0-only"
+    assert project["license-files"] == ["LICENSE"]
+    assert project["authors"] == [{"name": "Marker UI contributors"}]
+    assert not any(item.startswith("License ::") for item in project["classifiers"])
+    assert "mcp" in project["keywords"]
+    assert data["project"]["urls"]["Source"] == "https://github.com/0Cymantek0/Marker-UI"
     assert data["project"]["scripts"]["marker"] == "app.cli:main"
     packages = data["tool"]["setuptools"]["packages"]["find"]
     assert packages["where"] == ["backend"]
     assert packages["include"] == ["app*"]
+
+
+def test_mcp_client_config_codex_source_mode_emits_parseable_toml(tmp_path: Path):
+    from app.cli import _mcp_client_config
+
+    config = _mcp_client_config(
+        "codex",
+        mode="source",
+        cwd=str(tmp_path),
+        server_name="marker_docs",
+        tool_profile="minimal",
+    )
+
+    assert config["format"] == "toml"
+    parsed = tomllib.loads(config["config"])
+    server = parsed["mcp_servers"]["marker_docs"]
+    assert server["command"] == "python"
+    assert server["args"] == ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]
+    assert server["cwd"] == str(tmp_path.resolve())
+    assert server["env"]["MARKER_PRELOAD_MODELS"] == "false"
+
+
+def test_mcp_client_config_installed_and_http_modes_parse_as_json():
+    from app.cli import _mcp_client_config
+
+    clients = ["claude", "gemini", "cursor", "zed", "cline", "continue", "windsurf", "antigravity"]
+    for client in clients:
+        config = _mcp_client_config(
+            client,
+            mode="installed",
+            server_name="marker",
+            tool_profile="full",
+        )
+        assert config["format"] == "json"
+        json.dumps(config["config"])
+
+    installed = _mcp_client_config("gemini", mode="installed", tool_profile="full")
+    server = installed["config"]["mcpServers"]["marker"]
+    assert server["command"] == "marker"
+    assert server["args"] == ["mcp", "start", "--tool-profile", "full"]
+    assert "cwd" not in server
+
+    http = _mcp_client_config(
+        "cursor",
+        mode="http",
+        url="https://marker.example/mcp",
+        auth_token="token-123",
+    )
+    http_server = http["config"]["mcpServers"]["marker"]
+    assert http_server["url"] == "https://marker.example/mcp"
+    assert http_server["headers"]["Authorization"] == "Bearer token-123"
+
+
+def test_mcp_client_config_opencode_uses_command_array(tmp_path: Path):
+    from app.cli import _mcp_client_config
+
+    config = _mcp_client_config("opencode", mode="source", cwd=str(tmp_path))
+    server = config["config"]["mcp"]["marker"]
+    assert server["type"] == "local"
+    assert server["command"] == ["python", "-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]
+    assert server["cwd"] == str(tmp_path.resolve())
+
+
+def test_cli_settings_get_and_delete_accept_documented_category(monkeypatch: pytest.MonkeyPatch, capsys):
+    from app import cli
+
+    calls: list[tuple[str, str, str | None]] = []
+
+    async def fake_get_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("get", key, category))
+        return {"key": key, "value": "********", "category": category or "general"}
+
+    async def fake_delete_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("delete", key, category))
+        return {"status": "deleted", "key": key}
+
+    monkeypatch.setattr(cli, "get_setting", fake_get_setting)
+    monkeypatch.setattr(cli, "delete_setting", fake_delete_setting)
+
+    assert cli.main(["settings", "get", "openai_api_key", "--category", "llm", "--json"]) == 0
+    get_payload = json.loads(capsys.readouterr().out)
+    assert get_payload["category"] == "llm"
+
+    assert cli.main(["settings", "delete", "openai_api_key", "--category", "llm", "--json"]) == 0
+    delete_payload = json.loads(capsys.readouterr().out)
+    assert delete_payload["status"] == "deleted"
+    assert calls == [
+        ("get", "openai_api_key", "llm"),
+        ("delete", "openai_api_key", "llm"),
+    ]
+
+
+def test_cli_config_alias_get_and_delete_accept_documented_category(monkeypatch: pytest.MonkeyPatch):
+    from app import cli
+
+    calls: list[tuple[str, str, str | None]] = []
+
+    async def fake_get_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("get", key, category))
+        return {"key": key, "value": "********", "category": category or "general"}
+
+    async def fake_delete_setting(key: str, *, category: str | None = None) -> dict[str, str]:
+        calls.append(("delete", key, category))
+        return {"status": "deleted", "key": key}
+
+    monkeypatch.setattr(cli, "get_setting", fake_get_setting)
+    monkeypatch.setattr(cli, "delete_setting", fake_delete_setting)
+
+    assert cli.main(["config", "get", "openai_api_key", "--category", "llm", "--json"]) == 0
+    assert cli.main(["config", "delete", "openai_api_key", "--category", "llm", "--json"]) == 0
+    assert calls == [
+        ("get", "openai_api_key", "llm"),
+        ("delete", "openai_api_key", "llm"),
+    ]
 
 
 
@@ -553,11 +1909,12 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
     backend_dir = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
     env["MARKER_PRELOAD_MODELS"] = "false"
+    env["MARKER_MCP_ENABLE_SETTINGS_WRITE"] = "true"
     env["ENCRYPTION_KEY"] = "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdHRlc3Q="
 
     params = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "app.cli", "mcp"],
+        args=["-m", "app.cli", "mcp", "start", "--tool-profile", "admin"],
         cwd=backend_dir,
         env=env,
     )
@@ -590,7 +1947,10 @@ async def test_mcp_server_lists_tools_self_tests_and_converts(tmp_path: Path):
 
             convert_tool = next(tool for tool in tools.tools if tool.name == "marker_convert_file")
             assert "text_data_max_rows" in convert_tool.inputSchema["properties"]
+            assert "chunking_strategy" in convert_tool.inputSchema["properties"]
             assert "archive_max_files" in convert_tool.inputSchema["properties"]
+            assert "archive_max_total_uncompressed_bytes" in convert_tool.inputSchema["properties"]
+            assert "archive_max_compression_ratio" in convert_tool.inputSchema["properties"]
 
             response = await session.call_tool("marker_self_test", {"include_conversion": True})
             payload = json.loads(response.content[0].text)

@@ -10,20 +10,20 @@ by the CLI.
 Local stdio:
 
 ```powershell
-python -m app.cli mcp
+python -m app.cli mcp start --tool-profile minimal
 ```
 
 Loopback Streamable HTTP:
 
 ```powershell
-python -m app.cli mcp --transport streamable-http --host 127.0.0.1 --port 8000
+python -m app.cli mcp start --transport streamable-http --host 127.0.0.1 --port 8000 --tool-profile minimal
 ```
 
 Non-loopback Streamable HTTP requires a bearer token:
 
 ```powershell
 $env:MARKER_MCP_AUTH_TOKEN="change-this-token"
-python -m app.cli mcp --transport streamable-http --host 0.0.0.0 --port 8000
+python -m app.cli mcp start --transport streamable-http --host 0.0.0.0 --port 8000 --tool-profile minimal
 ```
 
 HTTP clients must send:
@@ -37,12 +37,25 @@ on an untrusted network.
 
 ## Client Configs
 
+Generate snippets with:
+
+```powershell
+python -m app.cli mcp init-config --client codex --mode source --cwd "C:\path\to\marker\backend" --tool-profile minimal --output config.toml
+python -m app.cli mcp init-config --client cursor --mode installed --tool-profile minimal --output mcp.json
+python -m app.cli mcp init-config --client gemini --mode http --url "http://127.0.0.1:8000/mcp" --output settings.json
+```
+
+Supported clients: `codex`, `claude`, `gemini`, `opencode`, `cursor`, `zed`,
+`cline`, `continue`, `goose`, `windsurf`, and `antigravity`. Source mode emits
+`cwd`; installed mode uses the `marker` console command; HTTP mode emits a URL
+and optional bearer header when `--auth-token` is provided.
+
 Codex `.codex/config.toml` using source checkout:
 
 ```toml
 [mcp_servers.marker]
 command = "python"
-args = ["-m", "app.cli", "mcp"]
+args = ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"]
 cwd = "C:\\path\\to\\marker\\backend"
 startup_timeout_sec = 20
 tool_timeout_sec = 600
@@ -54,7 +67,7 @@ Codex with installed package:
 ```toml
 [mcp_servers.marker]
 command = "marker"
-args = ["mcp"]
+args = ["mcp", "start", "--tool-profile", "minimal"]
 startup_timeout_sec = 20
 tool_timeout_sec = 600
 enabled = true
@@ -63,7 +76,7 @@ enabled = true
 Claude Code:
 
 ```powershell
-claude mcp add --transport stdio marker -- python -m app.cli mcp
+claude mcp add --transport stdio marker -- python -m app.cli mcp start --tool-profile minimal
 ```
 
 Run that command from `C:\path\to\marker\backend`, or put equivalent command and
@@ -76,7 +89,7 @@ Gemini CLI `settings.json`:
   "mcpServers": {
     "marker": {
       "command": "python",
-      "args": ["-m", "app.cli", "mcp"],
+      "args": ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"],
       "cwd": "C:\\path\\to\\marker\\backend",
       "timeout": 600000,
       "trust": false
@@ -93,7 +106,7 @@ OpenCode `opencode.json`:
   "mcp": {
     "marker": {
       "type": "local",
-      "command": ["python", "-m", "app.cli", "mcp"],
+      "command": ["python", "-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"],
       "cwd": "C:\\path\\to\\marker\\backend",
       "enabled": true
     }
@@ -108,17 +121,58 @@ Antigravity MCP config:
   "mcpServers": {
     "marker": {
       "command": "python",
-      "args": ["-m", "app.cli", "mcp"],
+      "args": ["-m", "app.cli", "mcp", "start", "--tool-profile", "minimal"],
       "cwd": "C:\\path\\to\\marker\\backend"
     }
   }
 }
 ```
 
+## Tool Profiles
+
+Default profile is `minimal`, also available through
+`MARKER_MCP_TOOL_PROFILE=minimal`. It exposes the small safe surface needed by
+most coding agents:
+
+- `marker_capabilities`
+- `marker_plan`
+- `marker_convert`
+- `marker_submit`
+- `marker_job_status`
+- `marker_cancel_job`
+- `marker_read_output`
+- `marker_output_manifest`
+
+Use `--tool-profile full` for legacy/source-specific convenience tools such as
+`marker_convert_file`, `marker_convert_url`, and `marker_submit_local_job`.
+Use `--tool-profile admin` only when the agent needs destructive/admin tools
+such as `marker_delete_job` or `marker_purge_job_files`.
+
+Settings write/delete tools are disabled even in `admin` unless
+`MARKER_MCP_ENABLE_SETTINGS_WRITE=true` is set. Enable this only for trusted
+agents because model-controlled settings writes can change provider keys,
+base URLs, and other sensitive runtime behavior.
+
+Canonical v2 tools use one source object:
+
+```json
+{ "kind": "local_path", "path": "C:\\path\\to\\document.pdf" }
+```
+
+```json
+{ "kind": "url", "url": "https://docs.example.com/report.pdf" }
+```
+
 ## Tools
 
 | Tool | Purpose |
 |------|---------|
+| `marker_capabilities` | Canonical v2 capability tool. |
+| `marker_plan` | Canonical v2 planning with a `{kind, path|url}` source object. |
+| `marker_convert` | Canonical v2 conversion with a `{kind, path|url}` source object. |
+| `marker_submit` | Canonical v2 async submission with a `{kind, path|url}` source object. |
+| `marker_job_status` | Canonical v2 job status. |
+| `marker_output_manifest` | Canonical v2 output manifest reader. |
 | `marker_list_capabilities` / `marker_get_capabilities` | Supported formats, engines, tools, resources, prompts, and options. |
 | `marker_get_health` | Lightweight MCP health check. |
 | `marker_get_version` | Version and contract schema version. |
@@ -138,15 +192,37 @@ Antigravity MCP config:
 | `marker_get_job_status` | Inspect one job. |
 | `marker_cancel_job` | Request job cancellation. |
 | `marker_delete_job` | Delete job metadata and optionally files. |
+| `marker_purge_job_files` | Remove a completed job's stored output artifacts while keeping metadata. |
 | `marker_list_settings` | Read masked settings by category. |
 | `marker_get_setting` | Read one masked setting. |
-| `marker_set_setting` | Write one encrypted setting. |
-| `marker_delete_setting` | Delete one setting. |
+| `marker_set_setting` | Write one encrypted setting. Requires `admin` and `MARKER_MCP_ENABLE_SETTINGS_WRITE=true`. |
+| `marker_delete_setting` | Delete one setting. Requires `admin` and `MARKER_MCP_ENABLE_SETTINGS_WRITE=true`. |
 | `marker_self_test` | Validate tools, resources, prompts, schemas, and a TSV conversion smoke path. |
 
 Tool annotations mark read-only, destructive, idempotent, and closed-world
 behavior for clients that use MCP planning metadata. Destructive tools are still
-policy-gated server side.
+policy-gated server side. URL-capable tools such as `marker_plan`,
+`marker_convert`, `marker_submit`, `marker_convert_file`, and
+`marker_submit_job` advertise `openWorldHint=true`; local-only read/output tools
+keep `openWorldHint=false`.
+
+`marker_convert_file` and `marker_submit_job` expose the same first-class audio
+controls used by the CLI and GUI, including `audio_provider`,
+`audio_allow_cloud_stt`, `audio_diarization`, `audio_speaker_aliases_json`,
+`audio_vocabulary_pack_ids`, `audio_text_enhancement_enabled`,
+`audio_structural_enhancement_enabled`, and `audio_contradiction_detection`.
+The generic v2 tools can also receive advanced fields through
+`extra_options_json`.
+
+For chunks output, MCP callers can pass `chunk_max_tokens` (or the same key in
+`extra_options_json`) with `chunking_strategy` to request tokenizer-backed
+chunk budgets while keeping semantic chunk reads available through
+`marker_read_output_chunk(mode="semantic")`. `unstructured_by_title` fails
+clearly when the optional Unstructured path is unavailable; pass
+`allow_chunking_fallback=true` only when markdown-heading fallback is acceptable.
+Semantic chunk reads also return `renderer_kind`, `source_format`,
+`semantic_level`, and `structured_ir` so agents can tell today's
+Markdown-derived chunks apart from future document-IR chunks.
 
 ## Resources
 
@@ -167,13 +243,15 @@ policy-gated server side.
 
 ## Agent Workflow
 
-1. Read `marker://capabilities`.
-2. Plan with `marker_plan_local_file` or `marker_plan_url` for PDFs and unknown inputs.
-3. Convert small work with `marker_convert_local_file` or `marker_convert_url`.
-4. Submit long work with `marker_submit_local_job` or `marker_submit_url_job`, then poll `marker_get_job_status`.
+1. Read `marker://capabilities` or call `marker_capabilities`.
+2. Plan with `marker_plan` for PDFs and unknown inputs.
+3. Convert small work with `marker_convert`.
+4. Submit long work with `marker_submit`, then poll `marker_job_status`.
 5. Read long output with `marker_read_output_chunk`.
 6. Inspect `.marker.json` manifests before summarizing asset-heavy output.
 7. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.
+8. Keep audio local by default. Set `audio_allow_cloud_stt=true` only when the
+   user explicitly approves a cloud STT provider.
 
 ## Security
 

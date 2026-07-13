@@ -1,6 +1,8 @@
 # Supported Output Formats
 
-Marker UI supports converting documents into several structured formats. Choosing the correct format determines how text, tables, and images are exported.
+Marker UI supports several output formats, but availability depends on the
+selected conversion route. Use `/api/capabilities` or `marker_capabilities` to
+read per-input `output_formats` before enabling UI or agent choices.
 
 ---
 
@@ -14,6 +16,9 @@ Generates standard GitHub Flavored Markdown (GFM).
 
 ## 2. JSON
 Returns a structured JSON payload representing the document structure.
+- Supported for Marker-backed PDF/image/EPUB routes today.
+- Native deterministic routes reject JSON instead of returning mislabeled
+  Markdown.
 - Ideal for downstream LLM ingestion, agentic workflows, or custom database ingestion.
 - Contains separate fields for document metadata, raw text, and tables.
 
@@ -21,6 +26,9 @@ Returns a structured JSON payload representing the document structure.
 
 ## 3. HTML
 Generates structured HTML5 markup with semantic layout tags.
+- Supported for Marker-backed PDF/image/EPUB routes today.
+- Native deterministic routes reject HTML instead of returning mislabeled
+  Markdown.
 - Keeps tables as `<table>` tags and equations formatted clearly.
 
 ---
@@ -28,6 +36,27 @@ Generates structured HTML5 markup with semantic layout tags.
 ## 4. Chunks
 Segments the document text into smaller, overlapping chunks.
 - Optimized for creating vector embeddings in Retrieval-Augmented Generation (RAG) applications.
+- Native Markdown-only converters use the deterministic `marker.chunks.v1`
+  semantic chunker. It preserves heading paths, line spans, chunk IDs,
+  `previous_id` / `next_id` links, character counts, token estimates,
+  source document SHA-256, per-chunk content hashes, and source references.
+  Chunks declare `renderer_kind="derived"`, `source_format="markdown"`,
+  `semantic_level="markdown_structure"`, and `structured_ir=false` so callers
+  do not confuse Markdown-derived chunks with future document-IR chunks.
+- Large prose blocks split on sentence and character boundaries with bounded
+  overlap. Markdown tables split by rows and repeat the header. Fenced code
+  blocks stay fenced, even when split.
+- Agent, CLI, MCP, and REST callers can set `chunk_max_tokens` /
+  `--chunk-max-tokens` to request tokenizer-backed budgets for prose chunks.
+  Structural chunks such as tables and fenced code stay intact where possible.
+  When `tiktoken` is available, each chunk reports both `token_count` and
+  `token_count_source`; otherwise the schema falls back to `token_estimate`.
+- `unstructured_by_title` requires the optional Unstructured dependency path.
+  If unavailable, conversion fails clearly unless `allow_chunking_fallback` /
+  `--allow-chunking-fallback` is set.
+- Read semantic chunks by index through `marker_read_output_chunk` with
+  `mode="semantic"` instead of loading the whole chunks JSON into agent
+  context.
 
 ---
 

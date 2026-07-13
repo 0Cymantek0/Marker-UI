@@ -14,8 +14,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from app.agent_api import (
     AgentConversionOptions,
+    cancel_job,
     capabilities,
     convert_document,
     delete_job,
@@ -27,13 +30,16 @@ from app.agent_api import (
     list_jobs,
     list_settings,
     plan_conversion,
+    purge_job_files,
     read_output,
+    read_output_chunk,
     set_setting,
     self_test,
     submit_conversion_job,
 )
-from app.agent_contract import export_json_schemas
-from app.errors import ERROR_SCHEMA_VERSION, MarkerError, from_exception
+from app.agent_contract import AUDIO_OUTPUT_MODES, ConvertRequestModel, export_json_schemas
+from app.conversion.formats import OUTPUT_FORMATS
+from app.errors import ERROR_SCHEMA_VERSION, UsageError, from_exception
 from app.eval.runner import run_eval
 
 
@@ -83,18 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return _print_result(result, args.json)
         if args.command == "convert":
-            opts = _options_from_args(args)
-            result = asyncio.run(
-                convert_document(
-                    local_file_path=args.input,
-                    source_url=args.source_url,
-                    output_dir=args.output_dir,
-                    output_path=args.output_path,
-                    max_chars=args.max_chars,
-                    options=opts,
-                )
-            )
-            return _print_result(result, args.json)
+            return asyncio.run(_handle_convert(args))
         if args.command == "submit-job":
             opts = _options_from_args(args)
             result = asyncio.run(
@@ -108,7 +103,13 @@ def main(argv: list[str] | None = None) -> int:
             return _print_result(result, args.json)
         if args.command == "read-output":
             return _print_result(
-                read_output(args.path, offset=args.offset, limit=args.limit),
+                read_output_chunk(
+                    args.path,
+                    mode=args.mode,
+                    chunk_index=args.chunk_index,
+                    offset=args.offset,
+                    limit=args.limit,
+                ),
                 args.json,
             )
         if args.command == "jobs":
@@ -142,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "delete-job":
             return _print_result(
-                asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files)),
+                asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files, force=args.force)),
                 args.json,
             )
         if args.command == "settings":
@@ -243,6 +244,9 @@ def _build_parser() -> argparse.ArgumentParser:
     conv.add_argument("--source-url", help="Public http(s) source URL")
     conv.add_argument("--output-dir", help="Directory for converted output")
     conv.add_argument("--output-path", help="Exact output text file path")
+    conv.add_argument("--request-json", help="Convert request JSON file")
+    conv.add_argument("--stdin-json", action="store_true", help="Read convert request JSON from stdin")
+    conv.add_argument("--overwrite", action="store_true", help="Replace an existing explicit output path")
     conv.add_argument("--max-chars", type=int, default=20_000, help="Preview chars printed in response")
     _add_common_options(conv)
     conv.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
@@ -254,8 +258,10 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_options(submit)
     submit.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
-    read = sub.add_parser("read-output", help="Read a slice of a converted text output")
+    read = sub.add_parser("read-output", help="Read a slice or semantic chunk of a converted output")
     read.add_argument("path", help="Output file path")
+    read.add_argument("--mode", choices=["offset", "semantic"], default="offset")
+    read.add_argument("--chunk-index", type=int, default=0, help="Semantic chunk index when --mode=semantic")
     read.add_argument("--offset", type=int, default=0)
     read.add_argument("--limit", type=int, default=20_000)
     read.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
@@ -285,11 +291,15 @@ def _build_parser() -> argparse.ArgumentParser:
     jobs_delete = jobs_sub.add_parser("delete", help="Delete one conversion job")
     jobs_delete.add_argument("job_id")
     jobs_delete.add_argument("--keep-files", action="store_true", help="Keep upload/output files")
+    jobs_delete.add_argument("--force", action="store_true", help="Cancel and delete a pending/running job")
     jobs_delete.add_argument("--yes", action="store_true", help="Confirm deletion")
     jobs_delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
-    jobs_cancel = jobs_sub.add_parser("cancel", help="Cancel one job best-effort by deleting its job record")
+    jobs_cancel = jobs_sub.add_parser("cancel", help="Cancel one job best-effort without deleting its record")
     jobs_cancel.add_argument("job_id")
     jobs_cancel.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+    jobs_purge = jobs_sub.add_parser("purge-files", help="Delete job files but keep conversion history")
+    jobs_purge.add_argument("job_id")
+    jobs_purge.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     status = sub.add_parser("job-status", help="Show one conversion job")
     status.add_argument("job_id")
@@ -297,9 +307,10 @@ def _build_parser() -> argparse.ArgumentParser:
     status.add_argument("--max-chars", type=int, default=20_000)
     status.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
-    delete = sub.add_parser("delete-job", help="Cancel/delete one conversion job")
+    delete = sub.add_parser("delete-job", help="Delete one terminal conversion job")
     delete.add_argument("job_id")
     delete.add_argument("--keep-files", action="store_true", help="Keep upload/output files")
+    delete.add_argument("--force", action="store_true", help="Cancel and delete a pending/running job")
     delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     output = sub.add_parser("output", help="Read converted outputs")
@@ -309,6 +320,13 @@ def _build_parser() -> argparse.ArgumentParser:
     output_read.add_argument("--offset", type=int, default=0)
     output_read.add_argument("--limit", type=int, default=20_000)
     output_read.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+    output_chunk = output_sub.add_parser("chunk", help="Read offset page or semantic chunk from a converted output")
+    output_chunk.add_argument("path", help="Output file path")
+    output_chunk.add_argument("--mode", choices=["offset", "semantic"], default="offset")
+    output_chunk.add_argument("--chunk-index", type=int, default=0, help="Semantic chunk index when --mode=semantic")
+    output_chunk.add_argument("--offset", type=int, default=0)
+    output_chunk.add_argument("--limit", type=int, default=20_000)
+    output_chunk.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     batch = sub.add_parser("batch", help="Convert multiple inputs sequentially")
     batch.add_argument("inputs", nargs="*", help="Local file paths to convert")
@@ -357,6 +375,7 @@ def _build_parser() -> argparse.ArgumentParser:
     settings_list.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     settings_get = settings_sub.add_parser("get", help="Get one masked setting")
     settings_get.add_argument("key")
+    settings_get.add_argument("--category")
     settings_get.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     settings_set = settings_sub.add_parser("set", help="Set one setting")
     settings_set.add_argument("key")
@@ -365,6 +384,7 @@ def _build_parser() -> argparse.ArgumentParser:
     settings_set.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     settings_delete = settings_sub.add_parser("delete", help="Delete one setting")
     settings_delete.add_argument("key")
+    settings_delete.add_argument("--category")
     settings_delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     config = sub.add_parser("config", help="Alias for settings list/get/set/delete")
@@ -374,6 +394,7 @@ def _build_parser() -> argparse.ArgumentParser:
     config_list.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     config_get = config_sub.add_parser("get", help="Get one masked setting")
     config_get.add_argument("key")
+    config_get.add_argument("--category")
     config_get.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     config_set = config_sub.add_parser("set", help="Set one setting")
     config_set.add_argument("key")
@@ -382,6 +403,7 @@ def _build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     config_delete = config_sub.add_parser("delete", help="Delete one setting")
     config_delete.add_argument("key")
+    config_delete.add_argument("--category")
     config_delete.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
 
     test = sub.add_parser("self-test", help="Run CLI/MCP readiness checks")
@@ -408,18 +430,43 @@ def _build_parser() -> argparse.ArgumentParser:
         "--auth-token",
         help="Bearer token for streamable HTTP; defaults to MARKER_MCP_AUTH_TOKEN",
     )
+    mcp.add_argument("--tool-profile", choices=["minimal", "full", "admin"], help="MCP tool profile")
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=False, parser_class=MarkerArgumentParser)
     mcp_start = mcp_sub.add_parser("start", help="Start MCP server")
     mcp_start.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
     mcp_start.add_argument("--host", default="127.0.0.1")
     mcp_start.add_argument("--port", type=int, default=8000)
     mcp_start.add_argument("--auth-token", help="Bearer token for streamable HTTP")
+    mcp_start.add_argument("--tool-profile", choices=["minimal", "full", "admin"], help="MCP tool profile")
     mcp_init = mcp_sub.add_parser("init-config", help="Generate an MCP client configuration snippet")
-    mcp_init.add_argument("--client", choices=["codex", "claude", "gemini", "opencode", "antigravity"], required=True)
-    mcp_init.add_argument("--output", help="Write config JSON to file instead of stdout")
+    mcp_init.add_argument(
+        "--client",
+        choices=[
+            "codex",
+            "claude",
+            "gemini",
+            "opencode",
+            "cursor",
+            "zed",
+            "cline",
+            "continue",
+            "goose",
+            "windsurf",
+            "antigravity",
+        ],
+        required=True,
+    )
+    mcp_init.add_argument("--mode", choices=["source", "installed", "http"], default="source")
+    mcp_init.add_argument("--cwd", help="Backend working directory for source mode")
+    mcp_init.add_argument("--server-name", default="marker", help="MCP server name in generated config")
+    mcp_init.add_argument("--tool-profile", choices=["minimal", "full", "admin"], default="minimal")
+    mcp_init.add_argument("--url", default="http://127.0.0.1:8000/mcp", help="Streamable HTTP URL for http mode")
+    mcp_init.add_argument("--auth-token", help="Bearer token for http mode")
+    mcp_init.add_argument("--output", help="Write generated TOML/JSON config content to file")
     mcp_init.add_argument("--dry-run", action="store_true", help="Print without writing output file")
     mcp_init.add_argument("--json", action="store_true", default=True, help="Print JSON")
     mcp_inspect = mcp_sub.add_parser("inspect", help="Inspect MCP tool names without starting transport")
+    mcp_inspect.add_argument("--tool-profile", choices=["minimal", "full", "admin"], help="MCP tool profile")
     mcp_inspect.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
     mcp_self = mcp_sub.add_parser("self-test", help="Run MCP readiness checks")
     mcp_self.add_argument("--no-conversion", action="store_true", help="Skip real TSV conversion smoke test")
@@ -441,14 +488,20 @@ def _handle_settings(args: argparse.Namespace) -> int:
             args.json,
         )
     if args.settings_command == "get":
-        return _print_result(asyncio.run(get_setting(args.key)), args.json)
+        return _print_result(
+            asyncio.run(get_setting(args.key, category=args.category)),
+            args.json,
+        )
     if args.settings_command == "set":
         return _print_result(
             asyncio.run(set_setting(args.key, args.value, category=args.category)),
             args.json,
         )
     if args.settings_command == "delete":
-        return _print_result(asyncio.run(delete_setting(args.key)), args.json)
+        return _print_result(
+            asyncio.run(delete_setting(args.key, category=args.category)),
+            args.json,
+        )
     return 2
 
 
@@ -485,13 +538,16 @@ def _handle_jobs(args: argparse.Namespace) -> int:
         return asyncio.run(_watch_job(args))
     if command == "delete":
         return _print_result(
-            asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files)),
+            asyncio.run(delete_job(args.job_id, delete_files=not args.keep_files, force=args.force)),
+            args.json,
+        )
+    if command == "purge-files":
+        return _print_result(
+            asyncio.run(purge_job_files(args.job_id)),
             args.json,
         )
     if command == "cancel":
-        result = asyncio.run(delete_job(args.job_id, delete_files=False))
-        result["cancelled"] = True
-        result["files_removed"] = []
+        result = asyncio.run(cancel_job(args.job_id))
         return _print_result(result, args.json)
     return 2
 
@@ -523,6 +579,17 @@ def _handle_output(args: argparse.Namespace) -> int:
     if args.output_command == "read":
         return _print_result(
             read_output(args.path, offset=args.offset, limit=args.limit),
+            args.json,
+        )
+    if args.output_command == "chunk":
+        return _print_result(
+            read_output_chunk(
+                args.path,
+                mode=args.mode,
+                chunk_index=args.chunk_index,
+                offset=args.offset,
+                limit=args.limit,
+            ),
             args.json,
         )
     return 2
@@ -601,6 +668,69 @@ def _handle_schema(args: argparse.Namespace) -> int:
     return _print_result(schemas, True)
 
 
+async def _handle_convert(args: argparse.Namespace) -> int:
+    request = _convert_request_from_args(args)
+    result = await convert_document(
+        local_file_path=request.local_file_path,
+        source_url=request.source_url,
+        output_dir=request.output_dir,
+        output_path=request.output_path,
+        overwrite=request.overwrite or bool(args.overwrite),
+        max_chars=request.max_chars,
+        options=request.options,
+    )
+    return _print_result(result, args.json)
+
+
+def _convert_request_from_args(args: argparse.Namespace) -> ConvertRequestModel:
+    if args.request_json and args.stdin_json:
+        raise UsageError("Use only one of --request-json or --stdin-json")
+    if args.request_json:
+        raw_text = Path(args.request_json).expanduser().read_text(encoding="utf-8")
+        return _convert_request_from_json(raw_text)
+    if args.stdin_json:
+        return _convert_request_from_json(sys.stdin.read())
+    return ConvertRequestModel(
+        local_file_path=args.input,
+        source_url=args.source_url,
+        output_dir=args.output_dir,
+        output_path=args.output_path,
+        overwrite=bool(args.overwrite),
+        max_chars=args.max_chars,
+        options=_options_from_args(args),
+    )
+
+
+def _convert_request_from_json(raw_text: str) -> ConvertRequestModel:
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise UsageError(
+            "Invalid convert request JSON",
+            details={"error": exc.msg, "line": exc.lineno, "column": exc.colno},
+        ) from exc
+    if not isinstance(raw, dict):
+        raise UsageError("Convert request JSON must be an object")
+    try:
+        return ConvertRequestModel.model_validate(raw)
+    except ValidationError as exc:
+        raise UsageError(
+            "Invalid convert request JSON",
+            details={"errors": _validation_error_details(exc)},
+        ) from exc
+
+
+def _validation_error_details(exc: ValidationError) -> list[dict[str, Any]]:
+    return [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": error.get("msg", "Invalid value"),
+            "type": error.get("type", "value_error"),
+        }
+        for error in exc.errors()
+    ]
+
+
 async def _handle_batch(args: argparse.Namespace) -> int:
     items = _batch_items_from_args(args)
     results: list[dict[str, Any]] = []
@@ -629,6 +759,7 @@ async def _handle_batch(args: argparse.Namespace) -> int:
                 source_url=item.get("source_url"),
                 output_dir=item.get("output_dir") or args.output_dir,
                 output_path=item.get("output_path"),
+                overwrite=bool(item.get("overwrite", False)),
                 options=_batch_options(args, item),
             )
             results.append({"index": index, "ok": True, "result": result})
@@ -769,20 +900,43 @@ def _handle_mcp(args: argparse.Namespace) -> int:
     if command == "start":
         from app.mcp_server import run
 
-        run(transport=args.transport, host=args.host, port=args.port, auth_token=args.auth_token)
+        run(
+            transport=args.transport,
+            host=args.host,
+            port=args.port,
+            auth_token=args.auth_token,
+            tool_profile=args.tool_profile,
+        )
         return 0
     if command == "init-config":
-        config = _mcp_client_config(args.client)
+        config = _mcp_client_config(
+            args.client,
+            mode=args.mode,
+            cwd=args.cwd,
+            server_name=args.server_name,
+            tool_profile=args.tool_profile,
+            url=args.url,
+            auth_token=args.auth_token,
+        )
         if args.output and not args.dry_run:
+            payload = config["config"]
+            text = payload if isinstance(payload, str) else json.dumps(payload, indent=2, ensure_ascii=False)
             Path(args.output).expanduser().write_text(
-                json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+                text + "\n",
                 encoding="utf-8",
             )
             config = {**config, "written_to": str(Path(args.output).expanduser().resolve())}
         return _print_result(config, True)
     if command == "inspect":
-        result = capabilities()
-        result["mcp"] = {"transport": "stdio", "command": ["python", "-m", "app.cli", "mcp", "start"]}
+        from app import mcp_server
+
+        profile = mcp_server.configure_mcp_tool_profile(args.tool_profile)
+        result = mcp_server.active_profile_capabilities()
+        result["mcp"] = {
+            "transport": "stdio",
+            "tool_profile": profile,
+            "command": ["python", "-m", "app.cli", "mcp", "start", "--tool-profile", profile],
+        }
         return _print_result(result, args.json)
     if command == "self-test":
         from app.mcp_server import marker_self_test
@@ -794,25 +948,135 @@ def _handle_mcp(args: argparse.Namespace) -> int:
     return 2
 
 
-def _mcp_client_config(client: str) -> dict[str, Any]:
-    base = {
+def _mcp_client_config(
+    client: str,
+    *,
+    mode: str = "source",
+    cwd: str | None = None,
+    server_name: str = "marker",
+    tool_profile: str = "minimal",
+    url: str = "http://127.0.0.1:8000/mcp",
+    auth_token: str | None = None,
+) -> dict[str, Any]:
+    if mode not in {"source", "installed", "http"}:
+        raise UsageError("mode must be source, installed, or http")
+    if tool_profile not in {"minimal", "full", "admin"}:
+        raise UsageError("tool_profile must be minimal, full, or admin")
+    server_name = server_name.strip() or "marker"
+    local = _mcp_local_server_config(mode=mode, cwd=cwd, tool_profile=tool_profile)
+    http = _mcp_http_server_config(url=url, auth_token=auth_token)
+    server = http if mode == "http" else local
+
+    if client == "codex":
+        return {
+            "client": client,
+            "mode": mode,
+            "server_name": server_name,
+            "format": "toml",
+            "config": _codex_mcp_toml(server_name, server),
+        }
+
+    if client == "opencode":
+        config = {
+            "mcp": {
+                server_name: _opencode_server_config(server, mode=mode),
+            }
+        }
+    elif client == "goose":
+        config = {"extensions": {server_name: server}}
+    elif client == "antigravity":
+        config = {"servers": {server_name: server}}
+    else:
+        config = {"mcpServers": {server_name: server}}
+    return {
+        "client": client,
+        "mode": mode,
+        "server_name": server_name,
+        "format": "json",
+        "config": config,
+    }
+
+
+def _mcp_local_server_config(
+    *,
+    mode: str,
+    cwd: str | None,
+    tool_profile: str,
+) -> dict[str, Any]:
+    if mode == "installed":
+        return {
+            "command": "marker",
+            "args": ["mcp", "start", "--tool-profile", tool_profile],
+            "env": {"MARKER_PRELOAD_MODELS": "false"},
+        }
+    backend_cwd = str(Path(cwd).expanduser().resolve()) if cwd else str(Path.cwd().resolve())
+    return {
         "command": "python",
-        "args": ["-m", "app.cli", "mcp", "start"],
+        "args": ["-m", "app.cli", "mcp", "start", "--tool-profile", tool_profile],
+        "cwd": backend_cwd,
         "env": {"MARKER_PRELOAD_MODELS": "false"},
     }
-    if client in {"codex", "claude"}:
-        return {"mcpServers": {"marker": base}}
-    if client == "gemini":
-        return {"mcpServers": {"marker": base}}
-    if client == "opencode":
-        return {"mcp": {"marker": base}}
-    if client == "antigravity":
-        return {"servers": {"marker": base}}
-    return {"marker": base}
+
+
+def _mcp_http_server_config(*, url: str, auth_token: str | None) -> dict[str, Any]:
+    server: dict[str, Any] = {"url": url}
+    if auth_token:
+        server["headers"] = {"Authorization": f"Bearer {auth_token}"}
+    return server
+
+
+def _opencode_server_config(server: dict[str, Any], *, mode: str) -> dict[str, Any]:
+    if mode == "http":
+        return {"type": "remote", **server}
+    command = [str(server["command"]), *[str(item) for item in server.get("args", [])]]
+    result: dict[str, Any] = {
+        "type": "local",
+        "command": command,
+        "enabled": True,
+    }
+    if server.get("cwd"):
+        result["cwd"] = server["cwd"]
+    if server.get("env"):
+        result["env"] = server["env"]
+    return result
+
+
+def _codex_mcp_toml(server_name: str, server: dict[str, Any]) -> str:
+    lines = [f"[mcp_servers.{server_name}]"]
+    for key in ("command", "url", "cwd"):
+        if key in server:
+            lines.append(f'{key} = "{_toml_escape(str(server[key]))}"')
+    if "args" in server:
+        args = ", ".join(f'"{_toml_escape(str(item))}"' for item in server["args"])
+        lines.append(f"args = [{args}]")
+    lines.append("startup_timeout_sec = 20")
+    lines.append("tool_timeout_sec = 600")
+    lines.append("enabled = true")
+    if "headers" in server:
+        lines.append(f"[mcp_servers.{server_name}.headers]")
+        for key, value in server["headers"].items():
+            lines.append(f'{key} = "{_toml_escape(str(value))}"')
+    if "env" in server:
+        lines.append(f"[mcp_servers.{server_name}.env]")
+        for key, value in server["env"].items():
+            lines.append(f'{key} = "{_toml_escape(str(value))}"')
+    return "\n".join(lines)
+
+
+def _toml_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--output-format", default="markdown", choices=["markdown", "json", "html", "chunks"])
+    parser.add_argument(
+        "--output-format",
+        default="markdown",
+        choices=list(OUTPUT_FORMATS),
+        help=(
+            "Requested output format. markdown/chunks are broadly available; "
+            "json/html require a Marker-backed PDF/image/EPUB route."
+        ),
+    )
     parser.add_argument("--converter-cls")
     parser.add_argument("--engine-override")
     parser.add_argument("--conversion-profile", choices=["auto", "fast", "high_accuracy"])
@@ -826,20 +1090,89 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--disable-image-extraction", action="store_true")
     parser.add_argument("--page-range")
     parser.add_argument("--lang")
-    parser.add_argument("--audio-output-mode", choices=["transcript", "enhanced", "notes", "meeting_notes", "lecture_notes"])
+    parser.add_argument("--audio-output-mode", choices=list(AUDIO_OUTPUT_MODES))
     parser.add_argument("--audio-model")
     parser.add_argument("--audio-vocabulary")
     parser.add_argument("--audio-context")
     parser.add_argument("--audio-low-confidence-threshold", type=float)
     parser.add_argument("--audio-word-timestamps", action="store_true")
+    parser.add_argument("--audio-provider", default="local_faster_whisper")
+    parser.add_argument("--audio-language")
+    parser.add_argument("--audio-device")
+    parser.add_argument("--audio-compute-type")
+    parser.add_argument("--audio-beam-size", type=int)
+    parser.add_argument("--audio-vad-filter", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--audio-diarization", action="store_true")
+    parser.add_argument("--audio-min-speakers", type=int)
+    parser.add_argument("--audio-max-speakers", type=int)
+    parser.add_argument(
+        "--audio-speaker-alias",
+        action="append",
+        default=[],
+        metavar="LABEL=NAME",
+        help="Speaker alias mapping. Repeat for multiple speakers.",
+    )
+    parser.add_argument(
+        "--audio-vocabulary-pack-id",
+        action="append",
+        default=[],
+        help="Saved audio vocabulary pack id. Repeat for multiple packs.",
+    )
+    parser.add_argument(
+        "--audio-confidence-heatmap",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Emit per-segment audio confidence metadata.",
+    )
+    parser.add_argument(
+        "--audio-quality-diagnostics",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Emit audio quality diagnostics metadata.",
+    )
+    parser.add_argument("--audio-allow-cloud-stt", action="store_true")
+    parser.add_argument("--audio-text-enhancement", action="store_true")
+    parser.add_argument("--audio-text-enhancement-strength", type=int, default=0)
+    parser.add_argument("--audio-structural-enhancement", action="store_true")
+    parser.add_argument("--audio-structural-enhancement-mode", default="auto")
+    parser.add_argument("--audio-fusion-mode")
+    parser.add_argument("--audio-contradiction-detection", action="store_true")
+    parser.add_argument("--audio-benchmark-compare", action="store_true")
+    parser.add_argument(
+        "--audio-compare-provider",
+        action="append",
+        default=[],
+        help="Audio provider id to include in benchmark comparison. Repeat for multiple providers.",
+    )
     parser.add_argument("--disable-multiprocessing", action="store_true")
     parser.add_argument("--strip-existing-ocr", action="store_true")
     parser.add_argument("--redo-inline-math", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--text-data-max-rows", type=int, help="Max CSV/TSV rows to inline in Markdown")
+    parser.add_argument(
+        "--chunking-strategy",
+        choices=["markdown_heading_blocks_v2", "unstructured_by_title"],
+        help="Chunking strategy for derived chunks output",
+    )
+    parser.add_argument("--chunk-max-tokens", type=int, help="Max tokenizer tokens per derived Markdown chunk")
+    parser.add_argument(
+        "--allow-chunking-fallback",
+        action="store_true",
+        help="Allow optional chunking strategies to fall back to markdown_heading_blocks_v2",
+    )
     parser.add_argument("--archive-max-files", type=int, help="Max archive entries to inspect")
     parser.add_argument("--archive-inline-bytes", type=int, help="Max bytes to inline per archive text child")
     parser.add_argument("--archive-max-child-bytes", type=int, help="Max bytes per converted archive child")
+    parser.add_argument(
+        "--archive-max-total-uncompressed-bytes",
+        type=int,
+        help="Max total uncompressed archive bytes to inspect",
+    )
+    parser.add_argument(
+        "--archive-max-compression-ratio",
+        type=float,
+        help="Max allowed archive entry compression ratio",
+    )
     parser.add_argument("--archive-max-depth", type=int, help="Max recursive archive conversion depth")
     parser.add_argument("--archive-max-converted-children", type=int, help="Max archive children to convert")
     parser.add_argument(
@@ -918,6 +1251,32 @@ def _options_from_args(args: argparse.Namespace) -> AgentConversionOptions:
         audio_context=args.audio_context,
         audio_low_confidence_threshold=args.audio_low_confidence_threshold,
         audio_word_timestamps=args.audio_word_timestamps,
+        audio_provider=args.audio_provider,
+        audio_language=args.audio_language,
+        audio_device=args.audio_device,
+        audio_compute_type=args.audio_compute_type,
+        audio_beam_size=args.audio_beam_size,
+        audio_vad_filter=args.audio_vad_filter,
+        audio_diarization=args.audio_diarization,
+        audio_min_speakers=args.audio_min_speakers,
+        audio_max_speakers=args.audio_max_speakers,
+        audio_speaker_aliases=_parse_key_value_map(args.audio_speaker_alias),
+        audio_vocabulary_pack_ids=list(args.audio_vocabulary_pack_id or []),
+        audio_confidence_heatmap=(
+            args.audio_confidence_heatmap if args.audio_confidence_heatmap is not None else True
+        ),
+        audio_quality_diagnostics=(
+            args.audio_quality_diagnostics if args.audio_quality_diagnostics is not None else True
+        ),
+        audio_allow_cloud_stt=args.audio_allow_cloud_stt,
+        audio_text_enhancement_enabled=args.audio_text_enhancement,
+        audio_text_enhancement_strength=args.audio_text_enhancement_strength,
+        audio_structural_enhancement_enabled=args.audio_structural_enhancement,
+        audio_structural_enhancement_mode=args.audio_structural_enhancement_mode,
+        audio_fusion_mode=args.audio_fusion_mode,
+        audio_contradiction_detection=args.audio_contradiction_detection,
+        audio_benchmark_compare=args.audio_benchmark_compare,
+        audio_compare_providers=list(args.audio_compare_provider or []),
         disable_multiprocessing=args.disable_multiprocessing,
         strip_existing_ocr=args.strip_existing_ocr,
         redo_inline_math=args.redo_inline_math,
@@ -933,12 +1292,38 @@ def _options_from_args(args: argparse.Namespace) -> AgentConversionOptions:
     )
 
 
+def _parse_key_value_map(items: list[str] | None) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for item in items or []:
+        if "=" not in item:
+            raise UsageError(
+                "Expected KEY=VALUE",
+                details={"option": item},
+                hint="Pass speaker aliases as --audio-speaker-alias speaker_0=Alice.",
+            )
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or not value:
+            raise UsageError(
+                "Expected non-empty KEY=VALUE",
+                details={"option": item},
+            )
+        parsed[key] = value
+    return parsed
+
+
 def _direct_extra_options(args: argparse.Namespace) -> dict[str, Any]:
     option_names = (
         "text_data_max_rows",
+        "chunking_strategy",
+        "chunk_max_tokens",
+        "allow_chunking_fallback",
         "archive_max_files",
         "archive_inline_bytes",
         "archive_max_child_bytes",
+        "archive_max_total_uncompressed_bytes",
+        "archive_max_compression_ratio",
         "archive_max_depth",
         "archive_max_converted_children",
         "archive_recursive",
