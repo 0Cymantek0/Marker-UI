@@ -140,7 +140,9 @@ if [ ! -d "node_modules" ] || [ ! -f "$NODE_DEPS_SIGNATURE_FILE" ] || [ "$(cat "
         cd ..
         exit 1
     fi
-    pnpm install --frozen-lockfile
+    # --config.confirm-modules-purge=false: pnpm prompts to purge a stale
+    # node_modules dir interactively; non-interactive launchers would hang.
+    pnpm install --frozen-lockfile --config.confirm-modules-purge=false
     if [ $? -ne 0 ]; then
         err "pnpm install failed"
         cd ..

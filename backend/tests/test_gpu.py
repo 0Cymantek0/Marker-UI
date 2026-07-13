@@ -151,6 +151,37 @@ def test_marker_service_waits_for_gpu_install():
 
 
 @pytest.mark.asyncio
+async def test_gpu_install_uses_cu126_index(settings_client: AsyncClient, settings_session):
+    """GPU install command must use cu126 wheel index (cu121 tops out at torch 2.5.1,
+    which is incompatible with marker-pdf's torch>=2.7.0 requirement)."""
+    mock_popen = MagicMock()
+    mock_popen.wait.return_value = 0
+    mock_popen.stdout = []
+
+    mock_run = MagicMock()
+    mock_run.return_value = MagicMock(stdout="True\n", stderr="")
+
+    with patch("subprocess.Popen", return_value=mock_popen) as mock_popen_ctor, \
+         patch("subprocess.run", return_value=mock_run), \
+         patch("app.services.gpu_service.GPUService._check_cuda_available", return_value=True):
+
+        gpu_service.start_install()
+        if gpu_service._thread:
+            gpu_service._thread.join(timeout=5.0)
+
+        assert mock_popen_ctor.called
+        install_cmd = mock_popen_ctor.call_args[0][0]
+
+        # Must include both torch and torchvision (paired CUDA wheels)
+        assert "torch" in install_cmd
+        assert "torchvision" in install_cmd
+
+        # Must use cu126 index — cu121 caps at torch 2.5.1, breaks marker-pdf>=2.7.0
+        assert "https://download.pytorch.org/whl/cu126" in install_cmd
+        assert "cu121" not in " ".join(install_cmd)
+
+
+@pytest.mark.asyncio
 async def test_gpu_install_failure_disables_setting(settings_client: AsyncClient, settings_session):
     """Verify that if GPU installation fails or CUDA verification fails, the database setting is disabled."""
     # Ensure starting clean and set setting to true

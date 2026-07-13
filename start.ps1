@@ -197,7 +197,7 @@ if (-not $nodeDepsInstalled) {
         Pop-Location
         exit 1
     }
-    pnpm install --frozen-lockfile 2>&1 | ForEach-Object {
+    pnpm install --frozen-lockfile --config.confirm-modules-purge=false 2>&1 | ForEach-Object {
         if ($_ -match "error|ERR") { Write-Host "  $_" -ForegroundColor Red }
     }
     if ($LASTEXITCODE -ne 0) {

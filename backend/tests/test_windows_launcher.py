@@ -6,6 +6,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 START_PS1 = REPO_ROOT / "start.ps1"
+START_SH = REPO_ROOT / "start.sh"
 
 
 def _launcher_script() -> str:
@@ -51,3 +52,12 @@ def test_windows_backend_soft_timeout_warns_without_failing() -> None:
     assert "Continuing to wait because the process is still running." in soft_block
     assert "return $false" not in soft_block
     assert "ERROR: $Name did not become ready within hard timeout $HardTimeoutSeconds seconds." in script
+
+
+def test_pnpm_install_disables_modules_purge_prompt() -> None:
+    """pnpm must not prompt to purge stale node_modules (hangs non-TTY launchers)."""
+    ps1 = _launcher_script()
+    assert "--config.confirm-modules-purge=false" in ps1
+
+    start_sh = (REPO_ROOT / "start.sh").read_text(encoding="utf-8")
+    assert "--config.confirm-modules-purge=false" in start_sh
