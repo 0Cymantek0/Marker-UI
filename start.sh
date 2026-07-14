@@ -127,7 +127,7 @@ echo ""
 echo -e "${YELLOW}[4/6] Installing Node.js dependencies...${NC}"
 
 cd frontend
-NODE_DEPS_SIGNATURE="$(dependency_signature package.json ../pnpm-lock.yaml)"
+NODE_DEPS_SIGNATURE="$(dependency_signature package.json pnpm-lock.yaml)"
 NODE_DEPS_SIGNATURE_FILE="node_modules/.marker-ui-deps.sha256"
 if [ ! -d "node_modules" ] || [ ! -f "$NODE_DEPS_SIGNATURE_FILE" ] || [ "$(cat "$NODE_DEPS_SIGNATURE_FILE")" != "$NODE_DEPS_SIGNATURE" ]; then
     if ! command -v pnpm &>/dev/null; then

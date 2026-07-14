@@ -183,7 +183,7 @@ Write-Host ""
 Write-Host "[4/6] Installing Node.js dependencies..." -ForegroundColor Yellow
 
 Push-Location frontend
-$nodeDepsSignature = Get-DependencySignature @("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml")
+$nodeDepsSignature = Get-DependencySignature @("package.json", "pnpm-lock.yaml")
 $nodeDepsSignatureFile = Join-Path "node_modules" ".marker-ui-deps.sha256"
 $nodeDepsInstalled = (Test-Path "node_modules") -and (Test-Path $nodeDepsSignatureFile) -and ((Get-Content $nodeDepsSignatureFile -Raw).Trim() -eq $nodeDepsSignature.Trim())
 if (-not $nodeDepsInstalled) {

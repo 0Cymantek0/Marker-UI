@@ -193,11 +193,21 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     try:
         from app.services.task_manager import TaskManager
         if isinstance(_app_state.task_manager, TaskManager):
-            recovered = await _app_state.task_manager.recover_and_sweep_durable_jobs(
+            recovery = await _app_state.task_manager.recover_and_sweep_durable_jobs(
                 _app_state.conversion_service
             )
-            if recovered:
-                logger.info("Recovered %d durable job(s) from prior session: %s", len(recovered), recovered)
+            recovered_ids = recovery.get("recovered", [])
+            swept_ids = recovery.get("swept", [])
+            if recovered_ids or swept_ids:
+                logger.info(
+                    "Durable job reconciliation: recovered %d job(s) %s, swept %d stale job(s) %s",
+                    len(recovered_ids),
+                    recovered_ids,
+                    len(swept_ids),
+                    swept_ids,
+                )
+            else:
+                logger.info("Durable job reconciliation: nothing to recover or sweep.")
     except Exception:  # noqa: BLE001 - recovery must never block startup
         logger.exception("Durable job recovery failed on startup; continuing with stale sweep only")
         # Fall back to the legacy unconditional sweep so non-durable rows still
