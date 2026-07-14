@@ -1,0 +1,10 @@
+# CPU-only PyTorch — installed BEFORE marker-pdf so pip skips the 14
+# nvidia-*-cu12 CUDA packages (~5 GB) that the default PyPI Linux wheel
+# pulls in.  Pinned to the floor marker-pdf 1.10.0 accepts (>=2.7.0).
+#
+# The "+cpu" local-version tag keeps pip from "upgrading" to the CUDA
+# wheel later: the base requirement in requirements.txt says torch but
+# the installed 2.7.0+cpu already satisfies it.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.0+cpu
+torchvision==0.22.0+cpu

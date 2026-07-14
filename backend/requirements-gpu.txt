@@ -1,0 +1,12 @@
+# GPU variant: CUDA-enabled PyTorch (cu126).
+#
+# Pre-installed BEFORE requirements.txt so pip sees torch satisfied and
+# resolves marker-pdf against the CUDA wheel instead of pulling the
+# default PyPI torch (which bundles 14 nvidia-*-cu12 packages anyway,
+# but from a less controlled index).
+#
+# cu126 is the only current index that carries torch>=2.7.0 (required
+# by marker-pdf 1.10.0).  See gpu_service.py for the same rationale.
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch==2.7.0
+torchvision==0.22.0

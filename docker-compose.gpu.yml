@@ -1,0 +1,23 @@
+# GPU overlay — use with: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Requires:
+#   - NVIDIA Container Toolkit (nvidia-docker2 / nvidia-container-toolkit)
+#     Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   - NVIDIA driver on the host matching the CUDA version (cu126 = driver >= 525.60.13)
+#
+# This overlay:
+#   1. Builds the image with VARIANT=gpu (pre-installs CUDA torch from PyTorch index)
+#   2. Passes GPU devices into the container at runtime
+
+services:
+  marker-ui:
+    build:
+      args:
+        VARIANT: gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

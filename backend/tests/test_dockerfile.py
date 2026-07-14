@@ -100,3 +100,81 @@ def test_supervisord_sets_transformers_cache() -> None:
         "TRANSFORMERS_CACHE covers older HF library code paths that read "
         "it instead of HF_HOME"
     )
+
+
+# ---------------------------------------------------------------------------
+# CPU/GPU torch split — prevents ~5 GB of nvidia-*-cu12 CUDA packages from
+# being pulled into the default (CPU-only) Docker image.
+#
+# marker-pdf depends on torch>=2.7.0.  On Linux x86_64 the PyPI torch wheel
+# depends on 14 nvidia-*-cu12 packages (~5 GB).  Pre-installing CPU torch
+# from the dedicated CPU index satisfies the constraint so pip skips every
+# nvidia-* dependency.
+# ---------------------------------------------------------------------------
+
+_REQUIREMENTS_CPU = _REPO_ROOT / "backend" / "requirements-cpu.txt"
+_REQUIREMENTS_GPU = _REPO_ROOT / "backend" / "requirements-gpu.txt"
+
+
+def test_dockerfile_has_variant_build_arg() -> None:
+    """Dockerfile must accept VARIANT=cpu|gpu to select torch flavour."""
+    text = _read(_DOCKERFILE)
+    assert "ARG VARIANT" in text, (
+        "Dockerfile must declare ARG VARIANT so the build can select "
+        "CPU or GPU torch"
+    )
+
+
+def test_dockerfile_installs_cpu_torch_by_default() -> None:
+    """Default VARIANT=cpu must pre-install CPU torch before marker-pdf."""
+    text = _read(_DOCKERFILE)
+    assert "requirements-cpu.txt" in text, (
+        "Dockerfile must install requirements-cpu.txt (CPU torch) to avoid "
+        "pulling 14 nvidia-*-cu12 CUDA packages from PyPI"
+    )
+
+
+def test_dockerfile_supports_gpu_variant() -> None:
+    """VARIANT=gpu must install CUDA torch from pytorch.org index."""
+    text = _read(_DOCKERFILE)
+    assert "requirements-gpu.txt" in text, (
+        "Dockerfile must support VARIANT=gpu to pre-install CUDA torch"
+    )
+
+
+def test_cpu_requirements_pin_cpu_torch_index() -> None:
+    """requirements-cpu.txt must point at the CPU-only pytorch index."""
+    text = _read(_REQUIREMENTS_CPU)
+    assert "download.pytorch.org/whl/cpu" in text, (
+        "CPU requirements must use the dedicated CPU wheel index so pip "
+        "never resolves to the CUDA-bundled PyPI torch"
+    )
+    assert "torch" in text and "+cpu" in text, (
+        "CPU requirements must pin a +cpu torch wheel"
+    )
+
+
+def test_gpu_requirements_pin_cuda_torch_index() -> None:
+    """requirements-gpu.txt must point at the CUDA pytorch index."""
+    text = _read(_REQUIREMENTS_GPU)
+    assert "download.pytorch.org/whl/cu126" in text, (
+        "GPU requirements must use the cu126 wheel index for CUDA torch"
+    )
+    assert "torch" in text, (
+        "GPU requirements must include torch"
+    )
+
+
+def test_compose_gpu_override_exists() -> None:
+    """docker-compose.gpu.yml must pass GPU devices and set VARIANT=gpu."""
+    compose_gpu = _REPO_ROOT / "docker-compose.gpu.yml"
+    assert compose_gpu.exists(), (
+        "docker-compose.gpu.yml override must exist for GPU deployments"
+    )
+    text = _read(compose_gpu)
+    assert "VARIANT: gpu" in text, (
+        "GPU compose override must set the VARIANT build arg to gpu"
+    )
+    assert "nvidia" in text, (
+        "GPU compose override must pass NVIDIA devices to the container"
+    )

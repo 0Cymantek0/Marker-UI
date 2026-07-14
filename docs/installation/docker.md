@@ -42,6 +42,51 @@ Dockerfile.
 
 ---
 
+## CPU vs GPU Images
+
+Marker UI ships two Docker variants. Choose based on your hardware.
+
+### CPU (default)
+
+```bash
+docker compose up -d
+```
+
+Builds a lean image (~4–5 GB pip layer, down from ~6 GB) by pre-installing
+CPU-only PyTorch (`+cpu` build) from the official PyTorch index. This skips
+the 14 `nvidia-*-cu12` packages that PyPI's default Linux torch wheel would
+otherwise pull (~5 GB of CUDA libraries the CPU image cannot use).
+
+All conversion features work. Inference runs on CPU.
+
+### GPU Acceleration (NVIDIA / CUDA)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+The GPU override passes `VARIANT=gpu` to the Dockerfile, which pre-installs
+CUDA-enabled PyTorch from the `cu126` index. It also maps all NVIDIA GPUs
+into the container via the NVIDIA Container Toolkit.
+
+**Prerequisites:**
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed on the host.
+- NVIDIA driver supporting CUDA 12.6+.
+- `docker compose` v2 (for `deploy.resources.reservations.devices` support).
+
+GPU mode accelerates PDF OCR and marker model inference. The image is larger
+(~9–10 GB) because it bundles CUDA libraries at build time.
+
+### In-app GPU Toggle
+
+The Settings → GPU Acceleration toggle in the web UI controls runtime CUDA
+PyTorch installation (used by the CPU image when an NVIDIA GPU becomes
+available later). For Docker deployments, prefer the GPU compose override
+above — it pre-installs CUDA torch at build time and avoids a multi-GB
+download on every fresh container.
+
+---
+
 ## How It Works
 
 - **Reverse Proxy**: Nginx runs on port `80` inside the container and is mapped to port `3000` on your host. It routes `/api/*` requests to the FastAPI backend and serves static React frontend assets for other routes.

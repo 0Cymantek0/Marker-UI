@@ -30,8 +30,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Python deps
-COPY backend/requirements.txt ./backend/
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# Pre-install torch from the variant-specific index BEFORE marker-pdf so pip
+# sees torch satisfied and skips the 14 nvidia-*-cu12 CUDA wheels (~5 GB).
+#   VARIANT=cpu (default) → CPU torch from pytorch/whl/cpu (~250 MB)
+#   VARIANT=gpu           → CUDA torch from pytorch/whl/cu126 (~2.5 GB)
+ARG VARIANT=cpu
+COPY backend/requirements.txt backend/requirements-cpu.txt backend/requirements-gpu.txt ./backend/
+RUN if [ "$VARIANT" = "gpu" ]; then \
+        pip install --no-cache-dir \
+            --index-url https://download.pytorch.org/whl/cu126 \
+            --extra-index-url https://pypi.org/simple \
+            -r backend/requirements-gpu.txt; \
+    else \
+        pip install --no-cache-dir \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --extra-index-url https://pypi.org/simple \
+            -r backend/requirements-cpu.txt; \
+    fi \
+    && pip install --no-cache-dir -r backend/requirements.txt
 
 # Backend source
 COPY backend/ ./backend/
