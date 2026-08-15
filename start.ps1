@@ -410,6 +410,23 @@ Set-Content -Path $frontendOutLog -Value $null
 Set-Content -Path $frontendErrLog -Value $null
 $script:LogOffsets = @{}
 
+# Database migrations: Alembic is the sole schema authority; run it before
+# the app, which only validates (never repairs) schema at startup.
+Write-Host "  Running database migrations (Alembic)..." -ForegroundColor Cyan
+Push-Location (Join-Path $PSScriptRoot "backend")
+try {
+    & $venvPythonFull -m app.db_migration upgrade
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: Database migration failed (exit code $LASTEXITCODE). Fix the reported state before starting." -ForegroundColor Red
+        Pop-Location
+        exit 1
+    }
+}
+finally {
+    Pop-Location
+}
+Write-Host "  Database schema is current." -ForegroundColor Green
+
 $backendJob = Start-Process -FilePath $venvPythonFull -ArgumentList "-u", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", $backendPort, "--app-dir", "backend", "--log-level", "info" -PassThru -WindowStyle Hidden -RedirectStandardOutput $backendOutLog -RedirectStandardError $backendErrLog
 
 $backendReadyTimeoutSeconds = Get-LauncherIntEnv -Name "MARKER_BACKEND_READY_TIMEOUT_SECONDS" -Default 120 -Minimum 1

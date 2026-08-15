@@ -54,6 +54,11 @@ jobs:
         run: |
           python -m pytest tests/test_dependency_truth.py tests/test_dockerfile.py -v
 
+      - name: Migration authority gate (Alembic sole schema authority)
+        working-directory: backend
+        run: |
+          python -m pytest tests/test_database_migration.py -v
+
       - name: Run full backend test suite
         working-directory: backend
         run: |

@@ -325,6 +325,15 @@ if [ "$FRONTEND_PORT" -ne 5173 ]; then
 fi
 
 # Backend
+# Database migrations: Alembic is the sole schema authority; run it before
+# the app, which only validates (never repairs) schema at startup.
+info "Running database migrations (Alembic)..."
+if ! (cd backend && python -m app.db_migration upgrade); then
+    err "ERROR: Database migration failed. Fix the reported state before starting."
+    exit 1
+fi
+ok "Database schema is current."
+
 info "Starting backend on http://$BACKEND_HOST:$BACKEND_PORT ..."
 uvicorn app.main:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" --app-dir backend &
 BACKEND_PID=$!
