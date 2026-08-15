@@ -89,7 +89,7 @@ ok "Virtual environment ready"
 echo ""
 echo -e "${YELLOW}[3/6] Installing Python dependencies...${NC}"
 
-PYTHON_DEPS_SIGNATURE="$(dependency_signature backend/requirements.txt pyproject.toml)"
+PYTHON_DEPS_SIGNATURE="$(dependency_signature backend/requirements.txt backend/requirements-cpu.lock pyproject.toml)"
 PYTHON_DEPS_SIGNATURE_FILE=".venv/requirements.sha256"
 if [ ! -f ".venv/installed" ] || [ ! -f "$PYTHON_DEPS_SIGNATURE_FILE" ] || [ "$(cat "$PYTHON_DEPS_SIGNATURE_FILE")" != "$PYTHON_DEPS_SIGNATURE" ]; then
     info "Installing dependencies (first run may take a while)..."

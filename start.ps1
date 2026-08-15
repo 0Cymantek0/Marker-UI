@@ -136,7 +136,7 @@ Write-Host ""
 Write-Host "[3/6] Installing Python dependencies..." -ForegroundColor Yellow
 
 $installedFlag = Join-Path ".venv" "installed"
-$pythonDepsSignature = Get-DependencySignature @("backend/requirements.txt", "pyproject.toml")
+$pythonDepsSignature = Get-DependencySignature @("backend/requirements.txt", "backend/requirements-cpu.lock", "pyproject.toml")
 $pythonDepsSignatureFile = Join-Path ".venv" "requirements.sha256"
 $pythonDepsInstalled = (Test-Path $installedFlag) -and (Test-Path $pythonDepsSignatureFile) -and ((Get-Content $pythonDepsSignatureFile -Raw).Trim() -eq $pythonDepsSignature.Trim())
 if (-not $pythonDepsInstalled) {

@@ -126,19 +126,19 @@ def test_dockerfile_has_variant_build_arg() -> None:
 
 
 def test_dockerfile_installs_cpu_torch_by_default() -> None:
-    """Default VARIANT=cpu must pre-install CPU torch before marker-pdf."""
+    """Default VARIANT=cpu must install from requirements-cpu.lock."""
     text = _read(_DOCKERFILE)
-    assert "requirements-cpu.txt" in text, (
-        "Dockerfile must install requirements-cpu.txt (CPU torch) to avoid "
+    assert "requirements-cpu.lock" in text, (
+        "Dockerfile must install requirements-cpu.lock (CPU torch + locked deps) to avoid "
         "pulling 14 nvidia-*-cu12 CUDA packages from PyPI"
     )
 
 
 def test_dockerfile_supports_gpu_variant() -> None:
-    """VARIANT=gpu must install CUDA torch from pytorch.org index."""
+    """VARIANT=gpu must install from requirements-gpu.lock."""
     text = _read(_DOCKERFILE)
-    assert "requirements-gpu.txt" in text, (
-        "Dockerfile must support VARIANT=gpu to pre-install CUDA torch"
+    assert "requirements-gpu.lock" in text, (
+        "Dockerfile must support VARIANT=gpu to install CUDA torch + locked deps"
     )
 
 

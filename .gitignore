@@ -54,6 +54,7 @@ logs/
 .omo/
 .opencode/
 .commandcode/
+.zcode/
 graphify-out/
 
 # TypeScript Build Cache

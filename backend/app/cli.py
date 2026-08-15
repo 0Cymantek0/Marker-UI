@@ -120,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(_handle_batch(args))
         if args.command == "doctor":
             return _handle_doctor(args)
+        if args.command == "provenance":
+            return _handle_provenance(args)
         if args.command == "hybrid-ocr":
             return _handle_hybrid_ocr(args)
         if args.command == "schema":
@@ -343,6 +345,11 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="Run environment and conversion readiness checks")
     doctor.add_argument("--no-conversion", action="store_true", help="Skip real TSV conversion smoke test")
     doctor.add_argument("--json", action="store_true", help="Print JSON instead of Markdown")
+
+    prov = sub.add_parser("provenance", help="Show build provenance, commit SHA, and dependency lock status")
+    prov.add_argument("--verify", action="store_true", help="Verify installed packages against active lockfile")
+    prov.add_argument("--variant", choices=["cpu", "gpu"], help="Explicit variant to inspect/verify")
+    prov.add_argument("--json", action="store_true", default=True, help="Print JSON")
 
     hybrid = sub.add_parser("hybrid-ocr", help="Inspect or set up Hybrid OCR specialist models")
     hybrid_sub = hybrid.add_subparsers(dest="hybrid_ocr_command", required=True, parser_class=MarkerArgumentParser)
@@ -595,12 +602,26 @@ def _handle_output(args: argparse.Namespace) -> int:
     return 2
 
 
+def _handle_provenance(args: argparse.Namespace) -> int:
+    from app.build_info import get_build_provenance, verify_dependency_lock
+
+    if getattr(args, "verify", False):
+        result = verify_dependency_lock(variant=getattr(args, "variant", None))
+        _print_result(result, args.json)
+        return 0 if result.get("ok") else 1
+
+    result = get_build_provenance(variant=getattr(args, "variant", None))
+    return _print_result(result, args.json)
+
+
 def _handle_doctor(args: argparse.Namespace) -> int:
     result = asyncio.run(self_test(include_conversion=not args.no_conversion))
+    from app.build_info import get_build_provenance
     from app.hybrid_ocr.capability import detect_capabilities
     from app.hybrid_ocr.setup import hybrid_setup_status
 
     caps = detect_capabilities()
+    result["provenance"] = get_build_provenance()
     result["doctor"] = {
         "schema_version": "marker.doctor.v1",
         "checks": {

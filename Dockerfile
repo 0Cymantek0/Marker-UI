@@ -35,19 +35,18 @@ WORKDIR /app
 #   VARIANT=cpu (default) → CPU torch from pytorch/whl/cpu (~250 MB)
 #   VARIANT=gpu           → CUDA torch from pytorch/whl/cu126 (~2.5 GB)
 ARG VARIANT=cpu
-COPY backend/requirements.txt backend/requirements-cpu.txt backend/requirements-gpu.txt ./backend/
+COPY backend/requirements.txt backend/requirements-cpu.txt backend/requirements-gpu.txt backend/requirements-cpu.lock backend/requirements-gpu.lock ./backend/
 RUN if [ "$VARIANT" = "gpu" ]; then \
         pip install --no-cache-dir \
             --index-url https://download.pytorch.org/whl/cu126 \
             --extra-index-url https://pypi.org/simple \
-            -r backend/requirements-gpu.txt; \
+            -r backend/requirements-gpu.lock; \
     else \
         pip install --no-cache-dir \
             --index-url https://download.pytorch.org/whl/cpu \
             --extra-index-url https://pypi.org/simple \
-            -r backend/requirements-cpu.txt; \
-    fi \
-    && pip install --no-cache-dir -r backend/requirements.txt
+            -r backend/requirements-cpu.lock; \
+    fi
 
 # Backend source
 COPY backend/ ./backend/
