@@ -73,7 +73,8 @@ def _write_json_table_artifact(
     artifact_dir.mkdir(parents=True, exist_ok=True)
     json_path = artifact_dir / f"{case.sample_id}.json"
     json_path.write_text(json_text or "", encoding="utf-8")
-    return str(json_path.relative_to(output_dir))
+    # POSIX separators keep the artifact identifier stable across platforms.
+    return json_path.relative_to(output_dir).as_posix()
 
 
 def _merge_marker_json_table_evidence(

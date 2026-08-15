@@ -47,7 +47,7 @@ def test_merge_marker_json_table_evidence_prefers_json_tables(tmp_path):
     assert merged.metadata["marker_json_table_evidence"] == {
         "source": "marker_json_renderer",
         "table_count": 1,
-        "artifact_path": "engine_json\\marker_pdf\\table_heavy.json",
+        "artifact_path": "engine_json/marker_pdf/table_heavy.json",
     }
     assert (tmp_path / "engine_json" / "marker_pdf" / "table_heavy.json").is_file()
 

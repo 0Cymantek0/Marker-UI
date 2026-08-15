@@ -135,21 +135,17 @@ async def test_rest_middleware_allows_matching_scope_when_configured(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_rest_asset_endpoint_requires_outputs_read_scope(monkeypatch):
-    from app.main import app
-
+async def test_rest_asset_endpoint_requires_outputs_read_scope(client, monkeypatch):
     monkeypatch.setenv("MARKER_AUTH_TOKENS", "outputs-token=outputs:read;caps-token=capabilities:read")
-    transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        scoped = await client.get(
-            "/api/convert/assets/missing-job/chart.png",
-            headers={"Authorization": "Bearer outputs-token"},
-        )
-        denied = await client.get(
-            "/api/convert/assets/missing-job/chart.png",
-            headers={"Authorization": "Bearer caps-token"},
-        )
+    scoped = await client.get(
+        "/api/convert/assets/missing-job/chart.png",
+        headers={"Authorization": "Bearer outputs-token"},
+    )
+    denied = await client.get(
+        "/api/convert/assets/missing-job/chart.png",
+        headers={"Authorization": "Bearer caps-token"},
+    )
 
     assert scoped.status_code == 404
     assert denied.status_code == 403
