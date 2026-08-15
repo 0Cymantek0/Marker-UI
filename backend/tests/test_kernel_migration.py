@@ -36,7 +36,9 @@ from app.db_migration import (
     verify_database_ready,
 )
 from app.kernel.commit import KernelCommitBatch, KernelCommitService
+from app.kernel.generations import GenerationService
 from app.kernel.records import ClaimAssertionRecord
+from app.kernel.snapshots import resolve_snapshot
 
 KERNEL_TABLES = {
     "kernel_commit_heads",
@@ -322,3 +324,150 @@ async def test_pr64_downgrade_drops_durability_truth_then_reupgrade_converges(
     assert (KERNEL_TABLES | PR64_TABLES) <= _kernel_tables_in(db_path)
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("SELECT COUNT(*) FROM kernel_payload_objects").fetchone()[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# PR65A: 20260815_0005 -> 20260815_0006 generation read model
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upgrade_from_pr64_head_preserves_committed_data(
+    tmp_path: Path,
+) -> None:
+    """A PR64 database with committed payload-bearing history upgrades
+    to the PR65A head with every record preserved and the generation
+    tables arriving empty (no fabricated read model)."""
+    db_path = tmp_path / "pr64.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR64_HEAD
+    )
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        for i in range(2):
+            await service.commit(
+                KernelCommitBatch(
+                    workspace_id="ws-pr64",
+                    records=(
+                        ClaimAssertionRecord(
+                            claim_key=f"k{i}",
+                            subject="doc:x.pdf",
+                            predicate="p",
+                            value=i,
+                        ),
+                    ),
+                )
+            )
+    finally:
+        await engine.dispose()
+
+    await upgrade_database(url=url)
+    status = await verify_database_ready(url=url)
+    assert status.state is DatabaseState.CURRENT
+
+    with sqlite3.connect(db_path) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == CURRENT_HEAD
+        records = conn.execute(
+            "SELECT COUNT(*) FROM kernel_records WHERE workspace_id = 'ws-pr64'"
+        ).fetchone()[0]
+        generations = conn.execute(
+            "SELECT COUNT(*) FROM kernel_generations"
+        ).fetchone()[0]
+        heads = conn.execute(
+            "SELECT COUNT(*) FROM kernel_generation_heads"
+        ).fetchone()[0]
+    assert records == 2
+    assert generations == 0 and heads == 0  # derived state is never fabricated
+
+
+@pytest.mark.asyncio
+async def test_runtime_fails_closed_at_pr64_head(tmp_path: Path) -> None:
+    """A database missing only the PR65A revision is PENDING_UPGRADE;
+    generation builds must fail closed, not self-heal the schema."""
+    db_path = tmp_path / "behind-pr65a.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR64_HEAD
+    )
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    gen_service = GenerationService(
+        factory, readiness_check=lambda: verify_database_ready(url=url)
+    )
+    try:
+        with pytest.raises(IncompatibleDatabaseError):
+            await _build_on_unmigrated(gen_service, factory)
+    finally:
+        await engine.dispose()
+    assert PR65A_TABLES.isdisjoint(_kernel_tables_in(db_path))
+
+
+async def _build_on_unmigrated(gen_service, factory) -> None:
+    snapshot = await resolve_snapshot(factory, "ws")
+    await gen_service.build_and_activate(snapshot)
+
+
+@pytest.mark.asyncio
+async def test_pr65a_downgrade_drops_generations_then_reupgrade_converges(
+    tmp_path: Path,
+) -> None:
+    """Downgrade discards generation truth (documented destructive
+    limitation): kernel truth and payloads survive, derived read state
+    and activation history are dropped, re-upgrade recreates the tables
+    empty and a rebuild reproduces the generation."""
+    db_path = tmp_path / "pr65a-downgrade.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    await service.commit(
+        KernelCommitBatch(
+            workspace_id="ws",
+            records=(
+                ClaimAssertionRecord(
+                    claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                ),
+            ),
+        )
+    )
+    gen_service = GenerationService(factory)
+    ref = await gen_service.build_and_activate(await resolve_snapshot(factory, "ws"))
+    await engine.dispose()
+
+    assert PR65A_TABLES <= _kernel_tables_in(db_path)
+
+    def _downgrade_to_pr64() -> None:
+        command.downgrade(db_migration._alembic_config(url), PR64_HEAD)
+
+    await asyncio.to_thread(_downgrade_to_pr64)
+    tables = _kernel_tables_in(db_path)
+    assert not (PR65A_TABLES & tables)
+    assert (KERNEL_TABLES | PR64_TABLES) <= tables  # kernel truth intact
+
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+    await upgrade_database(url=url)
+    assert inspect_database(url=url).state is DatabaseState.CURRENT
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM kernel_generations").fetchone()[0] == 0
+
+    # the dropped generation rebuilds deterministically from the kernel
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    gen_service = GenerationService(factory)
+    rebuilt = await gen_service.build(await resolve_snapshot(factory, "ws"))
+    await engine.dispose()
+    assert rebuilt.generation_id == ref.generation_id
+    assert rebuilt.content_digest == ref.content_digest

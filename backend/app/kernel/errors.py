@@ -66,3 +66,33 @@ class PayloadStageError(KernelError):
 
 class InvalidOutboxIntentError(KernelError):
     """Outbox intent failed validation at the kernel boundary."""
+
+
+# --- PR65A: snapshot + materialized generation ---------------------------
+
+
+class InvalidSnapshotCutError(KernelError):
+    """The requested kernel cut does not exist (negative, future, or unknown)."""
+
+
+class SnapshotIntegrityError(KernelError):
+    """Committed metadata at the cut is incoherent; the cut is not resolvable."""
+
+
+class SnapshotRequirementError(KernelError):
+    """The requested payload completeness cannot be honestly verified
+    (e.g. an inspectable/replayable requirement without a payload store)."""
+
+
+class UnknownGenerationError(KernelError):
+    """No generation exists with the requested identity."""
+
+
+class GenerationStateError(KernelError):
+    """A generation lifecycle transition was requested from a state that
+    does not permit it (e.g. activating a generation that is not validated)."""
+
+
+class GenerationIntegrityError(KernelError):
+    """Materialized generation content failed integrity verification;
+    it may not be treated as valid current state."""

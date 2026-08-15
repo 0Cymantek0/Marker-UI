@@ -1,5 +1,6 @@
 """Local Truth Kernel — commit spine (V3.2 PR63A) with durable payload
-staging, availability truth, and the transactional outbox (PR64).
+staging, availability truth, the transactional outbox (PR64), and
+snapshot-pinned immutable materialized generations (PR65A).
 
 Public surface:
 
@@ -15,11 +16,17 @@ Public surface:
 * :mod:`app.kernel.reconcile` — payload availability classification and
   conservative repair/restart reconciliation;
 * :mod:`app.kernel.replay` — head reads, causal-range replay, and
-  database-chain integrity verification;
+  database-chain integrity verification (correctness tooling, NOT the
+  materialized serving path);
+* :mod:`app.kernel.snapshots` (PR65A) — :func:`resolve_snapshot`, the
+  committed-cut snapshot contract with honest completeness classes;
+* :mod:`app.kernel.generations` (PR65A) — :class:`GenerationService`
+  (build → validate → activate) and :class:`GenerationReader`, the
+  bounded generation-pinned read path;
 * :mod:`app.kernel.errors` — boundary error contract;
 * :mod:`app.kernel.models` — ORM tables owned by Alembic revisions
-  ``20260815_0004`` (commit spine) and ``20260815_0005`` (payload
-  registry + outbox).
+  ``20260815_0004`` (commit spine), ``20260815_0005`` (payload
+  registry + outbox), and ``20260815_0006`` (materialized generations).
 
 What this slice guarantees and deliberately does not guarantee is
 documented in ``docs/reference/truth-kernel.md``.
@@ -34,6 +41,14 @@ from app.kernel.commit import (
     default_commit_service,
 )
 from app.kernel.errors import KernelError
+from app.kernel.generations import (
+    GenerationReader,
+    GenerationRef,
+    GenerationService,
+    default_generation_service,
+    open_current_generation,
+    resolve_current_generation,
+)
 from app.kernel.outbox import OutboxIntent, OutboxView
 from app.kernel.payloads import LocalPayloadStore, StagedBlob
 from app.kernel.reconcile import (
@@ -50,12 +65,17 @@ from app.kernel.replay import (
     replay,
     verify_history,
 )
+from app.kernel.snapshots import KernelSnapshot, resolve_snapshot
 
 __all__ = [
+    "GenerationReader",
+    "GenerationRef",
+    "GenerationService",
     "KernelCommitBatch",
     "KernelCommitReceipt",
     "KernelCommitService",
     "KernelError",
+    "KernelSnapshot",
     "LocalPayloadStore",
     "OutboxIntent",
     "OutboxView",
@@ -65,10 +85,14 @@ __all__ = [
     "StagedBlob",
     "VerificationResult",
     "default_commit_service",
+    "default_generation_service",
+    "open_current_generation",
     "read_head",
     "reconcile",
     "reconcile_after_restart",
     "replay",
+    "resolve_current_generation",
+    "resolve_snapshot",
     "verify_history",
     "verify_payload_availability",
 ]
