@@ -538,7 +538,11 @@ async def test_m8_failed_upgrade_keeps_honest_state_and_retry_recovers(tmp_path:
         _insert_sentinels(conn)
         shape_before = _shape(conn)
 
-    # Force a disk-level write failure for the migration writer.
+    # Force a disk-level write failure for the migration writer. Restore the
+    # original mode afterwards: stat.S_IWRITE alone is write-only (0o200) on
+    # POSIX, which would make the verification reopen below fail with
+    # "unable to open database file".
+    original_mode = stat.S_IMODE(os.stat(db_path).st_mode)
     os.chmod(db_path, stat.S_IREAD)
     try:
         with pytest.raises(Exception) as upgrade_err:
@@ -548,7 +552,7 @@ async def test_m8_failed_upgrade_keeps_honest_state_and_retry_recovers(tmp_path:
         with pytest.raises(IncompatibleDatabaseError):
             await verify_database_ready(url=url)
     finally:
-        os.chmod(db_path, stat.S_IWRITE)
+        os.chmod(db_path, original_mode)
 
     with closing(sqlite3.connect(db_path)) as conn:
         # Transactional DDL rolled back: still at 0002 with intact data.

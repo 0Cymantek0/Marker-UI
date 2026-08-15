@@ -16,7 +16,7 @@ Tag vocabulary (all tags are single-key objects):
 * ``{"$nan": true}`` / ``{"$inf": 1}`` / ``{"$inf": -1}``
 * ``{"$datetime": "..."}``  — unsupported type, must be rejected
 * ``{"$pyset": [...]}``     — plain hash-ordered set, must be rejected
-* ``{"$lone_surrogate": "\ud800"}`` — invalid Unicode, must be rejected
+* ``{"$lone_surrogate": true}`` — invalid Unicode, must be rejected
 
 Untagged JSON numbers with a fraction or exponent decode to floats and
 are expected to be rejected; that rejection is itself a fixture case.
@@ -66,7 +66,10 @@ def decode_payload(node: Any) -> Any:
         if set(node) == {"$pyset"}:
             return set(node["$pyset"])
         if set(node) == {"$lone_surrogate"}:
-            return "\ud800"
+            # Built via chr() so the module source stays valid UTF-8 with no
+            # lone-surrogate literal: Python 3.13 fails to collect modules
+            # whose docstrings/constants embed an actual U+D800 character.
+            return chr(0xD800)
         return {key: decode_payload(value) for key, value in node.items()}
     if isinstance(node, list):
         return [decode_payload(item) for item in node]
