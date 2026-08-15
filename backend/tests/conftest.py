@@ -16,6 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 os.environ["ENCRYPTION_KEY"] = "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdHRlc3Q="
 
 from app.database import Base, get_db
+from app.kernel.models import (  # noqa: F401 - ensure kernel tables are registered
+    KernelCommitHead,
+    KernelCommitManifest,
+    KernelRecord,
+    KernelRecordEdge,
+)
 from app.models.audit import AuditEvent  # noqa: F401 - ensure table is registered
 from app.models.job import ConversionJob  # noqa: F401 - ensure table is registered
 from app.models.job_event import JobEvent  # noqa: F401 - ensure table is registered
@@ -231,3 +237,18 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Provide a raw async DB session for direct DB assertions."""
     async with test_session_factory() as session:
         yield session
+
+
+@pytest_asyncio.fixture
+async def kernel_env(tmp_path: pathlib.Path) -> AsyncGenerator[async_sessionmaker, None]:
+    """File-backed SQLite DB migrated to the Alembic head for kernel tests."""
+    from app.db_migration import upgrade_database
+
+    url = f"sqlite+aiosqlite:///{(tmp_path / 'kernel.db').as_posix()}"
+    await upgrade_database(url=url)
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        yield factory
+    finally:
+        await engine.dispose()
