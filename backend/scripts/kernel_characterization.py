@@ -1,11 +1,22 @@
-"""Synthetic Truth Kernel workload characterization (V3.2 PR63A, plan 11.8).
+"""Synthetic Truth Kernel workload characterization (V3.2 PR63A + PR64).
 
-Runs a repeatable metadata-only workload against a throwaway SQLite
-database and prints a JSON report: commit/record/edge counts, database
-and WAL bytes, p50/p95 commit latency, replay + verification time,
-observed SQLITE_BUSY/head-contention retries, and the SQLite runtime
-version/journal mode. No hard threshold is imposed; the report is the
-first PR63 baseline that PR64/65 compare against.
+Runs a repeatable workload against a throwaway SQLite database and
+content-addressed payload store, then prints a JSON report.
+
+PR63A baseline fields: commit/record/edge counts, database and WAL
+bytes, p50/p95 commit latency, replay + verification time, observed
+SQLITE_BUSY/head-contention retries, SQLite runtime version/journal
+mode.
+
+PR64 durability fields (plan workstream F): payload staging latency
+distribution for representative payload sizes, bytes written versus
+logical payload bytes (write amplification incl. dedup reuse), commit
+latency with and without payload-bearing records, availability scan and
+restart-reconciliation cost, orphan/temp counts after an injected
+pre-commit failure, and filesystem object-count growth for the workload.
+
+No hard threshold is imposed; the report is the measured operating
+envelope that PR65 compares against and may then optimize.
 
 Usage (from ``backend/``)::
 
@@ -18,6 +29,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sqlite3
 import statistics
 import sys
@@ -33,6 +45,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db_migration import upgrade_database  # noqa: E402
 from app.kernel.commit import KernelCommitBatch, KernelCommitService  # noqa: E402
+from app.kernel.outbox import OutboxIntent  # noqa: E402
+from app.kernel.payloads import LocalPayloadStore  # noqa: E402
+from app.kernel.reconcile import reconcile_after_restart, verify_payload_availability  # noqa: E402
 from app.kernel.records import (  # noqa: E402
     EDGE_KIND_EVIDENCE_FOR,
     ClaimAssertionRecord,
@@ -115,27 +130,94 @@ async def run(
 
     engine = create_async_engine(url, connect_args={"check_same_thread": False})
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    service = KernelCommitService(factory)
+    store = LocalPayloadStore(db_dir / "payloads")
+    service = KernelCommitService(factory, payload_store=store)
     payload_bytes = b"x" * 512
 
-    latencies: list[float] = []
+    # --- PR64: staging latency distribution by payload size ----------
+    staging_profile: dict[str, dict] = {}
+    staging_samples = 20
+    for label, size in (("1KiB", 1024), ("64KiB", 64 * 1024), ("1MiB", 1024 * 1024)):
+        probe_store = LocalPayloadStore(db_dir / f"probe-{label}")
+        sample = os.urandom(size)
+        timings: list[float] = []
+        for i in range(staging_samples):
+            data = sample if i == 0 else sample + i.to_bytes(4, "big") + b"tail"
+            t0 = time.perf_counter()
+            await probe_store.stage(data)
+            timings.append(time.perf_counter() - t0)
+        staging_profile[label] = {
+            "bytes": size,
+            "samples": staging_samples,
+            "p50_ms": round(statistics.median(timings) * 1000, 2),
+            "p95_ms": round(sorted(timings)[int(len(timings) * 0.95) - 1] * 1000, 2),
+            "mean_ms": round(statistics.mean(timings) * 1000, 2),
+        }
+
+    # --- workload: metadata-only commits vs payload-bearing commits ---
+    latencies_meta: list[float] = []
+    latencies_payload: list[float] = []
     sem = asyncio.Semaphore(concurrent_writers)
 
-    async def one_commit(index: int) -> None:
-        batch = build_batch(index, records_per_commit, payload_bytes)
+    async def one_commit(index: int, with_payload: bool) -> None:
+        payload = None
+        if with_payload:
+            # Unique content per commit: staging, registry, and object
+            # counts then reflect real payload-bearing work, not dedup.
+            payload = payload_bytes + index.to_bytes(8, "big")
+        batch = build_batch(index, records_per_commit, payload)
+        if index == 0:
+            batch.outbox = (OutboxIntent(work_kind="materialize", payload={"i": index}),)
         async with sem:
             t0 = time.perf_counter()
             await service.commit(batch)
-            latencies.append(time.perf_counter() - t0)
+            (latencies_payload if with_payload else latencies_meta).append(
+                time.perf_counter() - t0
+            )
 
     started = time.perf_counter()
-    await asyncio.gather(*(one_commit(i) for i in range(commits)))
+    await asyncio.gather(
+        *(one_commit(i, with_payload=i % 2 == 0) for i in range(commits))
+    )
     workload_seconds = round(time.perf_counter() - started, 3)
 
-    sorted_lat = sorted(latencies)
-    p50 = round(statistics.median(sorted_lat) * 1000, 2)
-    p95 = round(sorted_lat[int(len(sorted_lat) * 0.95) - 1] * 1000, 2) if sorted_lat else 0.0
+    def _lat(list_: list[float]) -> dict:
+        if not list_:
+            return {"p50_ms": 0.0, "p95_ms": 0.0, "mean_ms": 0.0, "commits": 0}
+        ordered = sorted(list_)
+        return {
+            "commits": len(ordered),
+            "p50_ms": round(statistics.median(ordered) * 1000, 2),
+            "p95_ms": round(ordered[int(len(ordered) * 0.95) - 1] * 1000, 2),
+            "mean_ms": round(statistics.mean(ordered) * 1000, 2),
+        }
 
+    # --- PR64: availability scan + restart reconciliation cost --------
+    t0 = time.perf_counter()
+    availability = await verify_payload_availability(factory, store, workspace_id="bench")
+    availability_scan_seconds = round(time.perf_counter() - t0, 3)
+    t0 = time.perf_counter()
+    report_reconcile = await reconcile_after_restart(factory, store, tmp_older_than_seconds=0)
+    reconcile_seconds = round(time.perf_counter() - t0, 3)
+
+    # --- PR64: injected pre-commit failure residue ---------------------
+    orphans_before = len(availability.orphan_objects)
+    failed = 0
+    for i in range(5):
+        try:
+            await service.commit(
+                # records_per_commit must be >= 4: build_batch's edge
+                # references records[2].
+                build_batch(10_000 + i, 4, b"orphan probe" * 64 + i.to_bytes(4, "big")),
+                _inject_fault_at="pre-commit",
+            )
+        except Exception:
+            failed += 1
+    residue = await verify_payload_availability(factory, store, workspace_id="bench")
+    orphans_after_failure = len(residue.orphan_objects) - orphans_before
+    tmp_residue_after_failure = len(residue.tmp_residue)
+
+    # --- PR63A replay/verification ------------------------------------
     t0 = time.perf_counter()
     replayed = await replay(factory, "bench")
     replay_seconds = round(time.perf_counter() - t0, 3)
@@ -144,13 +226,32 @@ async def run(
     verify_seconds = round(time.perf_counter() - t0, 3)
     await engine.dispose()
 
+    # --- fresh-process restart view over the same durable files -------
+    engine2 = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory2 = async_sessionmaker(engine2, class_=AsyncSession, expire_on_commit=False)
+    store2 = LocalPayloadStore(db_dir / "payloads")
+    t0 = time.perf_counter()
+    restart_availability = await verify_payload_availability(
+        factory2, store2, workspace_id="bench"
+    )
+    restart_scan_seconds = round(time.perf_counter() - t0, 3)
+    await engine2.dispose()
+
     wal_path = db_path.with_name(db_path.name + "-wal")
     conn = sqlite3.connect(db_path)
     try:
         journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         page_count = conn.execute("PRAGMA page_count").fetchone()[0]
+        payload_registry_rows = conn.execute(
+            "SELECT COUNT(*) FROM kernel_payload_objects"
+        ).fetchone()[0]
+        outbox_rows = conn.execute(
+            "SELECT COUNT(*) FROM kernel_outbox WHERE state = 'pending'"
+        ).fetchone()[0]
     finally:
         conn.close()
+
+    object_files = sum(1 for _ in (db_dir / "payloads" / "objects").rglob("*") if _.is_file())
 
     return {
         "workload": {
@@ -159,6 +260,7 @@ async def run(
             "edges_per_commit": 1,
             "payload_bytes_per_observation": len(payload_bytes),
             "concurrent_writers": concurrent_writers,
+            "commit_mix": "even metadata-only / payload-bearing",
         },
         "totals": {
             "records": verification.checked_records,
@@ -171,17 +273,55 @@ async def run(
             "wal_bytes": wal_path.stat().st_size if wal_path.exists() else 0,
             "journal_mode": journal_mode,
             "page_count": page_count,
+            "payload_object_files": object_files,
+            "payload_registry_rows": payload_registry_rows,
         },
-        "latency_ms": {"p50": p50, "p95": p95, "mean": round(statistics.mean(sorted_lat) * 1000, 2) if sorted_lat else 0.0},
+        "latency_ms": {
+            "metadata_commits": _lat(latencies_meta),
+            "payload_commits": _lat(latencies_payload),
+            "all_commits": _lat(latencies_meta + latencies_payload),
+        },
+        "payload_durability": {
+            "staging_by_size": staging_profile,
+            "bytes_logical": store.bytes_logical,
+            "bytes_written": store.bytes_written,
+            "bytes_read_back": store.bytes_read_back,
+            "write_amplification": (
+                round(store.bytes_written / store.bytes_logical, 3)
+                if store.bytes_logical
+                else 0.0
+            ),
+            "dedup_hits": store.dedup_hits,
+            "stage_calls": store.stage_calls,
+            "availability": {
+                "payload_backed_complete": availability.payload_backed_complete,
+                "record_state_summary": availability.summary(),
+                "orphan_objects": len(availability.orphan_objects),
+                "tmp_residue": len(availability.tmp_residue),
+            },
+            "injected_failures": {
+                "pre_commit_failures": failed,
+                "orphan_objects_created": orphans_after_failure,
+                "tmp_files_left": tmp_residue_after_failure,
+            },
+            "pending_outbox_rows": outbox_rows,
+        },
         "duration_seconds": {
             "migration_to_head": migration_seconds,
             "commit_workload": workload_seconds,
+            "availability_scan": availability_scan_seconds,
+            "reconcile_after_restart": reconcile_seconds,
+            "restart_availability_scan": restart_scan_seconds,
             "full_replay": replay_seconds,
             "full_verification": verify_seconds,
         },
         "contention": {
             "busy_retries": service.busy_retries,
             "head_retries": service.head_retries,
+        },
+        "restart_view": {
+            "payload_backed_complete": restart_availability.payload_backed_complete,
+            "record_state_summary": restart_availability.summary(),
         },
         "runtime": {
             "python": sys.version.split()[0],

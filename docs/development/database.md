@@ -87,3 +87,14 @@ renames, or type changes.
     record metadata with canonical semantic identity.
   - `KernelRecordEdge` → `kernel_record_edges` — dependency/reference
     edges between records.
+- Truth Kernel payload durability + outbox (V3.2 PR64, revision
+  `20260815_0005`; see
+  [../reference/truth-kernel.md](../reference/truth-kernel.md)):
+  - `KernelPayloadObject` → `kernel_payload_objects` — registry of
+    durably published content-addressed payload objects (blob key,
+    length, store profile, locator). Rows are inserted in the same
+    transaction as the records referencing them, so a visible row
+    implies the bytes were staged and verified before acceptance.
+  - `KernelOutbox` → `kernel_outbox` — durable at-least-once
+    successor-work intent, enqueued atomically with its authorizing
+    commit and identified by a deterministic dedupe key.

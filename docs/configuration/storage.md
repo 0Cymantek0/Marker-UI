@@ -16,6 +16,10 @@ marker-ui/
     │   └── {job_id}/
     │       ├── output.md  # Converted Markdown file
     │       └── images/    # Extracted PNG/JPG images
+    ├── kernel_payloads/   # Truth Kernel immutable payload store (PR64)
+    │   ├── objects/       # Content-addressed final objects (never rewritten)
+    │   ├── tmp/           # Staging scratch (never referenced by truth)
+    │   └── quarantine/    # Tampered objects displaced by verified re-staging
     ├── marker_ui.db       # SQLite database file
     └── .secret_key        # Auto-generated 32-byte Fernet key
 ```
@@ -45,3 +49,14 @@ marker-ui/
 ### 4. Fernet Key File (`data/.secret_key`)
 - Auto-generated on the first system start.
 - If you lose this file, you will be unable to decrypt any previously saved API keys in SQLite, and will need to re-enter them in the UI.
+
+### 5. Truth Kernel Payload Store (`data/kernel_payloads/`)
+- Content-addressed immutable blob store backing committed Truth Kernel
+  payload references (V3.2 PR64). Objects are named by the sha256 of
+  their exact bytes, published via write-to-scratch + fsync + atomic
+  rename + read-back verification, and never rewritten; tampered objects
+  are quarantined rather than silently replaced. The store is not a
+  second truth authority — the SQLite commit remains the only
+  linearization point (see [Truth Kernel reference](../reference/truth-kernel.md)).
+- Location override: `MARKER_KERNEL_PAYLOAD_ROOT` environment variable
+  (default `data/kernel_payloads`).
