@@ -53,8 +53,8 @@ alembic -c backend/alembic.ini upgrade head   # from the repository root
 
 ## Making a schema change
 
-1. Update the model in `backend/app/models/` (and register any new model
-   module in `backend/alembic/env.py`).
+1. Update the model in `backend/app/models/` or `backend/app/kernel/`
+   (and register any new model module in `backend/alembic/env.py`).
 2. Generate and hand-check a revision:
 
    ```bash
@@ -77,3 +77,13 @@ renames, or type changes.
 - `Setting` → `settings` — key-value configuration.
 - `AuditEvent` → `audit_events` — redacted audit trail.
 - `JobEvent` → `job_events` — per-job progress/event log.
+- Truth Kernel spine (V3.2 PR63A, revision `20260815_0004`; see
+  [../reference/truth-kernel.md](../reference/truth-kernel.md)):
+  - `KernelCommitHead` → `kernel_commit_heads` — per-workspace commit
+    head (the commit serialization point).
+  - `KernelCommitManifest` → `kernel_commit_manifests` — one immutable
+    manifest per accepted commit.
+  - `KernelRecord` → `kernel_records` — append-only committed logical
+    record metadata with canonical semantic identity.
+  - `KernelRecordEdge` → `kernel_record_edges` — dependency/reference
+    edges between records.
