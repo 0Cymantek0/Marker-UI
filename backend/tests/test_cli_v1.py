@@ -16,12 +16,18 @@ def _run_cli(
     tmp_path: Path,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    from app.db_migration import _upgrade_database_sync
+
     env = os.environ.copy()
-    env["MARKER_DATABASE_URL"] = f"sqlite+aiosqlite:///{tmp_path / 'marker-cli-v1.db'}"
+    db_path = tmp_path / "marker-cli-v1.db"
+    env["MARKER_DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path.as_posix()}"
     env.pop("MARKER_WORKSPACE_ROOTS", None)
     env.pop("MARKER_OUTPUT_ROOT", None)
     if extra_env:
         env.update(extra_env)
+    if not db_path.exists():
+        # Alembic is the sole schema authority: migrate before the CLI runs.
+        _upgrade_database_sync(env["MARKER_DATABASE_URL"])
     return subprocess.run(
         [sys.executable, "-m", "app.cli", *args],
         cwd=cwd,

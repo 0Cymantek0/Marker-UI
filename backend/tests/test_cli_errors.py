@@ -3,17 +3,34 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
+_CLI_DB_PATH = Path(tempfile.gettempdir()) / f"marker-cli-errors-{os.getpid()}.db"
+
+
+def _cli_database_url() -> str:
+    """Alembic-migrated database for CLI subprocesses (sole schema authority)."""
+    from app.db_migration import _upgrade_database_sync
+
+    url = f"sqlite+aiosqlite:///{_CLI_DB_PATH.as_posix()}"
+    if not _CLI_DB_PATH.exists():
+        _upgrade_database_sync(url)
+    return url
+
 
 def _run_cli(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["MARKER_DATABASE_URL"] = _cli_database_url()
     return subprocess.run(
         [sys.executable, "-m", "app.cli", *args],
         cwd=cwd,
+        env=env,
         text=True,
         capture_output=True,
         timeout=60,

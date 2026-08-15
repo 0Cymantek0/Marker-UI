@@ -54,7 +54,7 @@ def test_maturity_tables_mark_partial_and_deferred_systems() -> None:
     required_rows = (
         "| Semantic chunking | Working alpha with deterministic source refs and lightweight retrieval gate; larger benchmark corpus still planned |",
         "| Audio / voice notes | Partial alpha: local faster-whisper route only; cloud STT, real diarization, and provider comparison are deferred |",
-        "| Database migrations | Startup creates tables and additive column repairs; Alembic upgrades are developer-managed |",
+        "| Database migrations | Alembic is the sole schema authority; launch paths migrate to head automatically; incompatible states fail closed |",
     )
     for row in required_rows:
         assert row in readme
@@ -121,20 +121,26 @@ def test_cli_guide_documents_first_class_audio_flags() -> None:
         assert flag in cli_guide
 
 
-def test_database_docs_do_not_claim_automatic_alembic_upgrade() -> None:
+def test_database_docs_document_single_migration_authority() -> None:
     storage_doc = (REPO_ROOT / "docs" / "configuration" / "storage.md").read_text(encoding="utf-8")
     database_doc = (REPO_ROOT / "docs" / "development" / "database.md").read_text(encoding="utf-8")
 
+    # Old dual-authority claims must stay gone: no runtime self-heal, no
+    # developer-only Alembic story.
     forbidden_claims = (
         "updated automatically via Alembic database migrations",
         "database updates are performed automatically when running the Docker container",
+        "does not currently run `alembic upgrade head` automatically",
+        "self-heal",
     )
     for claim in forbidden_claims:
         assert claim not in storage_doc
         assert claim not in database_doc
 
-    assert "does not currently run `alembic upgrade head` automatically" in storage_doc
-    assert "does not currently run `alembic upgrade head` automatically" in database_doc
+    # PR62 contract: Alembic is the sole persistent schema authority.
+    assert "Alembic is the sole persistent schema authority" in database_doc
+    assert "python -m app.db_migration upgrade" in database_doc
+    assert "Alembic is the sole persistent schema authority" in storage_doc
 
 
 def test_mcp_guide_documents_url_open_world_and_audio_controls() -> None:

@@ -878,7 +878,7 @@ async def test_agent_submit_rejects_deferred_audio_provider_before_queue(
         await conn.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     monkeypatch.setattr(agent_api, "_db_session_factory", session_factory)
-    monkeypatch.setattr(agent_api, "_db_tables_ready", False)
+    monkeypatch.setattr(agent_api, "_db_ready", False)
 
     try:
         with pytest.raises(UsageError, match="not shipped yet"):
