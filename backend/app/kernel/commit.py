@@ -1,4 +1,4 @@
-"""Single transactional Truth Kernel commit authority (V3.2 PR63A).
+"""Single transactional Truth Kernel commit authority (V3.2 PR63A/PR64).
 
 This module is the ONE local code path that creates authoritative kernel
 commits. The SQLite portion of the V3.2 commit protocol:
@@ -11,19 +11,25 @@ commits. The SQLite portion of the V3.2 commit protocol:
    ``parent_kernel_commit_id = head`` (causal order, never wall time);
 3. validate external record references against visible committed state;
 4. insert all logical records and dependency edges for the batch;
-5. insert the immutable commit manifest (counts + deterministic roots +
+5. register durably published payload objects (PR64): registry rows are
+   inserted in the same transaction, so a visible reference always
+   implies the immutable bytes were published and verified first;
+6. insert the immutable commit manifest (counts + deterministic roots +
    manifest identity hash);
-6. advance the head with a conditional update
+7. insert the batch's outbox intent rows (PR64): successor work becomes
+   visible exactly when the authorizing commit does;
+8. advance the head with a conditional update
    (``WHERE head_kernel_commit_id = <observed head>``) — a lost update
    cannot be silently accepted;
-7. COMMIT while still holding the head row — the database commit is the
-   linearization point that makes the new head, records, edges, and
-   manifest visible atomically.
+9. COMMIT while still holding the head row — the database commit is the
+   linearization point that makes the new head, records, edges,
+   manifest, payload references, and outbox visible atomically.
 
 Contention policy: ``SQLITE_BUSY``/lock errors and concurrent head
 movement are expected, retryable conditions with a bounded budget.
-Payload staging is out of scope (PR64): this slice commits metadata plus
-caller-supplied payload hashes only.
+Payload staging happens once per ``commit()`` call, before the retry
+loop: staging is content-addressed and idempotent, and a database retry
+never re-publishes bytes.
 """
 
 from __future__ import annotations
@@ -65,9 +71,19 @@ from app.kernel.models import (
     KERNEL_SCHEMA_VERSION,
     KernelCommitHead,
     KernelCommitManifest,
+    KernelOutbox,
+    KernelPayloadObject,
     KernelRecord,
     KernelRecordEdge,
 )
+from app.kernel.outbox import (
+    OUTBOX_STATE_PENDING,
+    OutboxIntent,
+    compute_dedupe_key,
+    intent_payload_json,
+    validate_intent,
+)
+from app.kernel.payloads import LOCAL_STORE_PROFILE, LocalPayloadStore
 from app.kernel.records import KernelEdge, KernelRecord as RecordInput
 from app.utils.canonical import (
     CANONICALIZATION_PROFILE,
@@ -88,6 +104,8 @@ __all__ = [
     "PHASE_HEAD_ADVANCED",
     "PHASE_HEAD_READ",
     "PHASE_MANIFEST_INSERTED",
+    "PHASE_OUTBOX_INSERTED",
+    "PHASE_PAYLOADS_REGISTERED",
     "PHASE_PRE_COMMIT",
     "PHASE_RECORDS_INSERTED",
     "default_commit_service",
@@ -97,8 +115,10 @@ __all__ = [
 PHASE_BEGIN = "begin"
 PHASE_HEAD_READ = "head-read"
 PHASE_RECORDS_INSERTED = "records-inserted"
+PHASE_PAYLOADS_REGISTERED = "payloads-registered"
 PHASE_EDGES_INSERTED = "edges-inserted"
 PHASE_MANIFEST_INSERTED = "manifest-inserted"
+PHASE_OUTBOX_INSERTED = "outbox-inserted"
 PHASE_HEAD_ADVANCED = "head-advanced"
 PHASE_PRE_COMMIT = "pre-commit"
 
@@ -107,8 +127,10 @@ FAULT_PHASES = frozenset(
         PHASE_BEGIN,
         PHASE_HEAD_READ,
         PHASE_RECORDS_INSERTED,
+        PHASE_PAYLOADS_REGISTERED,
         PHASE_EDGES_INSERTED,
         PHASE_MANIFEST_INSERTED,
+        PHASE_OUTBOX_INSERTED,
         PHASE_HEAD_ADVANCED,
         PHASE_PRE_COMMIT,
     }
@@ -146,6 +168,8 @@ class KernelCommitBatch:
     edges: tuple[KernelEdge, ...] = ()
     #: commit-level producer/operation metadata (audit, canonical-safe)
     producer: Mapping[str, Any] = field(default_factory=dict)
+    #: successor work that must become visible with this commit (PR64)
+    outbox: tuple[OutboxIntent, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -174,6 +198,10 @@ class KernelCommitReceipt:
     edge_ids: tuple[str, ...]
     record_count: int
     edge_count: int
+    #: payload blob keys whose durable objects back this commit's records
+    payload_blob_keys: tuple[str, ...] = ()
+    #: ids of outbox rows enqueued atomically with this commit
+    outbox_ids: tuple[int, ...] = ()
 
 
 class KernelCommitService:
@@ -194,6 +222,7 @@ class KernelCommitService:
         busy_retry_attempts: int = DEFAULT_BUSY_RETRY_ATTEMPTS,
         busy_retry_base_delay: float = DEFAULT_BUSY_RETRY_BASE_DELAY,
         readiness_check: Callable[[], Awaitable[None]] | None = None,
+        payload_store: LocalPayloadStore | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._max_batch_records = max_batch_records
@@ -201,6 +230,7 @@ class KernelCommitService:
         self._busy_retry_base_delay = busy_retry_base_delay
         self._readiness_check = readiness_check
         self._ready = readiness_check is None
+        self._payload_store = payload_store
         #: observed SQLITE_BUSY/lock retries (contention observability)
         self.busy_retries = 0
         #: observed concurrent-head-move retries
@@ -300,7 +330,49 @@ class KernelCommitService:
                 )
             seen_edges.add(key)
 
-        return workspace_id, tuple(prepared), edges, producer_json
+        prepared_outbox = tuple(
+            (intent, intent_payload_json(validate_intent(intent)))
+            for intent in batch.outbox
+        )
+
+        return workspace_id, tuple(prepared), edges, producer_json, prepared_outbox
+
+    # ------------------------------------------------------------------
+    # durable payload staging (pre-transaction; PR64)
+    # ------------------------------------------------------------------
+
+    async def _stage_payloads(
+        self, records: Sequence[RecordInput]
+    ) -> dict[str, tuple[int, str]]:
+        """Publish payload bytes durably before any database reference.
+
+        Returns ``{blob_key: (length, locator)}`` for every object this
+        commit may reference as available: freshly staged bytes, reused
+        verified objects for declared hashes, and deduplicated bytes
+        shared by several records. Runs once per ``commit()`` call — a
+        database retry never re-stages.
+        """
+        store = self._payload_store
+        if store is None:
+            return {}
+        staged: dict[str, tuple[int, str]] = {}
+        declared_keys: list[str] = []
+        for record in records:
+            raw = getattr(record, "payload_bytes", None)
+            if raw is not None:
+                blob = await store.stage(bytes(raw))
+                staged[blob.blob_key] = (blob.payload_length, blob.locator)
+            else:
+                declared = getattr(record, "declared_payload_hash", None)
+                if declared is not None:
+                    declared_keys.append(declared)
+        for key in declared_keys:
+            if key in staged:
+                continue
+            check = await store.check_object(key)
+            if check.available:
+                staged[key] = (check.length, check.locator)
+        return staged
 
     # ------------------------------------------------------------------
     # commit path
@@ -318,13 +390,20 @@ class KernelCommitService:
         if _inject_fault_at is not None and _inject_fault_at not in FAULT_PHASES:
             raise KernelError(f"unknown fault phase {_inject_fault_at!r}")
         await self._ensure_ready()
-        workspace_id, prepared, edges, producer_json = self._prepare(batch)
+        workspace_id, prepared, edges, producer_json, prepared_outbox = self._prepare(batch)
+        staged_payloads = await self._stage_payloads(batch.records)
 
         last_error: Exception | None = None
         for attempt in range(self._busy_retry_attempts):
             try:
                 return await self._commit_once(
-                    workspace_id, prepared, edges, producer_json, _inject_fault_at
+                    workspace_id,
+                    prepared,
+                    edges,
+                    producer_json,
+                    prepared_outbox,
+                    staged_payloads,
+                    _inject_fault_at,
                 )
             except HeadMovedError:
                 self.head_retries += 1
@@ -353,6 +432,8 @@ class KernelCommitService:
         prepared: Sequence[PreparedRecord],
         edges: Sequence[KernelEdge],
         producer_json: str,
+        prepared_outbox: Sequence[tuple[OutboxIntent, str]],
+        staged_payloads: Mapping[str, tuple[int, str]],
         inject_fault_at: str | None,
     ) -> KernelCommitReceipt:
         def maybe_inject(phase: str) -> None:
@@ -429,6 +510,25 @@ class KernelCommitService:
                 )
                 maybe_inject(PHASE_RECORDS_INSERTED)
 
+                # 3.5. Register durably published payload objects. The
+                #     objects were staged and verified before this
+                #     transaction began; the registry row is what makes
+                #     the reference "available" — and it appears or
+                #     disappears together with the records above.
+                for blob_key in sorted(staged_payloads):
+                    length, locator = staged_payloads[blob_key]
+                    await session.execute(
+                        sqlite_insert(KernelPayloadObject)
+                        .values(
+                            blob_key=blob_key,
+                            payload_length=length,
+                            store_profile=LOCAL_STORE_PROFILE,
+                            storage_locator=locator,
+                        )
+                        .on_conflict_do_nothing(index_elements=[KernelPayloadObject.blob_key])
+                    )
+                maybe_inject(PHASE_PAYLOADS_REGISTERED)
+
                 # 4. Insert dependency edges.
                 session.add_all(
                     KernelRecordEdge(
@@ -484,6 +584,35 @@ class KernelCommitService:
                 )
                 maybe_inject(PHASE_MANIFEST_INSERTED)
 
+                # 5.5. Enqueue successor-work intent. Same transaction as
+                #      the commit that authorizes it: rolled back with it,
+                #      durable with it. Dedupe keys are deterministic, so
+                #      a retried commit protocol cannot duplicate intent.
+                inserted_outbox_keys: list[str] = []
+                for intent, payload_json in prepared_outbox:
+                    dedupe_key = compute_dedupe_key(
+                        workspace_id=workspace_id,
+                        kernel_commit_id=next_commit_id,
+                        work_kind=intent.work_kind,
+                        payload_json=payload_json,
+                    )
+                    result = await session.execute(
+                        sqlite_insert(KernelOutbox)
+                        .values(
+                            workspace_id=workspace_id,
+                            kernel_commit_id=next_commit_id,
+                            work_kind=intent.work_kind,
+                            payload_json=payload_json,
+                            dedupe_key=dedupe_key,
+                            state=OUTBOX_STATE_PENDING,
+                            attempts=0,
+                        )
+                        .on_conflict_do_nothing(index_elements=[KernelOutbox.dedupe_key])
+                    )
+                    if result.rowcount == 1:
+                        inserted_outbox_keys.append(dedupe_key)
+                maybe_inject(PHASE_OUTBOX_INSERTED)
+
                 # 6. Conditional head advance (lost-update guard).
                 result = await session.execute(
                     update(KernelCommitHead)
@@ -505,6 +634,17 @@ class KernelCommitService:
                 maybe_inject(PHASE_PRE_COMMIT)
             # session.begin() exit == COMMIT == the linearization point.
 
+            outbox_ids: tuple[int, ...] = ()
+            if inserted_outbox_keys:
+                rows = (
+                    await session.execute(
+                        select(KernelOutbox.id)
+                        .where(KernelOutbox.dedupe_key.in_(inserted_outbox_keys))
+                        .order_by(KernelOutbox.id.asc())
+                    )
+                ).all()
+                outbox_ids = tuple(row.id for row in rows)
+
         return KernelCommitReceipt(
             workspace_id=workspace_id,
             kernel_commit_id=next_commit_id,
@@ -514,6 +654,8 @@ class KernelCommitService:
             edge_ids=tuple(edge.edge_id for edge in edges),
             record_count=len(prepared),
             edge_count=len(edges),
+            payload_blob_keys=tuple(sorted(staged_payloads)),
+            outbox_ids=outbox_ids,
         )
 
 
@@ -555,13 +697,19 @@ def default_commit_service() -> KernelCommitService:
 
     Commits fail closed until ``verify_database_ready`` passes; the check
     runs once per process (mirrors the agent API readiness convention).
+    Payload-bearing commits stage through the local content-addressed
+    store rooted at ``MARKER_KERNEL_PAYLOAD_ROOT`` (default
+    ``<data>/kernel_payloads``).
     """
     global _default_service
     if _default_service is None:
+        from app.core.config import KERNEL_PAYLOAD_ROOT
         from app.database import async_session_factory
         from app.db_migration import verify_database_ready
 
         _default_service = KernelCommitService(
-            async_session_factory, readiness_check=verify_database_ready
+            async_session_factory,
+            readiness_check=verify_database_ready,
+            payload_store=LocalPayloadStore(KERNEL_PAYLOAD_ROOT),
         )
     return _default_service

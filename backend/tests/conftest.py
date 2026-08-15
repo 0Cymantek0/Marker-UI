@@ -19,6 +19,8 @@ from app.database import Base, get_db
 from app.kernel.models import (  # noqa: F401 - ensure kernel tables are registered
     KernelCommitHead,
     KernelCommitManifest,
+    KernelOutbox,
+    KernelPayloadObject,
     KernelRecord,
     KernelRecordEdge,
 )
@@ -250,5 +252,26 @@ async def kernel_env(tmp_path: pathlib.Path) -> AsyncGenerator[async_sessionmake
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         yield factory
+    finally:
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def payload_env(
+    tmp_path: pathlib.Path,
+) -> AsyncGenerator[tuple, None]:
+    """Kernel DB + content-addressed payload store + wired commit service."""
+    from app.db_migration import upgrade_database
+    from app.kernel.commit import KernelCommitService
+    from app.kernel.payloads import LocalPayloadStore
+
+    url = f"sqlite+aiosqlite:///{(tmp_path / 'kernel.db').as_posix()}"
+    await upgrade_database(url=url)
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    store = LocalPayloadStore(tmp_path / "payloads")
+    service = KernelCommitService(factory, payload_store=store)
+    try:
+        yield factory, store, service
     finally:
         await engine.dispose()

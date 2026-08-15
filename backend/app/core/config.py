@@ -34,5 +34,11 @@ PRELOAD_MARKER_MODELS: bool = os.getenv("MARKER_PRELOAD_MODELS", "false").lower(
 # Database
 DATABASE_URL: str = os.getenv("MARKER_DATABASE_URL", f"sqlite+aiosqlite:///{DB_PATH}")
 
+# Truth Kernel durable payload store (PR64): content-addressed immutable
+# objects backing committed kernel payload references.
+KERNEL_PAYLOAD_ROOT: Path = Path(
+    os.getenv("MARKER_KERNEL_PAYLOAD_ROOT", str(DATA_DIR / "kernel_payloads"))
+)
+
 # Encryption
 SECRET_KEY_PATH: Path = DATA_DIR / ".secret_key"

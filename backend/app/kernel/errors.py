@@ -58,3 +58,11 @@ class InjectedFaultError(KernelError):
     def __init__(self, phase: str) -> None:
         self.phase = phase
         super().__init__(f"injected fault at kernel commit phase {phase!r}")
+
+
+class PayloadStageError(KernelError):
+    """Durable payload staging failed; no reference may treat it as available."""
+
+
+class InvalidOutboxIntentError(KernelError):
+    """Outbox intent failed validation at the kernel boundary."""
