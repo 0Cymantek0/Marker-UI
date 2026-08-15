@@ -3,3 +3,6 @@
 # CPU/GPU locks. CI installs them after the locked runtime set.
 pytest==8.3.4
 pytest-asyncio==0.24.0
+# Test-fixture generators (backend/tests/office_fixtures.py) build synthetic
+# docx files; python-pptx/openpyxl already ship as runtime dependencies.
+python-docx==1.2.0
