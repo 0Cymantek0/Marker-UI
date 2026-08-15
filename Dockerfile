@@ -35,6 +35,8 @@ WORKDIR /app
 #   VARIANT=cpu (default) → CPU torch from pytorch/whl/cpu (~250 MB)
 #   VARIANT=gpu           → CUDA torch from pytorch/whl/cu126 (~2.5 GB)
 ARG VARIANT=cpu
+ARG COMMIT_SHA=""
+ENV MARKER_COMMIT_SHA=${COMMIT_SHA}
 COPY backend/requirements.txt backend/requirements-cpu.txt backend/requirements-gpu.txt backend/requirements-cpu.lock backend/requirements-gpu.lock ./backend/
 RUN if [ "$VARIANT" = "gpu" ]; then \
         pip install --no-cache-dir \
@@ -63,10 +65,8 @@ RUN rm -f /etc/nginx/sites-enabled/default
 RUN mkdir -p /app/backend/data/uploads /app/backend/data/output /app/backend/data/huggingface
 
 # Supervisord config to manage both processes.
-# pip install supervisor does NOT create the runtime dirs the apt package does,
-# so create them explicitly before the chown chain below.
-RUN pip install --no-cache-dir supervisor \
-    && mkdir -p /var/log/supervisor /run/supervisor
+# Runtime directories created explicitly before chown chain below.
+RUN mkdir -p /var/log/supervisor /run/supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/marker-ui.conf
 
 # Create non-root user for application processes

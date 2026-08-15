@@ -140,23 +140,32 @@ $pythonDepsSignature = Get-DependencySignature @("backend/requirements.txt", "ba
 $pythonDepsSignatureFile = Join-Path ".venv" "requirements.sha256"
 $pythonDepsInstalled = (Test-Path $installedFlag) -and (Test-Path $pythonDepsSignatureFile) -and ((Get-Content $pythonDepsSignatureFile -Raw).Trim() -eq $pythonDepsSignature.Trim())
 if (-not $pythonDepsInstalled) {
-    Write-Host "  Installing dependencies (first run may take a while)..." -ForegroundColor DarkGray
-    & $venvPip install -r backend/requirements.txt --quiet
+    Write-Host "  Installing dependencies from locked profile (first run may take a while)..." -ForegroundColor DarkGray
+    $cpuLock = "backend/requirements-cpu.lock"
+    if (Test-Path $cpuLock) {
+        & $venvPip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r $cpuLock --quiet
+    } else {
+        & $venvPip install -r backend/requirements.txt --quiet
+    }
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  WARNING: Full install failed, retrying without [full] extra..." -ForegroundColor DarkYellow
-        
-        $tempReqs = Join-Path "backend" "requirements_min.txt"
-        Get-Content backend/requirements.txt | Where-Object {
-            $_ -notmatch "marker-pdf\[full\]"
-        } | Set-Content $tempReqs
-        
-        & $venvPip install -r $tempReqs --quiet
-        $minInstallStatus = $LASTEXITCODE
-        
-        if (Test-Path $tempReqs) { Remove-Item $tempReqs -Force }
-        
-        if ($minInstallStatus -eq 0) {
-            & $venvPip install marker-pdf --quiet
+        Write-Host "  WARNING: Locked profile install failed, falling back to requirements.txt..." -ForegroundColor DarkYellow
+        & $venvPip install -r backend/requirements.txt --quiet
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  WARNING: Full install failed, retrying without [full] extra..." -ForegroundColor DarkYellow
+            
+            $tempReqs = Join-Path "backend" "requirements_min.txt"
+            Get-Content backend/requirements.txt | Where-Object {
+                $_ -notmatch "marker-pdf\[full\]"
+            } | Set-Content $tempReqs
+            
+            & $venvPip install -r $tempReqs --quiet
+            $minInstallStatus = $LASTEXITCODE
+            
+            if (Test-Path $tempReqs) { Remove-Item $tempReqs -Force }
+            
+            if ($minInstallStatus -eq 0) {
+                & $venvPip install marker-pdf --quiet
+            }
         }
     }
     

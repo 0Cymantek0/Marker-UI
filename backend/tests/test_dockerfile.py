@@ -178,3 +178,19 @@ def test_compose_gpu_override_exists() -> None:
     assert "nvidia" in text, (
         "GPU compose override must pass NVIDIA devices to the container"
     )
+
+
+def test_dockerfile_declares_commit_sha_provenance() -> None:
+    """Dockerfile must accept ARG COMMIT_SHA and set MARKER_COMMIT_SHA."""
+    text = _read(_DOCKERFILE)
+    assert "ARG COMMIT_SHA" in text, "Dockerfile must declare ARG COMMIT_SHA for build provenance"
+    assert "ENV MARKER_COMMIT_SHA=${COMMIT_SHA}" in text, "Dockerfile must set MARKER_COMMIT_SHA environment variable"
+
+
+def test_dockerfile_avoids_unpinned_pip_install() -> None:
+    """Dockerfile must not run unpinned pip install commands."""
+    text = _read(_DOCKERFILE)
+    assert "pip install --no-cache-dir supervisor" not in text, (
+        "supervisor must be locked in dependency lockfile, not installed unpinned"
+    )
+

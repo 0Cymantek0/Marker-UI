@@ -92,8 +92,16 @@ echo -e "${YELLOW}[3/6] Installing Python dependencies...${NC}"
 PYTHON_DEPS_SIGNATURE="$(dependency_signature backend/requirements.txt backend/requirements-cpu.lock pyproject.toml)"
 PYTHON_DEPS_SIGNATURE_FILE=".venv/requirements.sha256"
 if [ ! -f ".venv/installed" ] || [ ! -f "$PYTHON_DEPS_SIGNATURE_FILE" ] || [ "$(cat "$PYTHON_DEPS_SIGNATURE_FILE")" != "$PYTHON_DEPS_SIGNATURE" ]; then
-    info "Installing dependencies (first run may take a while)..."
-    if pip install -r backend/requirements.txt --quiet; then
+    info "Installing dependencies from locked profile (first run may take a while)..."
+    if [ -f "backend/requirements-cpu.lock" ] && pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r backend/requirements-cpu.lock --quiet; then
+        if ! pip check --quiet; then
+            err "ERROR: Python dependency check failed."
+            exit 1
+        fi
+        printf '%s' "$PYTHON_DEPS_SIGNATURE" > "$PYTHON_DEPS_SIGNATURE_FILE"
+        touch .venv/installed
+        ok "Python dependencies installed"
+    elif pip install -r backend/requirements.txt --quiet; then
         if ! pip check --quiet; then
             err "ERROR: Python dependency check failed."
             exit 1

@@ -229,6 +229,28 @@ def test_adversarial_detection_of_cuda_in_cpu_lock() -> None:
     assert cuda_found is True, "Injected CUDA package must be detected."
 
 
+def test_pytesseract_and_supervisor_present_in_lockfiles() -> None:
+    """Verify pytesseract and supervisor are present and pinned in both lockfiles."""
+    for lock_path in (LOCK_CPU, LOCK_GPU):
+        pins = parse_lockfile_pins(lock_path)
+        assert "pytesseract" in pins, f"pytesseract must be pinned in {lock_path.name}"
+        assert pins["pytesseract"] == "0.3.13", f"Expected pytesseract==0.3.13 in {lock_path.name}, got {pins['pytesseract']}"
+        assert "supervisor" in pins, f"supervisor must be pinned in {lock_path.name}"
+
+
+def test_commit_sha_from_env_takes_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify get_git_commit_sha() respects MARKER_COMMIT_SHA."""
+    monkeypatch.setenv("MARKER_COMMIT_SHA", "abcdef1234567890")
+    assert get_git_commit_sha() == "abcdef1234567890"
+
+
+def test_verify_dependency_lock_strict_mode() -> None:
+    """Verify verify_dependency_lock supports strict mode."""
+    report = verify_dependency_lock(strict=True)
+    assert "mode" in report and report["mode"] == "strict"
+    assert "unexpected" in report
+
+
 def test_adversarial_lockfile_drift_detection(tmp_path: Path) -> None:
     """Adversarial check: check_lockfile detects when requirements change without updating lock."""
     req_file = tmp_path / "requirements.txt"
@@ -240,3 +262,4 @@ def test_adversarial_lockfile_drift_detection(tmp_path: Path) -> None:
     current_pins = extract_pinned_packages(stale_lock.read_text(encoding="utf-8"))
     updated_pins = extract_pinned_packages(req_file.read_text(encoding="utf-8"))
     assert current_pins != updated_pins, "Drift between stale lock and requirements must be detected."
+

@@ -34,6 +34,8 @@ KEY_PACKAGE_NAMES = (
     "alembic",
     "uvicorn",
     "faster-whisper",
+    "pytesseract",
+    "supervisor",
 )
 
 
@@ -155,8 +157,17 @@ def get_build_provenance(variant: str | None = None) -> dict[str, Any]:
     }
 
 
-def verify_dependency_lock(variant: str | None = None) -> dict[str, Any]:
-    """Verify runtime environment against the declared lockfile pins."""
+def verify_dependency_lock(
+    variant: str | None = None,
+    strict: bool = False,
+) -> dict[str, Any]:
+    """Verify runtime environment against the declared lockfile pins.
+
+    In standard mode (default), checks that all locked packages are installed at
+    the expected version.
+    In strict mode, also reports installed top-level packages that are not present
+    in the declared lockfile (excluding base system/build packages).
+    """
     active_variant = variant or detect_variant()
     lock_path = get_active_lock_path(active_variant)
 
@@ -166,11 +177,13 @@ def verify_dependency_lock(variant: str | None = None) -> dict[str, Any]:
             "error": f"Lockfile {lock_path.name} not found.",
             "mismatches": {},
             "missing": [],
+            "unexpected": [],
         }
 
     pins = parse_lockfile_pins(lock_path)
     mismatches: dict[str, dict[str, str]] = {}
     missing: list[str] = []
+    unexpected: list[str] = []
 
     for pkg, expected_ver in pins.items():
         installed = get_installed_package_version(pkg)
@@ -182,12 +195,31 @@ def verify_dependency_lock(variant: str | None = None) -> dict[str, Any]:
                 "installed": installed,
             }
 
-    return {
-        "ok": len(mismatches) == 0 and len(missing) == 0,
+    if strict:
+        # Ignore base tooling distributions
+        ignored = {"pip", "setuptools", "wheel", "uv", "pytest"}
+        try:
+            for dist in importlib.metadata.distributions():
+                name = dist.metadata["Name"].lower()
+                if name not in pins and name not in ignored and not name.startswith("pytest-"):
+                    unexpected.append(name)
+        except Exception:
+            pass
+
+    ok = len(mismatches) == 0 and len(missing) == 0 and (not strict or len(unexpected) == 0)
+
+    result: dict[str, Any] = {
+        "ok": ok,
         "lockfile": lock_path.name,
+        "mode": "strict" if strict else "standard",
         "total_pins": len(pins),
         "missing_count": len(missing),
         "mismatch_count": len(mismatches),
         "mismatches": mismatches,
         "missing": missing,
     }
+    if strict:
+        result["unexpected_count"] = len(unexpected)
+        result["unexpected"] = sorted(unexpected)
+
+    return result

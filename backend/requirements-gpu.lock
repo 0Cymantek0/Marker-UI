@@ -238,6 +238,7 @@ packaging==26.3
     # via
     #   huggingface-hub
     #   onnxruntime
+    #   pytesseract
     #   transformers
 pcodedmp==1.2.6
     # via oletools
@@ -246,6 +247,7 @@ pdftext==0.6.3
 pillow==10.4.0
     # via
     #   marker-pdf
+    #   pytesseract
     #   python-pptx
     #   surya-ocr
     #   torchvision
@@ -301,6 +303,8 @@ pypdfium2==4.30.0
     #   surya-ocr
 pyphen==0.18.1
     # via weasyprint
+pytesseract==0.3.13
+    # via -r backend/requirements.txt
 python-discovery==1.5.2
     # via virtualenv
 python-dotenv==1.0.1
@@ -383,6 +387,8 @@ starlette==0.41.3
     #   fastapi
     #   mcp
     #   sse-starlette
+supervisor==4.3.0
+    # via -r backend/requirements.txt
 surya-ocr==0.17.1
     # via marker-pdf
 sympy==1.14.0

@@ -7,12 +7,15 @@ on:
       - "docker-compose.yml"
       - "supervisord.conf"
       - "nginx.conf"
-      - "backend/requirements.txt"
+      - "backend/requirements*.txt"
+      - "backend/requirements-*.lock"
       - "backend/app/**"
+      - "backend/scripts/**"
+      - "backend/tests/**"
       - "frontend/**"
       - ".github/workflows/docker-smoke-test.yml"
   push:
-    branches: [master, main]
+    branches: [master, main, markerui-v2]
 
 jobs:
   smoke-test:
@@ -22,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t marker-ui:smoke .
+        run: docker build --build-arg COMMIT_SHA=${{ github.sha }} -t marker-ui:smoke .
 
       - name: Start container
         run: |
@@ -35,6 +38,15 @@ jobs:
             sleep 1
           done
           curl -sf http://localhost:3000/api/health || (docker logs marker-ui-smoke && exit 1)
+
+      - name: Verify build provenance inside container
+        run: |
+          docker exec marker-ui-smoke sh -lc '
+            python3 -m app.cli provenance
+            SHA=$(python3 -m app.cli provenance | python3 -c "import json,sys; print(json.load(sys.stdin)[\"commit_sha\"])")
+            echo "Reported commit_sha: $SHA, Expected: ${{ github.sha }}"
+            [ "$SHA" = "${{ github.sha }}" ] || (echo "FAIL: commit SHA mismatch" && exit 1)
+          '
 
       - name: Verify ffmpeg/ffprobe present as appuser
         run: |

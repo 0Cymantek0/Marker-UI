@@ -1,0 +1,53 @@
+name: Backend CI & Dependency Truth
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "Dockerfile"
+      - "docker-compose*.yml"
+      - "supervisord.conf"
+      - "nginx.conf"
+      - "pyproject.toml"
+      - "start.ps1"
+      - "start.sh"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [master, main, markerui-v2]
+
+jobs:
+  dependency-truth-and-tests:
+    name: Dependency Truth & Backend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install uv and locked dependencies
+        run: |
+          pip install --upgrade pip uv
+          pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r backend/requirements-cpu.lock
+
+      - name: Verify lockfile synchronization (fail-closed drift gate)
+        run: |
+          python backend/scripts/lock_dependencies.py --check
+
+      - name: Run Phase 0 Dependency & Build Truth tests
+        run: |
+          python -m pytest backend/tests/test_dependency_truth.py backend/tests/test_dockerfile.py -v
+
+      - name: Run full backend test suite
+        run: |
+          python -m pytest backend/tests/ -v
+
+      - name: Verify build provenance and runtime lock inspection
+        run: |
+          python -m app.cli provenance --verify

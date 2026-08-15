@@ -348,6 +348,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     prov = sub.add_parser("provenance", help="Show build provenance, commit SHA, and dependency lock status")
     prov.add_argument("--verify", action="store_true", help="Verify installed packages against active lockfile")
+    prov.add_argument("--strict", action="store_true", help="Verify exact environment isolation (no unexpected packages)")
     prov.add_argument("--variant", choices=["cpu", "gpu"], help="Explicit variant to inspect/verify")
     prov.add_argument("--json", action="store_true", default=True, help="Print JSON")
 
@@ -606,7 +607,10 @@ def _handle_provenance(args: argparse.Namespace) -> int:
     from app.build_info import get_build_provenance, verify_dependency_lock
 
     if getattr(args, "verify", False):
-        result = verify_dependency_lock(variant=getattr(args, "variant", None))
+        result = verify_dependency_lock(
+            variant=getattr(args, "variant", None),
+            strict=getattr(args, "strict", False),
+        )
         _print_result(result, args.json)
         return 0 if result.get("ok") else 1
 
