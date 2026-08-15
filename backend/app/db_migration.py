@@ -49,6 +49,12 @@ from alembic.script import ScriptDirectory
 
 from app.core.config import DATABASE_URL
 from app.database import Base  # noqa: F401 - shared declarative base
+from app.kernel.models import (  # noqa: F401 - register kernel spine tables
+    KernelCommitHead,
+    KernelCommitManifest,
+    KernelRecord,
+    KernelRecordEdge,
+)
 from app.models.audit import AuditEvent  # noqa: F401 - register tables on Base.metadata
 from app.models.job import ConversionJob  # noqa: F401
 from app.models.job_event import JobEvent  # noqa: F401

@@ -47,7 +47,20 @@ from app.db_migration import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
-EXPECTED_HEAD = "20260709_0003"
+EXPECTED_HEAD = "20260815_0004"
+EXPECTED_REVISION_CHAIN = [
+    "20260815_0004",
+    "20260709_0003",
+    "20260626_0002",
+    "20260626_0001",
+]
+APP_TABLES = {"conversion_jobs", "settings", "audit_events", "job_events"}
+KERNEL_TABLES = {
+    "kernel_commit_heads",
+    "kernel_commit_manifests",
+    "kernel_records",
+    "kernel_record_edges",
+}
 SENTINEL_JOB_ID = "sentinel-job"
 SENTINEL_CREATED_AT = "2026-08-15 00:00:00.000000"
 
@@ -167,7 +180,7 @@ async def test_m1_runner_initializes_empty_database_to_head(tmp_path: Path) -> N
     with closing(sqlite3.connect(db_path)) as conn:
         assert _version_row(conn) == EXPECTED_HEAD
         shape = _shape(conn)
-        assert set(shape) == {"conversion_jobs", "settings", "audit_events", "job_events"}
+        assert set(shape) == APP_TABLES | KERNEL_TABLES
         assert {"retry_count", "max_retries", "result_metadata_json", "formats_json"} <= shape[
             "conversion_jobs"
         ]
@@ -208,12 +221,7 @@ def test_m1_fresh_cli_upgrade_from_repo_scripts_creates_schema(tmp_path: Path) -
     assert completed.returncode == 0, completed.stderr
     with closing(sqlite3.connect(db_path)) as conn:
         assert _version_row(conn) == EXPECTED_HEAD
-        assert set(_shape(conn)) == {
-            "conversion_jobs",
-            "settings",
-            "audit_events",
-            "job_events",
-        }
+        assert set(_shape(conn)) == APP_TABLES | KERNEL_TABLES
 
 
 @pytest.mark.asyncio
@@ -362,7 +370,7 @@ async def test_m5_minimal_legacy_missing_table_and_columns(tmp_path: Path) -> No
     assert result.action == "adopted-legacy"
     with closing(sqlite3.connect(db_path)) as conn:
         assert _version_row(conn) == EXPECTED_HEAD
-        assert set(_shape(conn)) == {"conversion_jobs", "settings", "audit_events", "job_events"}
+        assert set(_shape(conn)) == APP_TABLES | KERNEL_TABLES
         _assert_sentinels(conn, include_job_events=False, include_audit=False)
 
 
@@ -608,7 +616,7 @@ async def test_m9_concurrent_cli_upgrades_serialize(tmp_path: Path) -> None:
         assert process.returncode == 0, stderr or stdout
     with closing(sqlite3.connect(db_path)) as conn:
         assert _version_row(conn) == EXPECTED_HEAD  # single version row, head
-        assert set(_shape(conn)) == {"conversion_jobs", "settings", "audit_events", "job_events"}
+        assert set(_shape(conn)) == APP_TABLES | KERNEL_TABLES
     assert not (tmp_path / "contended.db.migration.lock").exists()
 
 
@@ -622,11 +630,7 @@ def test_m11_single_expected_head_and_linear_history() -> None:
 
     script = db_migration.ScriptDirectory(str(db_migration.SCRIPT_LOCATION))
     revisions = list(script.walk_revisions())  # head -> base
-    assert [rev.revision for rev in revisions] == [
-        "20260709_0003",
-        "20260626_0002",
-        "20260626_0001",
-    ]
+    assert [rev.revision for rev in revisions] == EXPECTED_REVISION_CHAIN
     assert revisions[-1].down_revision is None
 
 

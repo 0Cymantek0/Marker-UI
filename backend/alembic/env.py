@@ -16,6 +16,12 @@ from app.models.settings import Setting  # noqa: F401
 from app.models.job import ConversionJob  # noqa: F401
 from app.models.audit import AuditEvent  # noqa: F401
 from app.models.job_event import JobEvent  # noqa: F401
+from app.kernel.models import (  # noqa: F401
+    KernelCommitHead,
+    KernelCommitManifest,
+    KernelRecord,
+    KernelRecordEdge,
+)
 
 config = context.config
 
