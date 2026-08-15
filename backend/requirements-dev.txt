@@ -1,0 +1,5 @@
+# Development/test-only dependencies. NOT part of runtime dependency truth:
+# these are never installed into the Docker image and are excluded from the
+# CPU/GPU locks. CI installs them after the locked runtime set.
+pytest==8.3.4
+pytest-asyncio==0.24.0
