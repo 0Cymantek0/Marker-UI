@@ -15,7 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()  # Load .env file if present
 
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR  # noqa: E402
-from app.database import create_tables  # noqa: E402
 from app.models.audit import AuditEvent  # noqa: E402, F401 - register table metadata
 from app.models.job_event import JobEvent  # noqa: E402, F401 - register table metadata
 from app.routes import capabilities, convert, diagnostics, models, settings  # noqa: E402
@@ -174,8 +173,11 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Create DB tables
-    await create_tables()
+    # Runtime gate: Alembic owns persistent schema. Startup validates
+    # compatibility and refuses to serve against an unproven database;
+    # it never creates or repairs schema (see app.db_migration).
+    from app.db_migration import verify_database_ready
+    await verify_database_ready()
 
     # Load secrets cache and register live API interceptor monkeypatch
     from app.core.api_manager import load_secrets_from_db, setup_api_manager_monkeypatch

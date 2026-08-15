@@ -2,7 +2,7 @@
 
 import pytest
 from httpx import AsyncClient
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 from app.services.gpu_service import gpu_service
 from app.models.settings import Setting
 from sqlalchemy import select
@@ -97,7 +97,7 @@ async def test_startup_gpu_install_trigger(settings_session):
          patch("app.services.gpu_service.GPUService.status_dict", new_callable=PropertyMock) as mock_status, \
          patch("app.services.gpu_service.gpu_service.start_install") as mock_start, \
          patch("app.main._load_models_background"), \
-         patch("app.main.create_tables"), \
+         patch("app.db_migration.verify_database_ready", new_callable=AsyncMock), \
          patch("app.core.api_manager.load_secrets_from_db"):
 
         class AsyncContextMock:

@@ -36,7 +36,8 @@ from app.conversion.formats import (
 from app.conversion.probe import probe_pdf
 from app.core.config import OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
-from app.database import async_session_factory, create_tables
+from app.database import async_session_factory
+from app.db_migration import verify_database_ready
 from app.errors import (
     InputNotAllowedError,
     InputNotFoundError,
@@ -76,7 +77,7 @@ DEFAULT_PREVIEW_CHARS = 20_000
 MAX_READ_CHARS = 100_000
 
 _db_session_factory = async_session_factory
-_db_tables_ready = False
+_db_ready = False
 
 
 def parse_extra_options(items: list[str] | None) -> dict[str, Any]:
@@ -437,7 +438,7 @@ async def submit_conversion_job(
 ) -> dict[str, Any]:
     if bool(local_file_path) == bool(source_url):
         raise UsageError("Provide exactly one of local_file_path or source_url")
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     options = options or AgentConversionOptions()
     job_id = str(uuid.uuid4())
     is_local = False
@@ -863,7 +864,7 @@ def _read_text_chunk(path: Path, *, offset: int, limit: int) -> str:
 
 
 async def list_jobs(*, page: int = 1, page_size: int = 20) -> dict[str, Any]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     page = max(1, page)
     page_size = max(1, min(page_size, 100))
     offset = (page - 1) * page_size
@@ -893,7 +894,7 @@ async def get_job_status(
     include_result_text: bool = False,
     max_chars: int = DEFAULT_PREVIEW_CHARS,
 ) -> dict[str, Any]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     max_chars = max(0, min(max_chars, MAX_READ_CHARS))
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
@@ -920,7 +921,7 @@ async def delete_job(
     delete_files: bool = True,
     force: bool = False,
 ) -> dict[str, Any]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
         if not job:
@@ -945,7 +946,7 @@ async def delete_job(
 async def purge_job_files(job_id: str) -> dict[str, Any]:
     """Remove upload/output artifacts for a terminal job while preserving history."""
 
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
         if not job:
@@ -982,7 +983,7 @@ async def purge_job_files(job_id: str) -> dict[str, Any]:
 
 
 async def cancel_job(job_id: str) -> dict[str, Any]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     async with _db_session_factory() as session:
         job = await session.get(ConversionJob, job_id)
         if not job:
@@ -1015,7 +1016,7 @@ async def cancel_job(job_id: str) -> dict[str, Any]:
 
 
 async def list_settings(*, category: str | None = None) -> dict[str, Any]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     async with _db_session_factory() as session:
         stmt = select(Setting).order_by(Setting.category, Setting.key)
         if category:
@@ -1028,7 +1029,7 @@ async def list_settings(*, category: str | None = None) -> dict[str, Any]:
 
 
 async def get_setting(key: str, *, category: str | None = None) -> dict[str, Any]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     async with _db_session_factory() as session:
         row = await _get_setting_row(session, key, category=category)
         if not row:
@@ -1040,7 +1041,7 @@ async def get_setting(key: str, *, category: str | None = None) -> dict[str, Any
 
 
 async def set_setting(key: str, value: str, *, category: str = "general") -> dict[str, Any]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     async with _db_session_factory() as session:
         row = await _get_setting_row(session, key)
         existed = row is not None
@@ -1078,7 +1079,7 @@ async def set_setting(key: str, value: str, *, category: str = "general") -> dic
 
 
 async def delete_setting(key: str, *, category: str | None = None) -> dict[str, str]:
-    await _ensure_db_tables()
+    await _ensure_db_ready()
     async with _db_session_factory() as session:
         stmt = delete(Setting).where(Setting.key == key)
         if category:
@@ -1326,12 +1327,12 @@ def _get_app_state() -> Any:
     return _app_state
 
 
-async def _ensure_db_tables() -> None:
-    global _db_tables_ready
-    if _db_tables_ready or _db_session_factory is not async_session_factory:
+async def _ensure_db_ready() -> None:
+    global _db_ready
+    if _db_ready or _db_session_factory is not async_session_factory:
         return
-    await create_tables()
-    _db_tables_ready = True
+    await verify_database_ready()
+    _db_ready = True
 
 
 async def _load_llm_config_for_options(config: dict[str, Any]) -> dict[str, Any]:
