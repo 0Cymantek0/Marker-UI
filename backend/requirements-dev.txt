@@ -6,3 +6,6 @@ pytest-asyncio==0.24.0
 # Test-fixture generators (backend/tests/office_fixtures.py) build synthetic
 # docx files; python-pptx/openpyxl already ship as runtime dependencies.
 python-docx==1.2.0
+# Synthetic PDF generation for tests and benchmark corpus tooling
+# (deferred imports in app code, module-level in tests).
+reportlab==5.0.0
