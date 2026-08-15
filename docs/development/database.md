@@ -1,53 +1,79 @@
 # Database Schema & Migrations
 
-Marker UI uses **SQLite** as its storage engine, managed through **SQLAlchemy** (using asynchronous `aiosqlite`). Runtime startup creates missing tables and self-heals additive column gaps. Alembic migration files are present for developer-managed schema work, but the application does not currently run `alembic upgrade head` automatically on startup.
+Marker UI uses **SQLite** as its storage engine, managed through **SQLAlchemy** (asynchronous `aiosqlite`).
 
----
+**Alembic is the sole persistent schema authority** (V3.2 PR62):
 
-## Schema Models
+- Application startup **never creates, repairs, or mutates schema**. The runtime
+  only *validates* that the database is at the current migration head and
+  structurally compatible; if it is not, startup fails closed with an
+  actionable diagnostic instead of attempting repairs.
+- Every persistent schema change is an Alembic revision under
+  `backend/alembic/versions/`.
+- All supported launch paths (`start.sh`, `start.ps1`, the container entrypoint
+  via `supervisord.conf`) run the migration phase **before** Uvicorn starts.
+- Concurrent launchers are serialized by a lock file
+  (`<database>.migration.lock`); one migration writer at a time.
 
-The database contains two main tables:
+## Operational commands
 
-### 1. `ConversionJob` Model (mapped to `conversion_jobs` table)
-Tracks document conversions.
-- `id`: String(36) UUID (Primary Key).
-- `filename`: String(512).
-- `original_name`: String(512).
-- `status`: String(20) (`pending`, `processing`, `completed`, `failed`).
-- `input_format` / `output_format`: String(20).
-- `config_json`: Text (JSON string of input parameters).
-- `result_text`: Text (final Markdown result).
-- `result_metadata_json`: Text (JSON metadata, including image-understanding info).
-- `result_path`: String(1024) (output directory path).
-- `error_message`: Text (nullable).
-- `progress`: Integer (0 to 100).
-- `created_at` / `updated_at` / `completed_at`: DateTime.
+Run from the `backend/` directory:
 
-### 2. `Setting` Model (mapped to `settings` table)
-Stores key-value configurations.
-- `id`: Integer (Primary Key, autoincrements).
-- `key`: String(255) (unique, indexed).
-- `value`: Text.
-- `category`: String(100) (`general`, `llm`, `gpu`, etc.).
-- `created_at` / `updated_at`: DateTime.
+```bash
+# Bring the database to the migration head (the ONLY schema-mutating command)
+python -m app.db_migration upgrade
 
----
+# Inspect migration state (revision, head, problems)
+python -m app.db_migration status
 
-## Migrations
+# Exit 0 if the database is ready for app runtime, 1 otherwise
+python -m app.db_migration check
 
-All schema changes must be versioned. If you add fields to database models in `backend/app/models/job.py` or `backend/app/models/settings.py`:
+# Override the target database (defaults to MARKER_DATABASE_URL / app config)
+python -m app.db_migration upgrade --url "sqlite+aiosqlite:////path/to/db.sqlite"
+```
 
-1. Generate the migration file:
+Raw Alembic remains available for development workflows:
+
+```bash
+alembic -c backend/alembic.ini upgrade head   # from the repository root
+```
+
+## Database states and how they are handled
+
+| Database state | Behavior |
+|---|---|
+| No database / empty database | `upgrade` initializes it to the migration head. |
+| At head and structurally valid | `upgrade` is a no-op; startup proceeds (zero schema churn). |
+| At a known older revision | `upgrade` applies revisions to head; existing rows are preserved. |
+| Legacy database without `alembic_version` | Shape is validated (no unknown tables/columns, compatible type affinities), then the guarded revision chain is replayed from the base revision. Rows are preserved. |
+| Claims head but physically broken (missing table/column) | **Fails closed.** Nothing is repaired; the diagnostic names the missing object. |
+| Unknown revision, foreign schema, or partially-equivalent shape | **Fails closed** with an actionable description of the divergence. |
+| Another migration writer holds the lock | `upgrade` waits (default 60 s), then fails with instructions; stale locks from dead processes are recovered automatically. |
+
+## Making a schema change
+
+1. Update the model in `backend/app/models/` (and register any new model
+   module in `backend/alembic/env.py`).
+2. Generate and hand-check a revision:
+
    ```bash
    cd backend
-   alembic revision --autogenerate -m "Describe your changes"
+   alembic revision --autogenerate -m "Describe your change"
    ```
-2. Apply the migration locally:
-   ```bash
-   alembic upgrade head
-   ```
-3. Apply migrations manually for any environment that depends on Alembic version history:
-   ```bash
-   alembic upgrade head
-   ```
-4. For current local runtime startup, `create_tables()` also creates missing tables and applies additive missing-column repairs so older SQLite databases keep working. Non-additive changes still require a real migration.
+
+3. `python -m app.db_migration upgrade` to apply locally, then run the test
+   suite. `tests/test_database_migration.py` fails if ORM metadata and the
+   migration head drift apart (a model change without a revision fails CI).
+
+Note for SQLite: only a constrained set of `ALTER TABLE` operations exist
+natively; use Alembic batch operations (`op.batch_alter_table`) for drops,
+renames, or type changes.
+
+## Schema models
+
+- `ConversionJob` → `conversion_jobs` — document conversion jobs (status,
+  formats, config, results, durable-queue/lease fields).
+- `Setting` → `settings` — key-value configuration.
+- `AuditEvent` → `audit_events` — redacted audit trail.
+- `JobEvent` → `job_events` — per-job progress/event log.

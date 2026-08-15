@@ -37,10 +37,10 @@ marker-ui/
 
 ### 3. SQLite Database (`data/marker_ui.db`)
 - Houses metadata for all jobs and system settings.
-- Initialized automatically at startup with SQLAlchemy metadata checks.
-- Existing local databases self-heal additive column changes at startup. Alembic
-  migrations are available for developer-managed schema changes, but the runtime
-  does not currently run `alembic upgrade head` automatically.
+- Alembic is the sole persistent schema authority: all supported launch paths
+  (`start.sh`, `start.ps1`, the container) run migrations to head before the
+  backend starts; application startup validates compatibility and never
+  creates or repairs schema. See [Database Schema & Migrations](../development/database.md).
 
 ### 4. Fernet Key File (`data/.secret_key`)
 - Auto-generated on the first system start.

@@ -15,7 +15,7 @@ so contributors can see where help is useful.
 | Audio / voice notes | Partial alpha: local faster-whisper route only; cloud STT, real diarization, and provider comparison are deferred |
 | Video | Experimental local demux, transcription, keyframe/OCR provenance |
 | VLM image understanding | Opt-in alpha; cloud calls require explicit consent |
-| Database migrations | Startup creates tables and additive column repairs; Alembic upgrades are developer-managed |
+| Database migrations | Alembic is the sole schema authority; launch paths migrate to head automatically; incompatible states fail closed |
 
 ## Output Formats
 
