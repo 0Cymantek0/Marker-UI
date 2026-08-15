@@ -47,11 +47,14 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Create an async engine and run migrations within it."""
+    # Programmatic runners (app.db_migration) pass their URL via config
+    # attributes; CLI invocations fall back to the configured DATABASE_URL.
+    url = config.attributes.get("database_url") or DATABASE_URL
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        config.get_section(config.config_ini_section, {}) or {},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        url=DATABASE_URL,
+        url=url,
     )
 
     async with connectable.connect() as connection:
