@@ -52,7 +52,15 @@ PR64_TABLES = {
 
 PREVIOUS_HEAD = "20260709_0003"
 PR63A_HEAD = "20260815_0004"
-CURRENT_HEAD = "20260815_0005"
+PR64_HEAD = "20260815_0005"
+CURRENT_HEAD = "20260815_0006"
+
+PR65A_TABLES = {
+    "kernel_generations",
+    "kernel_generation_records",
+    "kernel_generation_edges",
+    "kernel_generation_heads",
+}
 
 
 def _db_url(path: Path) -> str:

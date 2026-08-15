@@ -1,5 +1,5 @@
 """Truth Kernel persistence models (V3.2 PR63A commit spine + PR64
-payload durability and outbox).
+payload durability and outbox + PR65A materialized generations).
 
 Six tables establish the durable commit authority:
 
@@ -24,6 +24,23 @@ Six tables establish the durable commit authority:
 * ``kernel_outbox`` (PR64) — durable successor-work intent enqueued in
   the same transaction as its authorizing commit. Delivery is at-least-
   once; the dedupe key makes consumers idempotent.
+
+Four PR65A tables hold the materialized read model (revision
+``20260815_0006``). They are **derived, rebuildable state — never a
+second truth authority**: every row is copied from the committed kernel
+cut named by its generation and can be discarded and rebuilt at any time:
+
+* ``kernel_generations`` — one immutable manifest row per materialized
+  generation: the pinned snapshot identity, materializer/schema/config
+  identity, lifecycle state (staged/validated/active/superseded/failed),
+  and the deterministic content digest of the materialized view.
+* ``kernel_generation_records`` — committed record metadata materialized
+  into the generation, bounded to the snapshot cut.
+* ``kernel_generation_edges`` — dependency edges materialized into the
+  generation, bounded to the snapshot cut.
+* ``kernel_generation_heads`` — one row per workspace naming the current
+  accepted read generation. The single atomic pointer switch happens on
+  this row; readers resolve it once and pin the named generation.
 
 Wall-clock timestamps on these tables are audit metadata only. Causal
 order is ``kernel_commit_id``; nothing in this module may use timestamps
@@ -57,6 +74,9 @@ MAX_WORK_KIND_LENGTH = 64
 MAX_OUTBOX_STATE_LENGTH = 16
 MAX_STORE_PROFILE_LENGTH = 64
 MAX_STORAGE_LOCATOR_LENGTH = 256
+MAX_GENERATION_STATE_LENGTH = 16
+MAX_COMPLETENESS_LENGTH = 16
+MAX_PAYLOAD_REQUIREMENT_LENGTH = 24
 
 
 class KernelCommitHead(Base):
@@ -265,3 +285,140 @@ class KernelOutbox(Base):
             f"<KernelOutbox(id={self.id}, kind={self.work_kind!r}, "
             f"commit={self.kernel_commit_id}, state={self.state!r})>"
         )
+
+
+class KernelGeneration(Base):
+    """Immutable manifest row for one materialized generation (PR65A).
+
+    ``generation_id`` is deterministic: the same pinned snapshot plus the
+    same declared materializer/schema/config identity always derive the
+    same id, so a rebuild of the same declared inputs either matches the
+    stored ``content_digest`` exactly (idempotent reuse) or fails closed
+    as an integrity violation. Rows are never mutated except for the
+    lifecycle ``state``/timestamp columns; materialized content is
+    append-only and immutable once staged.
+    """
+
+    __tablename__ = "kernel_generations"
+
+    generation_id: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_id: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    materializer_id: Mapped[str] = mapped_column(
+        String(MAX_RECORD_TYPE_LENGTH), nullable=False
+    )
+    materializer_version: Mapped[str] = mapped_column(
+        String(MAX_SCHEMA_VERSION_LENGTH), nullable=False
+    )
+    schema_version: Mapped[str] = mapped_column(
+        String(MAX_SCHEMA_VERSION_LENGTH), nullable=False
+    )
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    state: Mapped[str] = mapped_column(
+        String(MAX_GENERATION_STATE_LENGTH), index=True, nullable=False
+    )
+    content_digest: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    commit_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    record_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    edge_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    record_class_counts_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    required_payload_state: Mapped[str] = mapped_column(
+        String(MAX_PAYLOAD_REQUIREMENT_LENGTH), nullable=False
+    )
+    completeness: Mapped[str] = mapped_column(
+        String(MAX_COMPLETENESS_LENGTH), nullable=False
+    )
+    payload_state_counts_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelGeneration(id={self.generation_id!r}, cut={self.kernel_commit_id}, "
+            f"state={self.state!r})>"
+        )
+
+
+class KernelGenerationRecord(Base):
+    """Committed record metadata materialized into one generation.
+
+    Derived state: copied verbatim from ``kernel_records`` for every
+    record whose commit is ``<=`` the generation's pinned cut. Never
+    mutated after staging; discardable and rebuildable at any time.
+    """
+
+    __tablename__ = "kernel_generation_records"
+
+    generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), primary_key=True
+    )
+    record_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), nullable=False
+    )
+    kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    record_class: Mapped[str] = mapped_column(String(MAX_RECORD_CLASS_LENGTH), nullable=False)
+    record_type: Mapped[str] = mapped_column(String(MAX_RECORD_TYPE_LENGTH), nullable=False)
+    schema_version: Mapped[str] = mapped_column(
+        String(MAX_SCHEMA_VERSION_LENGTH), nullable=False
+    )
+    identity_hash: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_byte_hash: Mapped[str | None] = mapped_column(String(MAX_HASH_LENGTH), nullable=True)
+    payload_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelGenerationRecord(generation={self.generation_id!r}, "
+            f"record={self.record_id!r})>"
+        )
+
+
+class KernelGenerationEdge(Base):
+    """Dependency edge materialized into one generation (derived state)."""
+
+    __tablename__ = "kernel_generation_edges"
+
+    generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), primary_key=True
+    )
+    edge_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), nullable=False
+    )
+    kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    edge_kind: Mapped[str] = mapped_column(String(MAX_EDGE_KIND_LENGTH), nullable=False)
+    source_record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    target_record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelGenerationEdge(generation={self.generation_id!r}, "
+            f"edge={self.edge_id!r})>"
+        )
+
+
+class KernelGenerationHead(Base):
+    """Current accepted read generation for one workspace (PR65A).
+
+    One row per workspace; the single atomic current-generation switch is
+    the transactional update of this row. Readers resolve it once and pin
+    the named generation for their whole request.
+    """
+
+    __tablename__ = "kernel_generation_heads"
+
+    workspace_id: Mapped[str] = mapped_column(String(MAX_WORKSPACE_ID_LENGTH), primary_key=True)
+    current_generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
