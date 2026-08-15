@@ -1,6 +1,7 @@
 name: Docker smoke test
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - "Dockerfile"

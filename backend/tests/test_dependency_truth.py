@@ -13,9 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import pytest
 from packaging.specifiers import SpecifierSet
@@ -27,19 +25,17 @@ from app.build_info import (
     get_build_provenance,
     get_git_commit_sha,
     get_key_package_versions,
+    marker_applies,
     parse_lockfile_pins,
+    parse_lockfile_records,
     verify_dependency_lock,
 )
 from scripts.lock_dependencies import (
-    CPU_EXTRA_INDEX,
-    GPU_EXTRA_INDEX,
     LOCK_CPU,
     LOCK_GPU,
     REQ_CORE,
-    REQ_CPU,
-    REQ_GPU,
-    check_lockfile,
     extract_pinned_packages,
+    extract_semantic_pins,
 )
 
 
@@ -209,7 +205,67 @@ def test_verify_dependency_lock_against_current_env() -> None:
 
 
 # ===========================================================================
-# 5. Adversarial & Failure Injection Tests
+# 5. Platform / Marker Semantics (universal CPU lock contract)
+# ===========================================================================
+
+def test_pywin32_is_marker_scoped_in_cpu_lock() -> None:
+    """Regression for the Phase 0 defect: pywin32 (via mcp) must never be
+    unconditionally pinned. An unconditional pin made the lock uninstallable
+    on Linux (CI + Docker) because pywin32 has no Linux distribution."""
+    records = {name: marker for name, _ver, marker in parse_lockfile_records(LOCK_CPU)}
+    assert "pywin32" in records, "pywin32 must be represented in the universal CPU lock"
+    assert "win32" in records["pywin32"], (
+        f"pywin32 must be gated to Windows via an environment marker, got: "
+        f"'{records['pywin32']}' — an unconditional pin breaks Linux installs"
+    )
+
+
+def test_platform_only_packages_carry_markers_in_cpu_lock() -> None:
+    """Any pin whose package only ships for a subset of platforms must be
+    marker-scoped in the universal lock."""
+    known_platform_packages = {"pywin32", "uvloop"}  # uvloop ships no Windows wheels
+    for name, _ver, marker in parse_lockfile_records(LOCK_CPU):
+        if name in known_platform_packages:
+            assert marker, (
+                f"Platform-specific package '{name}' must carry an environment "
+                f"marker in the universal CPU lock"
+            )
+
+
+def test_marker_applies_evaluation() -> None:
+    """marker_applies evaluates PEP 508 markers against the current runtime."""
+    # Markers that are false on every supported runtime (CPython 3.11+).
+    assert marker_applies("") is True
+    assert marker_applies("python_version >= '3.11'") is True
+    assert marker_applies("python_version < '3.0'") is False
+
+
+def test_marker_applies_fails_closed_on_garbage() -> None:
+    """An unparseable marker must be treated as applicable (fail closed)."""
+    assert marker_applies("this is !! not a marker") is True
+
+
+def test_gpu_lock_targets_linux_and_has_no_win32_pins() -> None:
+    """The GPU lock is an explicit Linux x86_64 resolution: pywin32 must be
+    absent entirely and no win32-gated pins may appear."""
+    content = LOCK_GPU.read_text(encoding="utf-8")
+    pins = parse_lockfile_pins(LOCK_GPU)
+    assert "pywin32" not in pins, "Linux-target GPU lock must not contain pywin32"
+    for name, _ver, marker in parse_lockfile_records(LOCK_GPU):
+        assert "win32" not in marker, (
+            f"win32-gated pin '{name}' makes no sense in a Linux-target lock"
+        )
+
+
+def test_cpu_lock_marker_distinction_survives_pin_parsing() -> None:
+    """The universal CPU lock must actually contain marker-scoped pins;
+    if every marker were stripped during generation this test fails."""
+    markers = [m for _n, _v, m in parse_lockfile_records(LOCK_CPU) if m]
+    assert markers, "Universal CPU lock is expected to carry environment markers"
+
+
+# ===========================================================================
+# 6. Adversarial & Failure Injection Tests
 # ===========================================================================
 
 def test_adversarial_rejection_of_unbounded_mcp() -> None:
@@ -227,6 +283,29 @@ def test_adversarial_detection_of_cuda_in_cpu_lock() -> None:
     pins = extract_pinned_packages(fake_cpu_lock)
     cuda_found = any(pkg.startswith("nvidia-") or "cuda" in pkg for pkg in pins)
     assert cuda_found is True, "Injected CUDA package must be detected."
+
+
+def test_adversarial_unconditional_platform_pin_is_detectable() -> None:
+    """Adversarial check: a platform-only pin with its marker stripped must be
+    distinguishable from the correctly gated pin (semantic, marker-aware parse)."""
+    gated = "pywin32==312 ; sys_platform == 'win32'\n"
+    ungated = "pywin32==312\n"
+
+    gated_pins = extract_semantic_pins(gated)
+    ungated_pins = extract_semantic_pins(ungated)
+    assert gated_pins != ungated_pins, (
+        "Marker removal must change the semantic pin record — otherwise drift "
+        "checking discards the information that keeps the lock cross-platform"
+    )
+    assert gated_pins[0].marker == "sys_platform == 'win32'"
+    assert ungated_pins[0].marker == ""
+
+
+def test_adversarial_version_change_is_detectable() -> None:
+    """Adversarial check: same package+marker, different version must differ."""
+    a = extract_semantic_pins("pywin32==312 ; sys_platform == 'win32'\n")
+    b = extract_semantic_pins("pywin32==311 ; sys_platform == 'win32'\n")
+    assert a != b
 
 
 def test_pytesseract_and_supervisor_present_in_lockfiles() -> None:
@@ -251,15 +330,9 @@ def test_verify_dependency_lock_strict_mode() -> None:
     assert "unexpected" in report
 
 
-def test_adversarial_lockfile_drift_detection(tmp_path: Path) -> None:
-    """Adversarial check: check_lockfile detects when requirements change without updating lock."""
-    req_file = tmp_path / "requirements.txt"
-    req_file.write_text("fastapi==0.115.6\npydantic==2.13.4\n", encoding="utf-8")
-
-    stale_lock = tmp_path / "stale.lock"
-    stale_lock.write_text("fastapi==0.115.6\npydantic==2.11.0\n", encoding="utf-8")
-
-    current_pins = extract_pinned_packages(stale_lock.read_text(encoding="utf-8"))
-    updated_pins = extract_pinned_packages(req_file.read_text(encoding="utf-8"))
-    assert current_pins != updated_pins, "Drift between stale lock and requirements must be detected."
+def test_adversarial_lockfile_drift_detection() -> None:
+    """Adversarial check: semantic pins differ when requirements change without updating lock."""
+    req_pins = extract_semantic_pins("fastapi==0.115.6\npydantic==2.13.4\n")
+    stale_lock_pins = extract_semantic_pins("fastapi==0.115.6\npydantic==2.11.0\n")
+    assert req_pins != stale_lock_pins, "Drift between stale lock and requirements must be detected."
 

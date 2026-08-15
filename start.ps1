@@ -141,47 +141,29 @@ $pythonDepsSignatureFile = Join-Path ".venv" "requirements.sha256"
 $pythonDepsInstalled = (Test-Path $installedFlag) -and (Test-Path $pythonDepsSignatureFile) -and ((Get-Content $pythonDepsSignatureFile -Raw).Trim() -eq $pythonDepsSignature.Trim())
 if (-not $pythonDepsInstalled) {
     Write-Host "  Installing dependencies from locked profile (first run may take a while)..." -ForegroundColor DarkGray
+    # The CPU lock is a universal, marker-preserving resolution: it installs
+    # on Windows/Linux/macOS. No unconstrained fallback - a broken lock must
+    # fail loudly, never silently re-resolve around committed dependency truth.
     $cpuLock = "backend/requirements-cpu.lock"
-    if (Test-Path $cpuLock) {
-        & $venvPip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r $cpuLock --quiet
-    } else {
-        & $venvPip install -r backend/requirements.txt --quiet
-    }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  WARNING: Locked profile install failed, falling back to requirements.txt..." -ForegroundColor DarkYellow
-        & $venvPip install -r backend/requirements.txt --quiet
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  WARNING: Full install failed, retrying without [full] extra..." -ForegroundColor DarkYellow
-            
-            $tempReqs = Join-Path "backend" "requirements_min.txt"
-            Get-Content backend/requirements.txt | Where-Object {
-                $_ -notmatch "marker-pdf\[full\]"
-            } | Set-Content $tempReqs
-            
-            & $venvPip install -r $tempReqs --quiet
-            $minInstallStatus = $LASTEXITCODE
-            
-            if (Test-Path $tempReqs) { Remove-Item $tempReqs -Force }
-            
-            if ($minInstallStatus -eq 0) {
-                & $venvPip install marker-pdf --quiet
-            }
-        }
-    }
-    
-    if ($LASTEXITCODE -eq 0) {
-        & $venvPip check --quiet
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  ERROR: Python dependency check failed." -ForegroundColor Red
-            exit 1
-        }
-        Set-Content -Path $pythonDepsSignatureFile -Value $pythonDepsSignature -Encoding UTF8
-        New-Item -ItemType File -Path $installedFlag -Force | Out-Null
-        Write-Host "  Python dependencies installed" -ForegroundColor Green
-    } else {
-        Write-Host "  ERROR: Python dependency installation failed." -ForegroundColor Red
+    if (-not (Test-Path $cpuLock)) {
+        Write-Host "  ERROR: backend/requirements-cpu.lock not found. Run 'python backend/scripts/lock_dependencies.py' to generate it." -ForegroundColor Red
         exit 1
     }
+    & $venvPip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r $cpuLock --quiet
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: Locked dependency install failed." -ForegroundColor Red
+        Write-Host "  Run 'python backend/scripts/lock_dependencies.py' to regenerate the lock," -ForegroundColor Red
+        Write-Host "  or 'python backend/scripts/lock_dependencies.py --check' to diagnose drift." -ForegroundColor Red
+        exit 1
+    }
+    & $venvPip check --quiet
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ERROR: Python dependency check failed." -ForegroundColor Red
+        exit 1
+    }
+    Set-Content -Path $pythonDepsSignatureFile -Value $pythonDepsSignature -Encoding UTF8
+    New-Item -ItemType File -Path $installedFlag -Force | Out-Null
+    Write-Host "  Python dependencies installed" -ForegroundColor Green
 } else {
     Write-Host "  Python dependencies already current." -ForegroundColor DarkGray
 }

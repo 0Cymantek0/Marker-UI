@@ -93,37 +93,26 @@ PYTHON_DEPS_SIGNATURE="$(dependency_signature backend/requirements.txt backend/r
 PYTHON_DEPS_SIGNATURE_FILE=".venv/requirements.sha256"
 if [ ! -f ".venv/installed" ] || [ ! -f "$PYTHON_DEPS_SIGNATURE_FILE" ] || [ "$(cat "$PYTHON_DEPS_SIGNATURE_FILE")" != "$PYTHON_DEPS_SIGNATURE" ]; then
     info "Installing dependencies from locked profile (first run may take a while)..."
-    if [ -f "backend/requirements-cpu.lock" ] && pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r backend/requirements-cpu.lock --quiet; then
-        if ! pip check --quiet; then
-            err "ERROR: Python dependency check failed."
-            exit 1
-        fi
-        printf '%s' "$PYTHON_DEPS_SIGNATURE" > "$PYTHON_DEPS_SIGNATURE_FILE"
-        touch .venv/installed
-        ok "Python dependencies installed"
-    elif pip install -r backend/requirements.txt --quiet; then
-        if ! pip check --quiet; then
-            err "ERROR: Python dependency check failed."
-            exit 1
-        fi
-        printf '%s' "$PYTHON_DEPS_SIGNATURE" > "$PYTHON_DEPS_SIGNATURE_FILE"
-        touch .venv/installed
-        ok "Python dependencies installed"
-    else
-        warn "Full install had issues, retrying without [full] extra..."
-        if grep -v "marker-pdf\[full\]" backend/requirements.txt | pip install -r /dev/stdin --quiet && pip install marker-pdf --quiet; then
-            if ! pip check --quiet; then
-                err "ERROR: Python dependency check failed."
-                exit 1
-            fi
-            printf '%s' "$PYTHON_DEPS_SIGNATURE" > "$PYTHON_DEPS_SIGNATURE_FILE"
-            touch .venv/installed
-            ok "Python dependencies installed"
-        else
-            err "ERROR: Python dependency installation failed."
-            exit 1
-        fi
+    # The CPU lock is a universal, marker-preserving resolution: it installs
+    # on Linux/macOS/Windows. No unconstrained fallback — a broken lock must
+    # fail loudly, never silently re-resolve around committed dependency truth.
+    if [ ! -f "backend/requirements-cpu.lock" ]; then
+        err "ERROR: backend/requirements-cpu.lock not found. Run 'python backend/scripts/lock_dependencies.py' to generate it."
+        exit 1
     fi
+    if ! pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r backend/requirements-cpu.lock --quiet; then
+        err "ERROR: Locked dependency install failed."
+        err "Run 'python backend/scripts/lock_dependencies.py' to regenerate the lock,"
+        err "or 'python backend/scripts/lock_dependencies.py --check' to diagnose drift."
+        exit 1
+    fi
+    if ! pip check --quiet; then
+        err "ERROR: Python dependency check failed."
+        exit 1
+    fi
+    printf '%s' "$PYTHON_DEPS_SIGNATURE" > "$PYTHON_DEPS_SIGNATURE_FILE"
+    touch .venv/installed
+    ok "Python dependencies installed"
 else
     info "Python dependencies already current."
 fi

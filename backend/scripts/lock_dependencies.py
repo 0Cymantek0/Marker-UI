@@ -1,18 +1,40 @@
 #!/usr/bin/env python3
 """Deterministic backend dependency locking tool using uv.
 
-Compiles top-level dependency requirements into exact, reproducible lockfiles
-for both CPU and GPU variants.
+Lock contract
+-------------
+CPU lock (`requirements-cpu.lock`):
+    Universal resolution (`--universal --python-version 3.11`). Environment
+    markers are preserved so platform-only dependencies (e.g. pywin32 via
+    mcp) are gated to their platform. The same artifact installs truthfully
+    on Linux (CI + Docker) and on Windows/macOS developer hosts.
+
+GPU lock (`requirements-gpu.lock`):
+    Explicit target resolution for Linux x86_64 / CPython 3.11
+    (`--python-platform x86_64-unknown-linux-gnu --python-version 3.11`).
+    CUDA wheels only exist for that platform, so the GPU lock is consumed
+    exclusively by the GPU Docker image and Linux GPU deployments.
+
+Both locks are compiled deterministically regardless of the contributor's
+host OS: uv resolves against the declared target(s), never the host.
+Compilation always targets a fresh temporary output with --refresh, so
+neither a pre-existing lockfile (uv prefers previously pinned versions)
+nor a stale local uv index cache can influence resolution. Generation and
+drift checking therefore share an identical resolution basis.
+Drift checking compares marker-aware pins (name, version, marker), so
+removing or widening a marker is detected as drift.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -28,6 +50,26 @@ LOCK_GPU = BACKEND_DIR / "requirements-gpu.lock"
 
 CPU_EXTRA_INDEX = "https://download.pytorch.org/whl/cpu"
 GPU_EXTRA_INDEX = "https://download.pytorch.org/whl/cu126"
+
+PYTHON_VERSION = "3.11"
+GPU_TARGET_PLATFORM = "x86_64-unknown-linux-gnu"
+
+
+@dataclass(frozen=True)
+class Resolution:
+    """Declared resolution semantics for a lock target."""
+
+    extra_index_url: str
+    universal: bool
+    python_platform: str | None = None
+
+
+RESOLUTION_CPU = Resolution(extra_index_url=CPU_EXTRA_INDEX, universal=True)
+RESOLUTION_GPU = Resolution(
+    extra_index_url=GPU_EXTRA_INDEX,
+    universal=False,
+    python_platform=GPU_TARGET_PLATFORM,
+)
 
 
 def find_uv_executable() -> str:
@@ -49,53 +91,104 @@ def compile_lockfile(
     *,
     requirements_files: list[Path],
     output_lock: Path,
-    extra_index_url: str,
+    resolution: Resolution,
     upgrade: bool = False,
     uv_cmd: str | None = None,
 ) -> None:
-    """Compile requirement files into a pinned lockfile using uv pip compile."""
-    uv = uv_cmd or find_uv_executable()
-    cmd = [
-        uv,
-        "pip",
-        "compile",
-        *[str(p) for p in requirements_files],
-        "--extra-index-url",
-        extra_index_url,
-        "--index-strategy",
-        "unsafe-best-match",
-        "--output-file",
-        str(output_lock),
-    ]
-    if upgrade:
-        cmd.append("--upgrade")
+    """Compile requirement files into a pinned lockfile using uv pip compile.
 
-    result = subprocess.run(
-        cmd,
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"uv pip compile failed for {output_lock.name}:\n"
-            f"STDOUT:\n{result.stdout}\n"
-            f"STDERR:\n{result.stderr}"
+    Resolution always runs against a fresh temporary output so uv cannot
+    prefer pins from a pre-existing lockfile, and with --refresh so a stale
+    local index cache cannot hide newer distributions. The result is copied
+    to output_lock only after a successful compile.
+    """
+    uv = uv_cmd or find_uv_executable()
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_out = Path(tmp_dir) / output_lock.name
+        cmd = [
+            uv,
+            "pip",
+            "compile",
+            # Repo-relative inputs keep the lock header host-independent.
+            *[str(p.relative_to(REPO_ROOT)) for p in requirements_files],
+            "--python-version",
+            PYTHON_VERSION,
+            "--extra-index-url",
+            resolution.extra_index_url,
+            "--index-strategy",
+            "unsafe-best-match",
+            "--no-header",
+            "--refresh",
+            "--output-file",
+            str(tmp_out),
+        ]
+        if resolution.universal:
+            cmd.append("--universal")
+        elif resolution.python_platform:
+            cmd.extend(["--python-platform", resolution.python_platform])
+        if upgrade:
+            cmd.append("--upgrade")
+
+        result = subprocess.run(
+            cmd,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"uv pip compile failed for {output_lock.name}:\n"
+                f"command: {shlex.join(cmd)}\n"
+                f"STDOUT:\n{result.stdout}\n"
+                f"STDERR:\n{result.stderr}"
+            )
+        shutil.copyfile(tmp_out, output_lock)
 
 
 def extract_pinned_packages(content: str) -> dict[str, str]:
-    """Parse exact package==version mappings from a lockfile."""
+    """Parse exact package==version mappings from a lockfile (markers stripped)."""
     pins: dict[str, str] = {}
+    for record in extract_semantic_pins(content):
+        pins[record.name] = record.version
+    return pins
+
+
+@dataclass(frozen=True)
+class SemanticPin:
+    """A single lock pin including the environment marker that scopes it."""
+
+    name: str
+    version: str
+    marker: str
+
+    def __str__(self) -> str:  # pragma: no cover - display only
+        return f"{self.name}=={self.version}" + (f" ; {self.marker}" if self.marker else "")
+
+
+def extract_semantic_pins(content: str) -> list[SemanticPin]:
+    """Parse package==version[; marker] records from a lockfile.
+
+    Markers are part of dependency truth: a pin whose marker was removed or
+    widened must be detectable as drift, so they are preserved verbatim
+    (normalized for whitespace) rather than discarded.
+    """
+    pins: list[SemanticPin] = []
     for line in content.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        if "==" in line:
-            parts = line.split("==")
-            pkg = parts[0].strip().lower()
-            ver = parts[1].split(";")[0].split()[0].strip()
-            pins[pkg] = ver
+        if "==" not in line:
+            continue
+        pin_part = line.split("#", 1)[0].strip()
+        marker = ""
+        if ";" in pin_part:
+            pin_part, marker_part = pin_part.split(";", 1)
+            marker = " ".join(marker_part.split())
+        parts = pin_part.split("==")
+        pkg = parts[0].strip().lower()
+        ver = parts[1].strip().split()[0] if parts[1].strip() else ""
+        if pkg and ver:
+            pins.append(SemanticPin(name=pkg, version=ver, marker=marker))
     return pins
 
 
@@ -103,7 +196,7 @@ def check_lockfile(
     *,
     requirements_files: list[Path],
     expected_lock: Path,
-    extra_index_url: str,
+    resolution: Resolution,
     uv_cmd: str | None = None,
 ) -> bool:
     """Check if existing lockfile is in sync with requirements without modifying it."""
@@ -116,42 +209,39 @@ def check_lockfile(
         compile_lockfile(
             requirements_files=requirements_files,
             output_lock=tmp_lock,
-            extra_index_url=extra_index_url,
+            resolution=resolution,
             upgrade=False,
             uv_cmd=uv_cmd,
         )
-        current_content = expected_lock.read_text(encoding="utf-8").strip()
-        compiled_content = tmp_lock.read_text(encoding="utf-8").strip()
-
-        current_pins = extract_pinned_packages(current_content)
-        compiled_pins = extract_pinned_packages(compiled_content)
+        current_pins = extract_semantic_pins(expected_lock.read_text(encoding="utf-8"))
+        compiled_pins = extract_semantic_pins(tmp_lock.read_text(encoding="utf-8"))
 
         if current_pins != compiled_pins:
-            diff_added = set(compiled_pins.items()) - set(current_pins.items())
-            diff_removed = set(current_pins.items()) - set(compiled_pins.items())
+            current_set = set(current_pins)
+            compiled_set = set(compiled_pins)
             print(f"Drift detected in {expected_lock.name}:", file=sys.stderr)
-            if diff_added:
-                print(f"  New/Changed in compilation: {diff_added}", file=sys.stderr)
-            if diff_removed:
-                print(f"  Missing from compilation: {diff_removed}", file=sys.stderr)
+            for pin in sorted(compiled_set - current_set, key=str):
+                print(f"  New/changed in compilation: {pin}", file=sys.stderr)
+            for pin in sorted(current_set - compiled_set, key=str):
+                print(f"  Missing/widened in compilation: {pin}", file=sys.stderr)
             return False
         return True
 
 
 def lock_cpu(*, check: bool = False, upgrade: bool = False, uv_cmd: str | None = None) -> bool:
-    """Lock or check CPU variant dependencies."""
+    """Lock or check CPU variant dependencies (universal, marker-preserving)."""
     reqs = [REQ_CORE, REQ_CPU]
     if check:
         return check_lockfile(
             requirements_files=reqs,
             expected_lock=LOCK_CPU,
-            extra_index_url=CPU_EXTRA_INDEX,
+            resolution=RESOLUTION_CPU,
             uv_cmd=uv_cmd,
         )
     compile_lockfile(
         requirements_files=reqs,
         output_lock=LOCK_CPU,
-        extra_index_url=CPU_EXTRA_INDEX,
+        resolution=RESOLUTION_CPU,
         upgrade=upgrade,
         uv_cmd=uv_cmd,
     )
@@ -160,19 +250,19 @@ def lock_cpu(*, check: bool = False, upgrade: bool = False, uv_cmd: str | None =
 
 
 def lock_gpu(*, check: bool = False, upgrade: bool = False, uv_cmd: str | None = None) -> bool:
-    """Lock or check GPU variant dependencies."""
+    """Lock or check GPU variant dependencies (explicit Linux x86_64 target)."""
     reqs = [REQ_CORE, REQ_GPU]
     if check:
         return check_lockfile(
             requirements_files=reqs,
             expected_lock=LOCK_GPU,
-            extra_index_url=GPU_EXTRA_INDEX,
+            resolution=RESOLUTION_GPU,
             uv_cmd=uv_cmd,
         )
     compile_lockfile(
         requirements_files=reqs,
         output_lock=LOCK_GPU,
-        extra_index_url=GPU_EXTRA_INDEX,
+        resolution=RESOLUTION_GPU,
         upgrade=upgrade,
         uv_cmd=uv_cmd,
     )

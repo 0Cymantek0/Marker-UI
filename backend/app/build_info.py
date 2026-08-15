@@ -91,20 +91,56 @@ def calculate_file_sha256(path: Path) -> str | None:
 
 
 def parse_lockfile_pins(lock_path: Path) -> dict[str, str]:
-    """Parse exact package==version pins from a lockfile."""
+    """Parse exact package==version pins from a lockfile (markers stripped)."""
     pins: dict[str, str] = {}
     if not lock_path.is_file():
         return pins
+    for name, version, _marker in parse_lockfile_records(lock_path):
+        pins[name] = version
+    return pins
+
+
+def parse_lockfile_records(lock_path: Path) -> list[tuple[str, str, str]]:
+    """Parse (name, version, marker) records from a lockfile.
+
+    The CPU lock is a universal, marker-preserving resolution: pins scoped
+    to other platforms or Python versions (e.g. pywin32 on win32, numpy on
+    py>=3.12) are part of dependency truth and must not be treated as
+    missing when they simply do not apply to this environment.
+    """
+    records: list[tuple[str, str, str]] = []
+    if not lock_path.is_file():
+        return records
     for line in lock_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        if "==" in line:
-            parts = line.split("==")
-            pkg = parts[0].strip().lower()
-            ver = parts[1].split(";")[0].split()[0].strip()
-            pins[pkg] = ver
-    return pins
+        if "==" not in line:
+            continue
+        pin_part = line.split("#", 1)[0].strip()
+        marker = ""
+        if ";" in pin_part:
+            pin_part, marker_part = pin_part.split(";", 1)
+            marker = " ".join(marker_part.split())
+        parts = pin_part.split("==")
+        name = parts[0].strip().lower()
+        version = parts[1].strip().split()[0] if parts[1].strip() else ""
+        if name and version:
+            records.append((name, version, marker))
+    return records
+
+
+def marker_applies(marker: str) -> bool:
+    """Evaluate a PEP 508 environment marker against the current runtime."""
+    if not marker:
+        return True
+    try:
+        from packaging.markers import Marker
+
+        return Marker(marker).evaluate()
+    except Exception:
+        # Unparseable marker: fail closed by treating the pin as applicable.
+        return True
 
 
 def get_installed_package_version(name: str) -> str | None:
@@ -184,8 +220,12 @@ def verify_dependency_lock(
     mismatches: dict[str, dict[str, str]] = {}
     missing: list[str] = []
     unexpected: list[str] = []
+    applicable: set[str] = set()
 
-    for pkg, expected_ver in pins.items():
+    for pkg, expected_ver, marker in parse_lockfile_records(lock_path):
+        if not marker_applies(marker):
+            continue
+        applicable.add(pkg)
         installed = get_installed_package_version(pkg)
         if installed is None:
             missing.append(pkg)
@@ -201,7 +241,7 @@ def verify_dependency_lock(
         try:
             for dist in importlib.metadata.distributions():
                 name = dist.metadata["Name"].lower()
-                if name not in pins and name not in ignored and not name.startswith("pytest-"):
+                if name not in applicable and name not in ignored and not name.startswith("pytest-"):
                     unexpected.append(name)
         except Exception:
             pass

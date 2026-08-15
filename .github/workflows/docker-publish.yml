@@ -10,11 +10,16 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  ci:
+    # Blocking gate: a revision can only be published when backend dependency
+    # truth, backend tests, frontend lint/tests/build all pass for this SHA.
+    uses: ./.github/workflows/ci.yml
+
   smoke-test:
     uses: ./.github/workflows/docker-smoke-test.yml
 
   build-and-push:
-    needs: smoke-test
+    needs: [ci, smoke-test]
     runs-on: ubuntu-latest
     permissions:
       contents: read

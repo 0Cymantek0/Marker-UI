@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.benchmark.runner import PdfBenchmarkCase, PdfEngineOutput
-from backend.scripts.run_phase3_pdf_benchmark import (
+from scripts.run_phase3_pdf_benchmark import (
     _merge_marker_json_table_evidence,
     _mixed_routing_engine,
 )
@@ -106,7 +106,7 @@ def test_mixed_routing_engine_passes_probe_and_records_output(tmp_path, monkeypa
             }
 
     monkeypatch.setattr(
-        "backend.scripts.run_phase3_pdf_benchmark.probe_pdf",
+        "scripts.run_phase3_pdf_benchmark.probe_pdf",
         lambda _path: _FakeProbe(),
     )
     service = _FakeService()

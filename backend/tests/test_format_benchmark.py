@@ -136,7 +136,7 @@ def test_run_format_benchmark_requires_all_outputs():
 
 
 def test_manual_format_fixture_outputs_score_above_gate():
-    fixture_dir = Path("backend/tests/fixtures/manual_real_docs")
+    fixture_dir = Path(__file__).resolve().parent / "fixtures" / "manual_real_docs"
     cases = manual_format_benchmark_cases(fixture_dir)
     outputs = load_manual_native_format_outputs(fixture_dir)
 

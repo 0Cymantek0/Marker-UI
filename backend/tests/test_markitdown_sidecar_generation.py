@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from backend.scripts.generate_markitdown_format_outputs import generate_outputs
+from scripts.generate_markitdown_format_outputs import generate_outputs
 
 
 @dataclass
