@@ -18,7 +18,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.kernel.commit import KernelCommitBatch, KernelCommitService
 from app.kernel.errors import DuplicateRecordIdentityError
-from app.kernel.models import KernelCommitManifest
+from app.kernel.models import KernelCommitManifest, KernelRecord
+from app.kernel.outbox import OutboxIntent, list_outbox
+from app.kernel.reconcile import verify_payload_availability
 from app.kernel.records import ClaimAssertionRecord, ObservationRecord
 from app.kernel.replay import read_head, verify_history
 
@@ -170,3 +172,151 @@ async def test_concurrent_duplicate_identity_collapses_to_one_commit(
     assert await read_head(kernel_env, "ws-a") == 1
     result = await verify_history(kernel_env, "ws-a")
     assert result.ok, result.problems
+
+
+# ---------------------------------------------------------------------------
+# V3.2 PR64: concurrency across the payload/storage boundary (plan 7.5)
+# ---------------------------------------------------------------------------
+
+
+def _payload_obs(index: int, payload: bytes) -> ObservationRecord:
+    return ObservationRecord(
+        observer=f"obs-{index}",
+        derivation={"race": index},
+        payload_bytes=payload,
+    )
+
+
+async def test_concurrent_distinct_payload_commits_stay_linear_and_complete(
+    payload_env,
+) -> None:
+    factory, store, service = payload_env
+    payloads = [f"distinct payload {i}".encode() for i in range(10)]
+
+    receipts = await asyncio.gather(
+        *(
+            service.commit(
+                KernelCommitBatch(
+                    workspace_id="ws-race",
+                    records=(_payload_obs(i, payloads[i]),),
+                    outbox=(OutboxIntent(work_kind="materialize", payload={"i": i}),),
+                )
+            )
+            for i in range(len(payloads))
+        ),
+        return_exceptions=True,
+    )
+    failures = [r for r in receipts if isinstance(r, BaseException)]
+    assert failures == [], [repr(f) for f in failures]
+
+    ids = sorted(r.kernel_commit_id for r in receipts)
+    assert ids == list(range(1, len(payloads) + 1))  # linear chain
+    history = await verify_history(factory, "ws-race")
+    assert history.ok, history.problems
+
+    availability = await verify_payload_availability(
+        factory, store, workspace_id="ws-race"
+    )
+    assert availability.payload_backed_complete is True
+    assert len(availability.orphan_objects) == 0
+
+    # Exactly one outbox intent per commit — no duplicates, none lost.
+    pending = await list_outbox(factory, workspace_id="ws-race")
+    assert len(pending) == len(payloads)
+    assert len({p.dedupe_key for p in pending}) == len(payloads)
+
+
+async def test_concurrent_same_bytes_races_publish_one_object(payload_env) -> None:
+    factory, store, service = payload_env
+    shared = b"contended content bytes"
+
+    receipts = await asyncio.gather(
+        *(
+            service.commit(
+                KernelCommitBatch(
+                    workspace_id="ws-same",
+                    records=(
+                        ObservationRecord(
+                            observer=f"obs-{i}",
+                            derivation={"witness": i},  # distinct evidence
+                            payload_bytes=shared,
+                        ),
+                    ),
+                )
+            )
+            for i in range(8)
+        ),
+        return_exceptions=True,
+    )
+    failures = [r for r in receipts if isinstance(r, BaseException)]
+    assert failures == [], [repr(f) for f in failures]
+
+    keys = await store.list_objects()
+    assert len(keys) == 1  # one immutable object, byte-identical publishers
+    check = await store.check_object(keys[0], expected_length=len(shared))
+    assert check.available
+
+    # Evidence did not collapse: 8 distinct records share the bytes.
+    async with factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(KernelRecord).where(KernelRecord.workspace_id == "ws-same")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(rows) == 8
+    assert len({r.identity_hash for r in rows}) == 8
+    assert {r.payload_byte_hash for r in rows} == set(keys)
+
+    history = await verify_history(factory, "ws-same")
+    assert history.ok, history.problems
+
+
+async def test_store_level_same_content_race_is_safe(payload_env) -> None:
+    _factory, store, _service = payload_env
+    payload = b"raw store race payload"
+
+    staged = await asyncio.gather(
+        *(store.stage(payload) for _ in range(6)),
+        return_exceptions=True,
+    )
+    failures = [s for s in staged if isinstance(s, BaseException)]
+    assert failures == [], [repr(f) for f in failures]
+
+    keys = {s.blob_key for s in staged}
+    assert len(keys) == 1
+    assert await store.read(keys.pop()) == payload
+    # At most one physical write happened; racers reused the result.
+    assert store.bytes_written == len(payload)
+
+
+async def test_db_contention_with_payload_staging_stays_bounded(payload_env) -> None:
+    """Payload staging concurrent with DB writer contention: retries stay
+    bounded, immutable content survives, chain stays linear."""
+    factory, store, service = payload_env
+
+    async def commit_many(prefix: str, base: int) -> list:
+        out = []
+        for i in range(6):
+            receipt = await service.commit(
+                KernelCommitBatch(
+                    workspace_id="ws-busy",
+                    records=(
+                        _payload_obs(base + i, f"{prefix} bytes {i}".encode()),
+                    ),
+                )
+            )
+            out.append(receipt)
+        return out
+
+    results = await asyncio.gather(commit_many("left", 0), commit_many("right", 100))
+    assert sum(len(r) for r in results) == 12
+    assert await read_head(factory, "ws-busy") == 12
+    history = await verify_history(factory, "ws-busy")
+    assert history.ok, history.problems
+    availability = await verify_payload_availability(factory, store, workspace_id="ws-busy")
+    assert availability.payload_backed_complete is True
+    assert service.busy_retries + service.head_retries <= 12 * 4  # bounded
