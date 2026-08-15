@@ -1,0 +1,755 @@
+{
+  "$schema": "marker.canonical.fixtures.v1",
+  "description": "Golden conformance corpus for the marker.canonical.v1 identity contract. Expected outputs are committed constants; regenerate only intentionally via backend/scripts/generate_canonical_fixtures.py and review the diff. See fixtures/README.md for the format.",
+  "canonicalization_profile": "marker.canonical.v1",
+  "framing": "marker.record_identity.v1",
+  "cases": [
+    {
+      "id": "ordering-nested-map-permutation",
+      "category": "ordering",
+      "payload": {
+        "alpha": {
+          "z": 26,
+          "a": 1,
+          "nested": {
+            "y": [
+              1,
+              2
+            ],
+            "x": null
+          }
+        },
+        "omega": "tail"
+      },
+      "variants": [
+        {
+          "id": "keys-reordered",
+          "payload": {
+            "omega": "tail",
+            "alpha": {
+              "nested": {
+                "x": null,
+                "y": [
+                  1,
+                  2
+                ]
+              },
+              "a": 1,
+              "z": 26
+            }
+          }
+        }
+      ],
+      "variant_expectation": "same",
+      "expect": {
+        "payload_canonical": "{\"alpha\":{\"a\":1,\"nested\":{\"x\":null,\"y\":[1,2]},\"z\":26},\"omega\":\"tail\"}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"alpha\":{\"a\":1,\"nested\":{\"x\":null,\"y\":[1,2]},\"z\":26},\"omega\":\"tail\"},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:0c5b6bc2bf79454e8770e7e08b4cd17f48c98bf0cb41d826e7eaf922d5c0a3ee"
+      }
+    },
+    {
+      "id": "set-vs-ordered-list",
+      "category": "ordering",
+      "payload": {
+        "tags": {
+          "$set": [
+            "finance",
+            "page-1",
+            "audited"
+          ]
+        },
+        "steps": [
+          1,
+          2,
+          3
+        ]
+      },
+      "variants": [
+        {
+          "id": "set-permuted",
+          "expectation": "same",
+          "payload": {
+            "tags": {
+              "$set": [
+                "audited",
+                "finance",
+                "page-1"
+              ]
+            },
+            "steps": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "id": "list-permuted",
+          "payload": {
+            "tags": {
+              "$set": [
+                "finance",
+                "page-1",
+                "audited"
+              ]
+            },
+            "steps": [
+              3,
+              2,
+              1
+            ]
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"steps\":[1,2,3],\"tags\":[\"audited\",\"finance\",\"page-1\"]}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"steps\":[1,2,3],\"tags\":[\"audited\",\"finance\",\"page-1\"]},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:5a18252b992e152146ccff5d989e965dd558218a31208c08659dd3924338e751"
+      }
+    },
+    {
+      "id": "unicode-composed-decomposed-distinct",
+      "category": "unicode",
+      "payload": {
+        "text": "café"
+      },
+      "variants": [
+        {
+          "id": "nfd-variant",
+          "payload": {
+            "text": "café"
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"text\":\"café\"}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"text\":\"café\"},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:d6d500d95e3c907abea02f61046c293be57e0412c04ce1603a0d1297c8cf7e46"
+      }
+    },
+    {
+      "id": "string-escapes-and-controls",
+      "category": "unicode",
+      "payload": {
+        "jcs-reference": "€$\u000f\nA'B\"\\\"/",
+        "del-raw": "",
+        "c0": "\u0000\u001f"
+      },
+      "variants": [],
+      "expect": {
+        "payload_canonical": "{\"c0\":\"\\u0000\\u001f\",\"del-raw\":\"\",\"jcs-reference\":\"€$\\u000f\\nA'B\\\"\\\\\\\"/\"}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"c0\":\"\\u0000\\u001f\",\"del-raw\":\"\",\"jcs-reference\":\"€$\\u000f\\nA'B\\\"\\\\\\\"/\"},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:bc7f818b7a47a0672d3cde6ea26ef3e8b472a2f2d7ecf2e2bd9f6db2603a7119"
+      }
+    },
+    {
+      "id": "empty-null-omitted-are-distinct",
+      "category": "structure",
+      "payload": {
+        "a": {},
+        "b": [],
+        "c": null,
+        "d": "",
+        "e": 0,
+        "f": false
+      },
+      "variants": [
+        {
+          "id": "omitted-f",
+          "payload": {
+            "a": {},
+            "b": [],
+            "c": null,
+            "d": "",
+            "e": 0
+          }
+        },
+        {
+          "id": "null-instead-of-empty-object",
+          "payload": {
+            "a": null
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"a\":{},\"b\":[],\"c\":null,\"d\":\"\",\"e\":0,\"f\":false}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"a\":{},\"b\":[],\"c\":null,\"d\":\"\",\"e\":0,\"f\":false},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:6287ba59dc077e165bb572190315124c2823891e570dc97d80cd0d9d130cd2d1"
+      }
+    },
+    {
+      "id": "high-precision-decimals",
+      "category": "numbers",
+      "payload": {
+        "amount": {
+          "$decimal": "123456789012345678901234567890.123"
+        },
+        "rate": {
+          "$decimal": "0.000000000000000000001"
+        }
+      },
+      "variants": [
+        {
+          "id": "trailing-zero-significance",
+          "payload": {
+            "amount": {
+              "$decimal": "123456789012345678901234567890.123"
+            },
+            "rate": {
+              "$decimal": "0.0000000000000000000010"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"amount\":\"123456789012345678901234567890.123\",\"rate\":\"0.000000000000000000001\"}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"amount\":\"123456789012345678901234567890.123\",\"rate\":\"0.000000000000000000001\"},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:2e435030a642a0e32d6e3c81bfe9bdff1404308bb09bfd6391dc4b1c8e29cdee"
+      }
+    },
+    {
+      "id": "safe-integer-extremes",
+      "category": "numbers",
+      "payload": {
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "zero": 0
+      },
+      "variants": [],
+      "expect": {
+        "payload_canonical": "{\"max\":9007199254740991,\"min\":-9007199254740991,\"zero\":0}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"max\":9007199254740991,\"min\":-9007199254740991,\"zero\":0},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:0b0e832977955cf53521e936d96b964fe402a726506601c3ef234aee09149b62"
+      }
+    },
+    {
+      "id": "geometry-quantization-boundaries",
+      "category": "geometry",
+      "payload": {
+        "box": {
+          "$geometry": {
+            "kind": "box",
+            "raw": [
+              "0.0005",
+              "0.0005",
+              "0.0035",
+              "0.0035"
+            ]
+          }
+        }
+      },
+      "variants": [],
+      "expect": {
+        "payload_canonical": "{\"box\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":0,\"x1\":4,\"y0\":0,\"y1\":4}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"box\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":0,\"x1\":4,\"y0\":0,\"y1\":4}},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:0fb2b23de866e740b71a0ab3e2483764065106a05e26f9b6fcd7755788ac5c85"
+      }
+    },
+    {
+      "id": "geometry-equivalent-input-forms",
+      "category": "geometry",
+      "payload": {
+        "box": {
+          "$geometry": {
+            "kind": "box",
+            "raw": [
+              1,
+              2,
+              3,
+              4
+            ]
+          }
+        }
+      },
+      "variants": [
+        {
+          "id": "float-form",
+          "payload": {
+            "box": {
+              "$geometry": {
+                "kind": "box",
+                "raw": [
+                  1.0,
+                  2.0,
+                  3.0,
+                  4.0
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "decimal-string-form",
+          "payload": {
+            "box": {
+              "$geometry": {
+                "kind": "box",
+                "raw": [
+                  "1",
+                  "2.0",
+                  "3.000",
+                  "4e0"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "variant_expectation": "same",
+      "expect": {
+        "payload_canonical": "{\"box\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":1000,\"x1\":3000,\"y0\":2000,\"y1\":4000}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"box\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":1000,\"x1\":3000,\"y0\":2000,\"y1\":4000}},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:5f2f6eadf47c4e72ade23ff9221f2943e09c78a8ab61669207455bba4806f7c2"
+      }
+    },
+    {
+      "id": "geometry-negative-and-tiny",
+      "category": "geometry",
+      "payload": {
+        "point": {
+          "$geometry": {
+            "kind": "point",
+            "raw": [
+              "-0.0004",
+              "-0.0006"
+            ]
+          }
+        },
+        "corner": {
+          "$geometry": {
+            "kind": "point",
+            "raw": [
+              -1000000000,
+              1000000000
+            ]
+          }
+        }
+      },
+      "variants": [],
+      "expect": {
+        "payload_canonical": "{\"corner\":{\"geometry\":\"point\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x\":-1000000000000,\"y\":1000000000000},\"point\":{\"geometry\":\"point\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x\":0,\"y\":-1}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"corner\":{\"geometry\":\"point\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x\":-1000000000000,\"y\":1000000000000},\"point\":{\"geometry\":\"point\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x\":0,\"y\":-1}},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:93389a3dabd2feba6777792e3f9074375c2ecc8c6c88c5100e6584285fa5326b"
+      }
+    },
+    {
+      "id": "representative-evidence-record",
+      "category": "composite",
+      "payload": {
+        "source_text": "Revenu : 1 000,50 € — vérifié",
+        "page": 3,
+        "bbox": {
+          "$geometry": {
+            "kind": "box",
+            "raw": [
+              72.0,
+              110.5,
+              540.25,
+              660.75
+            ]
+          }
+        },
+        "polygon": {
+          "$geometry": {
+            "kind": "polygon",
+            "raw": [
+              [
+                72.5,
+                90.25
+              ],
+              [
+                200.125,
+                90.25
+              ],
+              [
+                200.125,
+                300.0
+              ],
+              [
+                72.5,
+                300.0
+              ]
+            ]
+          }
+        },
+        "tags": {
+          "$set": [
+            "finance",
+            "page-1"
+          ]
+        },
+        "amount": {
+          "$decimal": "1000.50"
+        },
+        "confidence": {
+          "$decimal": "0.875"
+        }
+      },
+      "variants": [
+        {
+          "id": "wrapper-permutation",
+          "payload": {
+            "confidence": {
+              "$decimal": "0.875"
+            },
+            "amount": {
+              "$decimal": "1000.50"
+            },
+            "tags": {
+              "$set": [
+                "page-1",
+                "finance"
+              ]
+            },
+            "polygon": {
+              "$geometry": {
+                "kind": "polygon",
+                "raw": [
+                  [
+                    72.5,
+                    90.25
+                  ],
+                  [
+                    200.125,
+                    90.25
+                  ],
+                  [
+                    200.125,
+                    300.0
+                  ],
+                  [
+                    72.5,
+                    300.0
+                  ]
+                ]
+              }
+            },
+            "bbox": {
+              "$geometry": {
+                "kind": "box",
+                "raw": [
+                  72.0,
+                  110.5,
+                  540.25,
+                  660.75
+                ]
+              }
+            },
+            "page": 3,
+            "source_text": "Revenu : 1 000,50 € — vérifié"
+          }
+        }
+      ],
+      "variant_expectation": "same",
+      "expect": {
+        "payload_canonical": "{\"amount\":\"1000.50\",\"bbox\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":72000,\"x1\":540250,\"y0\":110500,\"y1\":660750},\"confidence\":\"0.875\",\"page\":3,\"polygon\":{\"geometry\":\"polygon\",\"points\":[{\"x\":72500,\"y\":90250},{\"x\":200125,\"y\":90250},{\"x\":200125,\"y\":300000},{\"x\":72500,\"y\":300000}],\"profile\":\"marker.geometry.fixed_point.v1\"},\"source_text\":\"Revenu : 1 000,50 € — vérifié\",\"tags\":[\"finance\",\"page-1\"]}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"amount\":\"1000.50\",\"bbox\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":72000,\"x1\":540250,\"y0\":110500,\"y1\":660750},\"confidence\":\"0.875\",\"page\":3,\"polygon\":{\"geometry\":\"polygon\",\"points\":[{\"x\":72500,\"y\":90250},{\"x\":200125,\"y\":90250},{\"x\":200125,\"y\":300000},{\"x\":72500,\"y\":300000}],\"profile\":\"marker.geometry.fixed_point.v1\"},\"source_text\":\"Revenu : 1 000,50 € — vérifié\",\"tags\":[\"finance\",\"page-1\"]},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:f4d3638a3838902a2b745e5ec86a3c9a8f7965ccd3b315b97f4b95cba90944cd"
+      }
+    },
+    {
+      "id": "framing-record-type-separation",
+      "category": "framing",
+      "record_type": "a",
+      "payload": {
+        "v": "BC"
+      },
+      "variants": [
+        {
+          "id": "split-shifted",
+          "record_type": "ab",
+          "payload": {
+            "v": "C"
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"v\":\"BC\"}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"v\":\"BC\"},\"record_type\":\"a\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:cfa265781377a62a3754e3cd131c7a30ef65db1acd098792e0c959ca986a3251"
+      }
+    },
+    {
+      "id": "framing-schema-version-separation",
+      "category": "framing",
+      "payload": {
+        "v": "same"
+      },
+      "variants": [
+        {
+          "id": "v2",
+          "schema_version": "marker.fixture.record.v2"
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"v\":\"same\"}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"v\":\"same\"},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:51a1698f5944fcb911f3af08e69e7477fe23a59dd6e954034bac1da43416d6d3"
+      }
+    },
+    {
+      "id": "framing-canonicalization-profile-separation",
+      "category": "framing",
+      "payload": {
+        "v": "same"
+      },
+      "variants": [
+        {
+          "id": "profile-v2",
+          "canonicalization_profile": "marker.canonical.v2"
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"v\":\"same\"}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"v\":\"same\"},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:51a1698f5944fcb911f3af08e69e7477fe23a59dd6e954034bac1da43416d6d3"
+      }
+    },
+    {
+      "id": "geometry-profile-separation",
+      "category": "framing",
+      "payload": {
+        "box": {
+          "$geometry": {
+            "kind": "box",
+            "raw": [
+              1,
+              2,
+              3,
+              4
+            ]
+          }
+        }
+      },
+      "variants": [
+        {
+          "id": "profile-v2-bytes",
+          "payload": {
+            "box": {
+              "geometry": "box",
+              "profile": "marker.geometry.fixed_point.v2",
+              "x0": 1000,
+              "y0": 2000,
+              "x1": 3000,
+              "y1": 4000
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "payload_canonical": "{\"box\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":1000,\"x1\":3000,\"y0\":2000,\"y1\":4000}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"box\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":1000,\"x1\":3000,\"y0\":2000,\"y1\":4000}},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:5f2f6eadf47c4e72ade23ff9221f2943e09c78a8ab61669207455bba4806f7c2"
+      }
+    },
+    {
+      "id": "empty-payload-record",
+      "category": "structure",
+      "payload": {},
+      "variants": [],
+      "expect": {
+        "payload_canonical": "{}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{},\"record_type\":\"marker.fixture.record.v1\",\"schema_version\":\"marker.fixture.record.v1\"}",
+        "identity_hash": "sha256:b2690c0e05bc5761227e8f148dd60478c54780103474093293e6c7ce87e0ff16"
+      }
+    },
+    {
+      "id": "reject-float-payload",
+      "category": "rejection",
+      "payload": {
+        "x": 1.5
+      },
+      "expect_error": "floats cannot enter canonical identity"
+    },
+    {
+      "id": "reject-json-float-unit",
+      "category": "rejection",
+      "payload": {
+        "x": 1.0
+      },
+      "expect_error": "floats cannot enter canonical identity"
+    },
+    {
+      "id": "reject-nan",
+      "category": "rejection",
+      "payload": {
+        "x": {
+          "$nan": true
+        }
+      },
+      "expect_error": "floats cannot enter canonical identity"
+    },
+    {
+      "id": "reject-infinity",
+      "category": "rejection",
+      "payload": {
+        "x": {
+          "$inf": 1
+        }
+      },
+      "expect_error": "floats cannot enter canonical identity"
+    },
+    {
+      "id": "reject-negative-infinity",
+      "category": "rejection",
+      "payload": {
+        "x": {
+          "$inf": -1
+        }
+      },
+      "expect_error": "floats cannot enter canonical identity"
+    },
+    {
+      "id": "reject-unsafe-integer",
+      "category": "rejection",
+      "payload": {
+        "x": 9007199254740993
+      },
+      "expect_error": "safe JSON identity range"
+    },
+    {
+      "id": "reject-plain-set",
+      "category": "rejection",
+      "payload": {
+        "x": {
+          "$pyset": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      "expect_error": "CanonicalSet"
+    },
+    {
+      "id": "reject-datetime",
+      "category": "rejection",
+      "payload": {
+        "x": {
+          "$datetime": "2026-01-01T00:00:00Z"
+        }
+      },
+      "expect_error": "not a canonical identity value"
+    },
+    {
+      "id": "reject-lone-surrogate",
+      "category": "rejection",
+      "payload": {
+        "x": {
+          "$lone_surrogate": true
+        }
+      },
+      "expect_error": "lone surrogate"
+    },
+    {
+      "id": "reject-set-duplicates",
+      "category": "rejection",
+      "payload": {
+        "tags": {
+          "$set": [
+            "a",
+            "a"
+          ]
+        }
+      },
+      "expect_error": "duplicate members"
+    },
+    {
+      "id": "reject-bad-decimal-text",
+      "category": "rejection",
+      "payload": {
+        "amount": {
+          "$decimal": "1e3"
+        }
+      },
+      "expect_error": "invalid canonical decimal"
+    },
+    {
+      "id": "reject-geometry-overflow",
+      "category": "rejection",
+      "payload": {
+        "g": {
+          "$geometry": {
+            "kind": "box",
+            "raw": [
+              0,
+              0,
+              "1e10",
+              1
+            ]
+          }
+        }
+      },
+      "expect_error": "profile range"
+    },
+    {
+      "id": "reject-geometry-nan-string",
+      "category": "rejection",
+      "payload": {
+        "g": {
+          "$geometry": {
+            "kind": "box",
+            "raw": [
+              "NaN",
+              0,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "expect_error": "non-finite"
+    },
+    {
+      "id": "reject-degenerate-box",
+      "category": "rejection",
+      "payload": {
+        "g": {
+          "$geometry": {
+            "kind": "box",
+            "raw": [
+              1,
+              1,
+              1,
+              2
+            ]
+          }
+        }
+      },
+      "expect_error": "positive extent"
+    },
+    {
+      "id": "reject-short-polygon",
+      "category": "rejection",
+      "payload": {
+        "g": {
+          "$geometry": {
+            "kind": "polygon",
+            "raw": [
+              [
+                0,
+                0
+              ],
+              [
+                1,
+                1
+              ],
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        }
+      },
+      "expect_error": "at least 3"
+    }
+  ]
+}

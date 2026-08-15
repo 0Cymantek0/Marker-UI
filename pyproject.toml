@@ -53,4 +53,4 @@ include = ["app*"]
 dependencies = {file = ["backend/requirements.txt"]}
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
+testpaths = ["backend/tests", "backend/conformance"]

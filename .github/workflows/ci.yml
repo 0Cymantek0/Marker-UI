@@ -57,7 +57,7 @@ jobs:
       - name: Run full backend test suite
         working-directory: backend
         run: |
-          python -m pytest tests -q
+          python -m pytest tests conformance -q
 
       - name: Verify build provenance and runtime lock inspection
         working-directory: backend
@@ -100,3 +100,29 @@ jobs:
       - name: Production build (tsc + vite)
         working-directory: frontend
         run: pnpm run build
+
+  canonical-conformance:
+    name: Canonical Identity Conformance (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pytest only (suite is stdlib + pytest)
+        run: pip install pytest==8.3.4
+
+      - name: Run canonical identity conformance suite
+        working-directory: backend
+        run: python -m pytest conformance -q
