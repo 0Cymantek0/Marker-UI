@@ -98,3 +98,22 @@ renames, or type changes.
   - `KernelOutbox` → `kernel_outbox` — durable at-least-once
     successor-work intent, enqueued atomically with its authorizing
     commit and identified by a deterministic dedupe key.
+- Truth Kernel materialized generations (V3.2 PR65A, revision
+  `20260815_0006`; see
+  [../reference/truth-kernel.md](../reference/truth-kernel.md)):
+  - `KernelGeneration` → `kernel_generations` — immutable manifest row
+    per materialized generation: pinned snapshot identity,
+    materializer/schema/config identity, lifecycle state
+    (staged/validated/active/superseded/failed), and the deterministic
+    content digest. Derived, rebuildable state — never a second truth
+    authority.
+  - `KernelGenerationRecord` → `kernel_generation_records` — committed
+    record metadata materialized into a generation, bounded to the
+    generation's pinned cut.
+  - `KernelGenerationEdge` → `kernel_generation_edges` — dependency
+    edges materialized into a generation, bounded to the pinned cut.
+  - `KernelGenerationHead` → `kernel_generation_heads` — per-workspace
+    current accepted read generation; the atomic pointer switch happens
+    on this row. Downgrade of this revision discards generation state
+    (a rebuild restores the derived content, not the activation
+    history).

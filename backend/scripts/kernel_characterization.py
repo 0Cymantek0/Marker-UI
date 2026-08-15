@@ -1,4 +1,5 @@
-"""Synthetic Truth Kernel workload characterization (V3.2 PR63A + PR64).
+"""Synthetic Truth Kernel workload characterization (V3.2 PR63A +
+PR64 + PR65A).
 
 Runs a repeatable workload against a throwaway SQLite database and
 content-addressed payload store, then prints a JSON report.
@@ -15,8 +16,15 @@ latency with and without payload-bearing records, availability scan and
 restart-reconciliation cost, orphan/temp counts after an injected
 pre-commit failure, and filesystem object-count growth for the workload.
 
+PR65A generation fields: snapshot resolution latency (metadata-only and
+inspectable), generation build/validate/activate latency, ready-read
+p50/p95 (current resolution, manifest summary, record lookup, record
+page), generation storage growth per source kernel record, deterministic
+rebuild digest equality and cost, restart current-generation resolution
+latency, and staging residue after an injected build fault.
+
 No hard threshold is imposed; the report is the measured operating
-envelope that PR65 compares against and may then optimize.
+envelope later PRs compare against and may then optimize.
 
 Usage (from ``backend/``)::
 
@@ -30,11 +38,13 @@ import argparse
 import asyncio
 import json
 import os
+import platform
 import sqlite3
 import statistics
 import sys
 import tempfile
 import time
+from contextlib import closing
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -45,6 +55,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db_migration import upgrade_database  # noqa: E402
 from app.kernel.commit import KernelCommitBatch, KernelCommitService  # noqa: E402
+from app.kernel.errors import InjectedFaultError  # noqa: E402
+from app.kernel.generations import (  # noqa: E402
+    GenerationReader,
+    GenerationService,
+    resolve_current_generation,
+    verify_generation,
+)
 from app.kernel.outbox import OutboxIntent  # noqa: E402
 from app.kernel.payloads import LocalPayloadStore  # noqa: E402
 from app.kernel.reconcile import reconcile_after_restart, verify_payload_availability  # noqa: E402
@@ -57,6 +74,10 @@ from app.kernel.records import (  # noqa: E402
     ObservationRecord,
 )
 from app.kernel.replay import replay, verify_history  # noqa: E402
+from app.kernel.snapshots import (  # noqa: E402
+    PAYLOAD_REQUIREMENT_INSPECTABLE,
+    resolve_snapshot,
+)
 
 
 def build_batch(index: int, records_per_commit: int, payload_bytes: bytes):
@@ -113,6 +134,176 @@ def build_batch(index: int, records_per_commit: int, payload_bytes: bytes):
     return KernelCommitBatch(
         workspace_id="bench", records=tuple(records), edges=edges
     )
+
+
+async def _generation_section(db_dir: Path, url: str, db_path: Path) -> dict:
+    """PR65A measurement block over the finished workload database."""
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    store = LocalPayloadStore(db_dir / "payloads")
+    commit_service = KernelCommitService(factory, payload_store=store)
+    gen_service = GenerationService(factory)
+
+    def samples(times: list[float]) -> dict:
+        ordered = sorted(times)
+        return {
+            "samples": len(ordered),
+            "p50_ms": round(statistics.median(ordered) * 1000, 2),
+            "p95_ms": round(ordered[int(len(ordered) * 0.95) - 1] * 1000, 2),
+            "mean_ms": round(statistics.mean(ordered) * 1000, 2),
+        }
+
+    # snapshot resolution: metadata-only vs inspectable (payload re-hash)
+    meta_times: list[float] = []
+    for _ in range(10):
+        t0 = time.perf_counter()
+        await resolve_snapshot(factory, "bench")
+        meta_times.append(time.perf_counter() - t0)
+    insp_times: list[float] = []
+    for _ in range(5):
+        t0 = time.perf_counter()
+        insp_snapshot = await resolve_snapshot(
+            factory,
+            "bench",
+            required_payload_state=PAYLOAD_REQUIREMENT_INSPECTABLE,
+            payload_store=store,
+        )
+        insp_times.append(time.perf_counter() - t0)
+
+    # build (stage+validate) and activate as separate latency steps
+    t0 = time.perf_counter()
+    built = await gen_service.build(insp_snapshot)
+    build_seconds = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    active = await gen_service.activate(built.generation_id)
+    activate_seconds = time.perf_counter() - t0
+
+    # deterministic rebuild equality + cost
+    t0 = time.perf_counter()
+    rebuilt = await gen_service.build(insp_snapshot)
+    rebuild_seconds = time.perf_counter() - t0
+    rebuild_digest_equal = rebuilt.content_digest == active.content_digest
+
+    # ready-read paths (no kernel replay)
+    reader = GenerationReader(factory, active.generation_id)
+    sample_records = await reader.list_records(limit=20)
+    probe_ids = [r.record_id for r in sample_records]
+    read_current: list[float] = []
+    read_summary: list[float] = []
+    read_lookup: list[float] = []
+    read_page: list[float] = []
+    for i in range(50):
+        probe = probe_ids[i % len(probe_ids)]
+        t0 = time.perf_counter()
+        await resolve_current_generation(factory, "bench")
+        read_current.append(time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        await reader.summary()
+        read_summary.append(time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        await reader.get_record(probe)
+        read_lookup.append(time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        await reader.list_records(limit=20)
+        read_page.append(time.perf_counter() - t0)
+
+    t0 = time.perf_counter()
+    verification = await verify_generation(factory, active.generation_id)
+    verify_seconds = time.perf_counter() - t0
+
+    # injected build fault: staged residue must not disturb the current
+    await commit_service.commit(
+        build_batch(20_000, 4, b"generation fault probe" * 8)
+    )
+    fault_snapshot = await resolve_snapshot(factory, "bench")
+    staged_residue = 0
+    prior_still_current = False
+    try:
+        await gen_service.build_and_activate(
+            fault_snapshot, _inject_fault_at="gen-staged"
+        )
+    except InjectedFaultError:
+        staged = await gen_service.list_generations(state="staged")
+        staged_residue = len(staged)
+        current = await resolve_current_generation(factory, "bench")
+        prior_still_current = (
+            current is not None and current.generation_id == active.generation_id
+        )
+
+    await engine.dispose()
+
+    # restart view: a brand-new process recovers the current generation
+    engine2 = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory2 = async_sessionmaker(
+        engine2, class_=AsyncSession, expire_on_commit=False
+    )
+    t0 = time.perf_counter()
+    restarted = await resolve_current_generation(factory2, "bench")
+    restart_current_seconds = time.perf_counter() - t0
+    await engine2.dispose()
+
+    with closing(sqlite3.connect(db_path)) as conn:
+        gen_rows = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(LENGTH(payload_json)), 0), "
+            "COALESCE(SUM(LENGTH(payload_byte_hash)), 0) "
+            "FROM kernel_generation_records WHERE generation_id = ?",
+            (active.generation_id,),
+        ).fetchone()
+        kernel_rows = conn.execute(
+            "SELECT COUNT(*) FROM kernel_records WHERE workspace_id = 'bench'"
+        ).fetchone()[0]
+    gen_record_rows, gen_payload_bytes, gen_hash_bytes = gen_rows
+    gen_bytes_total = gen_payload_bytes + gen_hash_bytes + 220 * gen_record_rows
+
+    return {
+        "fixture": {
+            "generation_cut": active.kernel_commit_id,
+            "kernel_records_in_workspace": kernel_rows,
+            "materialized_records": active.record_count,
+            "materialized_edges": active.edge_count,
+        },
+        "snapshot_resolution": {
+            "metadata_only": samples(meta_times),
+            "inspectable_full_hash": samples(insp_times),
+            "inspectable_completeness": insp_snapshot.completeness,
+        },
+        "lifecycle_seconds": {
+            "build_stage_and_validate": round(build_seconds, 3),
+            "atomic_activate": round(activate_seconds, 3),
+            "deterministic_rebuild": round(rebuild_seconds, 3),
+            "verify_generation": round(verify_seconds, 3),
+            "restart_current_resolution": round(restart_current_seconds, 3),
+        },
+        "ready_read_ms": {
+            "current_generation_resolution": samples(read_current),
+            "manifest_summary": samples(read_summary),
+            "record_lookup": samples(read_lookup),
+            "record_page_20": samples(read_page),
+        },
+        "storage": {
+            "generation_record_rows": gen_record_rows,
+            "generation_payload_json_bytes": gen_payload_bytes,
+            "estimated_bytes_per_materialized_record": (
+                round(gen_bytes_total / gen_record_rows, 1) if gen_record_rows else 0
+            ),
+            "estimated_bytes_per_kernel_record": (
+                round(gen_bytes_total / kernel_rows, 1) if kernel_rows else 0
+            ),
+        },
+        "determinism": {
+            "rebuild_digest_equal": rebuild_digest_equal,
+            "content_digest": active.content_digest,
+            "verify_ok": verification.ok,
+        },
+        "injected_build_fault": {
+            "staged_residue_generations": staged_residue,
+            "prior_generation_still_current": prior_still_current,
+        },
+        "restart_view": {
+            "current_generation_recovered": restarted is not None
+            and restarted.generation_id == active.generation_id,
+        },
+    }
 
 
 async def run(
@@ -238,6 +429,10 @@ async def run(
     await engine2.dispose()
 
     wal_path = db_path.with_name(db_path.name + "-wal")
+
+    # --- PR65A: snapshot + materialized generation envelope ------------
+    generation_report = await _generation_section(db_dir, url, db_path)
+
     conn = sqlite3.connect(db_path)
     try:
         journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
@@ -323,10 +518,13 @@ async def run(
             "payload_backed_complete": restart_availability.payload_backed_complete,
             "record_state_summary": restart_availability.summary(),
         },
+        "generations": generation_report,
         "runtime": {
+            "platform": platform.platform(),
             "python": sys.version.split()[0],
             "sqlite_library": sqlite3.sqlite_version,
             "sqlite_runtime": sqlite3.connect(":memory:").execute("select sqlite_version()").fetchone()[0],
+            "journal_mode": journal_mode,
         },
     }
 

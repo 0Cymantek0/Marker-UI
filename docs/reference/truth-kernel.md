@@ -1,23 +1,27 @@
-# Truth Kernel — Commit Spine + Local Payload Durability (PR63A/PR64)
+# Truth Kernel — Commit Spine + Payload Durability + Snapshots & Generations (PR63A/PR64/PR65A)
 
 Status: implemented (V3.2 amendment 4C / PR63 slice A, then amendment
-18C/19C PR64). This page is the authoritative description of what the
-local Truth Kernel guarantees, what it deliberately does not guarantee
-yet, and how PR65/66 are expected to attach. The canonical identity
-contract it consumes is documented separately in
-[canonical-identity.md](canonical-identity.md); the migration authority
-in [../development/database.md](../development/database.md).
+18C/19C PR64, then PR65 slice A). This page is the authoritative
+description of what the local Truth Kernel guarantees, what it
+deliberately does not guarantee yet, and how PR65B/PR66 are expected to
+attach. The canonical identity contract it consumes is documented
+separately in [canonical-identity.md](canonical-identity.md); the
+migration authority in [../development/database.md](../development/database.md).
 
 ## Overview
 
 PR63A established the first production-shaped local Truth Kernel
-persistence layer, and PR64 extended it with durable payload staging,
-availability truth, and the transactional outbox:
+persistence layer, PR64 extended it with durable payload staging,
+availability truth, and the transactional outbox, and PR65A adds
+snapshot-pinned immutable materialized read generations:
 
 - an Alembic-owned schema — revision `20260815_0004` (commit spine:
   `kernel_commit_heads`, `kernel_commit_manifests`, `kernel_records`,
-  `kernel_record_edges`) plus revision `20260815_0005` (PR64:
-  `kernel_payload_objects`, `kernel_outbox`);
+  `kernel_record_edges`), revision `20260815_0005` (PR64:
+  `kernel_payload_objects`, `kernel_outbox`), and revision
+  `20260815_0006` (PR65A: `kernel_generations`,
+  `kernel_generation_records`, `kernel_generation_edges`,
+  `kernel_generation_heads`);
 - one internal commit authority, `app.kernel.commit.KernelCommitService`,
   through which every kernel mutation enters SQLite;
 - per-workspace causal commit chains ordered by `kernel_commit_id`
@@ -33,7 +37,13 @@ availability truth, and the transactional outbox:
 - availability classification and conservative repair
   (`app.kernel.reconcile`);
 - PR61 canonical identity as the record identity boundary;
-- a read-side replay/verification surface (`app.kernel.replay`).
+- a read-side replay/verification surface (`app.kernel.replay`) — a
+  correctness tool, explicitly not the serving path;
+- **PR65A**: `app.kernel.snapshots.resolve_snapshot` pins a workspace to
+  one committed cut with an honest completeness verdict, and
+  `app.kernel.generations` builds deterministic immutable read
+  generations from that cut (build → validate → activate) with a
+  bounded, generation-pinned reader that never replays kernel history.
 
 Existing GUI/REST/CLI/MCP conversion behavior is untouched: nothing in
 production calls the kernel yet. Legacy job/settings/audit tables remain
@@ -205,17 +215,116 @@ Payload availability is verified by the separate
 `verify_payload_availability` surface (see above); the two dimensions
 are intentionally not merged.
 
-## What PR63A+PR64 do NOT guarantee (deliberate non-goals)
+## Snapshots and materialized generations (PR65A)
 
-- No `KernelSnapshot` API, materialized generations, atomic generation
-  serving, proof-closure traversal, retention/GC, pack-segment
-  compaction, or materialized indexes — **PR65**. Orphan objects are
-  classified and reused, never garbage-collected.
+### Snapshot contract
+
+`app.kernel.snapshots.resolve_snapshot(factory, workspace_id,
+at_commit=None, required_payload_state=..., payload_store=...)` pins one
+committed cut of one workspace chain:
+
+- membership is exclusively `kernel_commit_id <= K`; `at_commit=None`
+  pins the current head and `K=0` is the valid empty cut;
+- future (`K > head`), negative, and non-integer cuts are rejected
+  explicitly; a cut below head without a manifest fails closed as chain
+  corruption, as do manifest/record count disagreements;
+- the resolver returns a deterministic `snapshot_id` (framing
+  `marker.kernel.snapshot.v1`) over exactly the declared deterministic
+  fields, so resolving the same cut repeatedly is stable and different
+  cuts never collide;
+- completeness is honest against the requested payload requirement:
+  `metadata_only` is complete when the cut's metadata is coherent;
+  `inspectable`/`replayable` are complete only when every payload-bearing
+  record in the cut verifies `available` in the local store (the scan is
+  bounded to the cut — later payloads never participate). Missing,
+  corrupt, and metadata-only references keep the snapshot `degraded`
+  with per-state counts and a bounded offending-record sample; an
+  inspectable/replayable requirement without a payload store is refused
+  rather than guessed;
+- the master plan's future snapshot bindings (`content_revision_ids`,
+  `access_policy_set_id`, `verifier_policy_revision_id`,
+  `schema_registry_revision`) are **unbound by declaration**: the
+  subsystems that own them (PR70+) do not exist yet, no resolver
+  parameter can supply them, and their unbound names are hashed into the
+  snapshot identity. Absence is machine-detectable, never fabricated.
+
+### Generation lifecycle
+
+`app.kernel.generations.GenerationService` turns a pinned snapshot into
+the current read model in three durable steps:
+
+1. **build → staged.** One transaction reads the committed cut, inserts
+   materialized record/edge rows (`kernel_generation_records` /
+   `kernel_generation_edges`), and writes the immutable manifest row
+   (`kernel_generations`, state `staged`) with the content digest
+   computed from the source cut.
+2. **validate → validated.** The digest is recomputed *from the
+   materialized rows*; counts, workspace bounds, and cut bounds are
+   re-checked. Divergence marks the generation `failed` and raises — the
+   previously accepted generation is untouched. An explicit
+   `validate()` step can resume a generation left staged by a crash
+   between staging and validation.
+3. **activate.** One transaction flips `kernel_generation_heads` under a
+   conditional update, superseding the previous active generation. That
+   commit is the linearization point: readers observe the old accepted
+   generation or the complete new one — never a mix.
+
+Guarantees proven by test (`tests/test_kernel_snapshot.py`,
+`tests/test_kernel_generation*.py`):
+
+- **deterministic identity.** `generation_id` derives from (workspace,
+  cut, snapshot id, materializer id/version, schema version, canonical
+  config). Rebuilding the same declared inputs reproduces the same
+  `content_digest` and reuses the immutable rows; a diverging digest for
+  the same declared inputs fails closed as tampering/nondeterminism.
+- **cut isolation.** Records committed after the pinned cut never appear
+  in the generation; rebuilding a historical generation after newer
+  commits reproduces the original digest.
+- **atomic activation + pinning.** A reader that resolved generation A
+  keeps reading A (immutable rows) after B activates; new readers see B.
+  A failed or faulted build leaves the prior accepted generation current
+  — for every injected lifecycle fault the outcome is binary (prior
+  authoritative, or new fully-valid current), with no third state.
+- **restart truth.** `resolve_current_generation` recovers the current
+  generation from durable state alone; half-built generations are never
+  selected; `staged`/`failed` residue is listable for later cleanup.
+- **tamper detection.** Validation rejects tampered staged content;
+  bounded reads re-verify each record's semantic identity hash (tampered
+  rows fail loudly); `verify_generation` recomputes the full digest and
+  manifest counts for deep verification.
+- **replay-free reads.** The `GenerationReader` surface (summary, record
+  lookup, class-filtered enumeration, counts, edges) queries only
+  materialized rows — `replay()` is never invoked on the read path
+  (asserted by instrumentation).
+- **no second truth authority.** Every generation row is derived from
+  the committed cut named in its manifest; dropping the generation
+  tables and rebuilding reproduces the same identity and digest.
+
+### Deliberate PR65A limits (owned by PR65B/PR66)
+
+- No proof-closure roots, reader/retention pins, or mark/recheck/sweep
+  GC; no kernel payload object is ever deleted — **PR65B**. Its
+  attachment points are `GenerationService.list_generations(state=...)`
+  (stale staging identification), `kernel_generation_heads` (active
+  roots), and snapshot watermarks.
+- No pack-segment compaction or materialized FTS/vector indexes —
+  **PR65B/later**.
+- No worker leases/fencing, exactly-once accepted publication, or
+  dispatcher; the builder is a plain in-process service — **PR66**
+  remains untouched.
+
+## What this kernel does NOT guarantee (deliberate non-goals)
+
+- No proof-closure garbage collection, physical blob deletion, retention
+  pins, or pack-segment compaction — **PR65B**. Orphan objects and
+  stale staged generations are classified and listable, never deleted.
 - No lease/fencing for workers, no exactly-once accepted publication,
   no stable/provisional publication namespaces, no external effect
   ledger — **PR66**. Outbox delivery is at-least-once by declaration.
-- No scheduler/job-state changes, no source/content/access identity,
-  no patch semantics, no verification policy resolution, no UI.
+- No scheduler/job-state changes, no source/content/access identity
+  (snapshot future bindings stay explicitly unbound), no patch
+  semantics, no verification policy resolution, no materialized
+  FTS/vector/visual indexes, no server-side query engine, no UI.
 - Production GUI/REST/CLI/MCP paths are still not wired to the kernel.
 - FK constraints are declared RESTRICT for documentation, but the app
   engine does not enable SQLite FK enforcement — referential visibility
@@ -281,6 +390,34 @@ mixed metadata-only/payload-bearing, 520-byte payloads, 4 writers):
 No threshold is imposed by the plan; this is the measured operating
 envelope PR65 may optimize.
 
+PR65A delta (same Windows dev box, Python 3.11.9, SQLite 3.45.1,
+journal_mode=delete; default fixture: 100 commits × 12 records, 1200
+records / 100 edges in the workspace, generation built at cut 100 with
+the full-hash inspectable snapshot):
+
+- snapshot resolution p50: metadata-only ≈ 32 ms; inspectable with full
+  payload re-hash ≈ 326 ms (≈300 payload-bearing records re-hashed; the
+  availability classes from PR64 are reused unchanged, scan bounded to
+  the cut);
+- generation build (stage + validate, 1200 records materialized) ≈
+  0.57 s; atomic activation ≈ 47 ms; deterministic rebuild (digest
+  equal) ≈ 0.18 s; full `verify_generation` ≈ 0.53 s;
+- ready generation reads (never replay kernel history): current-
+  generation resolution p50 ≈ 9.5 ms, manifest summary ≈ 7.0 ms, record
+  lookup ≈ 7.4 ms, 20-record page ≈ 12.9 ms — p95 ≤ 26 ms, comfortably
+  inside the master-plan sub-200 ms local goal for this fixture;
+- storage: ≈ 377 bytes per source kernel record materialized
+  (payload-JSON + hash + row overhead), 1200 generation record rows for
+  1200 kernel records;
+- restart: current-generation recovery from a fresh engine ≈ 15 ms;
+- one injected `gen-staged` build fault left exactly 1 identifiable
+  staged generation, the prior generation stayed current, and rebuild
+  digest equality held.
+
+These are single-machine observations with the runtime profile recorded
+beside them, not universal claims; rerun
+`backend/scripts/kernel_characterization.py` to reproduce.
+
 ## Design decision note (simplest-design test)
 
 Kept: write-first head upsert (serialization), conditional head update
@@ -299,33 +436,53 @@ truth); an in-process store lock plus atomic replace for Windows
 replace-vs-open semantics; outbox dedupe by deterministic identity
 hash instead of a dispatcher framework.
 
-Considered and rejected: an in-process `asyncio.Lock` as the primary
-*commit* serialization (proves nothing across processes or against
-direct DB writers — the SQLite writer lock remains the authority); a
-Merkle tree over records (no measurable need — sorted-list sha256 roots
-give the same tamper detection with less machinery); six normalized
-tables (more joins, no additional enforceable invariant for this
-slice); a pending/outbox dispatcher (PR66); per-workspace blob
-namespacing (bytes carry no evidence identity, so content-only keys
-maximize dedup without merging evidence).
+PR65A kept: snapshots as **resolved immutable views** (a dataclass plus
+deterministic `snapshot_id`, not a persisted table — nothing new can
+drift from the commit chain because every field is recomputed from it
+on demand); relational derived tables for generations in the same
+SQLite database (indexed bounded lookups, `PK (generation_id,
+record_id)` makes duplicate materialization structurally impossible);
+one deterministic `generation_id` over declared inputs so rebuild
+idempotence and tamper rejection fall out of identity; staged →
+validated → active as three separate transactions with a single
+conditional pointer flip; per-record identity re-verification on
+bounded reads instead of whole-generation hashing per request.
+
+Considered and rejected: a persisted `kernel_snapshots` table (a second
+copy of derivable truth with drift risk — resolution is cheap and
+deterministic); one JSON blob column per generation (simplest rebuild,
+but record lookup/enumeration becomes O(generation) parsing and
+un-indexed); a separate generation database file (two-file durability
+and no atomic pointer switch); hashing the whole generation on every
+read (replay-scale cost — per-record identity checks plus explicit
+`verify_generation` give bounded honesty instead); purging any
+generation rows beyond never-activated `staged`/`failed` residue
+(retirement belongs to PR65B retention, not the builder).
 
 Deleting any of the kept mechanisms fails an acceptance test:
-write-first upsert + conditional update → fork test; canonical
-pre-validation → boundary-rejection tests; composite roots → tamper
-tests; envelope identity → duplicate/dedup tests; staged-before-
-registered ordering → the fault matrix; registry-in-transaction →
-rollback tests; outbox dedupe → duplicate-intent tests.
+deterministic generation id → rebuild-equality/idempotence tests;
+digest-from-materialized-rows validation → tamper/fault matrix;
+conditional pointer update → activation race tests; cut-bounded source
+reads → isolation tests; unbound future fields → snapshot honesty tests;
+never-activated-only purge → residue tests.
 
 ## Extension points for later PRs
 
-- **PR65 (snapshots/materialization):** `replay(to_commit=N)` already
-  defines the committed-cut semantics a snapshot builder consumes;
-  `LocalPayloadStore` and the availability classes are the storage
-  substrate for materialized generations; orphan classification is the
-  mark phase input for GC.
+- **PR65B (proof-closure/GC/pack):** active generations and
+  `kernel_generation_heads` are the durable reader roots; snapshot
+  watermarks (`kernel_commit_id` cuts) bound reachability;
+  `GenerationService.list_generations(state="staged"/"failed")` names
+  reclaimable residue; superseded-but-readable generations are the
+  pin model retention must respect. No physical blob deletion exists
+  yet, by design.
 - **PR66 (fencing/publication):** `KernelCommitReceipt` is the
   commit-identity token later fencing work can chain from;
   `kernel_outbox` rows (dedupe key + attempts + states) are the claim
-  surface leases/fencing will extend.
+  surface leases/fencing will extend; generation activation is
+  idempotent and safe to drive from an at-least-once dispatcher.
+- **PR70+ (source identity):** `KernelSnapshot.UNBOUND_FIELDS` is the
+  exact seam where content/access/verifier identities attach — binding
+  them changes the snapshot identity domain by construction, so old
+  snapshots cannot be silently reinterpreted.
 - **PR74+ (verification):** `ClaimAssessmentRecord.declared_context` is
   the versionable seam for policy resolution without rewriting history.
