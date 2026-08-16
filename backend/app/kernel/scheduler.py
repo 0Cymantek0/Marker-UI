@@ -23,13 +23,15 @@ Policy (weighted fair queuing with aging):
   ``age_boost_factor`` — old eligible work cannot be perpetually
   displaced; **deadline pressure** doubles (near) and quadruples
   (passed) the boost;
-* **bounded fan-out**: a group with ``max_in_flight`` currently-leased
-  items is skipped — a parent flow with a huge child backlog cannot
-  monopolize the class, and backpressure reduces further fan-out
-  instead of queueing unbounded work. A coordinator waiting on
-  children holds no lease and consumes no slot. The window is a
-  backpressure bound, not a hard invariant: concurrent dispatchers may
-  overshoot it transiently by their own count;
+* **bounded fan-out**: a group at its configured ``max_in_flight``
+  outstanding live leases admits no further claim — a parent flow with
+  a huge child backlog cannot monopolize the class, and backpressure
+  reduces further fan-out instead of queueing unbounded work. A
+  coordinator waiting on children holds no lease and consumes no slot.
+  The cap is a hard, database-observable invariant: the capacity
+  decision and the capacity-consuming ownership transition commit in
+  one write-serialized transaction, so concurrent dispatchers can
+  never oversubscribe a group, not even transiently;
 * **bounded look-ahead**: each pass scores at most ``lookahead``
   oldest pending items *per group* (a window, never a global id-ordered
   scan that would keep late-arriving groups invisible behind an older
@@ -40,12 +42,15 @@ ownership, acceptance, and acknowledgement are decided solely by the
 PR66 fence and publication tables. Losing or rebuilding the counter
 changes interleaving, never truth.
 
-Crash windows are explicit and repairable: a crash between the outbox
-claim and the fence acquire leaves an orphan delivery (no lease) that
-:func:`reconcile_dispatch` returns to pending; a crash between the
-acquire and the bookkeeping transaction leaves the ``work.claimed``
-semantic event missing while the claim itself stands — repaired by
-deterministic derivation from the lease authority, never invention.
+Crash windows are explicit and repairable: the delivery claim, the
+fence acquire, the served-count bump, the challenge evidence seed,
+and the ``work.claimed`` semantic event commit as ONE transaction, so
+a crash mid-claim leaves either nothing or the complete claim — never
+a half-claim. An outbox delivery stuck ``in_flight`` without a lease
+row (possible via non-scheduler claim paths or crashes between their
+separate transactions) is returned to pending by
+:func:`reconcile_dispatch`; events are always re-derived from the
+lease/publication authorities, never invented.
 """
 
 from __future__ import annotations
@@ -73,16 +78,15 @@ from app.kernel.fencing import (
     DEFAULT_WORK_LEASE_SECONDS,
     LEASE_STATE_LEASED,
     WorkLease,
+    _acquire_in_session,
     _iso,
-    acquire,
     validate_owner_id,
 )
 from app.kernel.liveness import seed_challenge_in_session
 from app.kernel.outbox import (
     OUTBOX_STATE_IN_FLIGHT,
     OUTBOX_STATE_PENDING,
-    claim as _outbox_claim,
-    release as _outbox_release,
+    _claim_in_session,
 )
 
 __all__ = [
@@ -459,53 +463,65 @@ async def _backfill_missing_entries(
     session_factory: async_sessionmaker,
     *,
     bound: int,
+    busy_retry_attempts: int | None = None,
+    busy_retry_base_delay: float | None = None,
 ) -> None:
     """Give unregistered pending work its default scheduling metadata
     (default class, workspace group) and make sure the involved group
-    policy rows exist. Idempotent; one bounded pass."""
+    policy rows exist. Idempotent; one bounded pass. Obeys the same
+    bounded ``SQLITE_BUSY`` retry envelope as every other scheduler
+    write — contention exhausts into :class:`KernelBusyError`, never a
+    raw ``OperationalError``."""
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
     from app.kernel.models import KernelOutbox, KernelSchedulingEntry, KernelSchedulingGroup
 
-    async with session_factory() as session:
-        async with session.begin():
-            missing = (
-                await session.execute(
-                    select(KernelOutbox)
-                    .outerjoin(KernelSchedulingEntry, KernelOutbox.id == KernelSchedulingEntry.work_id)
-                    .where(
-                        KernelOutbox.state == OUTBOX_STATE_PENDING,
-                        KernelSchedulingEntry.work_id.is_(None),
+    async def _operation() -> None:
+        async with session_factory() as session:
+            async with session.begin():
+                missing = (
+                    await session.execute(
+                        select(KernelOutbox)
+                        .outerjoin(KernelSchedulingEntry, KernelOutbox.id == KernelSchedulingEntry.work_id)
+                        .where(
+                            KernelOutbox.state == OUTBOX_STATE_PENDING,
+                            KernelSchedulingEntry.work_id.is_(None),
+                        )
+                        .order_by(KernelOutbox.id.asc())
+                        .limit(bound)
                     )
-                    .order_by(KernelOutbox.id.asc())
-                    .limit(bound)
-                )
-            ).scalars().all()
-            if not missing:
-                return
-            now = _utcnow()
-            for row in missing:
-                validate_group_id(row.workspace_id)
-                await session.execute(
-                    sqlite_insert(KernelSchedulingEntry)
-                    .values(
-                        work_id=row.id,
-                        workspace_id=row.workspace_id,
-                        resource_class=DEFAULT_RESOURCE_CLASS,
-                        group_id=row.workspace_id,
-                        created_at=now,
+                ).scalars().all()
+                if not missing:
+                    return
+                now = _utcnow()
+                for row in missing:
+                    validate_group_id(row.workspace_id)
+                    await session.execute(
+                        sqlite_insert(KernelSchedulingEntry)
+                        .values(
+                            work_id=row.id,
+                            workspace_id=row.workspace_id,
+                            resource_class=DEFAULT_RESOURCE_CLASS,
+                            group_id=row.workspace_id,
+                            created_at=now,
+                        )
+                        .on_conflict_do_nothing(index_elements=["work_id"])
                     )
-                    .on_conflict_do_nothing(index_elements=["work_id"])
-                )
-                await session.execute(
-                    sqlite_insert(KernelSchedulingGroup)
-                    .values(
-                        resource_class=DEFAULT_RESOURCE_CLASS,
-                        group_id=row.workspace_id,
-                        updated_at=now,
+                    await session.execute(
+                        sqlite_insert(KernelSchedulingGroup)
+                        .values(
+                            resource_class=DEFAULT_RESOURCE_CLASS,
+                            group_id=row.workspace_id,
+                            updated_at=now,
+                        )
+                        .on_conflict_do_nothing(index_elements=["resource_class", "group_id"])
                     )
-                    .on_conflict_do_nothing(index_elements=["resource_class", "group_id"])
-                )
+
+    await _run_with_busy_retry(
+        _operation,
+        busy_retry_attempts=busy_retry_attempts,
+        busy_retry_base_delay=busy_retry_base_delay,
+    )
 
 
 async def claim_fair(
@@ -525,13 +541,16 @@ async def claim_fair(
 
     Returns ``None`` when no eligible work remains: every candidate is
     claimed, fenced elsewhere, accepted, or held back by its group's
-    fan-out window. The claim path is the PR66 path — selection only
+    hard fan-out cap. The claim path is the PR66 path — selection only
     changes *which* item is attempted, never how authority is taken or
-    recorded. On success the bookkeeping transaction (same commit)
-    increments the group's served count, seeds the challenge evidence,
-    and appends the ``work.claimed`` semantic event; the returned
-    ``challenge_nonce`` is handed only to this claimer. ``lookahead``
-    bounds the scored window per scheduling group."""
+    recorded. The winning candidate commits in one write-serialized
+    transaction: delivery claim, lease + fence, served-count increment,
+    challenge evidence seed, and ``work.claimed`` semantic event, with
+    the group's live-lease capacity checked under the same writer lock
+    (``BEGIN IMMEDIATE``) so concurrent dispatchers cannot oversubscribe
+    ``max_in_flight``. The returned ``challenge_nonce`` is handed only
+    to this claimer. ``lookahead`` bounds the scored window per
+    scheduling group."""
     from app.kernel.models import (
         KernelOutbox,
         KernelSchedulingEntry,
@@ -545,6 +564,8 @@ async def claim_fair(
     await _backfill_missing_entries(
         session_factory,
         bound=lookahead * 4,
+        busy_retry_attempts=busy_retry_attempts,
+        busy_retry_base_delay=busy_retry_base_delay,
     )
 
     # Bounded look-ahead, per group: the K oldest pending items of each
@@ -664,118 +685,159 @@ async def claim_fair(
     scored.sort(key=lambda item: (item[0], item[1]))
 
     for _effective, work_id, group_id, _group, oldest in scored:
-        claimed = await _outbox_claim(session_factory, work_id)
-        if claimed is None:
-            continue  # another dispatcher moved first
-        lease = await acquire(
-            session_factory,
-            work_id=work_id,
-            owner_id=owner_id,
-            lease_seconds=lease_seconds,
+        result = await _run_with_busy_retry(
+            lambda wid=work_id, grp=group_id, item=oldest: _claim_under_capacity(
+                session_factory,
+                work_id=wid,
+                workspace_id=item.workspace_id,
+                work_kind=item.work_kind,
+                payload_json=item.payload_json,
+                owner_id=owner_id,
+                lease_seconds=lease_seconds,
+                resource_class=resource_class,
+                group_id=grp,
+                topology_generation=topology_generation,
+            ),
             busy_retry_attempts=busy_retry_attempts,
             busy_retry_base_delay=busy_retry_base_delay,
         )
-        if lease is None:
-            # Fence lost after claiming (e.g. redelivery while a valid
-            # lease exists): unstuck the delivery row, PR66 pattern.
-            await _outbox_release(session_factory, work_id)
-            continue
-
-        nonce = await _record_claim(
-            session_factory,
-            work_id=work_id,
-            workspace_id=oldest.workspace_id,
-            work_kind=oldest.work_kind,
-            owner_id=owner_id,
-            lease=lease,
-            resource_class=resource_class,
-            group_id=group_id,
-            topology_generation=topology_generation,
-            busy_retry_attempts=busy_retry_attempts,
-            busy_retry_base_delay=busy_retry_base_delay,
-        )
-        return ClaimFairResult(
-            work_id=work_id,
-            workspace_id=oldest.workspace_id,
-            work_kind=oldest.work_kind,
-            payload=json.loads(oldest.payload_json),
-            lease=lease,
-            challenge_nonce=nonce,
-            resource_class=resource_class,
-            group_id=group_id,
-        )
+        if result is not None:
+            return result
     return None
 
 
-async def _record_claim(
+async def _claim_under_capacity(
     session_factory: async_sessionmaker,
     *,
     work_id: int,
     workspace_id: str,
     work_kind: str,
+    payload_json: str,
     owner_id: str,
-    lease: WorkLease,
+    lease_seconds: float,
     resource_class: str,
     group_id: str,
     topology_generation: int | None,
-    busy_retry_attempts: int | None,
-    busy_retry_base_delay: float | None,
-) -> str:
-    """Post-acquire bookkeeping in one transaction: served-count
-    increment (non-authoritative), challenge evidence seed, and the
-    ``work.claimed`` semantic event. A crash before this transaction
-    leaves a repairable gap (see :func:`reconcile_dispatch`)."""
-    from app.kernel.models import KernelSchedulingGroup
+) -> ClaimFairResult | None:
+    """Capacity decision + ownership transition in ONE transaction.
+
+    ``BEGIN IMMEDIATE`` takes SQLite's single-writer lock before the
+    first read, so the live-lease count observed here includes every
+    lease committed before this transaction — two dispatchers cannot
+    both admit work into a group's last capacity slot. A group at its
+    configured ``max_in_flight`` therefore cannot commit another live
+    lease; the read-phase scoring above remains only a ranking hint.
+
+    Losing the capacity check, the delivery claim, or the fence race
+    rolls the entire transaction back: no partial state (no orphan
+    in-flight delivery, no served-count bump) ever commits. On success
+    the delivery claim, lease, served-count increment, challenge
+    evidence seed, and ``work.claimed`` semantic event commit together.
+    """
+    from app.kernel.models import (
+        KernelSchedulingEntry,
+        KernelSchedulingGroup,
+        KernelWorkLease,
+    )
     from app.utils.canonical import canonical_json_str, to_json_ready
 
-    async def _operation() -> str:
-        async with session_factory() as session:
-            async with session.begin():
-                await session.execute(
-                    update(KernelSchedulingGroup)
-                    .where(
-                        KernelSchedulingGroup.resource_class == resource_class,
-                        KernelSchedulingGroup.group_id == group_id,
-                    )
-                    .values(
-                        served_count=KernelSchedulingGroup.served_count + 1,
-                        updated_at=_utcnow(),
-                    )
-                    .execution_options(synchronize_session=False)
-                )
-                nonce = await seed_challenge_in_session(
-                    session, work_id=work_id, topology_generation=topology_generation
-                )
-                try:
-                    payload_json = canonical_json_str(
-                        to_json_ready(
-                            {
-                                "work_id": work_id,
-                                "owner_id": owner_id,
-                                "fencing_token": lease.fencing_token,
-                                "work_kind": work_kind,
-                                "resource_class": resource_class,
-                                "group_id": group_id,
-                            }
-                        )
-                    )
-                except Exception as exc:
-                    raise InvalidEventError(f"claim event payload rejected: {exc}") from exc
-                await _append_in_session(
-                    session,
-                    workspace_id=workspace_id,
-                    stream="work",
-                    event_type=EVENT_CLAIMED,
-                    payload_json=payload_json,
-                    durability=DURABILITY_DURABLE,
-                )
-                return nonce
+    async with session_factory() as session:
+        conn = await session.connection()  # autobegin; driver still idle
+        await conn.exec_driver_sql("BEGIN IMMEDIATE")  # writer lock first
 
-    return await _run_with_busy_retry(
-        _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
-    )
+        group = await session.get(
+            KernelSchedulingGroup,
+            {"resource_class": resource_class, "group_id": group_id},
+        )
+        if group is None:
+            # Policy row vanished between scoring and this transaction;
+            # skip honestly rather than inventing policy at dispatch time.
+            await session.rollback()
+            return None
+        live_leases = int(
+            (
+                await session.execute(
+                    select(func.count())
+                    .select_from(KernelWorkLease)
+                    .join(
+                        KernelSchedulingEntry,
+                        KernelWorkLease.work_id == KernelSchedulingEntry.work_id,
+                    )
+                    .where(
+                        KernelSchedulingEntry.resource_class == resource_class,
+                        KernelSchedulingEntry.group_id == group_id,
+                        KernelWorkLease.state == LEASE_STATE_LEASED,
+                        KernelWorkLease.lease_expires_at > _utcnow(),
+                    )
+                )
+            ).scalar_one()
+        )
+        if live_leases >= group.max_in_flight:
+            await session.rollback()  # hard cap: no commit without capacity
+            return None
+
+        if not await _claim_in_session(session, work_id):
+            await session.rollback()  # another dispatcher moved first
+            return None
+
+        lease = await _acquire_in_session(
+            session, work_id=work_id, owner_id=owner_id, lease_seconds=lease_seconds
+        )
+        if lease is None:
+            # Fence lost (e.g. redelivery while a valid lease exists):
+            # the delivery claim is undone by the same rollback.
+            await session.rollback()
+            return None
+
+        await session.execute(
+            update(KernelSchedulingGroup)
+            .where(
+                KernelSchedulingGroup.resource_class == resource_class,
+                KernelSchedulingGroup.group_id == group_id,
+            )
+            .values(
+                served_count=KernelSchedulingGroup.served_count + 1,
+                updated_at=_utcnow(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        nonce = await seed_challenge_in_session(
+            session, work_id=work_id, topology_generation=topology_generation
+        )
+        try:
+            claimed_payload = canonical_json_str(
+                to_json_ready(
+                    {
+                        "work_id": work_id,
+                        "owner_id": owner_id,
+                        "fencing_token": lease.fencing_token,
+                        "work_kind": work_kind,
+                        "resource_class": resource_class,
+                        "group_id": group_id,
+                    }
+                )
+            )
+        except Exception as exc:
+            raise InvalidEventError(f"claim event payload rejected: {exc}") from exc
+        await _append_in_session(
+            session,
+            workspace_id=workspace_id,
+            stream="work",
+            event_type=EVENT_CLAIMED,
+            payload_json=claimed_payload,
+            durability=DURABILITY_DURABLE,
+        )
+        await session.commit()
+        return ClaimFairResult(
+            work_id=work_id,
+            workspace_id=workspace_id,
+            work_kind=work_kind,
+            payload=json.loads(payload_json),
+            lease=lease,
+            challenge_nonce=nonce,
+            resource_class=resource_class,
+            group_id=group_id,
+        )
 
 
 # ---------------------------------------------------------------------------

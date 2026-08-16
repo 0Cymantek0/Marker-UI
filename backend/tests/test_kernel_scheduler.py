@@ -582,3 +582,164 @@ async def test_accept_work_records_accepted_event_idempotently(payload_env) -> N
     accepted = [e for e in events if e.event_type == "work.accepted"]
     assert len(accepted) == 1
     assert accepted[0].payload["result_hash"] == outcome.publication.result_hash
+
+
+# ---------------------------------------------------------------------------
+# hard fan-out cap under concurrent dispatchers (PR67 hardening)
+# ---------------------------------------------------------------------------
+
+
+async def _live_leases(factory, *, group_id: str) -> int:
+    """Committed live (leased, unexpired) leases in one group — the
+    capacity truth the cap must bound."""
+    from sqlalchemy import func, select
+
+    from app.kernel.models import KernelSchedulingEntry, KernelWorkLease
+
+    async with factory() as session:
+        value = (
+            await session.execute(
+                select(func.count())
+                .select_from(KernelWorkLease)
+                .join(
+                    KernelSchedulingEntry,
+                    KernelWorkLease.work_id == KernelSchedulingEntry.work_id,
+                )
+                .where(
+                    KernelSchedulingEntry.resource_class == "default",
+                    KernelSchedulingEntry.group_id == group_id,
+                    KernelWorkLease.state == "leased",
+                    KernelWorkLease.lease_expires_at > datetime.now(timezone.utc),
+                )
+            )
+        ).scalar_one()
+    return int(value)
+
+
+async def test_cap_one_never_oversubscribes_under_concurrent_dispatchers(
+    payload_env,
+) -> None:
+    """N simultaneous dispatchers against a cap-1 group: exactly one
+    committed live lease may exist — the check-and-claim window is
+    closed by the write-serialized claim transaction."""
+    factory = payload_env[0]
+    for _ in range(10):
+        await _new_work(payload_env, workspace_id="ws-cap1")
+    await scheduler.set_group_policy(
+        factory,
+        resource_class="default",
+        group_id="ws-cap1",
+        policy=scheduler.GroupPolicy(max_in_flight=1),
+    )
+
+    results = await asyncio.gather(
+        *(scheduler.claim_fair(factory, owner_id=f"racer-{i}") for i in range(6))
+    )
+    claims = [r for r in results if r is not None]
+    assert len(claims) == 1
+    assert await _live_leases(factory, group_id="ws-cap1") == 1
+
+    # Losers left no partial state behind: their candidates stay
+    # pending (nothing in_flight without a lease, no served-count
+    # inflation beyond the single winner).
+    states = await _outbox_states(factory)
+    assert list(states.values()).count("in_flight") == 1
+    view = await scheduler.get_group_policy(
+        factory, resource_class="default", group_id="ws-cap1"
+    )
+    assert view is not None and view.served_count == 1
+
+    # Serving the winner frees the only slot: capacity is reclaimable.
+    await _serve(factory, claims[0])
+    assert await _live_leases(factory, group_id="ws-cap1") == 0
+    nxt = await scheduler.claim_fair(factory, owner_id="racer-relief")
+    assert nxt is not None and nxt.group_id == "ws-cap1"
+
+
+async def test_cap_k_bounds_concurrent_dispatchers(payload_env) -> None:
+    """Cap K with more concurrent dispatchers than slots: committed
+    live leases never exceed K, and an unrelated group still claims."""
+    factory = payload_env[0]
+    for _ in range(12):
+        await _new_work(payload_env, workspace_id="ws-capk")
+    await _new_work(payload_env, workspace_id="ws-free")
+    await scheduler.set_group_policy(
+        factory,
+        resource_class="default",
+        group_id="ws-capk",
+        policy=scheduler.GroupPolicy(max_in_flight=3),
+    )
+    # Deterministic preference: ws-capk holds the lower virtual finish
+    # while any of its backlog remains, so racers and the drain loop
+    # always target it; ws-free is reserved for the saturated check.
+    await _seed_served(factory, resource_class="default", **{"ws-free": 5})
+
+    results = await asyncio.gather(
+        *(scheduler.claim_fair(factory, owner_id=f"racer-{i}") for i in range(8))
+    )
+    capped = [r for r in results if r is not None and r.group_id == "ws-capk"]
+    # Concurrent racers may converge on the same oldest candidate (one
+    # dispatch per call); losers retry. Drain to saturation: the
+    # committed total converges to exactly the cap, never past it.
+    while len(capped) < 3:
+        nxt = await scheduler.claim_fair(factory, owner_id="drain")
+        if nxt is None:
+            break
+        assert nxt.group_id == "ws-capk"
+        capped.append(nxt)
+    assert len(capped) == 3
+    assert await _live_leases(factory, group_id="ws-capk") == 3
+
+    # Unrelated group progress under saturation: a racer that found
+    # ws-capk already full claimed ws-free instead, or it is claimable
+    # now — either way the capped group refuses further work.
+    unrelated = [r for r in results if r is not None and r.group_id != "ws-capk"]
+    if not unrelated:
+        further = await scheduler.claim_fair(factory, owner_id="outsider")
+        assert further is not None and further.group_id == "ws-free"
+
+    # Completing one capped item reopens exactly one slot.
+    await _serve(factory, capped[0])
+    assert await _live_leases(factory, group_id="ws-capk") == 2
+    refill = await scheduler.claim_fair(factory, owner_id="refill")
+    assert refill is not None and refill.group_id == "ws-capk"
+    assert await _live_leases(factory, group_id="ws-capk") == 3
+
+
+async def test_lease_expiry_frees_capacity_under_concurrency(payload_env) -> None:
+    """Wedged owners' lapsed leases must not consume capacity: after
+    expiry the group admits fresh claims (takeover path)."""
+    factory = payload_env[0]
+    for _ in range(6):
+        await _new_work(payload_env, workspace_id="ws-exp")
+    await scheduler.set_group_policy(
+        factory,
+        resource_class="default",
+        group_id="ws-exp",
+        policy=scheduler.GroupPolicy(max_in_flight=2),
+    )
+
+    lease = 0.3
+    holders = [
+        await scheduler.claim_fair(factory, owner_id=f"w{i}", lease_seconds=lease)
+        for i in range(2)
+    ]
+    assert all(h is not None for h in holders)
+    assert await scheduler.claim_fair(factory, owner_id="w2") is None
+
+    await asyncio.sleep(lease + 0.15)
+    from app.kernel.outbox import reset_in_flight
+
+    await reset_in_flight(factory)
+    results = await asyncio.gather(
+        *(scheduler.claim_fair(factory, owner_id=f"t{i}") for i in range(4))
+    )
+    takeovers = [r for r in results if r is not None]
+    while len(takeovers) < 2:
+        nxt = await scheduler.claim_fair(factory, owner_id="t-late")
+        if nxt is None:
+            break
+        takeovers.append(nxt)
+    assert len(takeovers) == 2  # exactly the freed capacity, not more
+    assert await _live_leases(factory, group_id="ws-exp") == 2
+    assert all(r.lease.fencing_token == 2 for r in takeovers)  # takeover, not revival

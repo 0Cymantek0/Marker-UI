@@ -356,10 +356,6 @@ async def acquire(
     * lease vacated (``released``) or expired → takeover (token +1);
     * anything else → ``None`` (not eligible).
     """
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-    from app.kernel.models import KernelOutbox, KernelWorkLease
-
     validate_owner_id(owner_id)
     if lease_seconds <= 0:
         raise InvalidWorkLeaseError("lease_seconds must be positive")
@@ -367,94 +363,115 @@ async def acquire(
     async def _operation() -> WorkLease | None:
         async with session_factory() as session:
             async with session.begin():
-                outbox_row = await session.get(KernelOutbox, work_id)
-                if outbox_row is None:
-                    raise UnknownWorkError(f"no outbox work item {work_id!r}")
-                if outbox_row.state == OUTBOX_STATE_DONE:
-                    return None
-
-                now = _utcnow()
-                expires = now + timedelta(seconds=lease_seconds)
-                lease = await session.get(KernelWorkLease, work_id)
-
-                if lease is None:
-                    # Guarded insert: a concurrent first-acquire that wins
-                    # the primary key makes this contender cleanly lose
-                    # (T2) instead of failing the transaction.
-                    inserted = await session.execute(
-                        sqlite_insert(KernelWorkLease)
-                        .values(
-                            work_id=work_id,
-                            workspace_id=outbox_row.workspace_id,
-                            work_kind=outbox_row.work_kind,
-                            fencing_token=1,
-                            owner_id=owner_id,
-                            state=LEASE_STATE_LEASED,
-                            lease_expires_at=expires,
-                        )
-                        .on_conflict_do_nothing(index_elements=["work_id"])
-                    )
-                    if inserted.rowcount != 1:
-                        return None
-                    created = await session.get(KernelWorkLease, work_id)
-                    return _lease_view(created)
-
-                if lease.state == LEASE_STATE_ACCEPTED:
-                    return None
-
-                if lease.owner_id == owner_id and lease.state == LEASE_STATE_LEASED:
-                    # Renewal by the still-current owner: token must not
-                    # move just because delivery duplicated the acquire.
-                    result = await session.execute(
-                        update(KernelWorkLease)
-                        .where(
-                            KernelWorkLease.work_id == work_id,
-                            KernelWorkLease.fencing_token == lease.fencing_token,
-                            KernelWorkLease.owner_id == owner_id,
-                            KernelWorkLease.state == LEASE_STATE_LEASED,
-                        )
-                        .values(lease_expires_at=expires, updated_at=now)
-                        .execution_options(synchronize_session=False)
-                    )
-                    if result.rowcount != 1:
-                        return None  # ownership moved mid-renewal
-                    session.expire(lease)  # Core update bypassed the instance
-                    refreshed = await session.get(KernelWorkLease, work_id)
-                    return _lease_view(refreshed)
-
-                # Takeover: only when vacated or the lease has lapsed.
-                result = await session.execute(
-                    update(KernelWorkLease)
-                    .where(
-                        KernelWorkLease.work_id == work_id,
-                        KernelWorkLease.fencing_token == lease.fencing_token,
-                    )
-                    .where(
-                        (KernelWorkLease.state == LEASE_STATE_RELEASED)
-                        | (KernelWorkLease.lease_expires_at <= now)
-                    )
-                    .values(
-                        fencing_token=lease.fencing_token + 1,
-                        owner_id=owner_id,
-                        state=LEASE_STATE_LEASED,
-                        lease_expires_at=expires,
-                        updated_at=now,
-                    )
-                    # The identity-mapped row may hold tz-aware values the
-                    # SQL-side expiry compare must not re-evaluate in Python.
-                    .execution_options(synchronize_session=False)
+                return await _acquire_in_session(
+                    session, work_id=work_id, owner_id=owner_id,
+                    lease_seconds=lease_seconds,
                 )
-                if result.rowcount != 1:
-                    return None  # lost the takeover race
-                session.expire(lease)  # Core update bypassed the instance
-                refreshed = await session.get(KernelWorkLease, work_id)
-                return _lease_view(refreshed)
 
     return await _run_with_busy_retry(
         _operation,
         busy_retry_attempts=busy_retry_attempts,
         busy_retry_base_delay=busy_retry_base_delay,
     )
+
+
+async def _acquire_in_session(
+    session: Any,
+    *,
+    work_id: int,
+    owner_id: str,
+    lease_seconds: float,
+) -> WorkLease | None:
+    """Transactional lease-acquire core for callers that already hold an
+    open write transaction (internal transactional API; the scheduler
+    uses it so capacity decisions and ownership transitions commit
+    together). Behavior contract is exactly :func:`acquire`."""
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    from app.kernel.models import KernelOutbox, KernelWorkLease
+
+    outbox_row = await session.get(KernelOutbox, work_id)
+    if outbox_row is None:
+        raise UnknownWorkError(f"no outbox work item {work_id!r}")
+    if outbox_row.state == OUTBOX_STATE_DONE:
+        return None
+
+    now = _utcnow()
+    expires = now + timedelta(seconds=lease_seconds)
+    lease = await session.get(KernelWorkLease, work_id)
+
+    if lease is None:
+        # Guarded insert: a concurrent first-acquire that wins the
+        # primary key makes this contender cleanly lose (T2) instead of
+        # failing the transaction.
+        inserted = await session.execute(
+            sqlite_insert(KernelWorkLease)
+            .values(
+                work_id=work_id,
+                workspace_id=outbox_row.workspace_id,
+                work_kind=outbox_row.work_kind,
+                fencing_token=1,
+                owner_id=owner_id,
+                state=LEASE_STATE_LEASED,
+                lease_expires_at=expires,
+            )
+            .on_conflict_do_nothing(index_elements=["work_id"])
+        )
+        if inserted.rowcount != 1:
+            return None
+        created = await session.get(KernelWorkLease, work_id)
+        return _lease_view(created)
+
+    if lease.state == LEASE_STATE_ACCEPTED:
+        return None
+
+    if lease.owner_id == owner_id and lease.state == LEASE_STATE_LEASED:
+        # Renewal by the still-current owner: token must not move just
+        # because delivery duplicated the acquire.
+        result = await session.execute(
+            update(KernelWorkLease)
+            .where(
+                KernelWorkLease.work_id == work_id,
+                KernelWorkLease.fencing_token == lease.fencing_token,
+                KernelWorkLease.owner_id == owner_id,
+                KernelWorkLease.state == LEASE_STATE_LEASED,
+            )
+            .values(lease_expires_at=expires, updated_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            return None  # ownership moved mid-renewal
+        session.expire(lease)  # Core update bypassed the instance
+        refreshed = await session.get(KernelWorkLease, work_id)
+        return _lease_view(refreshed)
+
+    # Takeover: only when vacated or the lease has lapsed.
+    result = await session.execute(
+        update(KernelWorkLease)
+        .where(
+            KernelWorkLease.work_id == work_id,
+            KernelWorkLease.fencing_token == lease.fencing_token,
+        )
+        .where(
+            (KernelWorkLease.state == LEASE_STATE_RELEASED)
+            | (KernelWorkLease.lease_expires_at <= now)
+        )
+        .values(
+            fencing_token=lease.fencing_token + 1,
+            owner_id=owner_id,
+            state=LEASE_STATE_LEASED,
+            lease_expires_at=expires,
+            updated_at=now,
+        )
+        # The identity-mapped row may hold tz-aware values the SQL-side
+        # expiry compare must not re-evaluate in Python.
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        return None  # lost the takeover race
+    session.expire(lease)  # Core update bypassed the instance
+    refreshed = await session.get(KernelWorkLease, work_id)
+    return _lease_view(refreshed)
 
 
 async def release(

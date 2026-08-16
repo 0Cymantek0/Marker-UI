@@ -183,16 +183,26 @@ async def claim(session_factory: async_sessionmaker, work_id: int) -> OutboxView
 
     async with session_factory() as session:
         async with session.begin():
-            now = datetime.now(timezone.utc)
-            result = await session.execute(
-                update(KernelOutbox)
-                .where(KernelOutbox.id == work_id, KernelOutbox.state == OUTBOX_STATE_PENDING)
-                .values(state=OUTBOX_STATE_IN_FLIGHT, claimed_at=now)
-            )
-            if result.rowcount != 1:
+            claimed = await _claim_in_session(session, work_id)
+            if not claimed:
                 return None
             row = await session.get(KernelOutbox, work_id)
             return _view(row)
+
+
+async def _claim_in_session(session, work_id: int) -> bool:
+    """Transactional claim core for callers holding an open write
+    transaction (internal transactional API; the scheduler claims the
+    delivery inside its serialized capacity/ownership decision)."""
+    from app.kernel.models import KernelOutbox
+
+    now = datetime.now(timezone.utc)
+    result = await session.execute(
+        update(KernelOutbox)
+        .where(KernelOutbox.id == work_id, KernelOutbox.state == OUTBOX_STATE_PENDING)
+        .values(state=OUTBOX_STATE_IN_FLIGHT, claimed_at=now)
+    )
+    return result.rowcount == 1
 
 
 async def ack(session_factory: async_sessionmaker, work_id: int) -> bool:

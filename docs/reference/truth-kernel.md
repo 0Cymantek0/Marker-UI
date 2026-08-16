@@ -132,7 +132,11 @@ Invariants the implementation proves by test:
   semantic record identity (`identity_hash`) never merges.
 - **Tampering is detectable.** Truncation or mutation of a committed
   object makes availability verification report `corrupt`; deletion
-  reports `missing`; neither may be presented as complete.
+  reports `missing`; an object that exists but cannot be read
+  (permission loss, sharing violation, filesystem error) is reported
+  as present-but-unverifiable — the `corrupt` bucket — because an
+  availability claim requires a verified read; none of these may be
+  presented as complete or available.
 - **Storage paths are hex-derived only.** Record ids and caller strings
   never reach path construction; persisted locators are validated
   against a strict grammar before resolution.
@@ -543,12 +547,19 @@ acknowledgement still happens only behind accepted truth.
 - **Age boost** (item older than `age_boost_after_seconds` divides
   virtual finish by `age_boost_factor`) and **deadline pressure**
   (×2 near, ×4 past) keep old eligible work from perpetual displacement.
-- **Bounded fan-out**: a group at `max_in_flight` currently-leased items
-  is skipped — a parent flow's huge child backlog cannot monopolize the
+- **Bounded fan-out**: a group at `max_in_flight` live leases is
+  skipped — a parent flow's huge child backlog cannot monopolize the
   class, and backpressure reduces further fan-out rather than queueing
   unbounded work. A coordinator waiting on children holds no lease and
-  consumes no slot. The window is a backpressure bound, not a hard
-  invariant: N concurrent dispatchers may overshoot by their own count.
+  consumes no slot. The cap is a **hard, database-observable
+  invariant**: the winning claim's capacity check, delivery claim,
+  fence acquire, served-count bump, challenge seed, and
+  `work.claimed` event commit in one write-serialized transaction
+  (`BEGIN IMMEDIATE` takes SQLite's single-writer lock before the
+  live-lease count is read), so concurrent dispatchers can never
+  oversubscribe a group — not even transiently. Losing the capacity
+  check, delivery race, or fence race rolls the whole transaction
+  back; no partial claim state ever commits.
 - **Bounded look-ahead**: each pass scores the K oldest pending items
   *per group* (window-partitioned, never a global id-ordered scan that
   would keep late-arriving groups invisible). Items fenced by a still
