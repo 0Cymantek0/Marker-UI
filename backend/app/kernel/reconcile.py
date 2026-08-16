@@ -17,13 +17,25 @@ Classification per committed record that carries a ``payload_byte_hash``:
 * ``corrupt``       — registry row, object present but bytes fail verify;
 * ``metadata_only`` — no registry row: the hash is declared truth, but
   the bytes were never durably staged in the local profile. Honest, and
-  explicitly NOT payload-backed-complete.
+  explicitly NOT payload-backed-complete;
+* ``retired`` (PR65B) — registry row + GC tombstone + object absent:
+  the bytes were deliberately retired under an authorized retention
+  decision. Distinct from ``missing`` (unexpected absence) and from
+  ``available`` — a re-supplied object whose bytes verify again is
+  ``available`` regardless of tombstone history.
 
 Repair is conservative: it may delete stale tmp scratch and return
 stuck outbox items to pending. It never deletes objects, never writes
 payload bytes, never rewrites evidence identity, and never turns a
 metadata-only or degraded state into "complete" — healing requires the
 exact bytes to be re-supplied and re-verified through staging.
+
+Known reporting quirk (kept deliberately, documented for GC authors):
+``orphan_objects`` with a ``workspace_id`` filter compares the whole
+physical store against only that workspace's needed registry keys, so
+another workspace's object can appear as an "orphan". It is a report,
+never a deletion candidate list — the PR65B collector derives
+candidates from store-wide reachability instead.
 """
 
 from __future__ import annotations
@@ -35,7 +47,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.kernel.commit import validate_workspace_id
-from app.kernel.models import KernelOutbox, KernelPayloadObject, KernelRecord
+from app.kernel.models import (
+    KernelOutbox,
+    KernelPayloadObject,
+    KernelPayloadRetirement,
+    KernelRecord,
+)
 from app.kernel.outbox import (
     OUTBOX_STATE_PENDING,
     list_outbox,
@@ -49,6 +66,7 @@ __all__ = [
     "PAYLOAD_STATE_CORRUPT",
     "PAYLOAD_STATE_METADATA_ONLY",
     "PAYLOAD_STATE_MISSING",
+    "PAYLOAD_STATE_RETIRED",
     "PayloadAvailabilityResult",
     "RecordPayloadState",
     "ReconcileReport",
@@ -61,6 +79,7 @@ PAYLOAD_STATE_AVAILABLE = "available"
 PAYLOAD_STATE_MISSING = "missing"
 PAYLOAD_STATE_CORRUPT = "corrupt"
 PAYLOAD_STATE_METADATA_ONLY = "metadata_only"
+PAYLOAD_STATE_RETIRED = "retired"
 
 
 @dataclass(frozen=True)
@@ -73,14 +92,20 @@ class BlobState:
     exists: bool
     length_ok: bool
     hash_ok: bool
+    #: a GC tombstone authorizes/records this object's retirement
+    retired: bool = False
 
     @property
     def state(self) -> str:
-        if not self.exists:
-            return PAYLOAD_STATE_MISSING
-        if not (self.length_ok and self.hash_ok):
-            return PAYLOAD_STATE_CORRUPT
-        return PAYLOAD_STATE_AVAILABLE
+        if self.exists:
+            # Re-supplied bytes that verify win over retirement history:
+            # availability is about present, verified bytes.
+            if not (self.length_ok and self.hash_ok):
+                return PAYLOAD_STATE_CORRUPT
+            return PAYLOAD_STATE_AVAILABLE
+        if self.retired:
+            return PAYLOAD_STATE_RETIRED
+        return PAYLOAD_STATE_MISSING
 
 
 @dataclass(frozen=True)
@@ -167,11 +192,35 @@ async def verify_payload_availability(
                     )
                 )
             ).scalars().all()
+        tombstoned_keys: set[str] = set()
+        if needed_keys:
+            tombstoned_keys = {
+                row[0]
+                for row in (
+                    await session.execute(
+                        select(KernelPayloadRetirement.blob_key).where(
+                            KernelPayloadRetirement.blob_key.in_(needed_keys)
+                        )
+                    )
+                ).all()
+            }
 
     blob_states: dict[str, BlobState] = {}
     for row in registry_rows:
         check = await _check_blob(store, row, verify_hashes=verify_hashes)
         blob_states[row.blob_key] = check
+    for key in sorted(tombstoned_keys):
+        if key in blob_states:
+            existing = blob_states[key]
+            blob_states[key] = BlobState(
+                blob_key=existing.blob_key,
+                locator=existing.locator,
+                payload_length=existing.payload_length,
+                exists=existing.exists,
+                length_ok=existing.length_ok,
+                hash_ok=existing.hash_ok,
+                retired=True,
+            )
 
     record_states = tuple(
         RecordPayloadState(

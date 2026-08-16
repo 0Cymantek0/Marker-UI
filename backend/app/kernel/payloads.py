@@ -35,6 +35,12 @@ always points at bytes that were published and verified first.
 
 Fault injection: deterministic test hooks raise ``InjectedFaultError``
 at named protocol phases; see ``PAYLOAD_FAULT_PHASES``.
+
+Physical retirement (PR65B): ``delete_object`` unlinks one authorized
+object idempotently. The store itself never decides what may be
+deleted — a durable GC tombstone from the kernel database must already
+authorize it, and re-staging the exact bytes after deletion is always a
+valid re-publication (the dedup/heal path covers it).
 """
 
 from __future__ import annotations
@@ -54,6 +60,7 @@ from app.utils.canonical import payload_byte_hash
 __all__ = [
     "BLOB_HEX_PATTERN",
     "BLOB_KEY_PATTERN",
+    "DeleteResult",
     "LOCAL_STORE_PROFILE",
     "PAYLOAD_FAULT_PHASES",
     "LocalPayloadStore",
@@ -74,8 +81,11 @@ PHASE_AFTER_WRITE = "stage-after-write"  # after write, before fsync
 PHASE_AFTER_FSYNC = "stage-after-fsync"  # durable tmp, before publish
 PHASE_AFTER_PUBLISH = "stage-after-publish"  # renamed, before verify
 PHASE_AFTER_VERIFY = "stage-after-verify"  # verified, before caller
+PHASE_DELETE_BEFORE_UNLINK = "delete-before-unlink"  # object intact, crash window
+PHASE_DELETE_AFTER_UNLINK = "delete-after-unlink"  # unlinked, outcome unrecorded
 
-PAYLOAD_FAULT_PHASES = frozenset(
+#: Faults raised along the staging/publication protocol (commit path).
+STAGING_FAULT_PHASES = frozenset(
     {
         PHASE_BEFORE_WRITE,
         PHASE_MID_WRITE,
@@ -84,6 +94,11 @@ PAYLOAD_FAULT_PHASES = frozenset(
         PHASE_AFTER_PUBLISH,
         PHASE_AFTER_VERIFY,
     }
+)
+
+#: All fault phases this store can raise (staging + retirement sweep).
+PAYLOAD_FAULT_PHASES = STAGING_FAULT_PHASES | frozenset(
+    {PHASE_DELETE_BEFORE_UNLINK, PHASE_DELETE_AFTER_UNLINK}
 )
 
 
@@ -113,6 +128,20 @@ class ObjectCheck:
     @property
     def available(self) -> bool:
         return self.exists and self.length_ok and self.hash_ok
+
+
+@dataclass(frozen=True)
+class DeleteResult:
+    """Outcome of one authorized object deletion (PR65B GC sweep).
+
+    ``existed`` is False when the object was already physically absent —
+    an idempotent retry converging on the same truthful outcome, not an
+    error. The database tombstone, not this result, is the authority.
+    """
+
+    blob_key: str
+    existed: bool
+    deleted: bool
 
 
 class LocalPayloadStore:
@@ -372,6 +401,54 @@ class LocalPayloadStore:
             if age >= older_than_seconds and self._unlink_quietly(path):
                 removed.append(path)
         return removed
+
+    # ------------------------------------------------------------------
+    # retirement (PR65B GC sweep only; never called by the commit path)
+    # ------------------------------------------------------------------
+
+    async def object_exists(self, blob_key: str) -> bool:
+        """Cheap existence probe (stat only, no hashing).
+
+        Used inside the commit transaction's tombstone-rescue check,
+        where a full verify would hold the SQLite writer lock too long.
+        Existence is not availability: verification stays the authority.
+        """
+        async with self._io_lock:
+            return await asyncio.to_thread(self.object_path(blob_key).is_file)
+
+    async def delete_object(self, blob_key: str) -> DeleteResult:
+        """Unlink one object; idempotent and honest about absence.
+
+        Callers must already hold a durable retirement authorization
+        (a GC tombstone) — the store never decides retention policy.
+        An already-absent object returns ``existed=False`` without
+        error, so crash recovery and retries converge. ``OSError``
+        failures raise :class:`PayloadStageError` so the caller records
+        a retryable failure instead of a false success. Injected faults
+        ``delete-before-unlink`` / ``delete-after-unlink`` bracket the
+        unlink for crash-window tests.
+        """
+        async with self._io_lock:
+            return await asyncio.to_thread(self._delete_object_sync, blob_key)
+
+    def _delete_object_sync(self, blob_key: str) -> DeleteResult:
+        path = self.object_path(blob_key)
+        existed = path.is_file()
+        if not existed:
+            return DeleteResult(blob_key=blob_key, existed=False, deleted=False)
+        self._maybe_inject(PHASE_DELETE_BEFORE_UNLINK)
+        # Windows refuses to unlink the read-only tamper hint; clearing
+        # it is safe here because the unlink itself is already authorized.
+        self._clear_readonly(path)
+        try:
+            path.unlink()
+        except OSError as exc:
+            raise PayloadStageError(
+                f"payload deletion failed for {blob_key}: {exc}"
+            ) from exc
+        self._fsync_dir(path.parent)
+        self._maybe_inject(PHASE_DELETE_AFTER_UNLINK)
+        return DeleteResult(blob_key=blob_key, existed=True, deleted=True)
 
     # ------------------------------------------------------------------
     # internals

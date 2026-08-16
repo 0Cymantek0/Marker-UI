@@ -49,6 +49,7 @@ from app.kernel.models import (
     KERNEL_SCHEMA_VERSION,
     KernelCommitManifest,
     KernelPayloadObject,
+    KernelPayloadRetirement,
     KernelRecord,
     KernelRecordEdge,
 )
@@ -58,6 +59,7 @@ from app.kernel.reconcile import (
     PAYLOAD_STATE_CORRUPT,
     PAYLOAD_STATE_METADATA_ONLY,
     PAYLOAD_STATE_MISSING,
+    PAYLOAD_STATE_RETIRED,
 )
 from app.utils.canonical import CANONICALIZATION_PROFILE, record_identity_hash
 
@@ -345,9 +347,13 @@ async def _classify_cut_payloads(
     """Availability histogram for payload-bearing records within the cut.
 
     Semantics mirror ``app.kernel.reconcile`` (available / missing /
-    corrupt / metadata_only) but the scan is bounded to records whose
-    commit is ``<= cut`` — a pinned historical snapshot never consults
-    payloads that entered the workspace later.
+    corrupt / metadata_only / retired) but the scan is bounded to
+    records whose commit is ``<= cut`` — a pinned historical snapshot
+    never consults payloads that entered the workspace later. A retired
+    object (PR65B tombstone, bytes gone) keeps the snapshot honest:
+    degraded for inspectable/replayable requirements, and never
+    advertised as available. Re-supplied bytes that verify win over
+    retirement history.
     """
     async with session_factory() as session:
         payload_rows = (
@@ -367,6 +373,7 @@ async def _classify_cut_payloads(
         ).all()
         needed = sorted({row.payload_byte_hash for row in payload_rows})
         registry: dict[str, KernelPayloadObject] = {}
+        tombstoned: set[str] = set()
         if needed:
             rows = (
                 await session.execute(
@@ -376,12 +383,26 @@ async def _classify_cut_payloads(
                 )
             ).scalars().all()
             registry = {row.blob_key: row for row in rows}
+            tombstoned = {
+                row[0]
+                for row in (
+                    await session.execute(
+                        select(KernelPayloadRetirement.blob_key).where(
+                            KernelPayloadRetirement.blob_key.in_(needed)
+                        )
+                    )
+                ).all()
+            }
 
     blob_states: dict[str, str] = {}
     for blob_key, row in registry.items():
         check = await store.check_object(blob_key, expected_length=row.payload_length)
         if not check.exists:
-            blob_states[blob_key] = PAYLOAD_STATE_MISSING
+            blob_states[blob_key] = (
+                PAYLOAD_STATE_RETIRED
+                if blob_key in tombstoned
+                else PAYLOAD_STATE_MISSING
+            )
         elif not (check.length_ok and (check.hash_ok or not verify_hashes)):
             blob_states[blob_key] = PAYLOAD_STATE_CORRUPT
         else:
@@ -392,6 +413,7 @@ async def _classify_cut_payloads(
         PAYLOAD_STATE_MISSING: 0,
         PAYLOAD_STATE_CORRUPT: 0,
         PAYLOAD_STATE_METADATA_ONLY: 0,
+        PAYLOAD_STATE_RETIRED: 0,
     }
     degraded: list[str] = []
     for row in payload_rows:

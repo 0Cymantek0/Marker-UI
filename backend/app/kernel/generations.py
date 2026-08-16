@@ -31,13 +31,17 @@ the same declared inputs either reproduces the same content digest
 an integrity violation. Readers pin a generation by identity; a reader
 that began on generation A keeps reading A after B activates, because
 materialized rows are immutable and superseded generations remain
-readable until a later retention phase (PR65B) retires them.
+readable until PR65B retention retires them.
 
-PR65A performs **no physical deletion**: purging is restricted to rows
-of generations that were never activated, and no kernel payload object
-is ever touched. Worker fencing/leases/exactly-once publication remain
-PR66 and are intentionally absent — this service is a plain in-process
-builder over the durable kernel.
+Retention boundary (PR65B): this service still performs no physical
+deletion — retirement of superseded generations and payload bytes is
+owned by :mod:`app.kernel.gc`. A reader that needs protection across a
+collection pass opens the generation **pinned**
+(:func:`open_pinned_generation` / ``open_current_generation(pin_lease_seconds=...)``):
+the durable lease is an active retention root until released or
+expired. An unpinned superseded generation is collectible the moment
+no other root protects it. Worker fencing/leases/exactly-once
+publication remain PR66 and are intentionally absent.
 """
 
 from __future__ import annotations
@@ -67,6 +71,12 @@ from app.kernel.models import (
     KernelGenerationRecord,
     KernelRecord,
     KernelRecordEdge,
+)
+from app.kernel.retention import (
+    DEFAULT_PIN_LEASE_SECONDS,
+    acquire_reader_pin,
+    release_reader_pin,
+    renew_reader_pin,
 )
 from app.kernel.snapshots import KernelSnapshot
 from app.utils.canonical import (
@@ -106,6 +116,7 @@ __all__ = [
     "default_generation_service",
     "open_current_generation",
     "open_generation",
+    "open_pinned_generation",
     "resolve_current_generation",
     "verify_generation",
 ]
@@ -1129,18 +1140,54 @@ async def resolve_current_generation(
 def open_generation(
     session_factory: async_sessionmaker, generation_id: str
 ) -> GenerationReader:
-    """Pin one generation by identity for bounded reads."""
+    """Pin one generation by identity for bounded reads (no GC lease)."""
     return GenerationReader(session_factory, generation_id)
 
 
+async def open_pinned_generation(
+    session_factory: async_sessionmaker,
+    generation_id: str,
+    *,
+    lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS,
+) -> GenerationReader:
+    """Open a generation under a durable reader pin (PR65B).
+
+    The acquired lease is an active retention root: collection cannot
+    retire this generation or payload bytes its declared class requires
+    until the pin is released (``reader.close()``) or the lease lapses.
+    Long reads renew via ``reader.renew()``. A crashed reader's pin
+    expires on its own — safety never depends on process memory.
+    """
+    pin = await acquire_reader_pin(
+        session_factory, generation_id, lease_seconds=lease_seconds
+    )
+    return GenerationReader(session_factory, generation_id, pin_id=pin.pin_id)
+
+
 async def open_current_generation(
-    session_factory: async_sessionmaker, workspace_id: str
+    session_factory: async_sessionmaker,
+    workspace_id: str,
+    *,
+    pin_lease_seconds: float | None = None,
 ) -> GenerationReader | None:
-    """Resolve the current generation, then pin it for this reader."""
+    """Resolve the current generation, then pin it for this reader.
+
+    ``pin_lease_seconds`` optionally acquires a durable GC lease. The
+    current generation is structurally never collected, so pining it
+    only matters for callers that also rely on payload bytes staying
+    inspectable/replayable across collection passes.
+    """
     current = await resolve_current_generation(session_factory, workspace_id)
     if current is None:
         return None
-    return GenerationReader(session_factory, current.generation_id)
+    if pin_lease_seconds is None:
+        return GenerationReader(session_factory, current.generation_id)
+    pin = await acquire_reader_pin(
+        session_factory, current.generation_id, lease_seconds=pin_lease_seconds
+    )
+    return GenerationReader(
+        session_factory, current.generation_id, pin_id=pin.pin_id
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1156,6 +1203,12 @@ class GenerationReader:
     by the pinned ``generation_id``. Record reads re-verify each record's
     semantic identity hash, so tampered materialized rows fail loudly
     instead of serving as valid state.
+
+    GC protection (PR65B): a reader constructed with ``pin_id`` holds a
+    durable lease that makes this generation an active retention root
+    until :meth:`close` releases it (or the lease lapses). Unpinned
+    readers rely on their generation staying current — a superseded
+    generation being read without a pin is collectible by retention.
     """
 
     def __init__(
@@ -1164,10 +1217,38 @@ class GenerationReader:
         generation_id: str,
         *,
         workspace_id: str | None = None,
+        pin_id: str | None = None,
     ) -> None:
         self._session_factory = session_factory
         self.generation_id = generation_id
         self._workspace_id = workspace_id
+        self.pin_id = pin_id
+
+    async def __aenter__(self) -> GenerationReader:
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.close()
+
+    @property
+    def pinned(self) -> bool:
+        return self.pin_id is not None
+
+    async def renew(self, *, lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS) -> None:
+        """Extend this reader's GC lease from now (long reads)."""
+        if self.pin_id is None:
+            raise KernelError(
+                "reader holds no pin; open with open_pinned_generation to renew"
+            )
+        await renew_reader_pin(
+            self._session_factory, self.pin_id, lease_seconds=lease_seconds
+        )
+
+    async def close(self) -> None:
+        """Release this reader's pin (unpinned readers: no-op)."""
+        if self.pin_id is not None:
+            await release_reader_pin(self._session_factory, self.pin_id)
+            self.pin_id = None
 
     async def summary(self) -> GenerationRef:
         ref = await _load_generation(self._session_factory, self.generation_id)

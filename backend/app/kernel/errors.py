@@ -96,3 +96,20 @@ class GenerationStateError(KernelError):
 class GenerationIntegrityError(KernelError):
     """Materialized generation content failed integrity verification;
     it may not be treated as valid current state."""
+
+
+# --- PR65B: retention roots, reader pins, GC ------------------------------
+
+
+class RetentionContractError(KernelError):
+    """A retention hold or reader pin violated the declaration contract
+    (unknown kind, missing target, invalid lease, unknown id)."""
+
+
+class UnknownRetentionRootError(KernelError):
+    """No retention root exists with the requested identity."""
+
+
+class UnknownReaderPinError(KernelError):
+    """No active reader pin exists with the requested identity
+    (never acquired, already released, or the lease expired)."""

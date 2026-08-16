@@ -1,6 +1,7 @@
 """Local Truth Kernel — commit spine (V3.2 PR63A) with durable payload
-staging, availability truth, the transactional outbox (PR64), and
-snapshot-pinned immutable materialized generations (PR65A).
+staging, availability truth, the transactional outbox (PR64),
+snapshot-pinned immutable materialized generations (PR65A), and the
+retention/GC contract (PR65B).
 
 Public surface:
 
@@ -22,11 +23,18 @@ Public surface:
   committed-cut snapshot contract with honest completeness classes;
 * :mod:`app.kernel.generations` (PR65A) — :class:`GenerationService`
   (build → validate → activate) and :class:`GenerationReader`, the
-  bounded generation-pinned read path;
+  bounded generation-pinned read path (optionally under a durable GC
+  pin since PR65B);
+* :mod:`app.kernel.retention` (PR65B) — declared retention holds and
+  bounded reader pins: the attachment contract every current or future
+  retention producer uses;
+* :mod:`app.kernel.gc` (PR65B) — conservative two-phase collection
+  (plan → recheck → tombstone → sweep) and restart reconciliation;
 * :mod:`app.kernel.errors` — boundary error contract;
 * :mod:`app.kernel.models` — ORM tables owned by Alembic revisions
   ``20260815_0004`` (commit spine), ``20260815_0005`` (payload
-  registry + outbox), and ``20260815_0006`` (materialized generations).
+  registry + outbox), ``20260815_0006`` (materialized generations),
+  and ``20260815_0007`` (retention roots, reader pins, GC tombstones).
 
 What this slice guarantees and deliberately does not guarantee is
 documented in ``docs/reference/truth-kernel.md``.
@@ -41,12 +49,20 @@ from app.kernel.commit import (
     default_commit_service,
 )
 from app.kernel.errors import KernelError
+from app.kernel.gc import (
+    CollectionPlan,
+    CollectionReport,
+    collect,
+    plan_collection,
+    reconcile_retirements,
+)
 from app.kernel.generations import (
     GenerationReader,
     GenerationRef,
     GenerationService,
     default_generation_service,
     open_current_generation,
+    open_pinned_generation,
     resolve_current_generation,
 )
 from app.kernel.outbox import OutboxIntent, OutboxView
@@ -65,9 +81,21 @@ from app.kernel.replay import (
     replay,
     verify_history,
 )
+from app.kernel.retention import (
+    ReaderPinView,
+    RetentionHoldView,
+    acquire_reader_pin,
+    active_reader_pins,
+    declare_hold,
+    release_hold,
+    release_reader_pin,
+    renew_reader_pin,
+)
 from app.kernel.snapshots import KernelSnapshot, resolve_snapshot
 
 __all__ = [
+    "CollectionPlan",
+    "CollectionReport",
     "GenerationReader",
     "GenerationRef",
     "GenerationService",
@@ -80,16 +108,28 @@ __all__ = [
     "OutboxIntent",
     "OutboxView",
     "PayloadAvailabilityResult",
+    "ReaderPinView",
     "ReconcileReport",
     "ReplayResult",
+    "RetentionHoldView",
     "StagedBlob",
     "VerificationResult",
+    "acquire_reader_pin",
+    "active_reader_pins",
+    "collect",
     "default_commit_service",
     "default_generation_service",
+    "declare_hold",
     "open_current_generation",
+    "open_pinned_generation",
+    "plan_collection",
     "read_head",
     "reconcile",
     "reconcile_after_restart",
+    "reconcile_retirements",
+    "release_hold",
+    "release_reader_pin",
+    "renew_reader_pin",
     "replay",
     "resolve_current_generation",
     "resolve_snapshot",

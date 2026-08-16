@@ -10,6 +10,9 @@ commits. The SQLite portion of the V3.2 commit protocol:
 2. read the committed head, derive ``kernel_commit_id = head + 1`` and
    ``parent_kernel_commit_id = head`` (causal order, never wall time);
 3. validate external record references against visible committed state;
+   then (PR65B) rescue any staged payload hash that carries a GC
+   tombstone: present bytes un-tombstone the object, absent bytes abort
+   and re-stage — a commit can never land referencing retired bytes;
 4. insert all logical records and dependency edges for the batch;
 5. register durably published payload objects (PR64): registry rows are
    inserted in the same transaction, so a visible reference always
@@ -40,7 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -73,6 +76,7 @@ from app.kernel.models import (
     KernelCommitManifest,
     KernelOutbox,
     KernelPayloadObject,
+    KernelPayloadRetirement,
     KernelRecord,
     KernelRecordEdge,
 )
@@ -145,6 +149,12 @@ DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
 MAX_RETRY_DELAY = 0.5
 
 _BUSY_MARKERS = ("database is locked", "database table is locked", "database is busy")
+
+
+class _PayloadVanishedMidCommit(Exception):
+    """Internal retry signal: a staged object was swept by GC after
+    staging but before this transaction, so the bytes must be re-staged
+    before the commit can be accepted (PR65B rescue protocol)."""
 
 _duplicate_identity_marker = "uq_kernel_records_workspace_identity"
 _manifest_pk_marker = "kernel_commit_manifests"
@@ -405,6 +415,14 @@ class KernelCommitService:
                     staged_payloads,
                     _inject_fault_at,
                 )
+            except _PayloadVanishedMidCommit:
+                # PR65B rescue: GC swept a staged object between staging
+                # and this transaction. Re-publish the exact bytes and
+                # retry — the next attempt's tombstone check either sees
+                # the republished object (rescue + proceed) or repeats
+                # safely under the bounded attempt budget.
+                last_error = None
+                staged_payloads = await self._stage_payloads(batch.records)
             except HeadMovedError:
                 self.head_retries += 1
                 last_error = None
@@ -490,6 +508,45 @@ class KernelCommitService:
                         raise CrossWorkspaceReferenceError(
                             f"workspace={workspace_id!r}: edges reference records of "
                             f"other workspaces: {foreign}"
+                        )
+
+                # 2.5. PR65B tombstone rescue. The writer lock is held
+                #     (write-first head upsert above), so this check and
+                #     a concurrent GC sweep cannot interleave. Any staged
+                #     hash carrying a retirement tombstone is either
+                #     physically present — delete the tombstone; this
+                #     commit is re-referencing the bytes — or absent,
+                #     meaning GC swept between staging and this
+                #     transaction: abort, re-stage, retry.
+                if staged_payloads:
+                    tombstoned = (
+                        await session.execute(
+                            select(KernelPayloadRetirement.blob_key).where(
+                                KernelPayloadRetirement.blob_key.in_(
+                                    sorted(staged_payloads)
+                                )
+                            )
+                        )
+                    ).all()
+                    if tombstoned:
+                        store = self._payload_store
+                        assert store is not None  # staged_payloads implies a store
+                        vanished = [
+                            row[0]
+                            for row in tombstoned
+                            if not await store.object_exists(row[0])
+                        ]
+                        if vanished:
+                            raise _PayloadVanishedMidCommit(
+                                f"workspace={workspace_id!r}: staged objects were "
+                                f"retired before the commit transaction: {vanished}"
+                            )
+                        await session.execute(
+                            delete(KernelPayloadRetirement).where(
+                                KernelPayloadRetirement.blob_key.in_(
+                                    [row[0] for row in tombstoned]
+                                )
+                            )
                         )
 
                 # 3. Insert logical records.
