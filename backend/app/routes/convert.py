@@ -938,6 +938,21 @@ async def upload_file(
     effective_output_format = requested_formats[0]
 
     # DB record
+    from app.core.config import KERNEL_RUNTIME_ENABLED
+    from app.services.task_manager import TaskManager as _TaskManager
+
+    # Kernel dispatch is active only when the mode is on AND the runtime
+    # coordinator actually bound to this manager (a failed coordinator
+    # startup falls back to the legacy runtime instead of losing jobs).
+    kernel_active = KERNEL_RUNTIME_ENABLED and isinstance(
+        _app_state.task_manager, _TaskManager
+    ) and _app_state.task_manager.kernel_runtime is not None
+
+    # The kernel dispatcher resolves the source from the persisted config
+    # (the legacy durable queue used to inject this via enqueue). Without
+    # it, uploaded/URL-downloaded sources would be invisible at launch.
+    config.setdefault("durable_filepath", stored_path)
+
     job = ConversionJob(
         id=job_id,
         filename=stored_name if not is_local else original_name,
@@ -946,6 +961,12 @@ async def upload_file(
         input_format=input_format,
         output_format=effective_output_format,
         config_json=json.dumps(config),
+        # Kernel-mode rows are marked at creation so the restart sweep
+        # (which fails queue_backend-less stale rows) can never destroy a
+        # job that merely lost the race between row commit and kernel
+        # authorization. The marker is metadata; dispatch authority is the
+        # kernel outbox.
+        queue_backend="kernel" if kernel_active else None,
     )
     db.add(job)
     await db.flush()
@@ -983,7 +1004,7 @@ async def upload_file(
 
     from app.services.task_manager import TaskManager
 
-    if isinstance(task_manager, TaskManager):
+    if isinstance(task_manager, TaskManager) and not kernel_active:
         await task_manager.enqueue_durable_job(
             db,
             job_id=job_id,
@@ -1000,7 +1021,15 @@ async def upload_file(
     # the job hangs at "pending" forever (MUI-003).
     await db.commit()
 
-    task_manager.submit_job(job_id, stored_path, options, conversion_service)
+    if kernel_active:
+        # Kernel runtime (PR67B): the row is durable; authorize it as
+        # exactly one kernel work item. The fair scheduler claims and
+        # executes it — direct executor submission is no longer ownership.
+        await task_manager.submit_conversion(
+            job_id, stored_path, config, conversion_service
+        )
+    else:
+        task_manager.submit_job(job_id, stored_path, options, conversion_service)
 
     return ConversionResponse(
         job_id=job_id,
@@ -1484,6 +1513,15 @@ async def cancel_job(
 
     await _app_state.task_manager.cancel_job(job_id)
     await db.refresh(job)
+    if job.status in {"completed", "failed", "cancelled"}:
+        # The job reached terminal truth between the initial read and the
+        # cancel (e.g. an accepted publication committed first); report
+        # the real state instead of overwriting it.
+        return {
+            "status": job.status,
+            "job_id": job_id,
+            "cancelled": job.status == "cancelled",
+        }
     job.status = "cancelled"
     job.progress = 0
     await record_audit_event(
@@ -1738,6 +1776,14 @@ async def retry_job(
     A non-terminal job cannot be retried — cancel it first. An unknown
     provider is rejected with 400. A missing source file is rejected with 409.
     """
+    from app.core.config import KERNEL_RUNTIME_ENABLED
+    from app.main import _app_state as _app_state_ref
+    from app.services.task_manager import TaskManager as _TaskManager
+
+    kernel_active = KERNEL_RUNTIME_ENABLED and isinstance(
+        _app_state_ref.task_manager, _TaskManager
+    ) and _app_state_ref.task_manager.kernel_runtime is not None
+
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     job = (await db.execute(stmt)).scalar_one_or_none()
     if not job:
@@ -1789,7 +1835,9 @@ async def retry_job(
             # Same provider, different model.
             config["llm_model"] = body.llm_model
 
-    # Reset durable-queue retry state for the new job.
+    # Reset durable-queue retry state for the new job; the retried job's
+    # durable source is this run's resolved path (set once stored_path
+    # is known below, where the legacy enqueue used to inject it).
     config.pop("durable_filepath", None)
 
     from app.main import _app_state
@@ -1802,6 +1850,9 @@ async def retry_job(
 
     new_job_id = str(uuid.uuid4())
     stored_path = str(source_path)
+    # The kernel dispatcher (and legacy recovery) resolve the source from
+    # the persisted config; the retried job's source is this run's path.
+    config["durable_filepath"] = stored_path
     original_name = config.get("original_name") or job.original_name
     input_format = (Path(original_name).suffix.lstrip(".") or job.input_format or "").lower()
 
@@ -1813,6 +1864,7 @@ async def retry_job(
         input_format=input_format,
         output_format=job.output_format,
         config_json=json.dumps(config),
+        queue_backend="kernel" if kernel_active else None,
     )
     db.add(new_job)
     await db.flush()
@@ -1832,7 +1884,7 @@ async def retry_job(
     )
 
     from app.services.task_manager import TaskManager
-    if isinstance(task_manager, TaskManager):
+    if isinstance(task_manager, TaskManager) and not kernel_active:
         await task_manager.enqueue_durable_job(
             db,
             job_id=new_job_id,
@@ -1843,7 +1895,12 @@ async def retry_job(
 
     await db.commit()
 
-    task_manager.submit_job(new_job_id, stored_path, options, conversion_service)
+    if kernel_active:
+        await task_manager.submit_conversion(
+            new_job_id, stored_path, config, conversion_service
+        )
+    else:
+        task_manager.submit_job(new_job_id, stored_path, options, conversion_service)
 
     return {
         "new_job_id": new_job_id,

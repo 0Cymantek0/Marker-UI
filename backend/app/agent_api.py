@@ -34,7 +34,7 @@ from app.conversion.formats import (
     renderable_output_formats_for_extensions,
 )
 from app.conversion.probe import probe_pdf
-from app.core.config import OUTPUT_DIR, UPLOAD_DIR
+from app.core.config import KERNEL_RUNTIME_ENABLED, OUTPUT_DIR, UPLOAD_DIR
 from app.crypto import is_encrypted_field
 from app.database import async_session_factory
 from app.db_migration import verify_database_ready
@@ -500,6 +500,18 @@ async def submit_conversion_job(
         source_name=original_name,
     )
 
+    # Kernel dispatch is active only when the mode is on AND the runtime
+    # coordinator bound to the manager (startup failure falls back).
+    from app.services.task_manager import TaskManager as _TaskManager
+
+    kernel_active = KERNEL_RUNTIME_ENABLED and isinstance(
+        app_state.task_manager, _TaskManager
+    ) and app_state.task_manager.kernel_runtime is not None
+
+    # The kernel dispatcher resolves the source from the persisted config
+    # (the legacy durable queue used to inject this via enqueue).
+    config.setdefault("durable_filepath", stored_path)
+
     job = ConversionJob(
         id=job_id,
         filename=filename,
@@ -508,12 +520,13 @@ async def submit_conversion_job(
         input_format=input_format,
         output_format=config["output_format"],
         config_json=json.dumps(config),
+        queue_backend="kernel" if kernel_active else None,
     )
     async with _db_session_factory() as session:
         session.add(job)
         from app.services.task_manager import TaskManager
 
-        if isinstance(app_state.task_manager, TaskManager):
+        if isinstance(app_state.task_manager, TaskManager) and not kernel_active:
             await app_state.task_manager.enqueue_durable_job(
                 session,
                 job_id=job_id,
@@ -549,12 +562,20 @@ async def submit_conversion_job(
 
     await _prepare_runtime(config)
     marker_options = build_marker_options(await _load_llm_config_for_options(config), config)
-    app_state.task_manager.submit_job(
-        job_id,
-        stored_path,
-        marker_options,
-        app_state.conversion_service,
-    )
+    if kernel_active:
+        await app_state.task_manager.submit_conversion(
+            job_id,
+            stored_path,
+            config,
+            app_state.conversion_service,
+        )
+    else:
+        app_state.task_manager.submit_job(
+            job_id,
+            stored_path,
+            marker_options,
+            app_state.conversion_service,
+        )
     return {
         "job_id": job_id,
         "status": "pending",
