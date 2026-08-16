@@ -50,9 +50,11 @@ ARTIFACT_HANDLE_ROOT: Path = Path(
     os.getenv("MARKER_ARTIFACT_HANDLE_ROOT", str(DATA_DIR / "artifact_handles"))
 )
 # Fields whose encoded size is at or below this stay inline in the control
-# message; larger fields travel through verified handles.
+# message; larger fields travel through verified handles. 1 MiB per field is
+# where the measured queue-inline advantage ends and control-channel byte
+# relief starts to matter (see docs/reference/artifact-data-plane.md).
 ARTIFACT_HANDLE_INLINE_LIMIT: int = int(
-    os.getenv("MARKER_ARTIFACT_HANDLE_INLINE_LIMIT", str(256 * 1024))
+    os.getenv("MARKER_ARTIFACT_HANDLE_INLINE_LIMIT", str(1024 * 1024))
 )
 # Orphaned blobs (producer/consumer crash, cancelled jobs) are reclaimed
 # once older than this; must comfortably exceed any stage->consume window.

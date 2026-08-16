@@ -866,6 +866,11 @@ never-activated-only purge → residue tests.
 
 ## Extension points for later PRs
 
+- **PR68A (local artifact data plane):** the ArtifactHandle seam that moves
+  large process-worker result fields by verified file reference lives
+  deliberately OUTSIDE the kernel (`app/services/artifact_handles.py`) — it
+  is an ephemeral transport mechanism, not durable truth, and never feeds
+  commit/payload references. See `docs/reference/artifact-data-plane.md`.
 - **Future retention producers (PR67+):** `declare_hold(...)` with a
   new `root_kind` and producer context is the entire attachment
   surface — jobs, reviews, cursors, exports, legal holds, claim proof

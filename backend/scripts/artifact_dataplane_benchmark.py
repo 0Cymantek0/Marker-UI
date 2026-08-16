@@ -22,8 +22,9 @@ recorded alongside.
 Usage (from backend/):
 
     python scripts/artifact_dataplane_benchmark.py \
-        --lanes queue_inline --sizes 262144,4194304,33554432 \
-        --reps 7 --shape real --out report.json
+        --lanes queue_inline,file_handle,shared_memory \
+        --sizes 262144,4194304,33554432 --reps 7 --shape real \
+        --children 2 --out report.json
 
 The report is a JSON document safe to commit: it records platform,
 Python version, CPU count and timings only — never local paths.
@@ -111,9 +112,14 @@ def _payload_bytes_digest(payload: Any) -> str:
 
 
 def _canonical_snapshot(payload: Any) -> bytes:
-    """Byte snapshot used for end-to-end verification of a rebuilt payload."""
+    """Byte snapshot used for end-to-end verification of a rebuilt payload.
+
+    Dict order is normalized because the handle rebuild re-inserts staged
+    fields at the end of their container; the logical payload is equal.
+    """
     if isinstance(payload, dict):
-        return pickle.dumps({k: _canonical_snapshot(v) for k, v in payload.items()}, protocol=4)
+        items = sorted(payload.items(), key=lambda kv: str(kv[0]))
+        return pickle.dumps({k: _canonical_snapshot(v) for k, v in items}, protocol=4)
     if isinstance(payload, (list, tuple)):
         return pickle.dumps([_canonical_snapshot(v) for v in payload], protocol=4)
     if isinstance(payload, (bytes, bytearray)):
@@ -280,23 +286,36 @@ def _pct(values: list[float], q: float) -> float:
     return ordered[idx]
 
 
-def run_benchmark(lanes: list[str], sizes: list[int], reps: int, shape: str) -> dict[str, Any]:
+def run_benchmark(
+    lanes: list[str],
+    sizes: list[int],
+    reps: int,
+    shape: str,
+    children: int = 1,
+) -> dict[str, Any]:
     scratch = tempfile.mkdtemp(prefix="marker_pr68a_bench_")
     root = os.path.join(scratch, "handles")
-    task_q: Any = mp.Queue()
+    # Shared data/stats/cons queues model the real topology: N workers, one
+    # parent drain point. Only the per-child task queue is private, so the
+    # shm-lane consume ack reaches whichever child is waiting.
     data_q: Any = mp.Queue()
     stats_q: Any = mp.Queue()
     cons_q: Any = mp.Queue()
     global _DATA_Q
     _DATA_Q = data_q
-    global _CONS_Q
-    _CONS_Q = cons_q
     global _STATS_Q
     _STATS_Q = stats_q
-    child = mp.Process(
-        target=_child_entry, args=(task_q, data_q, stats_q, cons_q, root), daemon=True
-    )
-    child.start()
+    global _CONS_Q
+    _CONS_Q = cons_q
+
+    child_procs: list[dict[str, Any]] = []
+    for _ in range(children):
+        task_q: Any = mp.Queue()
+        child = mp.Process(
+            target=_child_entry, args=(task_q, data_q, stats_q, cons_q, root), daemon=True
+        )
+        child.start()
+        child_procs.append({"task_q": task_q, "child": child})
 
     report: dict[str, Any] = {
         "schema": "marker.pr68a.dataplane.benchmark.v1",
@@ -309,7 +328,7 @@ def run_benchmark(lanes: list[str], sizes: list[int], reps: int, shape: str) -> 
             "shape": shape,
             "inline_limit": INLINE_LIMIT,
         },
-        "params": {"lanes": lanes, "sizes": sizes, "reps": reps},
+        "params": {"lanes": lanes, "sizes": sizes, "reps": reps, "children": children},
         "results": [],
     }
 
@@ -322,35 +341,50 @@ def run_benchmark(lanes: list[str], sizes: list[int], reps: int, shape: str) -> 
             source_digest = _payload_bytes_digest(payload)
             for lane in lanes:
                 for rep in range(reps):
-                    print(f"bench: lane={lane} size={size} rep={rep} submitting", file=sys.stderr, flush=True)
-                    # Warm transfer of the raw source payload to the child.
-                    task_q.put((lane, payload))
-                    # Receive first (the shm lane completes inside the child
-                    # only after this parent-side copy acks), then collect stats.
-                    parent_stats, handoff_ms = _parent_receive(lane, root, source_digest)
+                    print(
+                        f"bench: lane={lane} size={size} rep={rep} children={children} submitting",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    t0 = time.perf_counter()
+                    # Fan the same rep out to every child, then receive them
+                    # all through the one shared data queue.
+                    for spec in child_procs:
+                        spec["task_q"].put((lane, payload))
+                    for _ in range(children):
+                        _parent_receive(lane, root, source_digest)
+                    batch_ms = (time.perf_counter() - t0) * 1000.0
+                    rep_stats: dict[str, Any] = {}
+                    for _ in range(children):
+                        status, child_stats = stats_q.get()
+                        if status != "ok":
+                            raise RuntimeError(f"child failed on lane {lane}: {child_stats}")
+                        if not rep_stats:
+                            rep_stats = {
+                                k: (round(v, 3) if isinstance(v, float) else v)
+                                for k, v in child_stats.items()
+                                if k not in ("lane",)
+                            }
                     print(f"bench: lane={lane} size={size} rep={rep} received", file=sys.stderr, flush=True)
-                    status, child_stats = stats_q.get()
-                    if status != "ok":
-                        raise RuntimeError(f"child failed on lane {lane}: {child_stats}")
-                    emit_wall = child_stats.pop("emit_wall_ms", 0.0)
-                    child_stats.pop("lane", None)
                     row = {
                         "lane": lane,
                         "size_bytes": size,
                         "rep": rep,
-                        "handoff_ms": round(handoff_ms, 3),
-                        "emit_wall_ms": round(emit_wall, 3),
-                        **{k: (round(v, 3) if isinstance(v, float) else v) for k, v in child_stats.items()},
-                        **parent_stats,
+                        "children": children,
+                        "batch_ms": round(batch_ms, 3),
+                        "per_result_ms": round(batch_ms / children, 3),
+                        **rep_stats,
                     }
                     report["results"].append(row)
     finally:
-        task_q.put(("stop", None))
-        child.join(timeout=15)
-        if child.is_alive():
-            child.terminate()
-            child.join(timeout=5)
-        for q in (task_q, data_q, stats_q, cons_q):
+        for spec in child_procs:
+            spec["task_q"].put(("stop", None))
+            spec["child"].join(timeout=15)
+            if spec["child"].is_alive():
+                spec["child"].terminate()
+                spec["child"].join(timeout=5)
+        queues = [data_q, stats_q, cons_q] + [spec["task_q"] for spec in child_procs]
+        for q in queues:
             q.close()
             q.join_thread()
 
@@ -361,10 +395,10 @@ def run_benchmark(lanes: list[str], sizes: list[int], reps: int, shape: str) -> 
             size_rows = [r for r in lane_rows if r["size_bytes"] == size]
             if not size_rows:
                 continue
-            handoffs = [r["handoff_ms"] for r in size_rows]
+            per_result = [r["per_result_ms"] for r in size_rows]
             summary.setdefault(lane, {})[str(size)] = {
-                "handoff_p50_ms": round(statistics.median(handoffs), 3),
-                "handoff_p95_ms": round(_pct(handoffs, 0.95), 3),
+                "per_result_p50_ms": round(statistics.median(per_result), 3),
+                "per_result_p95_ms": round(_pct(per_result, 0.95), 3),
                 "emit_pickle_bytes_median": statistics.median(
                     [r.get("emit_pickle_bytes", 0) for r in size_rows]
                 ),
@@ -391,6 +425,12 @@ def main() -> int:
     parser.add_argument("--sizes", default="262144,4194304,33554432", help="comma-separated byte sizes")
     parser.add_argument("--reps", type=int, default=7)
     parser.add_argument("--shape", choices=("real", "flat"), default="real")
+    parser.add_argument(
+        "--children",
+        type=int,
+        default=1,
+        help="concurrent producer processes sharing one parent data queue",
+    )
     parser.add_argument("--out", default=None, help="optional path to write the JSON report")
     args = parser.parse_args()
 
@@ -407,7 +447,7 @@ def main() -> int:
             return 2
     sizes = [int(s) for s in args.sizes.split(",") if s.strip()]
 
-    report = run_benchmark(lanes, sizes, args.reps, args.shape)
+    report = run_benchmark(lanes, sizes, args.reps, args.shape, children=max(1, args.children))
     text = json.dumps(report, indent=2)
     print(text)
     if args.out:

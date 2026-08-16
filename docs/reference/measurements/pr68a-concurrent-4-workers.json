@@ -1,0 +1,284 @@
+{
+  "schema": "marker.pr68a.dataplane.benchmark.v1",
+  "env": {
+    "python": "3.11.9",
+    "platform": "win32",
+    "machine": "AMD64",
+    "cpu_count": 12,
+    "start_method": "spawn",
+    "shape": "real",
+    "inline_limit": 262144
+  },
+  "params": {
+    "lanes": [
+      "queue_inline",
+      "file_handle"
+    ],
+    "sizes": [
+      4194304,
+      33554432
+    ],
+    "reps": 5,
+    "children": 4
+  },
+  "results": [
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 0,
+      "children": 4,
+      "batch_ms": 446.732,
+      "per_result_ms": 111.683,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 43.748
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 1,
+      "children": 4,
+      "batch_ms": 239.943,
+      "per_result_ms": 59.986,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 15.826
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 2,
+      "children": 4,
+      "batch_ms": 238.815,
+      "per_result_ms": 59.704,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 15.394
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 3,
+      "children": 4,
+      "batch_ms": 242.722,
+      "per_result_ms": 60.681,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 15.422
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 4,
+      "children": 4,
+      "batch_ms": 243.717,
+      "per_result_ms": 60.929,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 18.842
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 0,
+      "children": 4,
+      "batch_ms": 888.576,
+      "per_result_ms": 222.144,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 37.125
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 1,
+      "children": 4,
+      "batch_ms": 1013.937,
+      "per_result_ms": 253.484,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 46.875,
+      "emit_wall_ms": 33.315
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 2,
+      "children": 4,
+      "batch_ms": 1042.563,
+      "per_result_ms": 260.641,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 46.875,
+      "emit_wall_ms": 39.649
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 3,
+      "children": 4,
+      "batch_ms": 1064.061,
+      "per_result_ms": 266.015,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 37.138
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 4,
+      "children": 4,
+      "batch_ms": 1020.101,
+      "per_result_ms": 255.025,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 39.082
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 0,
+      "children": 4,
+      "batch_ms": 2355.419,
+      "per_result_ms": 588.855,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0,
+      "emit_wall_ms": 122.369
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 1,
+      "children": 4,
+      "batch_ms": 2167.334,
+      "per_result_ms": 541.833,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0,
+      "emit_wall_ms": 133.048
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 2,
+      "children": 4,
+      "batch_ms": 2053.401,
+      "per_result_ms": 513.35,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 146.193
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 3,
+      "children": 4,
+      "batch_ms": 2162.782,
+      "per_result_ms": 540.696,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0,
+      "emit_wall_ms": 131.365
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 4,
+      "children": 4,
+      "batch_ms": 2094.491,
+      "per_result_ms": 523.623,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 148.908
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 0,
+      "children": 4,
+      "batch_ms": 5216.304,
+      "per_result_ms": 1304.076,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 160.931
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 1,
+      "children": 4,
+      "batch_ms": 5165.898,
+      "per_result_ms": 1291.474,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 156.25,
+      "emit_wall_ms": 157.093
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 2,
+      "children": 4,
+      "batch_ms": 5166.856,
+      "per_result_ms": 1291.714,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 169.382
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 3,
+      "children": 4,
+      "batch_ms": 5134.642,
+      "per_result_ms": 1283.661,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 156.25,
+      "emit_wall_ms": 151.434
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 4,
+      "children": 4,
+      "batch_ms": 5082.137,
+      "per_result_ms": 1270.534,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 156.25,
+      "emit_wall_ms": 180.69
+    }
+  ],
+  "summary": {
+    "queue_inline": {
+      "4194304": {
+        "per_result_p50_ms": 60.681,
+        "per_result_p95_ms": 111.683,
+        "emit_pickle_bytes_median": 7799396
+      },
+      "33554432": {
+        "per_result_p50_ms": 540.696,
+        "per_result_p95_ms": 588.855,
+        "emit_pickle_bytes_median": 50003011
+      }
+    },
+    "file_handle": {
+      "4194304": {
+        "per_result_p50_ms": 255.025,
+        "per_result_p95_ms": 266.015,
+        "emit_pickle_bytes_median": 1510
+      },
+      "33554432": {
+        "per_result_p50_ms": 1291.474,
+        "per_result_p95_ms": 1304.076,
+        "emit_pickle_bytes_median": 1510
+      }
+    }
+  },
+  "leftover_artifacts": 0,
+  "scratch_root_basename": "marker_pr68a_bench_cvvumr15"
+}

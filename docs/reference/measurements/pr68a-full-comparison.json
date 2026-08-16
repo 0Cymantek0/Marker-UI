@@ -1,0 +1,1067 @@
+{
+  "schema": "marker.pr68a.dataplane.benchmark.v1",
+  "env": {
+    "python": "3.11.9",
+    "platform": "win32",
+    "machine": "AMD64",
+    "cpu_count": 12,
+    "start_method": "spawn",
+    "shape": "real",
+    "inline_limit": 262144
+  },
+  "params": {
+    "lanes": [
+      "queue_inline",
+      "file_handle",
+      "file_handle_fsync",
+      "shared_memory"
+    ],
+    "sizes": [
+      262144,
+      4194304,
+      33554432
+    ],
+    "reps": 7,
+    "children": 1
+  },
+  "results": [
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 155.085,
+      "per_result_ms": 155.085,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 7.116
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 16.571,
+      "per_result_ms": 16.571,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 1.632
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 16.212,
+      "per_result_ms": 16.212,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 2.076
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 16.938,
+      "per_result_ms": 16.938,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 1.865
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 17.092,
+      "per_result_ms": 17.092,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 2.189
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 16.505,
+      "per_result_ms": 16.505,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 2.392
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 17.278,
+      "per_result_ms": 17.278,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 2.397
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 262144,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 32.296,
+      "per_result_ms": 32.296,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 11.958
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 262144,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 25.919,
+      "per_result_ms": 25.919,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 5.549
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 262144,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 25.733,
+      "per_result_ms": 25.733,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 5.484
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 262144,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 26.775,
+      "per_result_ms": 26.775,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 5.254
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 262144,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 25.717,
+      "per_result_ms": 25.717,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 5.704
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 262144,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 26.422,
+      "per_result_ms": 26.422,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 5.663
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 262144,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 25.67,
+      "per_result_ms": 25.67,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 5.623
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 262144,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 30.62,
+      "per_result_ms": 30.62,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 9.97
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 262144,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 30.278,
+      "per_result_ms": 30.278,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 7.619
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 262144,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 29.308,
+      "per_result_ms": 29.308,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 8.728
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 262144,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 30.078,
+      "per_result_ms": 30.078,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 6.985
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 262144,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 28.881,
+      "per_result_ms": 28.881,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 8.144
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 262144,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 29.848,
+      "per_result_ms": 29.848,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 8.777
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 262144,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 31.41,
+      "per_result_ms": 31.41,
+      "emit_pickle_bytes": 377625,
+      "handles": 1,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 9.365
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 262144,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 19.264,
+      "per_result_ms": 19.264,
+      "emit_pickle_bytes": 2146664,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 7.284
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 262144,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 16.384,
+      "per_result_ms": 16.384,
+      "emit_pickle_bytes": 2146664,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 5.67
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 262144,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 18.189,
+      "per_result_ms": 18.189,
+      "emit_pickle_bytes": 2146664,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 5.364
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 262144,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 16.741,
+      "per_result_ms": 16.741,
+      "emit_pickle_bytes": 2146664,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 5.699
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 262144,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 19.858,
+      "per_result_ms": 19.858,
+      "emit_pickle_bytes": 2146664,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 6.817
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 262144,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 18.568,
+      "per_result_ms": 18.568,
+      "emit_pickle_bytes": 2146664,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 5.154
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 262144,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 19.036,
+      "per_result_ms": 19.036,
+      "emit_pickle_bytes": 2146664,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 6.064
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 108.986,
+      "per_result_ms": 108.986,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 14.916
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 94.828,
+      "per_result_ms": 94.828,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 14.587
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 98.282,
+      "per_result_ms": 98.282,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 13.449
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 103.045,
+      "per_result_ms": 103.045,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 14.893
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 100.215,
+      "per_result_ms": 100.215,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 14.053
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 110.714,
+      "per_result_ms": 110.714,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 0.0,
+      "emit_wall_ms": 14.025
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 100.554,
+      "per_result_ms": 100.554,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 14.482
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 190.669,
+      "per_result_ms": 190.669,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 25.44
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 188.164,
+      "per_result_ms": 188.164,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 25.981
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 185.613,
+      "per_result_ms": 185.613,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 24.004
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 179.306,
+      "per_result_ms": 179.306,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 24.303
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 178.419,
+      "per_result_ms": 178.419,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 24.24
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 274.762,
+      "per_result_ms": 274.762,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 23.271
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 4194304,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 276.573,
+      "per_result_ms": 276.573,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 25.976
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 4194304,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 319.855,
+      "per_result_ms": 319.855,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 62.705
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 4194304,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 319.97,
+      "per_result_ms": 319.97,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 46.875,
+      "emit_wall_ms": 49.47
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 4194304,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 314.058,
+      "per_result_ms": 314.058,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 46.875,
+      "emit_wall_ms": 47.179
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 4194304,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 315.49,
+      "per_result_ms": 315.49,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 46.875,
+      "emit_wall_ms": 55.126
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 4194304,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 314.47,
+      "per_result_ms": 314.47,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 46.417
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 4194304,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 603.132,
+      "per_result_ms": 603.132,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 339.984
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 4194304,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 329.463,
+      "per_result_ms": 329.463,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 46.875,
+      "emit_wall_ms": 54.841
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 4194304,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 104.734,
+      "per_result_ms": 104.734,
+      "emit_pickle_bytes": 7799161,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 26.431
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 4194304,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 113.107,
+      "per_result_ms": 113.107,
+      "emit_pickle_bytes": 7799161,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 29.969
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 4194304,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 115.846,
+      "per_result_ms": 115.846,
+      "emit_pickle_bytes": 7799161,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 32.194
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 4194304,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 117.763,
+      "per_result_ms": 117.763,
+      "emit_pickle_bytes": 7799161,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 31.759
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 4194304,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 114.183,
+      "per_result_ms": 114.183,
+      "emit_pickle_bytes": 7799161,
+      "emit_cpu_ms": 15.625,
+      "emit_wall_ms": 31.235
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 4194304,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 117.606,
+      "per_result_ms": 117.606,
+      "emit_pickle_bytes": 7799161,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 28.367
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 4194304,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 118.938,
+      "per_result_ms": 118.938,
+      "emit_pickle_bytes": 7799161,
+      "emit_cpu_ms": 31.25,
+      "emit_wall_ms": 32.612
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 928.05,
+      "per_result_ms": 928.05,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 136.71
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 820.281,
+      "per_result_ms": 820.281,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 142.687
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 819.147,
+      "per_result_ms": 819.147,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0,
+      "emit_wall_ms": 132.66
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 814.661,
+      "per_result_ms": 814.661,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 136.324
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 823.582,
+      "per_result_ms": 823.582,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 137.195
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 814.731,
+      "per_result_ms": 814.731,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 135.722
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 843.521,
+      "per_result_ms": 843.521,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 140.625,
+      "emit_wall_ms": 136.258
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 1554.175,
+      "per_result_ms": 1554.175,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 174.546
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 1562.484,
+      "per_result_ms": 1562.484,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 173.116
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 1576.485,
+      "per_result_ms": 1576.485,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 166.943
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 1541.801,
+      "per_result_ms": 1541.801,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 172.342
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 1524.468,
+      "per_result_ms": 1524.468,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 156.25,
+      "emit_wall_ms": 165.577
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 1590.17,
+      "per_result_ms": 1590.17,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 171.16
+    },
+    {
+      "lane": "file_handle",
+      "size_bytes": 33554432,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 1596.232,
+      "per_result_ms": 1596.232,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 178.19
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 33554432,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 1590.567,
+      "per_result_ms": 1590.567,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 217.017
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 33554432,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 1626.623,
+      "per_result_ms": 1626.623,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 221.273
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 33554432,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 1659.569,
+      "per_result_ms": 1659.569,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 219.335
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 33554432,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 1587.255,
+      "per_result_ms": 1587.255,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 219.428
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 33554432,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 4008.193,
+      "per_result_ms": 4008.193,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 203.125,
+      "emit_wall_ms": 2635.172
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 33554432,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 1590.081,
+      "per_result_ms": 1590.081,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 156.25,
+      "emit_wall_ms": 230.898
+    },
+    {
+      "lane": "file_handle_fsync",
+      "size_bytes": 33554432,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 1571.139,
+      "per_result_ms": 1571.139,
+      "emit_pickle_bytes": 1510,
+      "handles": 6,
+      "emit_cpu_ms": 203.125,
+      "emit_wall_ms": 244.365
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 33554432,
+      "rep": 0,
+      "children": 1,
+      "batch_ms": 810.533,
+      "per_result_ms": 810.533,
+      "emit_pickle_bytes": 50002776,
+      "emit_cpu_ms": 187.5,
+      "emit_wall_ms": 225.5
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 33554432,
+      "rep": 1,
+      "children": 1,
+      "batch_ms": 815.979,
+      "per_result_ms": 815.979,
+      "emit_pickle_bytes": 50002776,
+      "emit_cpu_ms": 203.125,
+      "emit_wall_ms": 231.082
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 33554432,
+      "rep": 2,
+      "children": 1,
+      "batch_ms": 810.623,
+      "per_result_ms": 810.623,
+      "emit_pickle_bytes": 50002776,
+      "emit_cpu_ms": 203.125,
+      "emit_wall_ms": 228.232
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 33554432,
+      "rep": 3,
+      "children": 1,
+      "batch_ms": 781.415,
+      "per_result_ms": 781.415,
+      "emit_pickle_bytes": 50002776,
+      "emit_cpu_ms": 203.125,
+      "emit_wall_ms": 225.502
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 33554432,
+      "rep": 4,
+      "children": 1,
+      "batch_ms": 814.826,
+      "per_result_ms": 814.826,
+      "emit_pickle_bytes": 50002776,
+      "emit_cpu_ms": 203.125,
+      "emit_wall_ms": 228.554
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 33554432,
+      "rep": 5,
+      "children": 1,
+      "batch_ms": 819.009,
+      "per_result_ms": 819.009,
+      "emit_pickle_bytes": 50002776,
+      "emit_cpu_ms": 171.875,
+      "emit_wall_ms": 220.479
+    },
+    {
+      "lane": "shared_memory",
+      "size_bytes": 33554432,
+      "rep": 6,
+      "children": 1,
+      "batch_ms": 835.513,
+      "per_result_ms": 835.513,
+      "emit_pickle_bytes": 50002776,
+      "emit_cpu_ms": 218.75,
+      "emit_wall_ms": 239.466
+    }
+  ],
+  "summary": {
+    "queue_inline": {
+      "262144": {
+        "per_result_p50_ms": 16.938,
+        "per_result_p95_ms": 155.085,
+        "emit_pickle_bytes_median": 2146899
+      },
+      "4194304": {
+        "per_result_p50_ms": 100.554,
+        "per_result_p95_ms": 110.714,
+        "emit_pickle_bytes_median": 7799396
+      },
+      "33554432": {
+        "per_result_p50_ms": 820.281,
+        "per_result_p95_ms": 928.05,
+        "emit_pickle_bytes_median": 50003011
+      }
+    },
+    "file_handle": {
+      "262144": {
+        "per_result_p50_ms": 25.919,
+        "per_result_p95_ms": 32.296,
+        "emit_pickle_bytes_median": 377625
+      },
+      "4194304": {
+        "per_result_p50_ms": 188.164,
+        "per_result_p95_ms": 276.573,
+        "emit_pickle_bytes_median": 1510
+      },
+      "33554432": {
+        "per_result_p50_ms": 1562.484,
+        "per_result_p95_ms": 1596.232,
+        "emit_pickle_bytes_median": 1510
+      }
+    },
+    "file_handle_fsync": {
+      "262144": {
+        "per_result_p50_ms": 30.078,
+        "per_result_p95_ms": 31.41,
+        "emit_pickle_bytes_median": 377625
+      },
+      "4194304": {
+        "per_result_p50_ms": 319.855,
+        "per_result_p95_ms": 603.132,
+        "emit_pickle_bytes_median": 1510
+      },
+      "33554432": {
+        "per_result_p50_ms": 1590.567,
+        "per_result_p95_ms": 4008.193,
+        "emit_pickle_bytes_median": 1510
+      }
+    },
+    "shared_memory": {
+      "262144": {
+        "per_result_p50_ms": 18.568,
+        "per_result_p95_ms": 19.858,
+        "emit_pickle_bytes_median": 2146664
+      },
+      "4194304": {
+        "per_result_p50_ms": 115.846,
+        "per_result_p95_ms": 118.938,
+        "emit_pickle_bytes_median": 7799161
+      },
+      "33554432": {
+        "per_result_p50_ms": 814.826,
+        "per_result_p95_ms": 835.513,
+        "emit_pickle_bytes_median": 50002776
+      }
+    }
+  },
+  "leftover_artifacts": 0,
+  "scratch_root_basename": "marker_pr68a_bench_b1t37kat"
+}
