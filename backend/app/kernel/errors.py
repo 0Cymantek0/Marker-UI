@@ -218,3 +218,15 @@ class WorkCancelledError(KernelError):
 class InvalidEventError(KernelError):
     """A semantic event or progress update failed validation at the
     kernel boundary (grammar, payload, or stream scope)."""
+
+
+# --- PR72: partial-order reading graph ------------------------------------
+
+
+class OrderConflictError(KernelError):
+    """Reading-order evidence is contradictory (an asserted cycle, an
+    asserted edge pair in both directions, or an ordering claim between
+    a containment ancestor and descendant).
+
+    The conflict is reported explicitly; the graph under validation is
+    never silently resolved by iteration or insertion order."""
