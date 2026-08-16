@@ -40,6 +40,35 @@ KERNEL_PAYLOAD_ROOT: Path = Path(
     os.getenv("MARKER_KERNEL_PAYLOAD_ROOT", str(DATA_DIR / "kernel_payloads"))
 )
 
+# Kernel runtime authority (PR67B): conversions are authorized as kernel
+# work, dispatched through the fair scheduler, kept alive by evidence-backed
+# liveness, and completed only through fenced accepted publication. The
+# kill switch restores the legacy direct-submission runtime.
+KERNEL_RUNTIME_ENABLED: bool = os.getenv(
+    "MARKER_KERNEL_RUNTIME", "true"
+).lower() in ("true", "1", "yes")
+KERNEL_RUNTIME_WORKSPACE: str = os.getenv("MARKER_KERNEL_RUNTIME_WORKSPACE", "local")
+KERNEL_RUNTIME_OWNER: str = os.getenv("MARKER_KERNEL_RUNTIME_OWNER", "marker-runtime")
+# Lease TTL for conversion work. Long enough that a healthy conversion in a
+# silent phase (cold model load) is not wrongly superseded, short enough
+# that a crashed worker becomes takeover-eligible in a reasonable window.
+# Liveness renewal extends it continuously while real evidence flows.
+KERNEL_LEASE_SECONDS: float = float(os.getenv("MARKER_KERNEL_LEASE_SECONDS", "900"))
+# How often the renewal task checks for fresh control-loop evidence.
+KERNEL_RENEW_INTERVAL_SECONDS: float = float(
+    os.getenv("MARKER_KERNEL_RENEW_INTERVAL_SECONDS", "5")
+)
+# Dispatch loop idle poll interval.
+KERNEL_DISPATCH_POLL_SECONDS: float = float(
+    os.getenv("MARKER_KERNEL_DISPATCH_POLL_SECONDS", "0.25")
+)
+# Watchdog pass interval: lapsed-lease takeover prep and lost-ack repair.
+KERNEL_WATCHDOG_INTERVAL_SECONDS: float = float(
+    os.getenv("MARKER_KERNEL_WATCHDOG_INTERVAL_SECONDS", "15")
+)
+# Hard cap on concurrently leased conversion work (scheduling group policy).
+KERNEL_MAX_IN_FLIGHT: int = int(os.getenv("MARKER_KERNEL_MAX_IN_FLIGHT", "4"))
+
 # Local ArtifactHandle data plane (PR68A): verified ephemeral file handles
 # that move large process-worker result fields out of the pickled control
 # message. Kill switch restores pure queue-inline transport everywhere.
