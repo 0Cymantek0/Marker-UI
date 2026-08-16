@@ -73,7 +73,7 @@ PR64_HEAD = "20260815_0005"
 PR65A_HEAD = "20260815_0006"
 PR65B_HEAD = "20260815_0007"
 PR66_HEAD = "20260816_0008"
-CURRENT_HEAD = "20260816_0009"
+CURRENT_HEAD = "20260817_0010"
 
 PR65A_TABLES = {
     "kernel_generations",
@@ -100,6 +100,8 @@ PR67A_TABLES = {
     "kernel_events",
     "kernel_progress",
 }
+
+PR73_TABLES = {"kernel_view_heads"}
 
 
 def _db_url(path: Path) -> str:
@@ -1099,5 +1101,207 @@ async def test_pr67a_downgrade_drops_scheduler_then_reupgrade_converges(
             "orphaned_deliveries_released": 0,
             "events_repaired": [],
         }
+    finally:
+        await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# PR73: conflict-aware patches — kernel view heads
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upgrade_from_pr67a_head_preserves_committed_data(
+    tmp_path: Path,
+) -> None:
+    """A PR67A database with committed history and an active generation
+    upgrades to the PR73 head with everything preserved and the view-head
+    table arriving empty — no fabricated current view revisions for
+    pre-PR73 work."""
+    db_path = tmp_path / "pr67a-full.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), "20260816_0009"
+    )
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    gen_service = GenerationService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws-pr73",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+            )
+        )
+        await gen_service.build_and_activate(await resolve_snapshot(factory, "ws-pr73"))
+    finally:
+        await engine.dispose()
+
+    await upgrade_database(url=url)
+    status = await verify_database_ready(url=url)
+    assert status.state is DatabaseState.CURRENT
+
+    with sqlite3.connect(db_path) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == CURRENT_HEAD
+        for table in sorted(PR73_TABLES):
+            count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            assert count == 0, f"{table} must arrive empty, found {count}"
+        records = conn.execute(
+            "SELECT COUNT(*) FROM kernel_records WHERE workspace_id = 'ws-pr73'"
+        ).fetchone()[0]
+        generations = conn.execute(
+            "SELECT COUNT(*) FROM kernel_generations WHERE state = 'active'"
+        ).fetchone()[0]
+    assert records == 1 and generations == 1  # PR67A-era truth survived
+
+
+@pytest.mark.asyncio
+async def test_view_advancement_fails_closed_at_pr67a_head(tmp_path: Path) -> None:
+    """A database missing only the PR73 revision is PENDING_UPGRADE; a
+    batch carrying a view advancement fails closed on the missing
+    kernel_view_heads table — the schema never self-heals through the
+    commit path."""
+    from app.kernel.patches import ViewAdvancement, ViewDocumentRecord
+    from app.kernel.reading_order import OrderNode, ReadingOrderGraph
+
+    db_path = tmp_path / "behind-pr73.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), "20260816_0009"
+    )
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+
+    view = ViewDocumentRecord(
+        record_id="view-genesis",
+        content_revision_ref="rev-s1",
+        graph=ReadingOrderGraph.build(
+            (OrderNode(node_id="run-a", anchor_ref="anchor-a"),), ()
+        ),
+        texts={"run-a": "Alpha"},
+    )
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        with pytest.raises(Exception) as commit_exc:
+            await service.commit(
+                KernelCommitBatch(
+                    workspace_id="ws",
+                    records=(view,),
+                    view_advancement=ViewAdvancement(
+                        new_revision_id=view.view_revision_id(),
+                    ),
+                )
+            )
+        assert "no such table" in str(commit_exc.value).lower()
+    finally:
+        await engine.dispose()
+    assert PR73_TABLES.isdisjoint(_kernel_tables_in(db_path))
+
+
+@pytest.mark.asyncio
+async def test_pr73_downgrade_drops_view_heads_then_reupgrade_converges(
+    tmp_path: Path,
+) -> None:
+    """Downgrade forgets current-view-revision truth (documented
+    destructive limitation): all committed kernel truth survives; a
+    database below the PR73 head is honestly PENDING_UPGRADE and never
+    reports ready; re-upgrade converges with an empty view-head table,
+    and re-committing the same genesis view fails as a duplicate
+    identity rather than resurrecting silently."""
+    from app.kernel.patches import ViewAdvancement, ViewDocumentRecord
+    from app.kernel.reading_order import OrderNode, ReadingOrderGraph
+
+    db_path = tmp_path / "pr73-downgrade.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+
+    graph = ReadingOrderGraph.build(
+        (OrderNode(node_id="run-a", anchor_ref="anchor-a"),),
+        (),
+    )
+    view = ViewDocumentRecord(
+        record_id="view-genesis",
+        content_revision_ref="rev-s1",
+        graph=graph,
+        texts={"run-a": "Alpha"},
+    )
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws",
+                records=(view,),
+                view_advancement=ViewAdvancement(
+                    new_revision_id=view.view_revision_id()
+                ),
+            )
+        )
+    finally:
+        await engine.dispose()
+
+    assert PR73_TABLES <= _kernel_tables_in(db_path)
+
+    def _downgrade_to_pr67a() -> None:
+        command.downgrade(db_migration._alembic_config(url), "20260816_0009")
+
+    await asyncio.to_thread(_downgrade_to_pr67a)
+    tables = _kernel_tables_in(db_path)
+    assert not (PR73_TABLES & tables)
+    assert (
+        KERNEL_TABLES
+        | PR64_TABLES
+        | PR65A_TABLES
+        | PR65B_TABLES
+        | PR66_TABLES
+        | PR67A_TABLES
+    ) <= tables
+
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+    with pytest.raises(IncompatibleDatabaseError):
+        await verify_database_ready(url=url)
+
+    await upgrade_database(url=url)
+    assert inspect_database(url=url).state is DatabaseState.CURRENT
+    with sqlite3.connect(db_path) as conn:
+        assert (
+            conn.execute("SELECT COUNT(*) FROM kernel_view_heads").fetchone()[0] == 0
+        )
+        records = conn.execute(
+            "SELECT COUNT(*) FROM kernel_records WHERE record_class = 'view_document'"
+        ).fetchone()[0]
+
+    # The committed view record survived the downgrade (kernel truth is
+    # never deleted); only the current-pointer truth was dropped, and the
+    # surviving record identity is still enforced as a duplicate.
+    assert records == 1
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        with pytest.raises(Exception) as dup_exc:
+            await service.commit(
+                KernelCommitBatch(
+                    workspace_id="ws",
+                    records=(view,),
+                    view_advancement=ViewAdvancement(
+                        new_revision_id=view.view_revision_id()
+                    ),
+                )
+            )
+        assert "already committed" in str(dup_exc.value)
     finally:
         await engine.dispose()

@@ -36,9 +36,12 @@ replaying accepted patches under their preconditions).
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Mapping
+
+from sqlalchemy import select
 
 from app.kernel.errors import (
     BeforeHashMismatchError,
@@ -46,6 +49,7 @@ from app.kernel.errors import (
     KernelError,
     MissingViewTargetError,
     SourceRevisionMismatchError,
+    StaleBaseRevisionError,
 )
 from app.kernel.reading_order import (
     NODE_KIND_CONTENT,
@@ -742,20 +746,20 @@ class PatchOutcomeRecord(KernelRecord):
 class ViewAdvancement:
     """Request to move a view's current revision inside a kernel commit.
 
-    Exactly one of three forms is valid (validated at construction, and
+    Exactly one of two forms is valid (validated at construction, and
     re-validated against durable state inside the commit transaction):
 
     * **genesis** — ``base_revision_id is None`` and no proposal: the
       first revision of a view. The head row is inserted; a second
       genesis for an initialized view is a stale-base conflict.
-    * **patch** — ``base_revision_id`` + ``proposal_record_id``: the
-      proposal record must be in the same batch; the commit evaluates
-      its preconditions against the current revision and independently
-      re-applies its operations to verify the result revision.
-    * **rebuild** — ``base_revision_id`` + ``verified_rebuild=True``: a
-      source rebase whose new revision the commit verifies by replaying
-      the rebase operation's declared proposals from its declared source
-      facts (the clean-rebuild oracle runs transactionally).
+    * **proposal** — ``base_revision_id`` + ``proposal_record_id``: the
+      proposal record must be in the same batch. The commit evaluates
+      its preconditions against the current revision and *independently
+      recomputes* the result — a view patch by re-applying its
+      operations to the current view, a ``rebase_source`` proposal by
+      replaying its declared proposals from its declared source facts
+      (the clean-rebuild oracle runs transactionally). The recomputed
+      revision must equal ``new_revision_id`` exactly.
 
     The head flip is a conditional update under the SQLite writer lock
     the commit already holds, so advancement linearizes with the commit:
@@ -766,7 +770,6 @@ class ViewAdvancement:
     view_id: str = DEFAULT_VIEW_ID
     base_revision_id: str | None = None
     proposal_record_id: str | None = None
-    verified_rebuild: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.view_id, str) or not VIEW_ID_PATTERN.match(self.view_id):
@@ -787,27 +790,222 @@ class ViewAdvancement:
                 self.proposal_record_id, field_name="proposal_record_id"
             )
         if self.base_revision_id is None:
-            if self.proposal_record_id is not None or self.verified_rebuild:
+            if self.proposal_record_id is not None:
                 raise InvalidViewAdvancementError(
-                    "genesis advancement initializes a view and carries neither "
-                    "a proposal nor a rebuild verification flag"
+                    "genesis advancement initializes a view and carries no proposal"
                 )
-        elif self.proposal_record_id is None and not self.verified_rebuild:
+        elif self.proposal_record_id is None:
             raise InvalidViewAdvancementError(
-                "an advancing request must name the proposal it applies or "
-                "declare itself a verified rebuild; the head never moves on "
-                "unvalidated state"
+                "an advancing request must name the proposal it applies; the "
+                "head never moves on unvalidated state"
             )
-        elif self.proposal_record_id is not None and self.verified_rebuild:
+
+
+# ---------------------------------------------------------------------------
+# Transactional advancement evaluation (runs inside the commit transaction)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PreparedViewRef:
+    """Batch-side view of one prepared record (class, identity, payload).
+
+    Decouples the evaluator from the commit service's internal types
+    while giving it exactly what verification needs.
+    """
+
+    record_id: str
+    record_class: str
+    identity_hash: str
+    payload_json: str
+
+
+@dataclass(frozen=True)
+class ViewFlip:
+    """The head movement the commit must perform after a passing check.
+
+    ``insert`` creates the first head row for the view (genesis);
+    ``update`` conditionally replaces ``expected_base_revision_id`` and
+    must affect exactly one row or the whole commit fails.
+    """
+
+    kind: str  # "insert" | "update"
+    workspace_id: str
+    view_id: str
+    expected_base_revision_id: str | None
+    new_revision_id: str
+    kernel_commit_id: int
+
+
+async def _load_view_document(session, workspace_id: str, revision_id: str):
+    from app.kernel.models import KernelRecord as KernelRecordRow
+
+    row = (
+        await session.execute(
+            select(KernelRecordRow.payload_json).where(
+                KernelRecordRow.workspace_id == workspace_id,
+                KernelRecordRow.identity_hash == revision_id,
+                KernelRecordRow.record_class == "view_document",
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise InvalidViewAdvancementError(
+            f"view head names revision {revision_id!r} but no committed view "
+            "document record carries that identity; refusing to advance over "
+            "unverifiable state"
+        )
+    return ViewDocumentRecord.from_payload(json.loads(row), record_id="head-view")
+
+
+async def check_view_advancement(
+    session,
+    *,
+    workspace_id: str,
+    advancement: ViewAdvancement,
+    prepared_records: Mapping[str, PreparedViewRef],
+    next_commit_id: int,
+) -> ViewFlip:
+    """Authoritative in-transaction evaluation of one view advancement.
+
+    Runs under the writer lock the commit service already holds. Every
+    precondition is checked against durable current state, and the
+    result revision is *independently recomputed* — never trusted from
+    the advancement request. Returns the flip to execute; any violation
+    raises a typed conflict and the entire batch rolls back.
+    """
+    from app.kernel.models import KernelRecord as KernelRecordRow
+    from app.kernel.models import KernelViewHead
+
+    advanced_in_batch = [
+        ref
+        for ref in prepared_records.values()
+        if ref.record_class == "view_document"
+        and ref.identity_hash == advancement.new_revision_id
+    ]
+    if not advanced_in_batch:
+        raise InvalidViewAdvancementError(
+            "the advanced revision must be committed in the same batch as the "
+            "advancement; a head never names state the commit does not create"
+        )
+
+    head = (
+        await session.execute(
+            select(KernelViewHead).where(
+                KernelViewHead.workspace_id == workspace_id,
+                KernelViewHead.view_id == advancement.view_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if advancement.base_revision_id is None:
+        if head is not None:
+            raise StaleBaseRevisionError(
+                expected_base_revision_id=None,
+                observed_base_revision_id=head.current_revision_id,
+            )
+        return ViewFlip(
+            kind="insert",
+            workspace_id=workspace_id,
+            view_id=advancement.view_id,
+            expected_base_revision_id=None,
+            new_revision_id=advancement.new_revision_id,
+            kernel_commit_id=next_commit_id,
+        )
+
+    if head is None:
+        raise StaleBaseRevisionError(
+            expected_base_revision_id=advancement.base_revision_id,
+            observed_base_revision_id=None,
+        )
+    if head.current_revision_id != advancement.base_revision_id:
+        raise StaleBaseRevisionError(
+            expected_base_revision_id=advancement.base_revision_id,
+            observed_base_revision_id=head.current_revision_id,
+        )
+    current_view = await _load_view_document(
+        session, workspace_id, head.current_revision_id
+    )
+
+    proposal_ref = prepared_records.get(advancement.proposal_record_id or "")
+    if (
+        proposal_ref is None
+        or proposal_ref.record_class != "patch_proposal"
+    ):
+        raise InvalidViewAdvancementError(
+            "advancement names a proposal that is not part of this batch"
+        )
+    proposal = PatchProposalRecord.from_payload(
+        json.loads(proposal_ref.payload_json),
+        record_id=advancement.proposal_record_id or "proposal",
+    )
+    if proposal.preconditions.base_revision_id != advancement.base_revision_id:
+        raise InvalidViewAdvancementError(
+            "the proposal targets a different base revision than the "
+            "advancement declares"
+        )
+
+    rebase_ops = [
+        op for op in proposal.operations if op.op_type == OP_TYPE_REBASE_SOURCE
+    ]
+    if rebase_ops:
+        if len(proposal.operations) != 1:
             raise InvalidViewAdvancementError(
-                "an advancement is either a patch proposal or a verified "
-                "rebuild, never both"
+                "a rebase proposal carries exactly one rebase_source operation"
             )
+        replay: dict[str, PatchProposalRecord] = {}
+        for ref in rebase_ops[0].params["replay_proposal_refs"]:
+            row = (
+                await session.execute(
+                    select(KernelRecordRow.payload_json).where(
+                        KernelRecordRow.id == ref,
+                        KernelRecordRow.workspace_id == workspace_id,
+                        KernelRecordRow.record_class == "patch_proposal",
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                raise InvalidViewAdvancementError(
+                    f"rebase references proposal {ref!r} which is not committed "
+                    "in this workspace"
+                )
+            replay[ref] = PatchProposalRecord.from_payload(
+                json.loads(row), record_id=ref
+            )
+        verified = apply_rebase_source(rebase_ops[0], replay).view
+    else:
+        evaluate_preconditions(current_view, proposal.preconditions)
+        graph, texts = current_view.graph, dict(current_view.texts)
+        for op in proposal.operations:
+            graph, texts = apply_operation(graph, texts, op)
+        verified = ViewDocumentRecord(
+            record_id="verified-view",
+            content_revision_ref=current_view.content_revision_ref,
+            graph=graph,
+            texts=texts,
+        )
+
+    if verified.view_revision_id() != advancement.new_revision_id:
+        raise InvalidViewAdvancementError(
+            "independently recomputed revision "
+            f"{verified.view_revision_id()} does not equal the advanced "
+            f"revision {advancement.new_revision_id}; the head never moves to "
+            "state the proposal does not prove"
+        )
+    return ViewFlip(
+        kind="update",
+        workspace_id=workspace_id,
+        view_id=advancement.view_id,
+        expected_base_revision_id=head.current_revision_id,
+        new_revision_id=advancement.new_revision_id,
+        kernel_commit_id=next_commit_id,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Pure operation application
 # ---------------------------------------------------------------------------
+
 
 
 def apply_operation(

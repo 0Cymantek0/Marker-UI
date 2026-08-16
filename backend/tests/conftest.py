@@ -23,6 +23,7 @@ from app.kernel.models import (  # noqa: F401 - ensure kernel tables are registe
     KernelPayloadObject,
     KernelRecord,
     KernelRecordEdge,
+    KernelViewHead,
 )
 from app.models.audit import AuditEvent  # noqa: F401 - ensure table is registered
 from app.models.job import ConversionJob  # noqa: F401 - ensure table is registered

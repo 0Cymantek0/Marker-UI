@@ -147,6 +147,7 @@ MANIFEST_SCHEMA_VERSION = "1.0.0"
 
 MAX_WORKSPACE_ID_LENGTH = 128
 MAX_HASH_LENGTH = 80
+MAX_VIEW_ID_LENGTH = 64
 MAX_RECORD_TYPE_LENGTH = 100
 MAX_SCHEMA_VERSION_LENGTH = 32
 MAX_RECORD_CLASS_LENGTH = 50
@@ -523,6 +524,40 @@ class KernelGenerationHead(Base):
         DateTime(),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class KernelViewHead(Base):
+    """Current accepted view revision for one (workspace, view) (PR73).
+
+    One row per named derived view. The current-revision switch happens
+    ONLY inside a kernel commit transaction (conditional update under the
+    writer lock the commit already holds), so view-head ordering can
+    never disagree with ``kernel_commit_id`` ordering: a patch batch and
+    its head movement commit or roll back together. ``kernel_commit_id``
+    records the commit that produced the current revision.
+    """
+
+    __tablename__ = "kernel_view_heads"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), primary_key=True
+    )
+    view_id: Mapped[str] = mapped_column(String(MAX_VIEW_ID_LENGTH), primary_key=True)
+    current_revision_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=False
+    )
+    kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelViewHead(workspace={self.workspace_id!r}, "
+            f"view={self.view_id!r}, revision={self.current_revision_id!r}, "
+            f"commit={self.kernel_commit_id})>"
+        )
 
 
 class KernelRetentionRoot(Base):

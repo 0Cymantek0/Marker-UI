@@ -640,18 +640,8 @@ def test_view_advancement_forms():
         ).proposal_record_id
         == "proposal-evt-1"
     )
-    assert ViewAdvancement(
-        new_revision_id=revision, base_revision_id=revision, verified_rebuild=True
-    ).verified_rebuild
     with pytest.raises(InvalidViewAdvancementError):
         ViewAdvancement(new_revision_id=revision, base_revision_id=revision)
-    with pytest.raises(InvalidViewAdvancementError):
-        ViewAdvancement(
-            new_revision_id=revision,
-            base_revision_id=revision,
-            proposal_record_id="proposal-evt-1",
-            verified_rebuild=True,
-        )
     with pytest.raises(InvalidViewAdvancementError):
         ViewAdvancement(new_revision_id=revision, proposal_record_id="proposal-evt-1")
     with pytest.raises(InvalidViewAdvancementError):

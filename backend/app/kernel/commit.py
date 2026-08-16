@@ -21,12 +21,19 @@ commits. The SQLite portion of the V3.2 commit protocol:
    manifest identity hash);
 7. insert the batch's outbox intent rows (PR64): successor work becomes
    visible exactly when the authorizing commit does;
-8. advance the head with a conditional update
+8. when the batch carries a view advancement (PR73): evaluate every
+   patch precondition against current authoritative state and
+   independently recompute the proposed revision under this
+   transaction's writer lock, then flip the view head conditionally —
+   the check, the records, and the head movement commit or roll back
+   together (all-or-conflict, no TOCTOU window);
+9. advance the head with a conditional update
    (``WHERE head_kernel_commit_id = <observed head>``) — a lost update
    cannot be silently accepted;
-9. COMMIT while still holding the head row — the database commit is the
+10. COMMIT while still holding the head row — the database commit is the
    linearization point that makes the new head, records, edges,
-   manifest, payload references, and outbox visible atomically.
+   manifest, payload references, outbox, and view-head movement visible
+   atomically.
 
 Contention policy: ``SQLITE_BUSY``/lock errors and concurrent head
 movement are expected, retryable conditions with a bounded budget.
@@ -60,6 +67,7 @@ from app.kernel.errors import (
     InvalidWorkspaceIdError,
     KernelBusyError,
     KernelError,
+    StaleBaseRevisionError,
     UnknownRecordReferenceError,
 )
 from app.kernel.manifest import (
@@ -79,6 +87,7 @@ from app.kernel.models import (
     KernelPayloadRetirement,
     KernelRecord,
     KernelRecordEdge,
+    KernelViewHead,
 )
 from app.kernel.outbox import (
     OUTBOX_STATE_PENDING,
@@ -86,6 +95,12 @@ from app.kernel.outbox import (
     compute_dedupe_key,
     intent_payload_json,
     validate_intent,
+)
+from app.kernel.patches import (
+    PreparedViewRef,
+    ViewAdvancement,
+    ViewFlip,
+    check_view_advancement,
 )
 from app.kernel.payloads import LOCAL_STORE_PROFILE, LocalPayloadStore
 from app.kernel.records import KernelEdge, KernelRecord as RecordInput
@@ -112,17 +127,21 @@ __all__ = [
     "PHASE_PAYLOADS_REGISTERED",
     "PHASE_PRE_COMMIT",
     "PHASE_RECORDS_INSERTED",
+    "PHASE_VIEW_ADVANCED",
+    "PHASE_VIEW_CHECKED",
     "default_commit_service",
 ]
 
 # Deterministic fault-injection phases (test-only parameter).
 PHASE_BEGIN = "begin"
 PHASE_HEAD_READ = "head-read"
+PHASE_VIEW_CHECKED = "view-checked"
 PHASE_RECORDS_INSERTED = "records-inserted"
 PHASE_PAYLOADS_REGISTERED = "payloads-registered"
 PHASE_EDGES_INSERTED = "edges-inserted"
 PHASE_MANIFEST_INSERTED = "manifest-inserted"
 PHASE_OUTBOX_INSERTED = "outbox-inserted"
+PHASE_VIEW_ADVANCED = "view-advanced"
 PHASE_HEAD_ADVANCED = "head-advanced"
 PHASE_PRE_COMMIT = "pre-commit"
 
@@ -130,11 +149,13 @@ FAULT_PHASES = frozenset(
     {
         PHASE_BEGIN,
         PHASE_HEAD_READ,
+        PHASE_VIEW_CHECKED,
         PHASE_RECORDS_INSERTED,
         PHASE_PAYLOADS_REGISTERED,
         PHASE_EDGES_INSERTED,
         PHASE_MANIFEST_INSERTED,
         PHASE_OUTBOX_INSERTED,
+        PHASE_VIEW_ADVANCED,
         PHASE_HEAD_ADVANCED,
         PHASE_PRE_COMMIT,
     }
@@ -180,6 +201,9 @@ class KernelCommitBatch:
     producer: Mapping[str, Any] = field(default_factory=dict)
     #: successor work that must become visible with this commit (PR64)
     outbox: tuple[OutboxIntent, ...] = ()
+    #: conditional view-revision movement evaluated and flipped inside
+    #: this commit's transaction (PR73); None for non-advancing batches
+    view_advancement: ViewAdvancement | None = None
 
 
 @dataclass(frozen=True)
@@ -413,6 +437,7 @@ class KernelCommitService:
                     producer_json,
                     prepared_outbox,
                     staged_payloads,
+                    batch.view_advancement,
                     _inject_fault_at,
                 )
             except _PayloadVanishedMidCommit:
@@ -452,6 +477,7 @@ class KernelCommitService:
         producer_json: str,
         prepared_outbox: Sequence[tuple[OutboxIntent, str]],
         staged_payloads: Mapping[str, tuple[int, str]],
+        view_advancement: ViewAdvancement | None,
         inject_fault_at: str | None,
     ) -> KernelCommitReceipt:
         def maybe_inject(phase: str) -> None:
@@ -548,6 +574,30 @@ class KernelCommitService:
                                 )
                             )
                         )
+
+                # 2.7. PR73 view advancement check. The writer lock is
+                #     held, so the precondition evaluation below and any
+                #     concurrent view head movement cannot interleave.
+                #     A false precondition raises a typed conflict and
+                #     rolls the whole batch back — all-or-conflict.
+                view_flip: ViewFlip | None = None
+                if view_advancement is not None:
+                    view_flip = await check_view_advancement(
+                        session,
+                        workspace_id=workspace_id,
+                        advancement=view_advancement,
+                        prepared_records={
+                            p.record_id: PreparedViewRef(
+                                record_id=p.record_id,
+                                record_class=p.record_class,
+                                identity_hash=p.identity_hash,
+                                payload_json=p.payload_json,
+                            )
+                            for p in prepared
+                        },
+                        next_commit_id=next_commit_id,
+                    )
+                maybe_inject(PHASE_VIEW_CHECKED)
 
                 # 3. Insert logical records.
                 session.add_all(
@@ -669,6 +719,45 @@ class KernelCommitService:
                     if result.rowcount == 1:
                         inserted_outbox_keys.append(dedupe_key)
                 maybe_inject(PHASE_OUTBOX_INSERTED)
+
+                # 5.7. PR73 view head movement. Conditional on the exact
+                #      base observed during the check above (still under
+                #      this transaction's writer lock); anything but one
+                #      affected row is a stale-base conflict that rolls
+                #      the whole commit back.
+                if view_flip is not None:
+                    if view_flip.kind == "insert":
+                        session.add(
+                            KernelViewHead(
+                                workspace_id=view_flip.workspace_id,
+                                view_id=view_flip.view_id,
+                                current_revision_id=view_flip.new_revision_id,
+                                kernel_commit_id=view_flip.kernel_commit_id,
+                            )
+                        )
+                    else:
+                        flip_result = await session.execute(
+                            update(KernelViewHead)
+                            .where(
+                                KernelViewHead.workspace_id == view_flip.workspace_id,
+                                KernelViewHead.view_id == view_flip.view_id,
+                                KernelViewHead.current_revision_id
+                                == view_flip.expected_base_revision_id,
+                            )
+                            .values(
+                                current_revision_id=view_flip.new_revision_id,
+                                kernel_commit_id=view_flip.kernel_commit_id,
+                                updated_at=datetime.now(timezone.utc),
+                            )
+                        )
+                        if flip_result.rowcount != 1:
+                            raise StaleBaseRevisionError(
+                                expected_base_revision_id=(
+                                    view_flip.expected_base_revision_id
+                                ),
+                                observed_base_revision_id=None,
+                            )
+                    maybe_inject(PHASE_VIEW_ADVANCED)
 
                 # 6. Conditional head advance (lost-update guard).
                 result = await session.execute(
