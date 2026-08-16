@@ -230,3 +230,89 @@ class OrderConflictError(KernelError):
 
     The conflict is reported explicitly; the graph under validation is
     never silently resolved by iteration or insertion order."""
+
+
+# --- PR73: conflict-aware patches & view revisions -------------------------
+
+
+class InvalidViewAdvancementError(KernelError):
+    """A view-revision advancement request was structurally invalid
+    (unknown form, missing batch records, or an inconsistent pairing of
+    proposal, base revision, and result revision).
+
+    Fail-closed: the advancement seam never guesses which state was
+    meant."""
+
+
+class StaleBaseRevisionError(KernelError):
+    """The patch targeted a base view revision that is not the current
+    authoritative revision of its view.
+
+    Attributes carry both identities, so callers can distinguish "view
+    advanced underneath me" (``observed`` set) from "view never
+    initialized / targeted unknown state" (``observed`` is ``None``).
+    A stale patch never partially applies."""
+
+    def __init__(
+        self,
+        *,
+        expected_base_revision_id: str | None,
+        observed_base_revision_id: str | None,
+    ) -> None:
+        self.expected_base_revision_id = expected_base_revision_id
+        self.observed_base_revision_id = observed_base_revision_id
+        super().__init__(
+            "stale base view revision: patch targeted "
+            f"{expected_base_revision_id!r} but the current revision is "
+            f"{observed_base_revision_id!r}"
+        )
+
+
+class BeforeHashMismatchError(KernelError):
+    """A target precondition asserted a canonical before-value hash that
+    no longer matches the current derived value for that node.
+
+    The node id still existing is not enough: the patch asserted what it
+    believed it was changing, and that belief is no longer true."""
+
+    def __init__(
+        self, *, node_id: str, expected_hash: str, observed_hash: str
+    ) -> None:
+        self.node_id = node_id
+        self.expected_hash = expected_hash
+        self.observed_hash = observed_hash
+        super().__init__(
+            f"before-value hash mismatch for target {node_id!r}: patch "
+            f"asserted {expected_hash} but the current value hashes to "
+            f"{observed_hash}"
+        )
+
+
+class SourceRevisionMismatchError(KernelError):
+    """A patch required source/content revisions that are not the ones
+    the current derived view is bound to."""
+
+    def __init__(
+        self, *, required_refs: tuple[str, ...], observed_ref: str | None
+    ) -> None:
+        self.required_refs = required_refs
+        self.observed_ref = observed_ref
+        super().__init__(
+            "source revision mismatch: patch requires "
+            f"{list(required_refs)} but the current view is bound to "
+            f"{observed_ref!r}"
+        )
+
+
+class MissingViewTargetError(KernelError):
+    """A patch precondition or operation named a view node that does not
+    exist in the current derived view (fail-closed; the patch cannot
+    partially apply)."""
+
+    def __init__(self, *, node_id: str, view_revision_id: str | None = None) -> None:
+        self.node_id = node_id
+        self.view_revision_id = view_revision_id
+        super().__init__(
+            f"patch target {node_id!r} does not exist in view revision "
+            f"{view_revision_id!r}"
+        )
