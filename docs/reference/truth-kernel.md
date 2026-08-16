@@ -877,18 +877,36 @@ never-activated-only purge → residue tests.
   closures, and PublicationSets register retention without the
   collector changing. `kernel_payload_retirements` rows are the point
   later effect ledgers can observe reclamation from.
-- **PR67B (runtime wiring):** the PR67A foundation slice delivered the
-  kernel-side contracts — `scheduler.claim_fair` (fair bounded
-  dispatch), `liveness.renew_lease` (challenge heartbeat), and
-  `events.replay`/`events.follow` (durable semantic sequencing). The
-  clean next seam is wiring the live runtime: `TaskManager`/executors
-  claim through `claim_fair`, keep leases alive through
-  `renew_lease` from their real control loops, and surface status by
-  projecting `kernel_events`/`kernel_progress` instead of in-memory
-  polling. Leases, tokens, acceptance, and fenced acknowledgement stay
-  unchanged underneath; `KernelCommitReceipt` remains the
-  commit-identity token work chains from, and generation activation is
-  idempotent and safe to drive from an at-least-once dispatcher.
+- **PR67B (runtime wiring — IMPLEMENTED):** the live conversion path now
+  runs through the kernel authority. `app/services/kernel_runtime.py`
+  (`KernelRuntimeCoordinator`) authorizes each submission as one kernel
+  commit (`NativeObjectRecord` request object + `conversion.execute`
+  outbox intent in the same transaction), dispatches exclusively through
+  `scheduler.claim_fair`, renews leases only from real control-loop
+  evidence (activity counter fed by tqdm progress, worker logs/status;
+  no detached heartbeat), and completes work only through
+  `scheduler.accept_work` → `fencing.complete_work` before the
+  `ConversionJob` compatibility row may read `completed`. Failure,
+  cancellation, retry, and lease-lapse are durably recorded as semantic
+  events (`work.failed`, `work.cancelled`, `work.retry`) behind the
+  current fence; a watchdog requeues lapsed leases (one lapse retry
+  always allowed, then the row's retry budget) and repairs lost acks;
+  startup `recover()` converges every crash boundary (adoption of
+  pre-kernel rows, publication projection, terminal-event projection,
+  non-durable sweep). Executors are generation-bound (`submit_job(...,
+  claim=...)`) so a stale generation can neither renew, publish, nor
+  finalize under its successor's fence. `MARKER_KERNEL_RUNTIME=0`
+  restores the legacy direct-submission runtime; the legacy SQLite
+  durable queue is dispatch-disabled in kernel mode (compatibility
+  metadata only). PR68A ArtifactHandle transport is unchanged and is
+  always resolved before acceptance — the accepted publication is a
+  bounded descriptor over the resolved durable output, never an
+  ephemeral handle pathname. See
+  `docs/reference/kernel-runtime-integration.md` for the evidence
+  bundle. Remaining for later slices: PR79 signed-cursor event surface
+  (SSE remains a compatibility projection over in-memory state plus the
+  durable row) and worker-side generation identity for the process
+  backend.
 - **PR76 (PublicationSet):** `kernel_publications` proves the
   one-fenced-accepted-outcome primitive; the multi-generation atomic
   bundle protocol wraps a seam like it rather than mutating it.
