@@ -750,6 +750,191 @@
         }
       },
       "expect_error": "at least 3"
+    },
+    {
+      "id": "pr72-anchor-pdf-point-geometry-quote",
+      "category": "geometry",
+      "record_type": "marker.kernel.source_anchor.v1",
+      "schema_version": "1.0.0",
+      "payload": {
+        "content_revision_ref": "rev-0001",
+        "locator": "pdf:page:1",
+        "selectors": {
+          "quote": {
+            "family": "quote",
+            "quote": "Left column first line.",
+            "prefix": "",
+            "suffix": ""
+          },
+          "geometry": {
+            "family": "geometry",
+            "space": {
+              "space_id": "pdf.page_points.v1",
+              "unit": "pt",
+              "axis": "y_up"
+            },
+            "boundary": "origin_point",
+            "geometry": {
+              "$geometry": {
+                "kind": "point",
+                "raw": [
+                  "72.5",
+                  "720.25"
+                ]
+              }
+            },
+            "approximate": false
+          }
+        }
+      },
+      "variants": [
+        {
+          "id": "office-emu-space-differs",
+          "expectation": "different",
+          "payload": {
+            "content_revision_ref": "rev-0001",
+            "locator": "pdf:page:1",
+            "selectors": {
+              "quote": {
+                "family": "quote",
+                "quote": "Left column first line.",
+                "prefix": "",
+                "suffix": ""
+              },
+              "geometry": {
+                "family": "geometry",
+                "space": {
+                  "space_id": "office.emu.v1",
+                  "unit": "emu",
+                  "axis": "y_down"
+                },
+                "boundary": "origin_point",
+                "geometry": {
+                  "$geometry": {
+                    "kind": "point",
+                    "raw": [
+                      "72.5",
+                      "720.25"
+                    ]
+                  }
+                },
+                "approximate": false
+              }
+            }
+          }
+        }
+      ],
+      "expect": {
+        "payload_canonical": "{\"content_revision_ref\":\"rev-0001\",\"locator\":\"pdf:page:1\",\"selectors\":{\"geometry\":{\"approximate\":false,\"boundary\":\"origin_point\",\"family\":\"geometry\",\"geometry\":{\"geometry\":\"point\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x\":72500,\"y\":720250},\"space\":{\"axis\":\"y_up\",\"space_id\":\"pdf.page_points.v1\",\"unit\":\"pt\"}},\"quote\":{\"family\":\"quote\",\"prefix\":\"\",\"quote\":\"Left column first line.\",\"suffix\":\"\"}}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"content_revision_ref\":\"rev-0001\",\"locator\":\"pdf:page:1\",\"selectors\":{\"geometry\":{\"approximate\":false,\"boundary\":\"origin_point\",\"family\":\"geometry\",\"geometry\":{\"geometry\":\"point\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x\":72500,\"y\":720250},\"space\":{\"axis\":\"y_up\",\"space_id\":\"pdf.page_points.v1\",\"unit\":\"pt\"}},\"quote\":{\"family\":\"quote\",\"prefix\":\"\",\"quote\":\"Left column first line.\",\"suffix\":\"\"}}},\"record_type\":\"marker.kernel.source_anchor.v1\",\"schema_version\":\"1.0.0\"}",
+        "identity_hash": "sha256:44401df3fa786e99274043dce50af2ed22c7711231c653bf29c5047426c1eea6"
+      }
+    },
+    {
+      "id": "pr72-anchor-emu-drawing",
+      "category": "composite",
+      "record_type": "marker.kernel.source_anchor.v1",
+      "schema_version": "1.0.0",
+      "payload": {
+        "content_revision_ref": "rev-0002",
+        "locator": "ooxml:word/document.xml",
+        "selectors": {
+          "native": {
+            "family": "native",
+            "provider": "ooxml",
+            "native_kind": "anchored_drawing",
+            "native_id": "7",
+            "package_path": "word/document.xml"
+          },
+          "geometry": {
+            "family": "geometry",
+            "space": {
+              "space_id": "office.emu.v1",
+              "unit": "emu",
+              "axis": "y_down"
+            },
+            "boundary": "region_inclusive",
+            "geometry": {
+              "$geometry": {
+                "kind": "box",
+                "scaled": [
+                  1828800000,
+                  457200000,
+                  2743200000,
+                  914400000
+                ]
+              }
+            },
+            "approximate": false
+          }
+        }
+      },
+      "variants": [],
+      "expect": {
+        "payload_canonical": "{\"content_revision_ref\":\"rev-0002\",\"locator\":\"ooxml:word/document.xml\",\"selectors\":{\"geometry\":{\"approximate\":false,\"boundary\":\"region_inclusive\",\"family\":\"geometry\",\"geometry\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":1828800000,\"x1\":2743200000,\"y0\":457200000,\"y1\":914400000},\"space\":{\"axis\":\"y_down\",\"space_id\":\"office.emu.v1\",\"unit\":\"emu\"}},\"native\":{\"family\":\"native\",\"native_id\":\"7\",\"native_kind\":\"anchored_drawing\",\"package_path\":\"word/document.xml\",\"provider\":\"ooxml\"}}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"content_revision_ref\":\"rev-0002\",\"locator\":\"ooxml:word/document.xml\",\"selectors\":{\"geometry\":{\"approximate\":false,\"boundary\":\"region_inclusive\",\"family\":\"geometry\",\"geometry\":{\"geometry\":\"box\",\"profile\":\"marker.geometry.fixed_point.v1\",\"x0\":1828800000,\"x1\":2743200000,\"y0\":457200000,\"y1\":914400000},\"space\":{\"axis\":\"y_down\",\"space_id\":\"office.emu.v1\",\"unit\":\"emu\"}},\"native\":{\"family\":\"native\",\"native_id\":\"7\",\"native_kind\":\"anchored_drawing\",\"package_path\":\"word/document.xml\",\"provider\":\"ooxml\"}}},\"record_type\":\"marker.kernel.source_anchor.v1\",\"schema_version\":\"1.0.0\"}",
+        "identity_hash": "sha256:dd6e28aef1a5bad522f6940547b82b85c9a862f38430fd612987a088302b16cb"
+      }
+    },
+    {
+      "id": "pr72-anchor-unicode-quote-exact",
+      "category": "unicode",
+      "record_type": "marker.kernel.source_anchor.v1",
+      "schema_version": "1.0.0",
+      "payload": {
+        "content_revision_ref": "rev-0003",
+        "locator": null,
+        "selectors": {
+          "quote": {
+            "family": "quote",
+            "quote": "café",
+            "prefix": "",
+            "suffix": ""
+          }
+        }
+      },
+      "variants": [
+        {
+          "id": "decomposed-form-differs",
+          "expectation": "different",
+          "payload": {
+            "content_revision_ref": "rev-0003",
+            "locator": null,
+            "selectors": {
+              "quote": {
+                "family": "quote",
+                "quote": "café",
+                "prefix": "",
+                "suffix": ""
+              }
+            }
+          }
+        }
+      ],
+      "expect": {
+        "payload_canonical": "{\"content_revision_ref\":\"rev-0003\",\"locator\":null,\"selectors\":{\"quote\":{\"family\":\"quote\",\"prefix\":\"\",\"quote\":\"café\",\"suffix\":\"\"}}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"content_revision_ref\":\"rev-0003\",\"locator\":null,\"selectors\":{\"quote\":{\"family\":\"quote\",\"prefix\":\"\",\"quote\":\"café\",\"suffix\":\"\"}}},\"record_type\":\"marker.kernel.source_anchor.v1\",\"schema_version\":\"1.0.0\"}",
+        "identity_hash": "sha256:ad4388641bf965fa61c8c92dda0fb4d7237844105c8d9cfb549a9dd3bc6cba64"
+      }
+    },
+    {
+      "id": "pr72-anchor-float-position-rejected",
+      "category": "rejection",
+      "record_type": "marker.kernel.source_anchor.v1",
+      "schema_version": "1.0.0",
+      "payload": {
+        "content_revision_ref": "rev-0004",
+        "locator": null,
+        "selectors": {
+          "position": {
+            "family": "position",
+            "scope": "content_bytes",
+            "start": 10.5,
+            "end": 19
+          }
+        }
+      },
+      "expect_error": "floats cannot enter canonical identity"
     }
   ]
 }
