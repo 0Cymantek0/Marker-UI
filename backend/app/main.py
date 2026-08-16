@@ -188,49 +188,100 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     await load_secrets_from_db()
     setup_api_manager_monkeypatch()
 
-    # Recover durable queued jobs from a prior session, then sweep any remaining
-    # non-durable pending/processing rows as failed. Order matters: recovery must
-    # run first so durable rows survive; the sweep only catches non-durable rows
-    # that have no queue backend to recover from.
-    try:
-        from app.services.task_manager import TaskManager
-        if isinstance(_app_state.task_manager, TaskManager):
-            recovery = await _app_state.task_manager.recover_and_sweep_durable_jobs(
-                _app_state.conversion_service
-            )
-            recovered_ids = recovery.get("recovered", [])
-            swept_ids = recovery.get("swept", [])
-            if recovered_ids or swept_ids:
-                logger.info(
-                    "Durable job reconciliation: recovered %d job(s) %s, swept %d stale job(s) %s",
-                    len(recovered_ids),
-                    recovered_ids,
-                    len(swept_ids),
-                    swept_ids,
+    # Runtime authority split (PR67B):
+    # * kernel mode (default) — pick the executor backend FIRST (the
+    #   coordinator binds to the surviving TaskManager), then reconcile
+    #   startup state through the kernel authority: dispatch repair, lost
+    #   acknowledgements, accepted-publication projection, legacy durable
+    #   row adoption, and the abandoned-row sweep all happen there. The
+    #   legacy durable-queue resubmission path is intentionally not run —
+    #   two schedulers deciding ownership for one job is exactly the race
+    #   this integration closes.
+    # * legacy mode — recover durable jobs, sweep the rest, then select
+    #   the backend (historical order).
+    from app.core.config import KERNEL_RUNTIME_ENABLED
+
+    kernel_started = False
+    if KERNEL_RUNTIME_ENABLED:
+        _configure_task_manager_backend()
+        try:
+            from app.services.task_manager import TaskManager
+            if isinstance(_app_state.task_manager, TaskManager):
+                coordinator = _app_state.task_manager.start_kernel_runtime(
+                    _app_state.conversion_service
                 )
-            else:
-                logger.info("Durable job reconciliation: nothing to recover or sweep.")
-    except Exception:  # noqa: BLE001 - recovery must never block startup
-        logger.exception("Durable job recovery failed on startup; continuing with stale sweep only")
-        # Fall back to the legacy unconditional sweep so non-durable rows still
-        # get cleaned up even if the durable recovery path errored.
-        from app.database import async_session_factory
-        from app.models.job import ConversionJob
-        from sqlalchemy import update
-        from datetime import datetime, timezone
-        async with async_session_factory() as session:
-            await session.execute(
-                update(ConversionJob)
-                .where(ConversionJob.status.in_(["pending", "processing"]))
-                .where(ConversionJob.queue_backend.is_(None))
-                .values(
-                    status="failed",
-                    error_message="Interrupted by server restart",
-                    completed_at=datetime.now(timezone.utc),
+                try:
+                    report = await coordinator.recover()
+                    summary = {
+                        key: len(value) if isinstance(value, list) else value
+                        for key, value in report.items()
+                        if value
+                    }
+                    logger.info(
+                        "Kernel runtime reconciliation: %s",
+                        summary if summary else "nothing to reconcile",
+                    )
+                except Exception:  # noqa: BLE001 - recovery must never block startup
+                    logger.exception(
+                        "Kernel runtime reconciliation failed on startup; the "
+                        "dispatch loop still runs and the next restart reconciles"
+                    )
+                try:
+                    coordinator.start()
+                    kernel_started = True
+                except Exception:  # noqa: BLE001 - fall back to the legacy runtime
+                    logger.exception(
+                        "Kernel runtime dispatch loop failed to start; "
+                        "unbinding coordinator so submissions fall back to "
+                        "the legacy runtime"
+                    )
+                    _app_state.task_manager._kernel_runtime = None
+        except Exception:  # noqa: BLE001 - never let startup break here
+            logger.exception("Kernel runtime initialization failed on startup")
+    else:
+        # Recover durable queued jobs from a prior session, then sweep any remaining
+        # non-durable pending/processing rows as failed. Order matters: recovery must
+        # run first so durable rows survive; the sweep only catches non-durable rows
+        # that have no queue backend to recover from.
+        try:
+            from app.services.task_manager import TaskManager
+            if isinstance(_app_state.task_manager, TaskManager):
+                recovery = await _app_state.task_manager.recover_and_sweep_durable_jobs(
+                    _app_state.conversion_service
                 )
-            )
-            await session.commit()
-            logger.info("Fallback: non-durable stale pending/processing jobs marked as failed.")
+                recovered_ids = recovery.get("recovered", [])
+                swept_ids = recovery.get("swept", [])
+                if recovered_ids or swept_ids:
+                    logger.info(
+                        "Durable job reconciliation: recovered %d job(s) %s, swept %d stale job(s) %s",
+                        len(recovered_ids),
+                        recovered_ids,
+                        len(swept_ids),
+                        swept_ids,
+                    )
+                else:
+                    logger.info("Durable job reconciliation: nothing to recover or sweep.")
+        except Exception:  # noqa: BLE001 - recovery must never block startup
+            logger.exception("Durable job recovery failed on startup; continuing with stale sweep only")
+            # Fall back to the legacy unconditional sweep so non-durable rows still
+            # get cleaned up even if the durable recovery path errored.
+            from app.database import async_session_factory
+            from app.models.job import ConversionJob
+            from sqlalchemy import update
+            from datetime import datetime, timezone
+            async with async_session_factory() as session:
+                await session.execute(
+                    update(ConversionJob)
+                    .where(ConversionJob.status.in_(["pending", "processing"]))
+                    .where(ConversionJob.queue_backend.is_(None))
+                    .values(
+                        status="failed",
+                        error_message="Interrupted by server restart",
+                        completed_at=datetime.now(timezone.utc),
+                    )
+                )
+                await session.commit()
+                logger.info("Fallback: non-durable stale pending/processing jobs marked as failed.")
 
     # Auto-trigger GPU installation if enabled in settings but CUDA is not ready
     from app.services.gpu_service import gpu_service
@@ -248,7 +299,11 @@ async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
 
     # Select the conversion backend based on detected GPUs + worker settings.
     # Multi-GPU -> process pool (one worker per GPU). Single/CPU -> threads.
-    _configure_task_manager_backend()
+    # Kernel mode already selected the backend before binding the runtime
+    # coordinator; selecting again would rebuild the TaskManager the
+    # coordinator is bound to.
+    if not kernel_started:
+        _configure_task_manager_backend()
 
     # Register download tracker retry callback
     from app.services.model_tracker import register_retry_callback
