@@ -1,0 +1,62 @@
+{
+  "benchmark": "pr74-claims-proofs",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "machine": "AMD64",
+  "processor": "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel",
+  "method": "best-of-5 wall seconds via time.perf_counter",
+  "scale_points": [
+    100,
+    1000,
+    10000
+  ],
+  "pure": {
+    "cycle_detection_seconds": {
+      "chain_100": 4.9e-05,
+      "wide_100": 4.6e-05,
+      "mixed_dag_100": 4.5e-05,
+      "chain_1000": 0.000495,
+      "wide_1000": 0.000445,
+      "mixed_dag_1000": 0.000455,
+      "chain_10000": 0.005234,
+      "wide_10000": 0.003851,
+      "mixed_dag_10000": 0.004803,
+      "cycle_far_100": 4e-05,
+      "cycle_far_1000": 0.000404,
+      "cycle_far_10000": 0.004624
+    },
+    "grounding_seconds": {
+      "chain_100": 2.2e-05,
+      "wide_100": 2.1e-05,
+      "mixed_dag_100": 1.3e-05,
+      "chain_1000": 0.00023,
+      "wide_1000": 0.000198,
+      "mixed_dag_1000": 0.000139,
+      "chain_10000": 0.002596,
+      "wide_10000": 0.001949,
+      "mixed_dag_10000": 0.00153
+    }
+  },
+  "commit_check": {
+    "edges_100": {
+      "seconds": 0.00894,
+      "committed_derived_edges": 100,
+      "batch_records": 3
+    },
+    "edges_1000": {
+      "seconds": 0.014508,
+      "committed_derived_edges": 1000,
+      "batch_records": 3
+    },
+    "edges_10000": {
+      "seconds": 0.072807,
+      "committed_derived_edges": 10000,
+      "batch_records": 3
+    }
+  },
+  "precondition_check": {
+    "assessments_10": 0.004623,
+    "assessments_100": 0.00469,
+    "assessments_1000": 0.010185
+  }
+}
