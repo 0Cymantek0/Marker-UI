@@ -381,7 +381,6 @@ def test_outcome_requires_result_revision_when_accepted():
     identity = proposal().proposal_id()
     good = PatchOutcomeRecord(
         record_id="outcome-evt-1",
-        proposal_ref="proposal-evt-1",
         proposal_identity=identity,
         outcome="accepted",
         observed={"base_revision_id": view_text_hash("x")},
@@ -391,7 +390,6 @@ def test_outcome_requires_result_revision_when_accepted():
     with pytest.raises(KernelError, match="resulting view revision"):
         PatchOutcomeRecord(
             record_id="outcome-evt-2",
-            proposal_ref="proposal-evt-1",
             proposal_identity=identity,
             outcome="accepted",
             resulting_revision_id=None,
@@ -399,15 +397,11 @@ def test_outcome_requires_result_revision_when_accepted():
     with pytest.raises(KernelError, match="invalid outcome"):
         PatchOutcomeRecord(
             record_id="outcome-evt-3",
-            proposal_ref="proposal-evt-1",
             proposal_identity=identity,
             outcome="maybe",
             resulting_revision_id=None,
         )
-    remat = PatchOutcomeRecord.from_payload(
-        {**good.identity_payload(), "proposal_ref": "proposal-evt-1"},
-        record_id="o2",
-    )
+    remat = PatchOutcomeRecord.from_payload(good.identity_payload(), record_id="o2")
     assert remat.identity_payload() == good.identity_payload()
 
 

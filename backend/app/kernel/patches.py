@@ -665,15 +665,16 @@ class PatchOutcomeRecord(KernelRecord):
     raises its typed conflict and leaves nothing behind). ``observed``
     records what was true at evaluation — the matched base revision and
     source binding — so history can explain the acceptance without
-    trusting the proposal's claims. Identity uses the proposal's
-    *semantic* identity (never its event id).
+    trusting the proposal's claims. The proposal link is the proposal's
+    *semantic* identity (never its event id); the same-commit grouping
+    in :func:`app.kernel.patching.load_view_history` and the lineage
+    edges carry record-id linkage.
     """
 
     record_class: ClassVar[str] = "patch_outcome"
     record_type: ClassVar[str] = RECORD_TYPE_PATCH_OUTCOME
     schema_version: ClassVar[str] = PATCH_SCHEMA_VERSION
 
-    proposal_ref: str
     proposal_identity: str
     outcome: str
     observed: Mapping[str, Any] = field(default_factory=dict)
@@ -681,7 +682,6 @@ class PatchOutcomeRecord(KernelRecord):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        validate_record_ref(self.proposal_ref, field_name="proposal_ref")
         if not isinstance(self.proposal_identity, str) or not HASH_PATTERN.match(
             self.proposal_identity
         ):
@@ -718,7 +718,6 @@ class PatchOutcomeRecord(KernelRecord):
         if not isinstance(payload, Mapping):
             raise KernelError(f"outcome payload must be a mapping, got {payload!r}")
         allowed = {
-            "proposal_ref",
             "proposal_identity",
             "outcome",
             "observed",
@@ -729,7 +728,6 @@ class PatchOutcomeRecord(KernelRecord):
             raise KernelError(f"unknown outcome payload fields {sorted(unknown)}")
         return cls(
             record_id=record_id,
-            proposal_ref=payload["proposal_ref"],
             proposal_identity=payload["proposal_identity"],
             outcome=payload["outcome"],
             observed=dict(payload.get("observed") or {}),

@@ -199,7 +199,6 @@ async def test_accepted_patch_flips_head_and_keeps_base_immutable(kernel_env, se
     next_view = patched_view(base, proposal)
     outcome = PatchOutcomeRecord(
         record_id="outcome-1",
-        proposal_ref=proposal.record_id,
         proposal_identity=proposal.proposal_id(),
         outcome="accepted",
         observed={
