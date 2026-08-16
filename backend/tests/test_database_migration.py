@@ -465,6 +465,137 @@ async def test_m6_head_claim_missing_table_fails_closed_unrepaired(tmp_path: Pat
 
 
 # ---------------------------------------------------------------------------
+# M6B - damaged correctness-critical constraints fail closed (A4 hardening)
+# ---------------------------------------------------------------------------
+
+
+def _rebuild_with(conn: sqlite3.Connection, table: str, mutate) -> None:
+    """Rebuild one table from mutated DDL (SQLite cannot alter constraints).
+
+    ``legacy_alter_table`` keeps the rename from rewriting other tables'
+    foreign-key clauses, and ``foreign_keys=OFF`` permits dropping the
+    referenced original; both are test-fixture mechanics only.
+    """
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("PRAGMA legacy_alter_table=ON")
+    (ddl,) = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    damaged = mutate(ddl)
+    assert damaged != ddl, f"damage fixture failed to alter DDL of {table}"
+    conn.execute(f'ALTER TABLE "{table}" RENAME TO "{table}_damaged_old"')
+    conn.execute(damaged)
+    conn.execute(f'INSERT INTO "{table}" SELECT * FROM "{table}_damaged_old"')
+    conn.execute(f'DROP TABLE "{table}_damaged_old"')
+    conn.commit()
+
+
+@pytest.mark.asyncio
+async def test_m6b_lost_unique_scope_fails_closed(tmp_path: Path) -> None:
+    """Losing the workspace record-identity uniqueness (damaged database)
+    must not pass readiness even though every table/column still exists."""
+    db_path = tmp_path / "lost-unique.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    with closing(sqlite3.connect(db_path)) as conn:
+        _rebuild_with(
+            conn,
+            "kernel_records",
+            lambda ddl: ddl.replace(
+                ", \n\tCONSTRAINT uq_kernel_records_workspace_identity "
+                "UNIQUE (workspace_id, identity_hash)",
+                "",
+            ),
+        )
+
+    with pytest.raises(IncompatibleDatabaseError) as err:
+        await verify_database_ready(url=url)
+    assert "lost unique scope" in str(err.value)
+    assert "workspace_id" in str(err.value) and "identity_hash" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_m6b_primary_key_order_damage_fails_closed(tmp_path: Path) -> None:
+    """Composite primary-key shape is commit-spine identity: wrong order
+    (or shape) fails closed."""
+    db_path = tmp_path / "pk-damage.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    with closing(sqlite3.connect(db_path)) as conn:
+        _rebuild_with(
+            conn,
+            "kernel_commit_manifests",
+            lambda ddl: ddl.replace(
+                "PRIMARY KEY (workspace_id, kernel_commit_id)",
+                "PRIMARY KEY (kernel_commit_id, workspace_id)",
+            ),
+        )
+
+    with pytest.raises(IncompatibleDatabaseError) as err:
+        await verify_database_ready(url=url)
+    assert "primary key of 'kernel_commit_manifests'" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_m6b_lost_not_null_fails_closed(tmp_path: Path) -> None:
+    """A nullable authority column (record_type classifies every record)
+    must not pass readiness."""
+    db_path = tmp_path / "notnull-damage.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    with closing(sqlite3.connect(db_path)) as conn:
+        _rebuild_with(
+            conn,
+            "kernel_records",
+            lambda ddl: ddl.replace(
+                "record_type VARCHAR(100) NOT NULL", "record_type VARCHAR(100)"
+            ),
+        )
+
+    with pytest.raises(IncompatibleDatabaseError) as err:
+        await verify_database_ready(url=url)
+    assert "'kernel_records.record_type' lost its NOT NULL constraint" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_m6b_lost_foreign_key_fails_closed(tmp_path: Path) -> None:
+    """Dropping the RESTRICT edges to kernel_records must fail closed."""
+    db_path = tmp_path / "fk-damage.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    with closing(sqlite3.connect(db_path)) as conn:
+        _rebuild_with(
+            conn,
+            "kernel_record_edges",
+            lambda ddl: ddl.replace(
+                ", \n\tFOREIGN KEY(source_record_id) REFERENCES kernel_records (id) "
+                "ON DELETE RESTRICT, \n\tFOREIGN KEY(target_record_id) REFERENCES "
+                "kernel_records (id) ON DELETE RESTRICT",
+                "",
+            ),
+        )
+
+    with pytest.raises(IncompatibleDatabaseError) as err:
+        await verify_database_ready(url=url)
+    assert "lost foreign key" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_m6b_dropped_performance_index_stays_current(tmp_path: Path) -> None:
+    """Non-unique indexes are performance details, not startup invariants:
+    losing one is visible to operators, not fatal to correctness."""
+    db_path = tmp_path / "perf-index.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("DROP INDEX ix_kernel_records_identity_hash")
+        conn.commit()
+
+    status = await verify_database_ready(url=url)
+    assert status.state is DatabaseState.CURRENT
+
+
+# ---------------------------------------------------------------------------
 # M7 - unknown / foreign / partially-equivalent states fail closed
 # ---------------------------------------------------------------------------
 
@@ -608,9 +739,57 @@ def test_stale_lock_from_dead_process_is_recovered(tmp_path: Path) -> None:
     lock_path.write_text('{"pid": 2147483646, "created": 1.0}', encoding="utf-8")
 
     with _MigrationLock(db_path, timeout=0.1):
-        pass  # acquired by stealing the stale lock
+        pass  # no live holder: acquired without any age heuristic
 
-    assert not lock_path.exists()
+
+def test_live_migration_lock_is_never_stolen_by_age(tmp_path: Path) -> None:
+    """A demonstrably live owner keeps the lock no matter how old it is;
+    the OS releases it only when the owner process exits."""
+    db_path = tmp_path / "live-lock.db"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, r'%s'); "
+            "from app.db_migration import _MigrationLock\n"
+            "from pathlib import Path\n"
+            "lock = _MigrationLock(Path(r'%s'), timeout=5)\n"
+            "lock.acquire()\n"
+            "print('HELD', flush=True)\n"
+            "import time; time.sleep(30)\n"
+            "lock.release()\n"
+            % (str(BACKEND_DIR), str(db_path)),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "HELD"
+        # Holder is alive and (were this the old protocol) far past any
+        # stale threshold: the lock must NOT be stealable.
+        with pytest.raises(MigrationLockTimeoutError) as err:
+            _MigrationLock(db_path, timeout=0.5).acquire()
+        assert str(holder.pid) in str(err.value)
+    finally:
+        holder.kill()
+        holder.wait(timeout=30)
+    # Owner death releases the OS lock immediately: recovery needs no age.
+    with _MigrationLock(db_path, timeout=5):
+        pass
+
+
+def test_released_lock_file_persists_and_is_reacquirable(tmp_path: Path) -> None:
+    """The lock file is never deleted after release: waiters must compete
+    for the same inode forever, or a delete/recreate race could split
+    them across inodes and admit two migration writers."""
+    db_path = tmp_path / "persist.db"
+    lock_path = tmp_path / "persist.db.migration.lock"
+    with _MigrationLock(db_path, timeout=1):
+        pass
+    assert lock_path.exists()  # residue is diagnostic, not authority
+    with _MigrationLock(db_path, timeout=1):  # immediately re-acquirable
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -642,7 +821,10 @@ async def test_m9_concurrent_cli_upgrades_serialize(tmp_path: Path) -> None:
     with closing(sqlite3.connect(db_path)) as conn:
         assert _version_row(conn) == EXPECTED_HEAD  # single version row, head
         assert set(_shape(conn)) == APP_TABLES | KERNEL_TABLES
-    assert not (tmp_path / "contended.db.migration.lock").exists()
+    # The lock file persists by design (same-inode mutual exclusion); it
+    # must simply be free afterwards.
+    with _MigrationLock(db_path, timeout=5):
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -687,16 +869,22 @@ async def test_m11_model_drift_fails_closed(tmp_path: Path) -> None:
     url = _db_url(db_path)
     await upgrade_database(url=url)
 
-    original = db_migration._orm_shape
+    original = db_migration._orm_contract
     drifted = dict(original())
-    drifted["conversion_jobs"] = {**drifted["conversion_jobs"], "unreleased_column": "TEXT"}
-    db_migration._orm_shape = lambda: drifted  # type: ignore[assignment]
+    drifted["conversion_jobs"] = {
+        **drifted["conversion_jobs"],
+        "columns": {
+            **drifted["conversion_jobs"]["columns"],
+            "unreleased_column": "TEXT",
+        },
+    }
+    db_migration._orm_contract = lambda: drifted  # type: ignore[assignment]
     try:
         with pytest.raises(IncompatibleDatabaseError) as err:
             await verify_database_ready(url=url)
         assert "unreleased_column" in str(err.value)
     finally:
-        db_migration._orm_shape = original  # type: ignore[assignment]
+        db_migration._orm_contract = original  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------

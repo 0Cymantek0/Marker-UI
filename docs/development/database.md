@@ -12,8 +12,17 @@ Marker UI uses **SQLite** as its storage engine, managed through **SQLAlchemy** 
   `backend/alembic/versions/`.
 - All supported launch paths (`start.sh`, `start.ps1`, the container entrypoint
   via `supervisord.conf`) run the migration phase **before** Uvicorn starts.
-- Concurrent launchers are serialized by a lock file
-  (`<database>.migration.lock`); one migration writer at a time.
+- Concurrent launchers are serialized by an **OS-backed file lock**
+  (`<database>.migration.lock`): mutual exclusion is enforced by the
+  kernel (byte-range lock on Windows, `flock` elsewhere), so ownership
+  ends exactly when the holder process exits. A live-but-slow
+  migration can never lose the lock to a wall-clock age threshold, and
+  a dead holder is recovered immediately with no staleness heuristic.
+  The lock file is never deleted after release (waiters must keep
+  competing for the same inode); its body is diagnostic metadata only.
+  Supported filesystem assumption: local filesystems with standard
+  lock semantics — the same profile SQLite's local single-writer mode
+  needs; network filesystems are out of scope.
 
 ## Operational commands
 
@@ -48,8 +57,9 @@ alembic -c backend/alembic.ini upgrade head   # from the repository root
 | At a known older revision | `upgrade` applies revisions to head; existing rows are preserved. |
 | Legacy database without `alembic_version` | Shape is validated (no unknown tables/columns, compatible type affinities), then the guarded revision chain is replayed from the base revision. Rows are preserved. |
 | Claims head but physically broken (missing table/column) | **Fails closed.** Nothing is repaired; the diagnostic names the missing object. |
+| Claims head but a correctness-critical constraint was damaged (lost primary-key shape, unique scope, NOT NULL on an authority column, or RESTRICT foreign key) | **Fails closed.** Readiness compares the schema *contract* — structured introspection of primary keys, unique scopes, nullability, and foreign keys — not just table/column names and type affinities. Non-unique (performance) indexes are deliberately not startup invariants. |
 | Unknown revision, foreign schema, or partially-equivalent shape | **Fails closed** with an actionable description of the divergence. |
-| Another migration writer holds the lock | `upgrade` waits (default 60 s), then fails with instructions; stale locks from dead processes are recovered automatically. |
+| Another migration writer holds the lock | `upgrade` waits (default 60 s), then fails with instructions naming the holder (pid, age, liveness). The OS releases the lock exactly when the holder process exits; it is never stolen by age, and the lock file must not be deleted manually on a live system. |
 
 ## Making a schema change
 

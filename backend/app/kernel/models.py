@@ -239,6 +239,13 @@ class KernelRecord(Base):
     """
 
     __tablename__ = "kernel_records"
+    __table_args__ = (
+        # Mirrors the migration-authority constraint: record identity is
+        # unique per workspace, enforced by the database at insert time.
+        UniqueConstraint(
+            "workspace_id", "identity_hash", name="uq_kernel_records_workspace_identity"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(
