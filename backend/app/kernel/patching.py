@@ -32,6 +32,7 @@ from app.kernel.models import KernelRecord, KernelViewHead
 from app.kernel.patches import (
     DEFAULT_VIEW_ID,
     OP_TYPE_REBASE_SOURCE,
+    PatchOperation,
     PatchOutcomeRecord,
     PatchPreconditions,
     PatchProposalRecord,
@@ -56,11 +57,13 @@ __all__ = [
     "PatchAcceptance",
     "ViewHistoryEntry",
     "ViewRevision",
+    "build_reversal_proposal",
     "clean_rebuild_view",
     "initialize_view",
     "load_view_history",
     "read_current_view",
     "rebase_proposal",
+    "reverse_patch",
     "submit_patch",
 ]
 
@@ -344,11 +347,16 @@ def rebase_proposal(
 
 @dataclass(frozen=True)
 class ViewHistoryEntry:
-    """One commit in the view lineage: its revision and its proposal."""
+    """One commit in the view lineage: its revision and its proposal.
+
+    ``view`` is ``None`` for reversal commits: they carry no new view
+    record — the head moves back to an already-committed revision named
+    by ``outcome.resulting_revision_id`` — but they are still lineage
+    steps that replay must reproduce."""
 
     kernel_commit_id: int
-    view: ViewDocumentRecord
-    view_record_id: str
+    view: ViewDocumentRecord | None
+    view_record_id: str | None
     proposal: PatchProposalRecord | None
     proposal_record_id: str | None
     outcome: PatchOutcomeRecord | None
@@ -411,16 +419,16 @@ async def load_view_history(
     history: list[ViewHistoryEntry] = []
     for commit_id in sorted(by_commit):
         slot = by_commit[commit_id]
-        if "view" not in slot:
-            # A proposal/outcome without its view record in the same
-            # commit is not part of the advancement lineage this slice
-            # writes; skip rather than fabricate a revision entry.
+        if "view" not in slot and not ("proposal" in slot and "outcome" in slot):
+            # Records without a view revision or an accepted decision are
+            # not advancement steps this slice writes; skip rather than
+            # fabricate a lineage entry.
             continue
         history.append(
             ViewHistoryEntry(
                 kernel_commit_id=commit_id,
-                view=slot["view"],
-                view_record_id=slot["view_record_id"],
+                view=slot.get("view"),
+                view_record_id=slot.get("view_record_id"),
                 proposal=slot.get("proposal"),
                 proposal_record_id=slot.get("proposal_record_id"),
                 outcome=slot.get("outcome"),
@@ -449,7 +457,7 @@ async def clean_rebuild_view(
     history = await load_view_history(
         session_factory, workspace_id, view_id=view_id, upto_commit=upto_commit
     )
-    if not history:
+    if not history or history[0].view is None:
         raise KernelError(f"workspace={workspace_id!r}: no view lineage to rebuild")
 
     current = history[0].view
@@ -471,6 +479,11 @@ async def clean_rebuild_view(
             op for op in proposal.operations if op.op_type == OP_TYPE_REBASE_SOURCE
         ]
         if rebase_ops:
+            if entry.view is None:
+                raise InvalidViewAdvancementError(
+                    f"commit {entry.kernel_commit_id}: a rebase must carry its "
+                    "resulting view revision"
+                )
             replayed = apply_rebase_source(rebase_ops[0], proposals).view
             if replayed.view_revision_id() != entry.view.view_revision_id():
                 raise InvalidViewAdvancementError(
@@ -490,11 +503,174 @@ async def clean_rebuild_view(
             graph=graph,
             texts=texts,
         )
-        if current.view_revision_id() != entry.view.view_revision_id():
+        # A patch commit records its own revision; a reversal commit (no
+        # view record) must reproduce the revision its outcome claims to
+        # have restored.
+        expected = (
+            entry.view.view_revision_id()
+            if entry.view is not None
+            else (entry.outcome.resulting_revision_id if entry.outcome else None)
+        )
+        if expected is None or current.view_revision_id() != expected:
             raise InvalidViewAdvancementError(
                 f"commit {entry.kernel_commit_id}: replayed revision "
                 f"{current.view_revision_id()} disagrees with the committed "
-                f"revision {entry.view.view_revision_id()}; incremental state "
-                "diverged from clean history"
+                f"revision {expected}; incremental state diverged from clean "
+                "history"
             )
     return current
+
+
+# ---------------------------------------------------------------------------
+# Deterministic reversal (declared reversible tracer: replace_text)
+# ---------------------------------------------------------------------------
+
+
+async def build_reversal_proposal(
+    session_factory: async_sessionmaker,
+    workspace_id: str,
+    *,
+    proposal_record_id: str,
+    view_id: str = DEFAULT_VIEW_ID,
+) -> tuple[PatchProposalRecord, ViewRevision, ViewRevision]:
+    """Build the inverse proposal for one accepted replace_text patch.
+
+    Reversal means recovering the prior derived revision, not recreating
+    lost source information: the restored value comes from the committed
+    revision the patch was applied to. Returns ``(proposal, current,
+    prior)`` — the caller submits through :func:`reverse_patch`, and the
+    head moves back to the prior revision's identity as new history.
+    """
+    history = await load_view_history(session_factory, workspace_id, view_id=view_id)
+    index = next(
+        (i for i, e in enumerate(history) if e.proposal_record_id == proposal_record_id),
+        None,
+    )
+    if index is None or index == 0:
+        raise KernelError(
+            f"reversal target {proposal_record_id!r} is not an accepted patch in "
+            "this view lineage"
+        )
+    target = history[index].proposal
+    assert target is not None
+    if len(target.operations) != 1 or target.operations[0].op_type != "replace_text":
+        raise KernelError(
+            "only single replace_text patches are declared reversible in this "
+            "slice; a split consumed structure that reversal must not guess back"
+        )
+    node_id = target.operations[0].params["node_id"]
+    original_after = target.operations[0].params["after_text"]
+    prior_view = history[index - 1].view
+    if node_id not in prior_view.texts:
+        raise KernelError(
+            f"the revision before the patch no longer carries {node_id!r}; its "
+            "prior derived value is not reconstructable"
+        )
+    current = await read_current_view(session_factory, workspace_id, view_id=view_id)
+    if current is None:
+        raise KernelError(f"workspace={workspace_id!r}: no current view to reverse")
+    try:
+        current.view.text_of(node_id)
+    except KernelError:
+        raise KernelError(
+            f"reversal target node {node_id!r} no longer exists in the current "
+            "view; reverse the intervening structural change first"
+        ) from None
+    # The reversal asserts the exact value the original patch produced:
+    # if an intervening change moved the node, this conflicts instead of
+    # clobbering it.
+    proposal = PatchProposalRecord(
+        record_id=_scoped_record_id(workspace_id, f"{proposal_record_id}-reverse"),
+        preconditions=PatchPreconditions(
+            base_revision_id=current.revision_id,
+            target_checks=(
+                TargetCheck(
+                    node_id=node_id, before_hash=view_text_hash(original_after)
+                ),
+            ),
+            required_source_revision_refs=(current.view.content_revision_ref,),
+        ),
+        operations=(
+            PatchOperation.replace_text(
+                node_id=node_id, after_text=prior_view.texts[node_id]
+            ),
+        ),
+        producer={"operation": "view.reverse", "reverses": proposal_record_id},
+    )
+    prior_revision = ViewRevision(
+        view=prior_view,
+        revision_id=prior_view.view_revision_id(),
+        record_id=history[index - 1].view_record_id,
+        kernel_commit_id=history[index - 1].kernel_commit_id,
+    )
+    return proposal, current, prior_revision
+
+
+async def reverse_patch(
+    session_factory: async_sessionmaker,
+    service: KernelCommitService,
+    *,
+    workspace_id: str,
+    proposal_record_id: str,
+    producer: Mapping[str, Any] | None = None,
+    view_id: str = DEFAULT_VIEW_ID,
+) -> PatchAcceptance:
+    """Reverse one accepted replace_text patch as new history.
+
+    The head moves back to the prior revision's identity — the original
+    patch event and every revision stay committed and inspectable; the
+    preconditions guarantee the restored value is exactly what the
+    current state still holds, so the movement is deterministic. If an
+    intervening change moved the node, the before-hash check conflicts
+    instead of guessing."""
+    proposal, current, prior = await build_reversal_proposal(
+        session_factory,
+        workspace_id,
+        proposal_record_id=proposal_record_id,
+        view_id=view_id,
+    )
+    evaluate_preconditions(current.view, proposal.preconditions)
+    outcome = PatchOutcomeRecord(
+        record_id=_scoped_record_id(workspace_id, f"outcome-{proposal.record_id}"),
+        proposal_identity=proposal.proposal_id(),
+        outcome="accepted",
+        observed={
+            "view_id": view_id,
+            "base_revision_id": current.revision_id,
+            "reverses_proposal_ref": proposal_record_id,
+            "restored_revision_id": prior.revision_id,
+        },
+        resulting_revision_id=prior.revision_id,
+    )
+    edges = (
+        KernelEdge(
+            edge_kind=EDGE_KIND_DEPENDS_ON,
+            source_ref=proposal.record_id,
+            target_ref=current.record_id,
+        ),
+        KernelEdge(
+            edge_kind=EDGE_KIND_EVIDENCE_FOR,
+            source_ref=outcome.record_id,
+            target_ref=prior.record_id,
+        ),
+    )
+    receipt = await service.commit(
+        KernelCommitBatch(
+            workspace_id=workspace_id,
+            records=(proposal, outcome),
+            edges=edges,
+            producer={"operation": "view.reverse", **(producer or {})},
+            view_advancement=ViewAdvancement(
+                new_revision_id=prior.revision_id,
+                view_id=view_id,
+                base_revision_id=current.revision_id,
+                proposal_record_id=proposal.record_id,
+            ),
+        )
+    )
+    return PatchAcceptance(
+        receipt=receipt,
+        proposal_id=proposal.proposal_id(),
+        previous=current,
+        result=prior,
+    )

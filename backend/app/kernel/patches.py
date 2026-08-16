@@ -882,10 +882,24 @@ async def check_view_advancement(
         and ref.identity_hash == advancement.new_revision_id
     ]
     if not advanced_in_batch:
-        raise InvalidViewAdvancementError(
-            "the advanced revision must be committed in the same batch as the "
-            "advancement; a head never names state the commit does not create"
-        )
+        # A head may also move BACK to an already-committed revision —
+        # deterministic reversal — but only to state this workspace has
+        # actually committed; it never names fabricated identity.
+        row = (
+            await session.execute(
+                select(KernelRecordRow.id).where(
+                    KernelRecordRow.workspace_id == workspace_id,
+                    KernelRecordRow.identity_hash == advancement.new_revision_id,
+                    KernelRecordRow.record_class == "view_document",
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise InvalidViewAdvancementError(
+                "the advanced revision must be committed in the same batch or "
+                "already exist as committed view state; a head never names "
+                "state the kernel cannot prove"
+            )
 
     head = (
         await session.execute(
