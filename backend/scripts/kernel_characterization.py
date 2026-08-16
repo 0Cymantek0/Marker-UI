@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import itertools
 import json
 import os
 import platform
@@ -68,9 +69,13 @@ if str(BACKEND_DIR) not in sys.path:
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
 from app.db_migration import upgrade_database  # noqa: E402
-from app.kernel import fencing  # noqa: E402
+from app.kernel import events, fencing, liveness, scheduler  # noqa: E402
 from app.kernel.commit import KernelCommitBatch, KernelCommitService  # noqa: E402
-from app.kernel.errors import InjectedFaultError, StaleFenceError  # noqa: E402
+from app.kernel.errors import (
+    InjectedFaultError,
+    InvalidChallengeError,
+    StaleFenceError,
+)  # noqa: E402
 from app.kernel.gc import (  # noqa: E402
     execute_collection,
     plan_collection,
@@ -677,6 +682,352 @@ async def _fencing_section(db_dir: Path, url: str, db_path: Path) -> dict:
     }
 
 
+async def _scheduler_section(db_dir: Path, url: str, db_path: Path) -> dict:
+    """PR67A measurement block: fair scheduling vs oldest-first,
+    challenge liveness, and durable semantic events."""
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+
+    def _pct(timings: list[float]) -> dict:
+        ordered = sorted(timings)
+        return {
+            "samples": len(ordered),
+            "p50_ms": round(statistics.median(ordered) * 1000, 2),
+            "p95_ms": round(ordered[int(len(ordered) * 0.95) - 1] * 1000, 2),
+            "mean_ms": round(statistics.mean(ordered) * 1000, 2),
+        }
+
+    counter = itertools.count()
+
+    async def _make_work(workspace_id: str, tag: str) -> int:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id=workspace_id,
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key=f"sched-{next(counter)}",
+                        subject=f"doc:{tag}.pdf",
+                        predicate="contains_table",
+                        value=True,
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={"tag": tag}),),
+            )
+        )
+        from app.kernel.outbox import list_outbox
+
+        rows = [r for r in await list_outbox(factory) if r.payload.get("tag") == tag]
+        assert len(rows) == 1
+        return rows[0].id
+
+    async def _serve(claimed) -> None:
+        await scheduler.accept_work(
+            factory,
+            work_id=claimed.work_id,
+            fencing_token=claimed.lease.fencing_token,
+            result={"ok": True},
+        )
+        assert await fencing.complete_work(
+            factory,
+            work_id=claimed.work_id,
+            fencing_token=claimed.lease.fencing_token,
+        )
+
+    # --- fair mixed load vs oldest-first, same shape ---------------------
+    # One workspace per group: the scheduling group defaults to the
+    # workspace id, so distinct workspaces are distinct fair shares.
+    groups = ("bench-g1", "bench-g2", "bench-g3")
+    big_per_group = 12
+    from app.kernel.outbox import reset_in_flight as _reset_in_flight
+
+    async def mixed_drain(prefix: str, fair: bool):
+        per_claim: list[float] = []
+        service_order: list[str] = []
+        small_enqueued_at: dict[str, float] = {}
+        small_position: dict[str, int] = {}
+        small_latency: dict[str, float] = {}
+        expected = big_per_group * len(groups) + len(groups)
+        served = 0
+        while True:
+            if served == big_per_group // 2:
+                for g in groups:  # interactive items arrive mid-backlog
+                    await _make_work(g, f"{prefix}-small-{g}")
+                    small_enqueued_at[g] = time.perf_counter()
+            t0 = time.perf_counter()
+            if fair:
+                claimed = await scheduler.claim_fair(
+                    factory, owner_id=f"{prefix}-solo"
+                )
+            else:
+                claimed = await fencing.claim_next(factory, owner_id=f"{prefix}-solo")
+            if claimed is None:
+                if served < expected:
+                    await asyncio.sleep(0.01)
+                    continue
+                break
+            per_claim.append(time.perf_counter() - t0)
+            group = claimed.group_id if fair else claimed.workspace_id
+            service_order.append(group)
+            if group in small_enqueued_at and group not in small_position:
+                small_position[group] = served
+                small_latency[group] = time.perf_counter() - small_enqueued_at[group]
+            if fair:
+                await _serve(claimed)
+            else:
+                await fencing.accept(
+                    factory,
+                    work_id=claimed.work_id,
+                    fencing_token=claimed.lease.fencing_token,
+                    result={"ok": True},
+                )
+                assert await fencing.complete_work(
+                    factory,
+                    work_id=claimed.work_id,
+                    fencing_token=claimed.lease.fencing_token,
+                )
+            served += 1
+        assert served == expected, f"drained {served} of {expected}"
+        return per_claim, service_order, small_position, small_latency
+
+    for g in groups:
+        for i in range(big_per_group):
+            await _make_work(g, f"fair-{g}-{i}")
+    fair_claim, fair_order, fair_small_pos, fair_small_lat = await mixed_drain(
+        "fair", fair=True
+    )
+    served_counts = {g: fair_order.count(g) for g in set(fair_order)}
+    running = {g: 0 for g in groups}
+    max_gap = 0
+    for group in fair_order:
+        if group in running:
+            running[group] += 1
+            max_gap = max(max_gap, max(running.values()) - min(running.values()))
+
+    for g in groups:
+        for i in range(big_per_group):
+            await _make_work(g, f"fifo-{g}-{i}")
+    fifo_claim, fifo_order, fifo_small_pos, fifo_small_lat = await mixed_drain(
+        "fifo", fair=False
+    )
+
+    # --- challenge liveness ---------------------------------------------
+    live_ws = "bench-live"
+    live_id = await _make_work(live_ws, "live-probe")
+    live_claim = await scheduler.claim_fair(factory, owner_id="bench-live")
+    assert live_claim is not None and live_claim.work_id == live_id
+    renew_times: list[float] = []
+    nonce = live_claim.challenge_nonce
+    renew_count = 0
+    for progress in range(1, 21):
+        t0 = time.perf_counter()
+        outcome = await liveness.renew_lease(
+            factory,
+            work_id=live_id,
+            owner_id="bench-live",
+            fencing_token=live_claim.lease.fencing_token,
+            challenge_nonce=nonce,
+            progress=progress,
+            active_request_id="bench-stage",
+        )
+        renew_times.append(time.perf_counter() - t0)
+        nonce = outcome.next_challenge_nonce
+        renew_count = outcome.renew_count
+
+    stale_nonce_rejections = 0
+    t0 = time.perf_counter()
+    try:
+        await liveness.renew_lease(
+            factory,
+            work_id=live_id,
+            owner_id="bench-live",
+            fencing_token=live_claim.lease.fencing_token,
+            challenge_nonce=live_claim.challenge_nonce,  # long-rotated
+            progress=99,
+            active_request_id="bench-stage",
+        )
+    except InvalidChallengeError:
+        stale_nonce_rejections += 1
+    stale_nonce_reject_seconds = time.perf_counter() - t0
+
+    # Forced wedge: stop renewing, measure time-to-takeover.
+    wedge_id = await _make_work(live_ws, "wedge-probe")
+    wedge_claim = await scheduler.claim_fair(
+        factory, owner_id="bench-wedge", lease_seconds=0.4
+    )
+    assert wedge_claim is not None and wedge_claim.work_id == wedge_id
+    wedge_start = time.perf_counter()
+    took_over = False
+    while time.perf_counter() - wedge_start < 5.0:
+        await _reset_in_flight(factory)
+        takeover = await scheduler.claim_fair(
+            factory, owner_id="bench-heir", workspace_id=live_ws
+        )
+        if takeover is not None and takeover.work_id == wedge_id:
+            took_over = True
+            break
+        await asyncio.sleep(0.05)
+    wedge_takeover_seconds = time.perf_counter() - wedge_start
+    stale_fence_rejections = 0
+    try:
+        await fencing.accept(
+            factory,
+            work_id=wedge_id,
+            fencing_token=wedge_claim.lease.fencing_token,
+            result={"late": True},
+        )
+    except StaleFenceError:
+        stale_fence_rejections += 1
+    await scheduler.accept_work(
+        factory,
+        work_id=wedge_id,
+        fencing_token=takeover.lease.fencing_token,
+        result={"ok": True},
+    )
+    await fencing.complete_work(
+        factory, work_id=wedge_id, fencing_token=takeover.lease.fencing_token
+    )
+
+    # --- durable semantic events + progress coalescing -------------------
+    ev_ws = "bench-events"
+    append_times: list[float] = []
+    for i in range(200):
+        t0 = time.perf_counter()
+        await events.append(
+            factory,
+            workspace_id=ev_ws,
+            event_type="probe.tick",
+            payload={"i": i},
+        )
+        append_times.append(time.perf_counter() - t0)
+    replay_times: list[float] = []
+    for _ in range(20):
+        t0 = time.perf_counter()
+        replayed_events = await events.replay(factory, workspace_id=ev_ws)
+        replay_times.append(time.perf_counter() - t0)
+    event_row_count = len(replayed_events)
+    assert [e.semantic_sequence for e in replayed_events] == list(
+        range(1, event_row_count + 1)
+    )
+
+    progress_generated = 500
+    for tick in range(progress_generated):
+        await events.append_progress(
+            factory, workspace_id=ev_ws, work_id=live_id, counter=tick
+        )
+
+    # Slow consumer: executor drains a small batch with a crawling
+    # follower attached, vs the same batch without one.
+    durations: dict[str, float] = {}
+    followed_events: list[int] = []
+    for name, with_consumer in (("solo", False), ("followed", True)):
+        ws = f"bench-{name}"
+        for i in range(6):
+            await _make_work(ws, f"{name}-{i}")
+        received: list[int] = []
+
+        async def crawl() -> None:
+            async for event in events.follow(
+                factory, workspace_id=ws, poll_interval=0.01, max_idle_seconds=3.0
+            ):
+                received.append(event.semantic_sequence)
+                await asyncio.sleep(0.03)
+
+        follower = asyncio.create_task(crawl()) if with_consumer else None
+        t0 = time.perf_counter()
+        for _ in range(6):
+            claimed = await scheduler.claim_fair(
+                factory, owner_id=f"{name}-solo", workspace_id=ws
+            )
+            assert claimed is not None
+            await _serve(claimed)
+        durations[name] = time.perf_counter() - t0
+        if with_consumer:
+            await asyncio.wait_for(follower, timeout=30)
+            followed_events.extend(received)
+    slow_consumer_delta_seconds = round(
+        durations["followed"] - durations["solo"], 3
+    )
+    assert len(followed_events) >= 12  # 6 claims + 6 acceptances, in order
+
+    # Restart replay over a fresh engine.
+    await engine.dispose()
+    engine2 = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory2 = async_sessionmaker(engine2, class_=AsyncSession, expire_on_commit=False)
+    t0 = time.perf_counter()
+    restart_replay = await events.replay(factory2, workspace_id=ev_ws)
+    restart_replay_seconds = time.perf_counter() - t0
+    await engine2.dispose()
+    restart_ok = [e.semantic_sequence for e in restart_replay] == list(
+        range(1, event_row_count + 1)
+    )
+
+    conn = sqlite3.connect(db_path)
+    try:
+        event_rows = conn.execute("SELECT COUNT(*) FROM kernel_events").fetchone()[0]
+        event_payload_bytes = conn.execute(
+            "SELECT COALESCE(SUM(LENGTH(payload_json)), 0) FROM kernel_events"
+        ).fetchone()[0]
+        progress_rows = conn.execute(
+            "SELECT COUNT(*) FROM kernel_progress"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    return {
+        "policy": "weighted-fair-queuing (served/weight) + age/deadline boost + per-group in-flight window",
+        "fixture": {
+            "groups": len(groups),
+            "big_items_per_group": big_per_group,
+            "small_items_per_group": 1,
+            "small_arrival_after_services": big_per_group // 2,
+            "resource_class": "default",
+        },
+        "fairness": {
+            "small_item_service_position_fair": sorted(fair_small_pos.values()),
+            "small_item_service_position_fifo": sorted(fifo_small_pos.values()),
+            "small_item_start_latency_s_fair": [
+                round(v, 4) for v in fair_small_lat.values()
+            ],
+            "small_item_start_latency_s_fifo": [
+                round(v, 4) for v in fifo_small_lat.values()
+            ],
+            "max_prefix_service_gap_fair": max_gap,
+            "service_counts": served_counts,
+            "bound": "equal weights: prefix gap <= 2 observed",
+        },
+        "throughput": {
+            "fair_per_item_e2e_ms": _pct(fair_claim),
+            "fifo_per_item_e2e_ms": _pct(fifo_claim),
+            "scheduler_overhead_ms": round(
+                statistics.mean(fair_claim) * 1000
+                - statistics.mean(fifo_claim) * 1000,
+                2,
+            ),
+        },
+        "liveness": {
+            "renewals": renew_count,
+            "renew_latency": _pct(renew_times),
+            "stale_nonce_rejections": stale_nonce_rejections,
+            "stale_nonce_reject_seconds": round(stale_nonce_reject_seconds, 4),
+            "forced_wedge_takeover_seconds": round(wedge_takeover_seconds, 3),
+            "wedge_takeover_succeeded": took_over,
+            "stale_fence_rejections": stale_fence_rejections,
+        },
+        "events": {
+            "append_latency": _pct(append_times),
+            "replay_latency_200_rows": _pct(replay_times),
+            "durable_rows": event_rows,
+            "payload_bytes": event_payload_bytes,
+            "progress_generated": progress_generated,
+            "progress_rows_stored": progress_rows,
+            "slow_consumer_completion_delta_seconds": slow_consumer_delta_seconds,
+            "restart_replay_ok": restart_ok,
+            "restart_replay_seconds": round(restart_replay_seconds, 4),
+        },
+    }
+
+
 async def run(
     db_dir: Path,
     *,
@@ -810,6 +1161,9 @@ async def run(
     # --- PR66: fenced ownership + accepted-publication envelope --------
     fencing_report = await _fencing_section(db_dir, url, db_path)
 
+    # --- PR67A: fair scheduling, liveness, semantic events -------------
+    scheduler_report = await _scheduler_section(db_dir, url, db_path)
+
     conn = sqlite3.connect(db_path)
     try:
         journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
@@ -898,6 +1252,7 @@ async def run(
         "generations": generation_report,
         "retention_gc": retention_report,
         "fencing_publication": fencing_report,
+        "scheduler_liveness_events": scheduler_report,
         "runtime": {
             "platform": platform.platform(),
             "python": sys.version.split()[0],
