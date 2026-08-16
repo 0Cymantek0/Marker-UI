@@ -11,9 +11,7 @@ rescue. Crash-window variants live in test_kernel_gc_faults.py.
 
 from __future__ import annotations
 
-import os
 import sqlite3
-import stat
 from pathlib import Path
 
 import pytest
@@ -52,6 +50,7 @@ from app.kernel.snapshots import (
     PAYLOAD_REQUIREMENT_METADATA_ONLY,
     resolve_snapshot,
 )
+from tests._payload_tamper import corrupt_object, unlink_object
 
 pytestmark = pytest.mark.asyncio
 
@@ -480,9 +479,7 @@ async def test_unlink_failure_is_truthful_and_retryable(payload_env: tuple) -> N
 
 async def test_already_missing_object_converges_idempotently(payload_env: tuple) -> None:
     factory, store, _service, key = await _lone_candidate_env(payload_env)
-    path = store.object_path(key)
-    os.chmod(path, stat.S_IWRITE)  # clear the read-only tamper hint
-    path.unlink()  # vanished outside GC's control
+    unlink_object(store, key)  # vanished outside GC's control
 
     report = await collect(factory, store)
     assert report.already_absent == 1
@@ -509,11 +506,10 @@ async def test_corruption_and_retirement_stay_distinct_facts(
         required_payload_state=PAYLOAD_REQUIREMENT_INSPECTABLE,
     )
 
-    # tamper with both objects' bytes
+    # tamper with both objects' bytes (readable tamper: hash mismatch, not
+    # a permission failure)
     for key, tag in ((live_key, b"tampered-live"), (dead_key, b"tampered-dead")):
-        path = store.object_path(key)
-        os.chmod(path, stat.S_IWRITE)
-        path.write_bytes(tag)
+        corrupt_object(store, key, tag)
 
     report = await collect(factory, store)
     # the corrupt-but-unreachable object is retired (policy disposal of

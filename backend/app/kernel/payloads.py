@@ -36,6 +36,12 @@ always points at bytes that were published and verified first.
 Fault injection: deterministic test hooks raise ``InjectedFaultError``
 at named protocol phases; see ``PAYLOAD_FAULT_PHASES``.
 
+Availability truth: ``check_object`` classifies an object that exists
+but cannot be read (permission loss, sharing violation, filesystem
+error) as present with failed verification — the corrupt bucket —
+because availability claims require a verified read. A read failure is
+never converted into an "available" or "missing" answer.
+
 Physical retirement (PR65B): ``delete_object`` unlinks one authorized
 object idempotently. The store itself never decides what may be
 deleted — a durable GC tombstone from the kernel database must already
@@ -331,12 +337,23 @@ class LocalPayloadStore:
                 blob_key=blob_key, locator=locator,
                 exists=False, length_ok=False, hash_ok=False, length=0,
             )
-        actual = self._read_and_hash(path)
+        try:
+            actual = self._read_and_hash(path)
+        except PayloadStageError:
+            # Bytes exist but cannot be read (permission loss, sharing
+            # violation, filesystem error): availability cannot be proven,
+            # so the object is reported as present-but-unverifiable — the
+            # corrupt bucket — never as available. Availability claims
+            # require a verified read.
+            return ObjectCheck(
+                blob_key=blob_key, locator=locator,
+                exists=True, length_ok=False, hash_ok=False, length=0,
+            )
         length_ok = expected_length is None or len(actual) == expected_length
         hash_ok = payload_byte_hash(actual) == blob_key
         return ObjectCheck(
-            blob_key=blob_key, locator=locator,
-            exists=True, length_ok=length_ok, hash_ok=hash_ok, length=len(actual),
+            blob_key=blob_key, locator=locator, exists=True,
+            length_ok=length_ok, hash_ok=hash_ok, length=len(actual),
         )
 
     async def read(self, blob_key: str) -> bytes:

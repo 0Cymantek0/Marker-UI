@@ -11,7 +11,6 @@ from __future__ import annotations
 import inspect
 import os
 import sqlite3
-import stat
 from pathlib import Path
 
 import pytest
@@ -23,7 +22,6 @@ from app.kernel.errors import (
     SnapshotIntegrityError,
     SnapshotRequirementError,
 )
-from app.kernel.payloads import LocalPayloadStore
 from app.kernel.records import (
     EDGE_KIND_EVIDENCE_FOR,
     ClaimAssertionRecord,
@@ -40,6 +38,7 @@ from app.kernel.snapshots import (
     KernelSnapshot,
     resolve_snapshot,
 )
+from tests._payload_tamper import corrupt_object, make_unreadable, unlink_object
 
 pytestmark = pytest.mark.asyncio
 
@@ -93,18 +92,6 @@ def _sql(db_path: Path, statement: str, params: tuple = ()) -> None:
     with sqlite3.connect(db_path) as conn:
         conn.execute(statement, params)
         conn.commit()
-
-
-def _unlink_object(store: LocalPayloadStore, blob_key: str) -> None:
-    path = store.object_path(blob_key)
-    os.chmod(path, stat.S_IWRITE)
-    path.unlink()
-
-
-def _corrupt_object(store: LocalPayloadStore, blob_key: str) -> None:
-    path = store.object_path(blob_key)
-    os.chmod(path, stat.S_IWRITE)
-    path.write_bytes(b"tampered-bytes")
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +241,7 @@ async def test_missing_payload_degrades_not_completes(payload_env: tuple) -> Non
     receipt = await service.commit(
         KernelCommitBatch(workspace_id="ws-a", records=(record,))
     )
-    _unlink_object(store, receipt.payload_blob_keys[0])
+    unlink_object(store, receipt.payload_blob_keys[0])
 
     degraded = await resolve_snapshot(
         factory,
@@ -281,7 +268,7 @@ async def test_corrupt_payload_degrades_and_stays_visible(payload_env: tuple) ->
     receipt = await service.commit(
         KernelCommitBatch(workspace_id="ws-a", records=(record,))
     )
-    _corrupt_object(store, receipt.payload_blob_keys[0])
+    corrupt_object(store, receipt.payload_blob_keys[0], b"tampered-bytes")
 
     snapshot = await resolve_snapshot(
         factory,
@@ -304,10 +291,10 @@ async def test_same_length_tamper_detected_by_hash(payload_env: tuple) -> None:
         KernelCommitBatch(workspace_id="ws-a", records=(record,))
     )
     path = store.object_path(receipt.payload_blob_keys[0])
-    os.chmod(path, stat.S_IWRITE)
     tampered = bytearray(payload)
     tampered[0] ^= 0xFF  # same length, different bytes
-    path.write_bytes(bytes(tampered))
+    corrupt_object(store, receipt.payload_blob_keys[0], bytes(tampered))
+    assert path.is_file()  # still present, still readable: pure byte mismatch
 
     snapshot = await resolve_snapshot(
         factory,
@@ -317,6 +304,47 @@ async def test_same_length_tamper_detected_by_hash(payload_env: tuple) -> None:
     )
     assert snapshot.completeness == COMPLETENESS_DEGRADED
     assert snapshot.payload_state_counts["corrupt"] == 1
+
+
+async def test_unreadable_payload_never_reports_available(
+    payload_env: tuple,
+) -> None:
+    """Bytes that exist but cannot be read are a distinct failure mode:
+    present-but-unverifiable must degrade (corrupt bucket), never pass an
+    availability check, and never surface as missing."""
+    factory, store, service = payload_env
+    record = _observation("with-bytes", payload=b"evidence" * 8)
+    receipt = await service.commit(
+        KernelCommitBatch(workspace_id="ws-a", records=(record,))
+    )
+    path = store.object_path(receipt.payload_blob_keys[0])
+
+    with make_unreadable(path):
+        check = await store.check_object(receipt.payload_blob_keys[0])
+        assert check.exists and not check.available
+        assert not (check.length_ok and check.hash_ok)
+
+        snapshot = await resolve_snapshot(
+            factory,
+            "ws-a",
+            required_payload_state=PAYLOAD_REQUIREMENT_INSPECTABLE,
+            payload_store=store,
+        )
+        assert snapshot.completeness == COMPLETENESS_DEGRADED
+        assert snapshot.payload_state_counts["corrupt"] == 1
+        assert snapshot.payload_state_counts["missing"] == 0
+        assert snapshot.payload_backed_complete is False
+        assert record.record_id in snapshot.degraded_record_ids
+
+    # the condition was physical and temporary: readability restores truth
+    healed = await resolve_snapshot(
+        factory,
+        "ws-a",
+        required_payload_state=PAYLOAD_REQUIREMENT_INSPECTABLE,
+        payload_store=store,
+    )
+    assert healed.completeness == COMPLETENESS_COMPLETE
+    assert healed.payload_state_counts["available"] == 1
 
 
 async def test_metadata_only_reference_not_promoted(payload_env: tuple) -> None:
@@ -364,7 +392,7 @@ async def test_historical_payload_scan_bounded_to_cut(payload_env: tuple) -> Non
     receipt = await service.commit(
         KernelCommitBatch(workspace_id="ws-a", records=(later,))
     )
-    _unlink_object(store, receipt.payload_blob_keys[0])
+    unlink_object(store, receipt.payload_blob_keys[0])
 
     pinned = await resolve_snapshot(
         factory,
