@@ -757,7 +757,7 @@ class KernelCommitService:
                                 ),
                                 observed_base_revision_id=None,
                             )
-                    maybe_inject(PHASE_VIEW_ADVANCED)
+                maybe_inject(PHASE_VIEW_ADVANCED)
 
                 # 6. Conditional head advance (lost-update guard).
                 result = await session.execute(

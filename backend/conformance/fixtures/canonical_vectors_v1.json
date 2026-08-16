@@ -935,6 +935,304 @@
         }
       },
       "expect_error": "floats cannot enter canonical identity"
+    },
+    {
+      "id": "pr73-proposal-replace-text",
+      "category": "composite",
+      "record_type": "marker.kernel.patch_proposal.v1",
+      "schema_version": "1.0.0",
+      "payload": {
+        "preconditions": {
+          "base_revision_id": "sha256:abababababababababababababababababababababababababababababababab",
+          "target_checks": [
+            {
+              "node_id": "run-a",
+              "before_hash": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+            },
+            {
+              "node_id": "run-b",
+              "before_hash": "sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+            }
+          ],
+          "required_source_revision_refs": [
+            "rev-0001"
+          ],
+          "required_claim_refs": []
+        },
+        "operations": [
+          {
+            "op_type": "replace_text",
+            "params": {
+              "node_id": "run-a",
+              "after_text": "Fixed"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "id": "after-text-differs",
+          "expectation": "different",
+          "payload": {
+            "preconditions": {
+              "base_revision_id": "sha256:abababababababababababababababababababababababababababababababab",
+              "target_checks": [
+                {
+                  "node_id": "run-a",
+                  "before_hash": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+                },
+                {
+                  "node_id": "run-b",
+                  "before_hash": "sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+                }
+              ],
+              "required_source_revision_refs": [
+                "rev-0001"
+              ],
+              "required_claim_refs": []
+            },
+            "operations": [
+              {
+                "op_type": "replace_text",
+                "params": {
+                  "node_id": "run-a",
+                  "after_text": "Different"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "operation-order-is-identity-bearing",
+          "expectation": "different",
+          "payload": {
+            "preconditions": {
+              "base_revision_id": "sha256:abababababababababababababababababababababababababababababababab",
+              "target_checks": [
+                {
+                  "node_id": "run-a",
+                  "before_hash": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+                }
+              ],
+              "required_source_revision_refs": [],
+              "required_claim_refs": []
+            },
+            "operations": [
+              {
+                "op_type": "replace_text",
+                "params": {
+                  "node_id": "run-a",
+                  "after_text": "X"
+                }
+              },
+              {
+                "op_type": "replace_text",
+                "params": {
+                  "node_id": "run-b",
+                  "after_text": "Y"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "expect": {
+        "payload_canonical": "{\"operations\":[{\"op_type\":\"replace_text\",\"params\":{\"after_text\":\"Fixed\",\"node_id\":\"run-a\"}}],\"preconditions\":{\"base_revision_id\":\"sha256:abababababababababababababababababababababababababababababababab\",\"required_claim_refs\":[],\"required_source_revision_refs\":[\"rev-0001\"],\"target_checks\":[{\"before_hash\":\"sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"node_id\":\"run-a\"},{\"before_hash\":\"sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\",\"node_id\":\"run-b\"}]}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"operations\":[{\"op_type\":\"replace_text\",\"params\":{\"after_text\":\"Fixed\",\"node_id\":\"run-a\"}}],\"preconditions\":{\"base_revision_id\":\"sha256:abababababababababababababababababababababababababababababababab\",\"required_claim_refs\":[],\"required_source_revision_refs\":[\"rev-0001\"],\"target_checks\":[{\"before_hash\":\"sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"node_id\":\"run-a\"},{\"before_hash\":\"sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\",\"node_id\":\"run-b\"}]}},\"record_type\":\"marker.kernel.patch_proposal.v1\",\"schema_version\":\"1.0.0\"}",
+        "identity_hash": "sha256:26b1d04b543bd85f520806c6fd0f74280a61d07074bd35a1dd2079e5d55edb41"
+      }
+    },
+    {
+      "id": "pr73-view-document",
+      "category": "composite",
+      "record_type": "marker.kernel.view_document.v1",
+      "schema_version": "1.0.0",
+      "payload": {
+        "content_revision_ref": "rev-0001",
+        "graph": {
+          "schema": "1.0.0",
+          "nodes": [
+            {
+              "node_id": "run-a",
+              "kind": "content",
+              "anchor_ref": "anchor-a"
+            },
+            {
+              "node_id": "run-b",
+              "kind": "content",
+              "anchor_ref": "anchor-b"
+            }
+          ],
+          "edges": [
+            {
+              "kind": "before",
+              "source": "run-a",
+              "target": "run-b",
+              "producer": "conformance",
+              "confidence": "1.0",
+              "state": "asserted"
+            }
+          ]
+        },
+        "texts": {
+          "run-a": "Alpha",
+          "run-b": "Beta"
+        }
+      },
+      "variants": [
+        {
+          "id": "texts-mapping-order-insensitive",
+          "expectation": "same",
+          "payload": {
+            "content_revision_ref": "rev-0001",
+            "graph": {
+              "schema": "1.0.0",
+              "nodes": [
+                {
+                  "node_id": "run-a",
+                  "kind": "content",
+                  "anchor_ref": "anchor-a"
+                },
+                {
+                  "node_id": "run-b",
+                  "kind": "content",
+                  "anchor_ref": "anchor-b"
+                }
+              ],
+              "edges": [
+                {
+                  "kind": "before",
+                  "source": "run-a",
+                  "target": "run-b",
+                  "producer": "conformance",
+                  "confidence": "1.0",
+                  "state": "asserted"
+                }
+              ]
+            },
+            "texts": {
+              "run-b": "Beta",
+              "run-a": "Alpha"
+            }
+          }
+        },
+        {
+          "id": "text-value-differs",
+          "expectation": "different",
+          "payload": {
+            "content_revision_ref": "rev-0001",
+            "graph": {
+              "schema": "1.0.0",
+              "nodes": [
+                {
+                  "node_id": "run-a",
+                  "kind": "content",
+                  "anchor_ref": "anchor-a"
+                },
+                {
+                  "node_id": "run-b",
+                  "kind": "content",
+                  "anchor_ref": "anchor-b"
+                }
+              ],
+              "edges": [
+                {
+                  "kind": "before",
+                  "source": "run-a",
+                  "target": "run-b",
+                  "producer": "conformance",
+                  "confidence": "1.0",
+                  "state": "asserted"
+                }
+              ]
+            },
+            "texts": {
+              "run-a": "alpha",
+              "run-b": "Beta"
+            }
+          }
+        },
+        {
+          "id": "source-binding-differs",
+          "expectation": "different",
+          "payload": {
+            "content_revision_ref": "rev-0002",
+            "graph": {
+              "schema": "1.0.0",
+              "nodes": [
+                {
+                  "node_id": "run-a",
+                  "kind": "content",
+                  "anchor_ref": "anchor-a"
+                },
+                {
+                  "node_id": "run-b",
+                  "kind": "content",
+                  "anchor_ref": "anchor-b"
+                }
+              ],
+              "edges": [
+                {
+                  "kind": "before",
+                  "source": "run-a",
+                  "target": "run-b",
+                  "producer": "conformance",
+                  "confidence": "1.0",
+                  "state": "asserted"
+                }
+              ]
+            },
+            "texts": {
+              "run-a": "Alpha",
+              "run-b": "Beta"
+            }
+          }
+        }
+      ],
+      "expect": {
+        "payload_canonical": "{\"content_revision_ref\":\"rev-0001\",\"graph\":{\"edges\":[{\"confidence\":\"1.0\",\"kind\":\"before\",\"producer\":\"conformance\",\"source\":\"run-a\",\"state\":\"asserted\",\"target\":\"run-b\"}],\"nodes\":[{\"anchor_ref\":\"anchor-a\",\"kind\":\"content\",\"node_id\":\"run-a\"},{\"anchor_ref\":\"anchor-b\",\"kind\":\"content\",\"node_id\":\"run-b\"}],\"schema\":\"1.0.0\"},\"texts\":{\"run-a\":\"Alpha\",\"run-b\":\"Beta\"}}",
+        "preimage": "{\"canonicalization_profile\":\"marker.canonical.v1\",\"framing\":\"marker.record_identity.v1\",\"payload\":{\"content_revision_ref\":\"rev-0001\",\"graph\":{\"edges\":[{\"confidence\":\"1.0\",\"kind\":\"before\",\"producer\":\"conformance\",\"source\":\"run-a\",\"state\":\"asserted\",\"target\":\"run-b\"}],\"nodes\":[{\"anchor_ref\":\"anchor-a\",\"kind\":\"content\",\"node_id\":\"run-a\"},{\"anchor_ref\":\"anchor-b\",\"kind\":\"content\",\"node_id\":\"run-b\"}],\"schema\":\"1.0.0\"},\"texts\":{\"run-a\":\"Alpha\",\"run-b\":\"Beta\"}},\"record_type\":\"marker.kernel.view_document.v1\",\"schema_version\":\"1.0.0\"}",
+        "identity_hash": "sha256:9cee89ba681055092429d8b3cac6df3dccd3dabaa5eff23679f37b8a335f15df"
+      }
+    },
+    {
+      "id": "pr73-view-text-float-rejected",
+      "category": "rejection",
+      "record_type": "marker.kernel.view_document.v1",
+      "schema_version": "1.0.0",
+      "payload": {
+        "content_revision_ref": "rev-0003",
+        "graph": {
+          "schema": "1.0.0",
+          "nodes": [
+            {
+              "node_id": "run-a",
+              "kind": "content",
+              "anchor_ref": "anchor-a"
+            },
+            {
+              "node_id": "run-b",
+              "kind": "content",
+              "anchor_ref": "anchor-b"
+            }
+          ],
+          "edges": [
+            {
+              "kind": "before",
+              "source": "run-a",
+              "target": "run-b",
+              "producer": "conformance",
+              "confidence": "1.0",
+              "state": "asserted"
+            }
+          ]
+        },
+        "texts": {
+          "run-a": 1.5,
+          "run-b": "Beta"
+        }
+      },
+      "expect_error": "floats cannot enter canonical identity"
     }
   ]
 }
