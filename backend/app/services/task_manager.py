@@ -546,6 +546,14 @@ class TaskManager:
         self._drain_stop = threading.Event()
         self._drain_thread: Optional[threading.Thread] = None
 
+        # Kernel runtime authority (PR67B): when enabled, conversions are
+        # authorized as kernel work, dispatched through claim_fair, kept
+        # alive by evidence-backed liveness, and completed only through
+        # fenced accepted publication. ``_kernel_claims`` carries the live
+        # claim context from the dispatcher to the executor finalize paths.
+        self._kernel_runtime: Any = None
+        self._kernel_claims: dict[str, Any] = {}
+
         # Local ArtifactHandle data plane (PR68A): the parent-side store that
         # resolves worker result handles before finalization. Only the process
         # backend crosses the pickled-result boundary the seam optimizes.
@@ -576,6 +584,73 @@ class TaskManager:
     @property
     def backend_name(self) -> str:
         return self._backend.name
+
+    @property
+    def kernel_runtime(self) -> Any:
+        return self._kernel_runtime
+
+    def start_kernel_runtime(self, conversion_service: Any, **overrides: Any) -> Any:
+        """Create (once) the kernel runtime coordinator bound to this manager.
+
+        Reads the PR67B tuning knobs from ``app.core.config``; ``overrides``
+        exist for tests. The coordinator is not started here — the caller
+        (app lifespan, tests) runs ``recover()`` and then ``start()``.
+        """
+        if self._kernel_runtime is not None:
+            return self._kernel_runtime
+        from app.core.config import (
+            KERNEL_DISPATCH_POLL_SECONDS,
+            KERNEL_LEASE_SECONDS,
+            KERNEL_MAX_IN_FLIGHT,
+            KERNEL_RENEW_INTERVAL_SECONDS,
+            KERNEL_RUNTIME_OWNER,
+            KERNEL_RUNTIME_WORKSPACE,
+            KERNEL_WATCHDOG_INTERVAL_SECONDS,
+        )
+        from app.services.kernel_runtime import KernelRuntimeCoordinator
+
+        coordinator = KernelRuntimeCoordinator(
+            self,
+            workspace_id=overrides.pop("workspace_id", KERNEL_RUNTIME_WORKSPACE),
+            owner_id=overrides.pop("owner_id", KERNEL_RUNTIME_OWNER),
+            lease_seconds=overrides.pop("lease_seconds", KERNEL_LEASE_SECONDS),
+            renew_interval_seconds=overrides.pop(
+                "renew_interval_seconds", KERNEL_RENEW_INTERVAL_SECONDS
+            ),
+            dispatch_poll_seconds=overrides.pop(
+                "dispatch_poll_seconds", KERNEL_DISPATCH_POLL_SECONDS
+            ),
+            watchdog_interval_seconds=overrides.pop(
+                "watchdog_interval_seconds", KERNEL_WATCHDOG_INTERVAL_SECONDS
+            ),
+            max_in_flight=overrides.pop("max_in_flight", KERNEL_MAX_IN_FLIGHT),
+            **overrides,
+        )
+        coordinator.set_conversion_service(conversion_service)
+        self._kernel_runtime = coordinator
+        return coordinator
+
+    async def submit_conversion(
+        self,
+        job_id: str,
+        filepath: str,
+        config: dict[str, Any],
+        marker_service: Any,
+    ) -> int | None:
+        """Submit a conversion through the live runtime authority.
+
+        Kernel mode authorizes the job as exactly one kernel work item and
+        returns its work id; the coordinator's dispatch loop claims and
+        executes it. Legacy mode falls back to direct executor submission
+        and returns None.
+        """
+        if self._kernel_runtime is None:
+            self.submit_job(job_id, filepath, config, marker_service)
+            return None
+        self._kernel_runtime.set_conversion_service(marker_service)
+        self._job_status_text[job_id] = "Queued for kernel dispatch..."
+        self._job_logs[job_id] = []
+        return await self._kernel_runtime.authorize(job_id, config)
 
     async def recover_durable_jobs(self, conversion_service: Any) -> list[str]:
         """Reclaim queued/expired durable jobs and resubmit them.
@@ -698,6 +773,14 @@ class TaskManager:
         Returns ``{"recovered": [...job_ids], "swept": [...job_ids]}`` so callers
         (and tests) can observe exactly what happened.
         """
+        if self._kernel_runtime is not None:
+            # Kernel authority owns recovery: ``coordinator.recover()``
+            # reconciles dispatch, completes lost acks, projects accepted
+            # publications, adopts legacy rows, and sweeps the rest. The
+            # legacy resubmission path must never run beside it — two
+            # schedulers deciding ownership for one job is the exact race
+            # PR67B exists to close.
+            return {"recovered": [], "swept": []}
         recovered = await self.recover_durable_jobs(conversion_service)
 
         from sqlalchemy import select, update
@@ -791,6 +874,7 @@ class TaskManager:
                 self._pids[job_id] = event.pid
             if event.status_text:
                 self._job_status_text[job_id] = event.status_text
+            self._kernel_note_activity(job_id)
             return
 
         if event.type is WorkerEventType.result:
@@ -815,12 +899,14 @@ class TaskManager:
             result = result.get("result") or {}
         self._progress[job_id] = 90
         self._job_status_text[job_id] = "Finalizing results..."
+        projected = True
         try:
-            self._run_async(self._finalize_job(job_id, result, config, formats_payload))
+            projected = self._run_async(self._finalize_job(job_id, result, config, formats_payload))
         except Exception:  # noqa: BLE001
             logger.exception("finalize failed for process job %s", job_id)
-        self._progress[job_id] = 100
-        self._job_status_text[job_id] = "Conversion completed successfully."
+        if projected:
+            self._progress[job_id] = 100
+            self._job_status_text[job_id] = "Conversion completed successfully."
         self._cleanup_proc_job(job_id, config, state="done")
         self._maybe_sweep_artifacts()
 
@@ -887,6 +973,7 @@ class TaskManager:
         with self._lock:
             self._proc_jobs[job_id] = state
             self._pids.pop(job_id, None)
+        self._kernel_claims.pop(job_id, None)
         # Drop any live model hot-swap for this job's provider so it never bleeds
         # into an unrelated later job. Best effort; process backend overrides are
         # per-worker so this is a no-op in practice but keeps the contract even.
@@ -907,16 +994,27 @@ class TaskManager:
 
     @staticmethod
     def _run_async(coro: Any) -> Any:
-        """Run an async coroutine to completion from a sync (worker/drainer) context."""
+        """Run an async coroutine to completion from a sync (worker/drainer) context.
+
+        Production callers (worker threads, the process-event drain
+        thread) have no running loop, so ``asyncio.run`` is the normal
+        path. When a loop IS running (tests driving sync seams from a
+        coroutine), the coroutine runs on a private loop and the caller's
+        loop is restored.
+        """
         try:
-            return asyncio.run(coro)
+            running = asyncio.get_running_loop()
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(coro)
-            finally:
-                loop.close()
+            running = None
+        if running is None:
+            return asyncio.run(coro)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+            asyncio.set_event_loop(running)
 
     def report_stage_progress(self, job_id: str, percent: int, label: str) -> None:
         """Sink for the tqdm progress tap. Monotonic, never regresses."""
@@ -928,6 +1026,18 @@ class TaskManager:
         if label:
             self._job_status_text[job_id] = label
         self._job_has_real_progress[job_id] = True
+        self._kernel_note_activity(job_id)
+
+    def _kernel_note_activity(self, job_id: str) -> None:
+        """Feed real control-loop activity to the live kernel claim, if any.
+
+        Called from worker threads and the process-event drain thread; the
+        claim's lock keeps the counter coherent. This is the ONLY source of
+        liveness evidence — no timer may renew a lease without it.
+        """
+        claim = self._kernel_claims.get(job_id)
+        if claim is not None:
+            claim.note_activity()
 
     def _mark_job_started(self, job_id: str) -> None:
         """Called by thread backends when a queued job begins executing."""
@@ -991,8 +1101,15 @@ class TaskManager:
         filepath: str,
         config: dict[str, Any],
         marker_service: Any,
+        claim: Any = None,
     ) -> None:
-        """Start conversion via the selected backend and track the job."""
+        """Start conversion via the selected backend and track the job.
+
+        ``claim`` binds this execution to one kernel ownership generation
+        (PR67B): the executor's terminal paths use exactly the claim they
+        launched with, so a stale generation can never finalize under a
+        successor's fence. Legacy callers omit it.
+        """
         self._progress[job_id] = 10
         self._job_logs[job_id] = []
         self._job_status_text[job_id] = "Starting conversion..."
@@ -1011,8 +1128,23 @@ class TaskManager:
         queued_message = getattr(backend, "queued_message", "Waiting for conversion worker...")
         self._job_queued_message[job_id] = queued_message
         self._job_status_text[job_id] = queued_message
+        if claim is not None:
+            def _run_bound(
+                _job_id=job_id,
+                _filepath=filepath,
+                _config=config,
+                _service=marker_service,
+                _claim=claim,
+            ) -> dict[str, Any]:
+                return self._run_conversion(
+                    _job_id, _filepath, _config, _service, claim_ctx=_claim
+                )
+
+            run_job: Any = _run_bound
+        else:
+            run_job = self._run_conversion
         future = backend.submit(
-            self._run_conversion,
+            run_job,
             job_id,
             filepath,
             config,
@@ -1030,6 +1162,7 @@ class TaskManager:
                     self._job_backends.pop(job_id, None)
                     self._job_started.pop(job_id, None)
                     self._job_queued_message.pop(job_id, None)
+                    self._kernel_claims.pop(job_id, None)
                     smooth = self._smooth_tasks.pop(job_id, None)
                     if smooth is not None:
                         smooth.cancel()
@@ -1044,6 +1177,7 @@ class TaskManager:
                 self._job_backends.pop(job_id, None)
                 self._job_started.pop(job_id, None)
                 self._job_queued_message.pop(job_id, None)
+                self._kernel_claims.pop(job_id, None)
                 smooth = self._smooth_tasks.pop(job_id, None)
                 if smooth is not None:
                     smooth.cancel()
@@ -1102,6 +1236,7 @@ class TaskManager:
         
         # Append message
         self._job_logs[job_id].append(message)
+        self._kernel_note_activity(job_id)
 
         # tqdm tap owns progress once it starts reporting; don't let coarse
         # log-string guesses override the real per-stage values.
@@ -1206,6 +1341,17 @@ class TaskManager:
         proc_state = self._proc_jobs.get(job_id)
         cancelled = False
 
+        # Kernel authority first (PR67B): durably observe the cancellation
+        # behind the current fence so a racing worker result cannot publish
+        # or renew past it, then stop the executor below.
+        kernel_cancelled = False
+        if self._kernel_runtime is not None:
+            try:
+                kernel_cancelled = await self._kernel_runtime.prepare_cancel(job_id)
+            except Exception:  # noqa: BLE001 - cancellation must never 500
+                logger.exception("kernel cancel failed for job %s", job_id)
+                kernel_cancelled = False
+
         if future and not future.done():
             self._cancel_requested.add(job_id)
             self._job_status_text[job_id] = "Cancellation requested..."
@@ -1240,18 +1386,25 @@ class TaskManager:
             if smooth is not None:
                 smooth.cancel()
 
-        if cancelled:
+        if cancelled or kernel_cancelled:
             # Cancelled jobs don't need the SSE grace window — evict immediately.
             self._cleanup_job_memory(job_id, delay=0.0)
             pid = self._pids.pop(job_id, None)
             if pid is not None:
                 self._kill_pid(pid)
-            await self._update_job_status(job_id, "cancelled")
+            # Guarded write: work that reached accepted/completed truth
+            # between the caller's read and here must not be overwritten.
+            await self._update_job_status(job_id, "cancelled", only_if_active=True)
             await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
-        return cancelled
+        return cancelled or kernel_cancelled
 
     def shutdown(self, wait: bool = False) -> None:
         """Stop the drain thread and release the executor/pool."""
+        if self._kernel_runtime is not None:
+            try:
+                self._kernel_runtime.stop()
+            except Exception:  # noqa: BLE001 - shutdown is best effort
+                logger.exception("kernel runtime stop failed")
         self._drain_stop.set()
         for smooth in list(self._smooth_tasks.values()):
             smooth.cancel()
@@ -1353,8 +1506,15 @@ class TaskManager:
         filepath: str,
         config: dict[str, Any],
         conversion_service: Any,
+        claim_ctx: Any = None,
     ) -> dict[str, Any]:
-        """Runs inside ThreadPoolExecutor - updates DB on completion."""
+        """Runs inside ThreadPoolExecutor - updates DB on completion.
+
+        ``claim_ctx`` is the kernel ownership generation this execution
+        launched under; terminal paths carry it explicitly so a stale
+        generation finishing late cannot finalize under its successor's
+        claim (which a job_id-keyed lookup would hand it).
+        """
         self._pids[job_id] = os.getpid()
         thread_ident = threading.get_ident()
         active_conversion_threads[thread_ident] = job_id
@@ -1398,7 +1558,7 @@ class TaskManager:
             if job_id in self._cancel_requested:
                 self._progress[job_id] = 0
                 self._job_status_text[job_id] = "Conversion cancelled."
-                self._run_async(self._update_job_status(job_id, "cancelled"))
+                self._run_async(self._update_job_status(job_id, "cancelled", only_if_active=True))
                 self._run_async(
                     self._mark_job_terminal_durable(
                         job_id,
@@ -1411,20 +1571,30 @@ class TaskManager:
             self._progress[job_id] = 90
             self._job_status_text[job_id] = "Finalizing results..."
 
-            # Persist result synchronously via a new async loop
+            # Persist result synchronously via a new async loop. The claim
+            # kwarg is passed only when this execution actually launched
+            # under one, so patched legacy seams keep their signature.
+            async def _finalize_coro() -> bool:
+                if claim_ctx is not None:
+                    return await self._finalize_job(
+                        job_id, result, config, formats_envelopes, claim=claim_ctx
+                    )
+                return await self._finalize_job(job_id, result, config, formats_envelopes)
+
+            projected = True
             try:
-                asyncio.run(
-                    self._finalize_job(job_id, result, config, formats_envelopes)
-                )
+                projected = asyncio.run(_finalize_coro())
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    loop.run_until_complete(
-                        self._finalize_job(job_id, result, config, formats_envelopes)
-                    )
+                    projected = loop.run_until_complete(_finalize_coro())
                 finally:
                     loop.close()
+            if not projected:
+                # Acceptance was rejected (stale/conflict/cancelled): the
+                # in-memory success view must not claim completion either.
+                return result
             if job_id in self._cancel_requested:
                 self._progress[job_id] = 0
                 self._job_status_text[job_id] = "Conversion cancelled."
@@ -1436,7 +1606,7 @@ class TaskManager:
             if job_id in self._cancel_requested:
                 self._progress[job_id] = 0
                 self._job_status_text[job_id] = "Conversion cancelled."
-                self._run_async(self._update_job_status(job_id, "cancelled"))
+                self._run_async(self._update_job_status(job_id, "cancelled", only_if_active=True))
                 self._run_async(
                     self._mark_job_terminal_durable(
                         job_id,
@@ -1448,13 +1618,20 @@ class TaskManager:
             logger.exception("Conversion failed for job %s", job_id)
             self._progress[job_id] = 0
             self._job_status_text[job_id] = f"Conversion failed: {exc}"
+            failure_message = str(exc)
             try:
-                asyncio.run(self._fail_job(job_id, str(exc)))
+                async def _fail_coro() -> None:
+                    if claim_ctx is not None:
+                        await self._fail_job(job_id, failure_message, claim=claim_ctx)
+                    else:
+                        await self._fail_job(job_id, failure_message)
+
+                asyncio.run(_fail_coro())
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    loop.run_until_complete(self._fail_job(job_id, str(exc)))
+                    loop.run_until_complete(_fail_coro())
                 finally:
                     loop.close()
             except Exception:
@@ -1479,15 +1656,24 @@ class TaskManager:
     # DB helpers (async - called via asyncio.run from thread)
     # ------------------------------------------------------------------
 
-    async def _update_job_status(self, job_id: str, status: str) -> None:
+    async def _update_job_status(
+        self, job_id: str, status: str, *, only_if_active: bool = False
+    ) -> None:
+        """Write a job's status.
+
+        ``only_if_active`` guards against overwriting terminal truth: the
+        write is skipped when the row already reached a terminal status
+        (e.g. a cancel racing an accepted completion).
+        """
         async with async_session_factory() as session:
             from sqlalchemy import update
 
-            await session.execute(
-                update(ConversionJob)
-                .where(ConversionJob.id == job_id)
-                .values(status=status)
-            )
+            stmt = update(ConversionJob).where(ConversionJob.id == job_id)
+            if only_if_active:
+                stmt = stmt.where(
+                    ConversionJob.status.not_in(["completed", "failed", "cancelled"])
+                )
+            await session.execute(stmt.values(status=status))
             await session.commit()
 
     async def _read_job_status_with_commit_race_retry(
@@ -1581,12 +1767,21 @@ class TaskManager:
         result: dict[str, Any],
         config: dict[str, Any],
         formats_payload: dict[str, dict[str, Any]] | None = None,
-    ) -> None:
+        claim: Any = None,
+    ) -> bool:
+        """Persist a completed conversion.
+
+        Returns True when this call projected the job terminal-completed
+        (legacy: always unless cancelled; kernel: only when the fenced
+        accepted publication committed first). ``claim`` is the launching
+        generation's claim; when omitted the current claim is looked up
+        (process-backend drain path).
+        """
         if job_id in self._cancel_requested:
             logger.info("Job %s was cancelled. Skipping finalization.", job_id)
-            await self._update_job_status(job_id, "cancelled")
+            await self._update_job_status(job_id, "cancelled", only_if_active=True)
             await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
-            return
+            return False
 
         # Check if job still exists and is not cancelled. Tolerate the
         # commit-before-submit race: the request transaction may still be
@@ -1595,10 +1790,10 @@ class TaskManager:
             job_id, action="finalization"
         )
         if status is None:
-            return
+            return False
         if status == "cancelled":
             logger.info("Job %s was cancelled. Skipping finalization.", job_id)
-            return
+            return False
 
         result_text = result.get("text", "")
         metadata = result.get("metadata") or {}
@@ -1645,6 +1840,52 @@ class TaskManager:
         # for its format; the cache stores text only to stay small and portable.
         formats_json = _formats_payload_for_finalize(result, output_format, formats_payload)
 
+        # Fenced accepted publication (PR67B): durable output exists on disk
+        # now, so build the bounded canonical descriptor and cross the PR66
+        # acceptance boundary BEFORE the compatibility row may say completed.
+        # ArtifactHandle transport was already resolved into real bytes
+        # upstream, so acceptance describes durable output, never an
+        # ephemeral handle pathname.
+        if self._kernel_runtime is not None:
+            active_claim = claim if claim is not None else self._kernel_claims.get(job_id)
+            if active_claim is None:
+                # Kernel dispatch is authoritative for this runtime: a
+                # completion without its owning generation (zombie worker
+                # after takeover/cancel) must never write terminal truth.
+                logger.warning(
+                    "Job %s completion arrived without a live kernel claim; "
+                    "refusing to project it terminal-completed.",
+                    job_id,
+                )
+                return False
+            from app.services.kernel_runtime import build_result_descriptor
+
+            try:
+                formats_keys = list(json.loads(formats_json).keys()) if formats_json else []
+            except (TypeError, ValueError):
+                formats_keys = []
+            descriptor = build_result_descriptor(
+                job_id=job_id,
+                output_format=output_format,
+                result_text=result_text,
+                formats_json=formats_json,
+                result_metadata_json=result_metadata_json,
+                final_path=written.final_path,
+                manifest_path=written.manifest_path,
+                asset_count=len(written.asset_paths),
+                formats=formats_keys,
+            )
+            disposition = await self._kernel_runtime.accept_result(active_claim, descriptor)
+            if disposition != "projected":
+                # superseded / conflict / cancelled: an older generation's
+                # late bytes must not become user-visible completion truth.
+                logger.info(
+                    "Job %s finalization not projected (kernel disposition=%s).",
+                    job_id,
+                    disposition,
+                )
+                return False
+
         async with async_session_factory() as session:
             from sqlalchemy import update
 
@@ -1670,14 +1911,36 @@ class TaskManager:
             await session.commit()
             if (update_result.rowcount or 0) < 1:
                 logger.info("Job %s was cancelled during finalization. Skipping completed terminal mark.", job_id)
-                return
+                return False
         await self._mark_job_terminal_durable(job_id, status="completed")
+        return True
 
-    async def _fail_job(self, job_id: str, error_message: str) -> None:
+    async def _fail_job(self, job_id: str, error_message: str, claim: Any = None) -> None:
         if job_id in self._cancel_requested:
             logger.info("Job %s was cancelled. Skipping failure recording.", job_id)
-            await self._update_job_status(job_id, "cancelled")
+            await self._update_job_status(job_id, "cancelled", only_if_active=True)
             await self._mark_job_terminal_durable(job_id, status="cancelled", message="Cancelled by user")
+            return
+
+        # Kernel authority (PR67B): a failed execution ends through the
+        # coordinator — retry budget, fenced release, durable work.failed
+        # event, and the row projection all live behind one decision. The
+        # failing generation's own claim is used: a stale generation must
+        # not consume its successor's retry budget or terminal-fail its
+        # live work.
+        if self._kernel_runtime is not None:
+            active_claim = claim if claim is not None else self._kernel_claims.get(job_id)
+            if active_claim is None:
+                logger.warning(
+                    "Job %s failure arrived without a live kernel claim; "
+                    "the owning generation owns the row projection.",
+                    job_id,
+                )
+                return
+            outcome = await self._kernel_runtime.fail_execution(active_claim, error_message)
+            logger.info(
+                "Job %s failure recorded through kernel authority (%s).", job_id, outcome
+            )
             return
 
         # Same commit-race tolerance as _finalize_job: a fast converter can
