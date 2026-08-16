@@ -40,6 +40,15 @@ KERNEL_PAYLOAD_ROOT: Path = Path(
     os.getenv("MARKER_KERNEL_PAYLOAD_ROOT", str(DATA_DIR / "kernel_payloads"))
 )
 
+# Source truth artifact store (PR70/71 local slice): content-addressed
+# immutable copies of acquired local/uploaded/URL source documents. A
+# committed ContentRevisionRecord references the blob key; probe/routing
+# and conversion consume the artifact instead of re-trusting the
+# external source path.
+SOURCE_STORE_ROOT: Path = Path(
+    os.getenv("MARKER_SOURCE_STORE_ROOT", str(DATA_DIR / "source_store"))
+)
+
 # Kernel runtime authority (PR67B): conversions are authorized as kernel
 # work, dispatched through the fair scheduler, kept alive by evidence-backed
 # liveness, and completed only through fenced accepted publication. The
