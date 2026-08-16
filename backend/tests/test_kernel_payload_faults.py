@@ -29,7 +29,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.kernel.commit import FAULT_PHASES, KernelCommitBatch, KernelCommitService
+from app.kernel.commit import FAULT_PHASES, KernelCommitBatch
 from app.kernel.errors import InjectedFaultError
 from app.kernel.models import (
     KernelCommitManifest,
@@ -38,7 +38,7 @@ from app.kernel.models import (
     KernelRecord,
 )
 from app.kernel.outbox import OutboxIntent, list_outbox
-from app.kernel.payloads import PAYLOAD_FAULT_PHASES, LocalPayloadStore
+from app.kernel.payloads import STAGING_FAULT_PHASES
 from app.kernel.reconcile import verify_payload_availability
 from app.kernel.records import ObservationRecord
 from app.kernel.replay import read_head, verify_history
@@ -47,7 +47,7 @@ pytestmark = pytest.mark.asyncio
 
 PAYLOAD = b"matrix payload bytes \x00\xff\x80 binary"
 
-STORAGE_FAULTS = sorted(PAYLOAD_FAULT_PHASES)
+STORAGE_FAULTS = sorted(STAGING_FAULT_PHASES)
 DB_FAULTS = sorted(FAULT_PHASES)
 # Storage faults after successful publication leave complete bytes.
 POST_PUBLISH_STORAGE_FAULTS = {"stage-after-publish", "stage-after-verify"}

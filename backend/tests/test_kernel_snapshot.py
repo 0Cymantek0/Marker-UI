@@ -244,7 +244,8 @@ async def test_available_payloads_yield_complete_snapshot(payload_env: tuple) ->
     assert snapshot.completeness == COMPLETENESS_COMPLETE
     assert snapshot.payload_backed_complete is True
     assert snapshot.payload_state_counts == {"available": 1, "missing": 0,
-                                             "corrupt": 0, "metadata_only": 0}
+                                             "corrupt": 0, "metadata_only": 0,
+                                             "retired": 0}
 
 
 async def test_missing_payload_degrades_not_completes(payload_env: tuple) -> None:
@@ -374,7 +375,8 @@ async def test_historical_payload_scan_bounded_to_cut(payload_env: tuple) -> Non
     )
     assert pinned.completeness == COMPLETENESS_COMPLETE
     assert pinned.payload_state_counts == {"available": 1, "missing": 0,
-                                           "corrupt": 0, "metadata_only": 0}
+                                           "corrupt": 0, "metadata_only": 0,
+                                           "retired": 0}
 
 
 # ---------------------------------------------------------------------------
