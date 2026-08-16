@@ -1,0 +1,614 @@
+{
+  "$schema": "marker.claim_proof.fixtures.v1",
+  "description": "PR74 claim assertion/assessment/proof-support identity vectors and proof-topology determinism vectors. Identity hashes are committed constants computed through the real kernel constructors (regenerate with backend/scripts/generate_claim_proof_fixtures.py --write).",
+  "canonicalization_profile": "marker.canonical.v1",
+  "identity_cases": [
+    {
+      "id": "assertion-qualifier-key-order",
+      "record_class": "claim_assertion",
+      "payload": {
+        "claim_key": "invoice-42.total",
+        "subject": "doc:invoice-42",
+        "predicate": "total_amount",
+        "value": "1250.00",
+        "qualifiers": {
+          "currency": "USD",
+          "basis": "net"
+        }
+      },
+      "variants": [
+        {
+          "id": "qualifiers-reordered",
+          "payload": {
+            "claim_key": "invoice-42.total",
+            "subject": "doc:invoice-42",
+            "predicate": "total_amount",
+            "value": "1250.00",
+            "qualifiers": {
+              "basis": "net",
+              "currency": "USD"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "same",
+      "expect": {
+        "identity_hash": "sha256:89282ec9a7bf292e60394817819484970877884dabe82a02affbb879a4cb028d"
+      }
+    },
+    {
+      "id": "assertion-claim-key-scopes-identity",
+      "record_class": "claim_assertion",
+      "payload": {
+        "claim_key": "invoice-42.total",
+        "subject": "doc:invoice-42",
+        "predicate": "total_amount",
+        "value": "1250.00",
+        "qualifiers": {
+          "currency": "USD",
+          "basis": "net"
+        }
+      },
+      "variants": [
+        {
+          "id": "renamed-claim-key",
+          "payload": {
+            "claim_key": "invoice-42.grand-total",
+            "subject": "doc:invoice-42",
+            "predicate": "total_amount",
+            "value": "1250.00",
+            "qualifiers": {
+              "currency": "USD",
+              "basis": "net"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "identity_hash": "sha256:89282ec9a7bf292e60394817819484970877884dabe82a02affbb879a4cb028d"
+      }
+    },
+    {
+      "id": "assertion-value-change",
+      "record_class": "claim_assertion",
+      "payload": {
+        "claim_key": "invoice-42.total",
+        "subject": "doc:invoice-42",
+        "predicate": "total_amount",
+        "value": "1250.00",
+        "qualifiers": {
+          "currency": "USD",
+          "basis": "net"
+        }
+      },
+      "variants": [
+        {
+          "id": "value-changed",
+          "payload": {
+            "claim_key": "invoice-42.total",
+            "subject": "doc:invoice-42",
+            "predicate": "total_amount",
+            "value": "1251.00",
+            "qualifiers": {
+              "currency": "USD",
+              "basis": "net"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "identity_hash": "sha256:89282ec9a7bf292e60394817819484970877884dabe82a02affbb879a4cb028d"
+      }
+    },
+    {
+      "id": "assertion-raw-unicode-not-folded",
+      "record_class": "claim_assertion",
+      "payload": {
+        "claim_key": "invoice-42.total",
+        "subject": "doc:invoice-42",
+        "predicate": "total_amount",
+        "value": "café",
+        "qualifiers": {
+          "currency": "USD",
+          "basis": "net"
+        }
+      },
+      "variants": [
+        {
+          "id": "precomposed-twin",
+          "payload": {
+            "claim_key": "invoice-42.total",
+            "subject": "doc:invoice-42",
+            "predicate": "total_amount",
+            "value": "café",
+            "qualifiers": {
+              "currency": "USD",
+              "basis": "net"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "identity_hash": "sha256:2a022e19cf315abd9ac9de5eef324fa520edebdc03cd1434f7d2831e5cc1e729"
+      }
+    },
+    {
+      "id": "assessment-evidence-set-order",
+      "record_class": "claim_assessment",
+      "payload": {
+        "assertion_ref": "assertion-1",
+        "outcome": "verified",
+        "policy": {
+          "policy_id": "policy.default",
+          "revision": "rev-3"
+        },
+        "evidence_refs": [
+          "obs-1",
+          "obs-2"
+        ],
+        "snapshot_commit_id": 2,
+        "workflow_class": "standard.v1",
+        "declared_context": {
+          "as_of": "fixture",
+          "locale": "en"
+        }
+      },
+      "variants": [
+        {
+          "id": "evidence-reordered",
+          "payload": {
+            "assertion_ref": "assertion-1",
+            "outcome": "verified",
+            "policy": {
+              "policy_id": "policy.default",
+              "revision": "rev-3"
+            },
+            "evidence_refs": [
+              "obs-2",
+              "obs-1"
+            ],
+            "snapshot_commit_id": 2,
+            "workflow_class": "standard.v1",
+            "declared_context": {
+              "as_of": "fixture",
+              "locale": "en"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "same",
+      "expect": {
+        "identity_hash": "sha256:843ede40b83057bd614474e58c84f5d4e9e75fc79cdf41ec599ac42fc5e77bc5"
+      }
+    },
+    {
+      "id": "assessment-policy-revision",
+      "record_class": "claim_assessment",
+      "payload": {
+        "assertion_ref": "assertion-1",
+        "outcome": "verified",
+        "policy": {
+          "policy_id": "policy.default",
+          "revision": "rev-3"
+        },
+        "evidence_refs": [
+          "obs-1",
+          "obs-2"
+        ],
+        "snapshot_commit_id": 2,
+        "workflow_class": "standard.v1",
+        "declared_context": {
+          "as_of": "fixture",
+          "locale": "en"
+        }
+      },
+      "variants": [
+        {
+          "id": "revision-bumped",
+          "payload": {
+            "assertion_ref": "assertion-1",
+            "outcome": "verified",
+            "policy": {
+              "policy_id": "policy.default",
+              "revision": "rev-4"
+            },
+            "evidence_refs": [
+              "obs-1",
+              "obs-2"
+            ],
+            "snapshot_commit_id": 2,
+            "workflow_class": "standard.v1",
+            "declared_context": {
+              "as_of": "fixture",
+              "locale": "en"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "identity_hash": "sha256:843ede40b83057bd614474e58c84f5d4e9e75fc79cdf41ec599ac42fc5e77bc5"
+      }
+    },
+    {
+      "id": "assessment-snapshot-cut",
+      "record_class": "claim_assessment",
+      "payload": {
+        "assertion_ref": "assertion-1",
+        "outcome": "verified",
+        "policy": {
+          "policy_id": "policy.default",
+          "revision": "rev-3"
+        },
+        "evidence_refs": [
+          "obs-1",
+          "obs-2"
+        ],
+        "snapshot_commit_id": 2,
+        "workflow_class": "standard.v1",
+        "declared_context": {
+          "as_of": "fixture",
+          "locale": "en"
+        }
+      },
+      "variants": [
+        {
+          "id": "later-cut",
+          "payload": {
+            "assertion_ref": "assertion-1",
+            "outcome": "verified",
+            "policy": {
+              "policy_id": "policy.default",
+              "revision": "rev-3"
+            },
+            "evidence_refs": [
+              "obs-1",
+              "obs-2"
+            ],
+            "snapshot_commit_id": 3,
+            "workflow_class": "standard.v1",
+            "declared_context": {
+              "as_of": "fixture",
+              "locale": "en"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "identity_hash": "sha256:843ede40b83057bd614474e58c84f5d4e9e75fc79cdf41ec599ac42fc5e77bc5"
+      }
+    },
+    {
+      "id": "assessment-workflow-class",
+      "record_class": "claim_assessment",
+      "payload": {
+        "assertion_ref": "assertion-1",
+        "outcome": "verified",
+        "policy": {
+          "policy_id": "policy.default",
+          "revision": "rev-3"
+        },
+        "evidence_refs": [
+          "obs-1",
+          "obs-2"
+        ],
+        "snapshot_commit_id": 2,
+        "workflow_class": "standard.v1",
+        "declared_context": {
+          "as_of": "fixture",
+          "locale": "en"
+        }
+      },
+      "variants": [
+        {
+          "id": "fast-class",
+          "payload": {
+            "assertion_ref": "assertion-1",
+            "outcome": "verified",
+            "policy": {
+              "policy_id": "policy.default",
+              "revision": "rev-3"
+            },
+            "evidence_refs": [
+              "obs-1",
+              "obs-2"
+            ],
+            "snapshot_commit_id": 2,
+            "workflow_class": "fast.v1",
+            "declared_context": {
+              "as_of": "fixture",
+              "locale": "en"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "identity_hash": "sha256:843ede40b83057bd614474e58c84f5d4e9e75fc79cdf41ec599ac42fc5e77bc5"
+      }
+    },
+    {
+      "id": "assessment-declared-context-order",
+      "record_class": "claim_assessment",
+      "payload": {
+        "assertion_ref": "assertion-1",
+        "outcome": "verified",
+        "policy": {
+          "policy_id": "policy.default",
+          "revision": "rev-3"
+        },
+        "evidence_refs": [
+          "obs-1",
+          "obs-2"
+        ],
+        "snapshot_commit_id": 2,
+        "workflow_class": "standard.v1",
+        "declared_context": {
+          "as_of": "fixture",
+          "locale": "en"
+        }
+      },
+      "variants": [
+        {
+          "id": "context-reordered",
+          "payload": {
+            "assertion_ref": "assertion-1",
+            "outcome": "verified",
+            "policy": {
+              "policy_id": "policy.default",
+              "revision": "rev-3"
+            },
+            "evidence_refs": [
+              "obs-1",
+              "obs-2"
+            ],
+            "snapshot_commit_id": 2,
+            "workflow_class": "standard.v1",
+            "declared_context": {
+              "locale": "en",
+              "as_of": "fixture"
+            }
+          }
+        }
+      ],
+      "variant_expectation": "same",
+      "expect": {
+        "identity_hash": "sha256:843ede40b83057bd614474e58c84f5d4e9e75fc79cdf41ec599ac42fc5e77bc5"
+      }
+    },
+    {
+      "id": "proof-support-role-and-rule",
+      "record_class": "proof_support",
+      "payload": {
+        "holder_ref": "assessment-1",
+        "evidence_ref": "obs-1",
+        "role": "witness",
+        "authority_rule": "policy.default/rev-3:witness-v1"
+      },
+      "variants": [
+        {
+          "id": "role-changed",
+          "payload": {
+            "holder_ref": "assessment-1",
+            "evidence_ref": "obs-1",
+            "role": "derived",
+            "authority_rule": "policy.default/rev-3:witness-v1"
+          }
+        },
+        {
+          "id": "rule-changed",
+          "payload": {
+            "holder_ref": "assessment-1",
+            "evidence_ref": "obs-1",
+            "role": "witness",
+            "authority_rule": "policy.default/rev-3:derived-v1"
+          }
+        }
+      ],
+      "variant_expectation": "different",
+      "expect": {
+        "identity_hash": "sha256:d1555e4c23c066b5b55d5e309b92898a2c6cc1151606da7bf0c467cd33ef9fce"
+      }
+    }
+  ],
+  "topology_cases": [
+    {
+      "id": "valid-witness-proof",
+      "expect": "acyclic",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-1"
+        ]
+      ],
+      "derived_edges": []
+    },
+    {
+      "id": "derived-chain-proof",
+      "expect": "acyclic",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-crop"
+        ]
+      ],
+      "derived_edges": [
+        [
+          "obs-crop",
+          "obs-page"
+        ],
+        [
+          "obs-page",
+          "obs-source"
+        ]
+      ]
+    },
+    {
+      "id": "wide-witness-fan",
+      "expect": "acyclic",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-1"
+        ],
+        [
+          "assessment-1",
+          "obs-2"
+        ],
+        [
+          "assessment-1",
+          "obs-3"
+        ]
+      ],
+      "derived_edges": []
+    },
+    {
+      "id": "two-node-self-support",
+      "expect": "cycle",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-1"
+        ]
+      ],
+      "derived_edges": [
+        [
+          "obs-1",
+          "assessment-1"
+        ]
+      ]
+    },
+    {
+      "id": "three-node-reconciliation-loop",
+      "expect": "cycle",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-1"
+        ]
+      ],
+      "derived_edges": [
+        [
+          "obs-1",
+          "obs-summary"
+        ],
+        [
+          "obs-summary",
+          "assessment-1"
+        ]
+      ]
+    },
+    {
+      "id": "loop-through-second-consumer",
+      "expect": "cycle",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-1"
+        ],
+        [
+          "assessment-2",
+          "obs-2"
+        ]
+      ],
+      "derived_edges": [
+        [
+          "obs-1",
+          "obs-2"
+        ],
+        [
+          "obs-2",
+          "assessment-1"
+        ]
+      ]
+    }
+  ],
+  "grounding_cases": [
+    {
+      "id": "grounded-witness",
+      "expect": "grounded",
+      "start": "assessment-1",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-1"
+        ]
+      ],
+      "derived_edges": [],
+      "classes": {
+        "assessment-1": "claim_assessment",
+        "obs-1": "observation"
+      }
+    },
+    {
+      "id": "grounded-derivation-chain",
+      "expect": "grounded",
+      "start": "assessment-1",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-crop"
+        ]
+      ],
+      "derived_edges": [
+        [
+          "obs-crop",
+          "obs-page"
+        ]
+      ],
+      "classes": {
+        "assessment-1": "claim_assessment",
+        "obs-crop": "observation",
+        "obs-page": "observation"
+      }
+    },
+    {
+      "id": "summary-of-assessed-claim",
+      "expect": "reaches_authority_consumer",
+      "start": "assessment-1",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-summary"
+        ]
+      ],
+      "derived_edges": [
+        [
+          "obs-summary",
+          "assertion-1"
+        ]
+      ],
+      "classes": {
+        "assessment-1": "claim_assessment",
+        "obs-summary": "observation",
+        "assertion-1": "claim_assertion"
+      }
+    },
+    {
+      "id": "laundering-through-peer-assessment",
+      "expect": "reaches_authority_consumer",
+      "start": "assessment-1",
+      "supports": [
+        [
+          "assessment-1",
+          "obs-1"
+        ]
+      ],
+      "derived_edges": [
+        [
+          "obs-1",
+          "assessment-2"
+        ]
+      ],
+      "classes": {
+        "assessment-1": "claim_assessment",
+        "obs-1": "observation",
+        "assessment-2": "claim_assessment"
+      }
+    }
+  ]
+}

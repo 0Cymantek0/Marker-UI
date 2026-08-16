@@ -87,7 +87,9 @@ __all__ = [
     "PROOF_ROLE_WITNESS",
     "PROOF_ROLES",
     "check_batch_proof_integrity",
+    "detect_proof_cycle",
     "evaluate_claim_requirements",
+    "proof_closure_path_to_authority_consumer",
 ]
 
 #: Record classes that consume authority rather than provide it. They
@@ -644,6 +646,69 @@ async def check_batch_proof_integrity(
     await _check_grounding(
         session, workspace_id, graph, grounding_roots, batch_classes
     )
+
+
+# ---------------------------------------------------------------------------
+# Pure topology probes (conformance/determinism surface, no database)
+# ---------------------------------------------------------------------------
+
+
+def detect_proof_cycle(
+    supports: Sequence[tuple[str, str]],
+    derived_edges: Sequence[tuple[str, str]],
+) -> list[str] | None:
+    """Cycle probe over declared proof-support and derivation relations.
+
+    Returns the offending reliance path (consumer -> dependency order)
+    or ``None`` when the relations are acyclic. Same algorithm the
+    commit boundary runs; exposed pure for conformance vectors.
+    """
+    graph = _RelianceGraph()
+    for holder, evidence in supports:
+        graph.add(holder, evidence, new=True)
+    for source, target in derived_edges:
+        graph.add(source, target, new=True)
+    try:
+        _check_cycles(graph)
+    except ProofCycleError as exc:
+        return list(exc.cycle_path)
+    return None
+
+
+def proof_closure_path_to_authority_consumer(
+    start: str,
+    supports: Sequence[tuple[str, str]],
+    derived_edges: Sequence[tuple[str, str]],
+    classes: Mapping[str, str],
+) -> list[str] | None:
+    """Grounding probe: reliance closure of ``start`` over the declared
+    relations, returning the path to the first authority-consumer node
+    reached (or ``None`` when the closure stays grounded)."""
+    adjacency: dict[str, list[str]] = {}
+    for holder, evidence in supports:
+        adjacency.setdefault(holder, []).append(evidence)
+    for source, target in derived_edges:
+        adjacency.setdefault(source, []).append(target)
+    parent: dict[str, str | None] = {start: None}
+    frontier = [start]
+    while frontier:
+        node = frontier.pop()
+        for nxt in adjacency.get(node, ()):
+            if nxt not in parent:
+                parent[nxt] = node
+                frontier.append(nxt)
+    for node in parent:
+        if node == start:
+            continue
+        if classes.get(node) in AUTHORITY_CONSUMER_CLASSES:
+            path = [node]
+            cursor = parent[node]
+            while cursor is not None:
+                path.append(cursor)
+                cursor = parent[cursor]
+            path.reverse()
+            return path
+    return None
 
 
 # ---------------------------------------------------------------------------
