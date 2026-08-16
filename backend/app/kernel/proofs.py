@@ -508,6 +508,40 @@ async def check_batch_proof_integrity(
         session, workspace_id, referenced, batch_classes
     )
 
+    # -- snapshot honesty: evidence committed in PRIOR commits must have
+    #    been visible at the declared snapshot cut (in-batch evidence
+    #    becomes visible atomically with the assessment and is exempt) --
+    committed_evidence = {
+        ref
+        for view in assessments.values()
+        for ref in view.evidence_refs
+        if ref not in batch_classes
+    }
+    if committed_evidence:
+        from app.kernel.models import KernelRecord as KernelRecordRow
+
+        visibility_rows = (
+            await session.execute(
+                select(
+                    KernelRecordRow.id, KernelRecordRow.kernel_commit_id
+                ).where(
+                    KernelRecordRow.id.in_(sorted(committed_evidence)),
+                    KernelRecordRow.workspace_id == workspace_id,
+                )
+            )
+        ).all()
+        evidence_commit = {row.id: row.kernel_commit_id for row in visibility_rows}
+        for record_id, view in assessments.items():
+            for ref in view.evidence_refs:
+                landed = evidence_commit.get(ref)
+                if landed is not None and landed > view.snapshot_commit_id:
+                    raise InvalidClaimAssessmentError(
+                        f"assessment {record_id!r} declares snapshot commit "
+                        f"{view.snapshot_commit_id} but its evidence {ref!r} only "
+                        f"became visible at commit {landed}; an assessment cannot "
+                        "rely on state its declared cut does not contain"
+                    )
+
     # -- reliance graph: committed state overlaid with this batch -------
     graph, _committed_supports = await _load_committed_reliance(session, workspace_id)
     for edge in edges:
