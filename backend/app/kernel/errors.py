@@ -113,3 +113,58 @@ class UnknownRetentionRootError(KernelError):
 class UnknownReaderPinError(KernelError):
     """No active reader pin exists with the requested identity
     (never acquired, already released, or the lease expired)."""
+
+
+# --- PR66: fenced work ownership + accepted publication ------------------
+
+
+class UnknownWorkError(KernelError):
+    """No outbox work item exists with the requested identity."""
+
+
+class UnknownWorkLeaseError(KernelError):
+    """No durable ownership exists for the requested work item
+    (work was never acquired through the fencing boundary)."""
+
+
+class InvalidOwnerIdError(KernelError):
+    """Worker owner id does not match the kernel owner id grammar."""
+
+
+class InvalidWorkLeaseError(KernelError):
+    """A lease parameter violated the fencing contract (e.g. a
+    non-positive lease duration)."""
+
+
+class InvalidWorkResultError(KernelError):
+    """Work result failed canonical value validation at the boundary."""
+
+
+class StaleFenceError(KernelError):
+    """The submitted fencing token is no longer the current authority
+    for the work item: a successor moved ownership forward, the owner
+    vacated, or the work already reached an accepted publication under
+    another generation. The attempt must not create accepted state."""
+
+    def __init__(self, *, submitted_token: int, current_token: int) -> None:
+        self.submitted_token = submitted_token
+        self.current_token = current_token
+        super().__init__(
+            f"stale fence: submitted token {submitted_token} is not the "
+            f"current fencing token {current_token}"
+        )
+
+
+class PublicationConflictError(KernelError):
+    """A different result is already the accepted publication for this
+    work identity; the conflicting submission was rejected without
+    changing accepted state."""
+
+    def __init__(self, *, existing_result_hash: str, submitted_result_hash: str) -> None:
+        self.existing_result_hash = existing_result_hash
+        self.submitted_result_hash = submitted_result_hash
+        super().__init__(
+            "publication conflict: accepted result "
+            f"{existing_result_hash} differs from submitted "
+            f"{submitted_result_hash}"
+        )
