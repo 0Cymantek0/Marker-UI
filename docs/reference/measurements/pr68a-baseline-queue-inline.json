@@ -1,0 +1,181 @@
+{
+  "schema": "marker.pr68a.dataplane.benchmark.v1",
+  "env": {
+    "python": "3.11.9",
+    "platform": "win32",
+    "machine": "AMD64",
+    "cpu_count": 12,
+    "start_method": "spawn",
+    "shape": "real",
+    "inline_limit": 262144
+  },
+  "params": {
+    "lanes": [
+      "queue_inline"
+    ],
+    "sizes": [
+      262144,
+      4194304,
+      33554432
+    ],
+    "reps": 5
+  },
+  "results": [
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 0,
+      "handoff_ms": 164.683,
+      "emit_wall_ms": 6.351,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 15.625
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 1,
+      "handoff_ms": 12.374,
+      "emit_wall_ms": 1.719,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 2,
+      "handoff_ms": 14.056,
+      "emit_wall_ms": 1.938,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 3,
+      "handoff_ms": 13.791,
+      "emit_wall_ms": 2.12,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 0.0
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 262144,
+      "rep": 4,
+      "handoff_ms": 14.172,
+      "emit_wall_ms": 2.786,
+      "emit_pickle_bytes": 2146899,
+      "emit_cpu_ms": 15.625
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 0,
+      "handoff_ms": 78.861,
+      "emit_wall_ms": 14.145,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 1,
+      "handoff_ms": 76.224,
+      "emit_wall_ms": 15.154,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 0.0
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 2,
+      "handoff_ms": 74.88,
+      "emit_wall_ms": 14.892,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 3,
+      "handoff_ms": 76.886,
+      "emit_wall_ms": 14.563,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 4194304,
+      "rep": 4,
+      "handoff_ms": 75.173,
+      "emit_wall_ms": 13.544,
+      "emit_pickle_bytes": 7799396,
+      "emit_cpu_ms": 15.625
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 0,
+      "handoff_ms": 544.597,
+      "emit_wall_ms": 111.898,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 109.375
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 1,
+      "handoff_ms": 541.538,
+      "emit_wall_ms": 117.117,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 2,
+      "handoff_ms": 557.904,
+      "emit_wall_ms": 131.778,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 3,
+      "handoff_ms": 570.853,
+      "emit_wall_ms": 125.554,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0
+    },
+    {
+      "lane": "queue_inline",
+      "size_bytes": 33554432,
+      "rep": 4,
+      "handoff_ms": 586.949,
+      "emit_wall_ms": 130.533,
+      "emit_pickle_bytes": 50003011,
+      "emit_cpu_ms": 125.0
+    }
+  ],
+  "summary": {
+    "queue_inline": {
+      "262144": {
+        "handoff_p50_ms": 14.056,
+        "handoff_p95_ms": 164.683,
+        "emit_pickle_bytes_median": 2146899
+      },
+      "4194304": {
+        "handoff_p50_ms": 76.224,
+        "handoff_p95_ms": 78.861,
+        "emit_pickle_bytes_median": 7799396
+      },
+      "33554432": {
+        "handoff_p50_ms": 557.904,
+        "handoff_p95_ms": 586.949,
+        "emit_pickle_bytes_median": 50003011
+      }
+    }
+  },
+  "leftover_artifacts": 0,
+  "scratch_root_basename": "marker_pr68a_bench_wxlbrepy"
+}
