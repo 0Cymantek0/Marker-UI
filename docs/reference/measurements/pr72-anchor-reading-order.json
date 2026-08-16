@@ -1,0 +1,19 @@
+{
+  "anchor_payload_bytes_avg": 550.5,
+  "anchor_identity_1000_s": 0.3151,
+  "anchor_identity_us_each": 315.1,
+  "anchor_id_example": "sha256:b55b485d0bc6f7d486e10f2c33565799f18fdfb6ed77f7bfd769ae776be57205",
+  "graph_nodes": 1000,
+  "graph_edges": 1999,
+  "graph_payload_bytes": 293869,
+  "graph_bytes_per_edge": 147.0,
+  "graph_serialize_s": 0.0753,
+  "split_neighborhood_nodes": 6,
+  "split_edges_rewritten": 7,
+  "split_edges_preserved": 1996,
+  "split_s": 0.005293,
+  "full_rebuild_s": 0.002923,
+  "split_vs_rebuild_ratio": 1.811,
+  "split_neighborhood_nodes_10x_graph": 6,
+  "neighborhood_is_graph_size_independent": true
+}
