@@ -420,10 +420,11 @@ async def test_future_bindings_unbound_and_machine_detectable(
     snapshot = await resolve_snapshot(factory, "ws-a")
 
     assert KernelSnapshot.UNBOUND_FIELDS == UNBOUND_FUTURE_FIELDS
+    # The PR70/71 local slice made the source-content and access-policy
+    # bindings real; only the subsystems that still do not exist stay
+    # unbound.
     assert UNBOUND_FUTURE_FIELDS == frozenset(
         {
-            "content_revision_ids",
-            "access_policy_set_id",
             "verifier_policy_revision_id",
             "schema_registry_revision",
         }
@@ -432,6 +433,11 @@ async def test_future_bindings_unbound_and_machine_detectable(
     params = inspect.signature(resolve_snapshot).parameters
     for name in UNBOUND_FUTURE_FIELDS:
         assert name not in params
+    for name in ("content_revision_ids", "access_policy_set_id"):
+        assert name not in params
+    # a cut without source records reports empty bindings explicitly
+    assert snapshot.content_revision_ids == ()
+    assert snapshot.access_policy_set_id != ""
     # identity round-trips over exactly the declared deterministic fields
     # (unbound names hashed as unbound), so future bound versions cannot
     # collide with v1 identities
@@ -447,6 +453,8 @@ async def test_future_bindings_unbound_and_machine_detectable(
         "kernel_schema_versions": list(snapshot.kernel_schema_versions),
         "canonicalization_profiles": list(snapshot.canonicalization_profiles),
         "payload_state_counts": snapshot.payload_state_counts,
+        "content_revision_ids": list(snapshot.content_revision_ids),
+        "access_policy_set_id": snapshot.access_policy_set_id,
         "unbound_future_fields": sorted(UNBOUND_FUTURE_FIELDS),
     }
     from app.kernel.snapshots import compute_snapshot_identity

@@ -650,6 +650,11 @@ class TaskManager:
         self._kernel_runtime.set_conversion_service(marker_service)
         self._job_status_text[job_id] = "Queued for kernel dispatch..."
         self._job_logs[job_id] = []
+        # Source truth (PR70 local slice): normalize/acquire the source
+        # revision before authorization so the work item references
+        # committed source truth. REST/agent already acquired pre-probe;
+        # this chokepoint covers direct submissions and retries.
+        config = await self._kernel_runtime.ensure_source_revision(job_id, filepath, config)
         return await self._kernel_runtime.authorize(job_id, config)
 
     async def recover_durable_jobs(self, conversion_service: Any) -> list[str]:

@@ -74,8 +74,14 @@ from app.kernel.errors import (
     WorkCancelledError,
     InvalidChallengeError,
 )
-from app.kernel.records import NativeObjectRecord
+from app.kernel.records import NativeObjectRecord, KernelEdge
+from app.kernel.source_store import LocalSourceStore, SourceStoreError
 from app.models.job import ConversionJob
+from app.services.source_acquisition import (
+    SOURCE_CONFIG_KEY,
+    AcquiredSourceRevision,
+    SourceAcquisitionService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +167,7 @@ class KernelRuntimeCoordinator:
         *,
         session_factory: Callable[[], Any] | None = None,
         commit_service: KernelCommitService | None = None,
+        source_store: LocalSourceStore | None = None,
         workspace_id: str = "local",
         owner_id: str = "marker-runtime",
         lease_seconds: float = 900.0,
@@ -172,6 +179,8 @@ class KernelRuntimeCoordinator:
         self._task_manager = task_manager
         self._session_factory_ref = session_factory
         self._commit_service_ref = commit_service
+        self._source_store = source_store
+        self._source_service_ref: SourceAcquisitionService | None = None
         self.workspace_id = workspace_id
         self.owner_id = owner_id
         self.lease_seconds = lease_seconds
@@ -200,6 +209,19 @@ class KernelRuntimeCoordinator:
         if self._commit_service_ref is None:
             self._commit_service_ref = KernelCommitService(self._sf)
         return self._commit_service_ref
+
+    def _source_service(self) -> SourceAcquisitionService:
+        if self._source_service_ref is None:
+            from app.core.config import SOURCE_STORE_ROOT
+
+            store = self._source_store or LocalSourceStore(SOURCE_STORE_ROOT)
+            self._source_service_ref = SourceAcquisitionService(
+                self._sf,
+                self._commit_service(),
+                store,
+                workspace_id=self.workspace_id,
+            )
+        return self._source_service_ref
 
     def set_conversion_service(self, service: Any) -> None:
         self._conversion_service = service
@@ -230,33 +252,58 @@ class KernelRuntimeCoordinator:
         is unique per workspace, so a retried authorization either finds
         the existing work item or converges onto it after the loser of
         an insert race resolves the winner's row.
+
+        Source truth (PR70 local slice): a config carrying a committed
+        source-revision block is validated against the kernel + artifact
+        store BEFORE the work item is authorized — the request record
+        gains the revision references and a ``depends_on`` edge onto the
+        ContentRevision, so authorized work can never point at an
+        uncommitted or unavailable revision.
         """
         record_id = _record_id_for_job(job_id)
         existing = await self._resolve_work_id(record_id)
         if existing is not None:
             return existing
 
+        acquired = await self._validated_source_revision(job_id, config)
+
         source_uri = str(config.get("source_url") or "") or (
             "file://" + str(config.get("local_filepath") or config.get("durable_filepath") or job_id)
         )
         locator = str(config.get("durable_filepath") or config.get("local_filepath") or "")
+        if acquired is not None:
+            # The execution source is the acquired revision's immutable
+            # artifact, never the mutable external path.
+            locator = str(await self._source_service().artifact_path_for(acquired))
+        properties: dict[str, Any] = {
+            "job_id": str(job_id),
+            "output_format": str(config.get("output_format") or "markdown"),
+            "max_retries": int(config.get("max_retries") or 0),
+        }
+        edges: tuple[KernelEdge, ...] = ()
+        if acquired is not None:
+            properties["source_revision"] = acquired.to_config()
+            edges = (
+                KernelEdge(
+                    edge_kind="depends_on",
+                    source_ref=record_id,
+                    target_ref=acquired.content_revision_id,
+                ),
+            )
         record = NativeObjectRecord(
             record_id=record_id,
             source_uri=source_uri,
             locator=locator or job_id,
             media_type=str(config.get("input_format") or "document"),
             extractor_name="marker-ui-runtime",
-            extractor_version="pr67b",
-            properties={
-                "job_id": str(job_id),
-                "output_format": str(config.get("output_format") or "markdown"),
-                "max_retries": int(config.get("max_retries") or 0),
-            },
+            extractor_version="pr70",
+            properties=properties,
         )
         intent_payload = {"job_id": str(job_id)}
         batch = KernelCommitBatch(
             workspace_id=self.workspace_id,
             records=(record,),
+            edges=edges,
             producer={"operation": "conversion.submit", "job_id": str(job_id)},
             outbox=(kernel_outbox.OutboxIntent(work_kind=WORK_KIND, payload=intent_payload),),
         )
@@ -284,6 +331,91 @@ class KernelRuntimeCoordinator:
         )
         await self._mark_row_kernel_owned(job_id, config)
         return work_id
+
+    async def _validated_source_revision(
+        self, job_id: str, config: dict[str, Any]
+    ) -> AcquiredSourceRevision | None:
+        """Resolve the config's source-revision block against truth.
+
+        Returns None for legacy configs without a block (the pre-PR70
+        direct-submission shape). Raises when a block exists but its
+        revision is not committed in this workspace or its bytes are
+        unavailable — a submission may then re-acquire, but work must
+        not be authorized against fiction.
+        """
+        block = config.get(SOURCE_CONFIG_KEY)
+        if not isinstance(block, dict):
+            return None
+        acquired = await self._source_service().resolve(block)
+        if acquired is None:
+            raise KernelError(
+                f"job {job_id!r}: source revision block does not resolve to "
+                "committed kernel truth with available bytes; re-acquire the source"
+            )
+        return acquired
+
+    async def ensure_source_revision(
+        self, job_id: str, filepath: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Normalize/acquire the source revision for one kernel submission.
+
+        The single acquisition chokepoint for direct ``submit_conversion``
+        callers (REST/agent/retry acquire earlier so their probe runs on
+        the staged artifact). Rules:
+
+        * a resolvable committed block is normalized in place;
+        * a block whose bytes are gone is re-acquired from the current
+          source — a NEW revision, never silent reuse of dead truth;
+        * a config without a block acquires when the file exists and the
+          local policy permits it; otherwise the submission proceeds in
+          the legacy path-trust shape (recorded, never hidden);
+        * whenever the block changes, the row's config_json is persisted
+          so ``_launch`` (which reads the row, not this dict) sees it.
+        """
+        block = config.get(SOURCE_CONFIG_KEY)
+        service = self._source_service()
+        if isinstance(block, dict):
+            acquired = await service.resolve(block)
+            if acquired is not None:
+                config[SOURCE_CONFIG_KEY] = acquired.to_config()
+                return config
+
+        path = Path(filepath or "")
+        if not path.is_file():
+            return config  # launch-time terminal failure owns missing files
+        try:
+            from app.core.config import UPLOAD_DIR
+
+            marker_owned = UPLOAD_DIR.resolve() in path.resolve().parents
+            acquired = await service.acquire(
+                path,
+                source_kind="upload" if marker_owned else "local_path",
+                suffix=path.suffix.lower(),
+                job_id=job_id,
+            )
+            config[SOURCE_CONFIG_KEY] = acquired.to_config()
+            config["durable_filepath"] = str(await service.artifact_path_for(acquired))
+            await self._persist_row_config(job_id, config)
+        except Exception as exc:  # noqa: BLE001 - policy/IO must not kill legacy-shaped submits
+            logger.info(
+                "kernel submission for job %s runs without a source revision (%s: %s)",
+                job_id,
+                type(exc).__name__,
+                exc,
+            )
+        return config
+
+    async def _persist_row_config(self, job_id: str, config: dict[str, Any]) -> None:
+        try:
+            async with self._sf() as session:
+                await session.execute(
+                    update(ConversionJob)
+                    .where(ConversionJob.id == job_id)
+                    .values(config_json=json.dumps(config))
+                )
+                await session.commit()
+        except Exception:  # noqa: BLE001 - metadata must never block dispatch
+            logger.exception("source-revision config persist failed for job %s", job_id)
 
     @staticmethod
     def _group_for_config(config: dict[str, Any]) -> str:
@@ -401,17 +533,43 @@ class KernelRuntimeCoordinator:
             logger.info("kernel work %d vacated: row %s is %s", claimed.work_id, job_id, row_status)
             return
 
-        filepath = str(
-            config.get("durable_filepath") or config.get("local_filepath") or ""
-        )
-        if not filepath or not Path(filepath).is_file():
-            await self._terminal_fail(
-                claimed.work_id,
-                job_id,
-                f"conversion source not found: {filepath}",
-                attempts=0,
+        # Source resolution: a job with a committed source revision
+        # executes against the revision's immutable artifact ONLY. A
+        # missing/truncated artifact terminal-fails honestly — falling
+        # back to the external path here would reopen the exact
+        # validate-A-parse-B hole source truth exists to close.
+        acquired = AcquiredSourceRevision.from_config(config.get(SOURCE_CONFIG_KEY) or {})
+        if acquired is not None:
+            try:
+                artifact = self._source_service().store.artifact_path(
+                    acquired.blob_key, acquired.suffix
+                )
+                if not artifact.is_file() or artifact.stat().st_size != acquired.byte_length:
+                    raise FileNotFoundError(
+                        f"artifact for {acquired.blob_key}{acquired.suffix} is "
+                        "missing or truncated"
+                    )
+            except (SourceStoreError, OSError) as exc:
+                await self._terminal_fail(
+                    claimed.work_id,
+                    job_id,
+                    f"acquired source revision unavailable: {exc}",
+                    attempts=0,
+                )
+                return
+            filepath = str(artifact)
+        else:
+            filepath = str(
+                config.get("durable_filepath") or config.get("local_filepath") or ""
             )
-            return
+            if not filepath or not Path(filepath).is_file():
+                await self._terminal_fail(
+                    claimed.work_id,
+                    job_id,
+                    f"conversion source not found: {filepath}",
+                    attempts=0,
+                )
+                return
 
         claim = ActiveClaim(
             work_id=claimed.work_id,

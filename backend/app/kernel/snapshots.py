@@ -7,12 +7,16 @@ time, filesystem mtimes, and worker clocks never participate.
 
 PR65A scope honesty: the master plan's full ``KernelSnapshot`` shape
 also names content-revision, access-policy, verifier-policy, and
-schema-registry identities. Those subsystems (PR70+) do not exist on
-this branch, so this contract is explicitly **kernel-only v1**: the
-future bindings are declared ``UNBOUND_FUTURE_FIELDS``, appear verbatim
-as such in the snapshot identity preimage, and there is no API surface
-through which a fabricated value for them could be supplied. Absence is
-machine-detectable, never invented.
+schema-registry identities. The PR70/71 local slice made the
+source-content and access-policy bindings real (schema 1.1.0): they
+are derived from committed ``content_revision`` /
+``access_policy_revision`` records visible in the cut and hashed into
+the identity preimage — there is no API surface through which a
+fabricated value for them could be supplied. Verifier-policy and
+schema-registry subsystems (PR74+) still do not exist, so those fields
+remain declared ``UNBOUND_FUTURE_FIELDS`` and appear verbatim as such
+in the identity preimage. Absence stays machine-detectable, never
+invented.
 
 Completeness is classified honestly against the requested payload
 requirement:
@@ -64,6 +68,8 @@ from app.kernel.reconcile import (
 from app.utils.canonical import CANONICALIZATION_PROFILE, record_identity_hash
 
 __all__ = [
+    "ACCESS_POLICY_SET_RECORD_TYPE",
+    "ACCESS_POLICY_SET_SCHEMA_VERSION",
     "COMPLETENESS_COMPLETE",
     "COMPLETENESS_DEGRADED",
     "DEGRADED_SAMPLE_BOUND",
@@ -74,14 +80,24 @@ __all__ = [
     "PAYLOAD_REQUIREMENTS",
     "SNAPSHOT_RECORD_TYPE",
     "SNAPSHOT_SCHEMA_VERSION",
+    "SOURCE_BOUND_RECORD_CLASSES",
     "UNBOUND_FUTURE_FIELDS",
     "compute_snapshot_identity",
     "resolve_snapshot",
 ]
 
 #: Framing domain separating snapshot identity from other kernel hashes.
+#: v1.1.0 binds the source-truth fields (content revisions + access
+#: policy set) owned by the PR70/71 local slice; identities computed by
+#: v1.0.0 code remain stable historical facts, and a v1.1.0 resolution
+#: of a pre-source cut reports empty bindings explicitly rather than
+#: silently reinterpreting the old snapshot.
 SNAPSHOT_RECORD_TYPE = "marker.kernel.snapshot.v1"
-SNAPSHOT_SCHEMA_VERSION = "1.0.0"
+SNAPSHOT_SCHEMA_VERSION = "1.1.0"
+
+#: Framing for the access-policy set root bound into snapshot identity.
+ACCESS_POLICY_SET_RECORD_TYPE = "marker.kernel.access_policy_set.v1"
+ACCESS_POLICY_SET_SCHEMA_VERSION = "1.0.0"
 
 PAYLOAD_REQUIREMENT_METADATA_ONLY = "metadata_only"
 PAYLOAD_REQUIREMENT_INSPECTABLE = "inspectable"
@@ -97,17 +113,21 @@ PAYLOAD_REQUIREMENTS = frozenset(
 COMPLETENESS_COMPLETE = "complete"
 COMPLETENESS_DEGRADED = "degraded"
 
-#: Master-plan snapshot fields whose owning subsystems (PR70+) are not
+#: Master-plan snapshot fields whose owning subsystems are not
 #: implemented on this branch. Declared unbound here and hashed as
-#: unbound into the snapshot identity — never fabricated.
+#: unbound into the snapshot identity — never fabricated. The
+#: source-content and access-policy bindings became real in the PR70/71
+#: local slice (schema 1.1.0): they are derived from committed records
+#: visible in the cut, never caller-supplied.
 UNBOUND_FUTURE_FIELDS = frozenset(
     {
-        "content_revision_ids",
-        "access_policy_set_id",
         "verifier_policy_revision_id",
         "schema_registry_revision",
     }
 )
+
+#: Record classes consulted for the source-truth bindings.
+SOURCE_BOUND_RECORD_CLASSES = ("content_revision", "access_policy_revision")
 
 #: Bounded diagnostic sample of degraded record ids (full truth is the
 #: per-state counts plus reconciliation surfaces).
@@ -137,6 +157,12 @@ class KernelSnapshot:
     payload_backed_complete: bool | None = None
     #: bounded sample of record ids blocking payload completeness
     degraded_record_ids: tuple[str, ...] = ()
+    #: source-truth bindings (PR70/71 local slice): identity hashes of
+    #: content revisions visible in the cut, and the framed root over
+    #: the access-policy revision set. Empty when the cut predates the
+    #: source subsystem — explicit, never fabricated.
+    content_revision_ids: tuple[str, ...] = ()
+    access_policy_set_id: str = ""
 
     #: future master-plan bindings not yet implemented (see module docs)
     UNBOUND_FIELDS: ClassVar[frozenset[str]] = UNBOUND_FUTURE_FIELDS
@@ -258,7 +284,33 @@ async def resolve_snapshot(
             )
         ).all()
 
-    record_class_counts = {row[0]: row[1] for row in class_rows}
+        record_class_counts = {row[0]: row[1] for row in class_rows}
+
+        # Source-truth bindings: derived exclusively from committed
+        # records visible in the cut. A cut that predates the source
+        # subsystem yields empty bindings — old snapshots are explicitly
+        # unbound, never retroactively upgraded.
+        source_rows = (
+            await session.execute(
+                select(KernelRecord.record_class, KernelRecord.identity_hash)
+                .where(
+                    KernelRecord.workspace_id == workspace_id,
+                    KernelRecord.kernel_commit_id <= cut,
+                    KernelRecord.record_class.in_(SOURCE_BOUND_RECORD_CLASSES),
+                )
+            )
+        ).all()
+        content_revision_ids = tuple(
+            sorted(row.identity_hash for row in source_rows if row.record_class == "content_revision")
+        )
+        access_revision_ids = sorted(
+            row.identity_hash for row in source_rows if row.record_class == "access_policy_revision"
+        )
+        access_policy_set_id = record_identity_hash(
+            record_type=ACCESS_POLICY_SET_RECORD_TYPE,
+            schema_version=ACCESS_POLICY_SET_SCHEMA_VERSION,
+            payload={"access_policy_revision_ids": access_revision_ids},
+        )
 
     # Metadata coherence: manifest-declared members must equal the rows
     # actually visible in the cut (append-only history makes this cheap).
@@ -314,6 +366,8 @@ async def resolve_snapshot(
         "kernel_schema_versions": list(schema_versions),
         "canonicalization_profiles": list(profiles),
         "payload_state_counts": payload_state_counts,
+        "content_revision_ids": list(content_revision_ids),
+        "access_policy_set_id": access_policy_set_id,
         "unbound_future_fields": sorted(UNBOUND_FUTURE_FIELDS),
     }
     snapshot_id = compute_snapshot_identity(identity_payload)
@@ -333,6 +387,8 @@ async def resolve_snapshot(
         payload_state_counts=payload_state_counts,
         payload_backed_complete=payload_backed_complete,
         degraded_record_ids=degraded_ids,
+        content_revision_ids=content_revision_ids,
+        access_policy_set_id=access_policy_set_id,
     )
 
 
