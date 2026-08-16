@@ -1,0 +1,40 @@
+{
+  "benchmark": "pr73-patches-incremental",
+  "identity": {
+    "proposal_and_view_identities_1000_s": 0.6299,
+    "identity_us_each": 629.9
+  },
+  "preconditions": {
+    "precondition_checks_total": 2000,
+    "precondition_evaluations_s": 0.0036,
+    "precondition_us_per_check": 1.8
+  },
+  "rebuild_small": {
+    "nodes": 200,
+    "clean_derive_calls": 1000,
+    "incremental_derive_calls": 5,
+    "clean_replay_s": 0.0172,
+    "incremental_replay_s": 0.0127,
+    "derive_call_ratio_clean_over_incremental": 200.0,
+    "same_result": true
+  },
+  "rebuild_10x": {
+    "nodes": 2000,
+    "clean_derive_calls": 10000,
+    "incremental_derive_calls": 5,
+    "clean_replay_s": 0.1626,
+    "incremental_replay_s": 0.1304,
+    "derive_call_ratio_clean_over_incremental": 2000.0,
+    "same_result": true
+  },
+  "invalidation_amplification": {
+    "nodes": 2000,
+    "exact_local_edit_invalidated": 1,
+    "conservative_local_edit_invalidated": 2000,
+    "conservative_widened": true,
+    "unknown_change_invalidated": 0,
+    "unknown_change_uncovered": 1,
+    "worst_amplification_factor": 2000.0
+  },
+  "locality_holds_at_10x": true
+}
