@@ -30,6 +30,13 @@ generations retired), mark/recheck/sweep durations, tracemalloc peak
 during a full pass, availability summary after collection, and restart
 tombstone-reconciliation cost on a fresh engine.
 
+PR66 fencing/publication fields: uncontended claim-and-fence and
+accepted-publication latency, fenced acknowledgement cost, a concurrent
+dispatch stress (contending workers each claim -> accept -> complete),
+stale-fence rejection cost after takeover, durable rows added per work
+item, and restart authority/publication resolution latency on a fresh
+engine.
+
 No hard threshold is imposed; the report is the measured operating
 envelope later PRs compare against and may then optimize.
 
@@ -61,8 +68,9 @@ if str(BACKEND_DIR) not in sys.path:
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
 from app.db_migration import upgrade_database  # noqa: E402
+from app.kernel import fencing  # noqa: E402
 from app.kernel.commit import KernelCommitBatch, KernelCommitService  # noqa: E402
-from app.kernel.errors import InjectedFaultError  # noqa: E402
+from app.kernel.errors import InjectedFaultError, StaleFenceError  # noqa: E402
 from app.kernel.gc import (  # noqa: E402
     execute_collection,
     plan_collection,
@@ -450,6 +458,225 @@ async def _retention_section(db_dir: Path, url: str, db_path: Path) -> dict:
     }
 
 
+async def _fencing_section(db_dir: Path, url: str, db_path: Path) -> dict:
+    """PR66 measurement block over the finished workload database.
+
+    Scenario: fresh outbox work is dispatched through the fencing
+    boundary uncontended (claim -> accept -> complete), then a
+    concurrent dispatch stress runs contending workers over distinct
+    work items, then a stale worker's post-takeover rejection is timed,
+    and a fresh engine resolves authority/publication truth.
+    """
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+
+    def _pct(timings: list[float]) -> dict:
+        ordered = sorted(timings)
+        return {
+            "samples": len(ordered),
+            "p50_ms": round(statistics.median(ordered) * 1000, 2),
+            "p95_ms": round(ordered[int(len(ordered) * 0.95) - 1] * 1000, 2),
+            "mean_ms": round(statistics.mean(ordered) * 1000, 2),
+        }
+
+    async def _make_work(tag: str) -> int:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="bench",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key=f"fence-{tag}",
+                        subject=f"doc:{tag}.pdf",
+                        predicate="contains_table",
+                        value=True,
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={"tag": tag}),),
+            )
+        )
+        from app.kernel.outbox import list_outbox
+
+        rows = [r for r in await list_outbox(factory) if r.payload.get("tag") == tag]
+        assert len(rows) == 1
+        return rows[0].id
+
+    # --- uncontended dispatch through the fencing boundary -----------
+    # Drain any pending rows the earlier sections left behind so the
+    # measured samples below are exactly this section's own work.
+    drained = 0
+    while True:
+        residue = await fencing.claim_next(factory, owner_id="bench-drain")
+        if residue is None:
+            break
+        await fencing.accept(
+            factory,
+            work_id=residue.work_id,
+            fencing_token=residue.lease.fencing_token,
+            result={"drained": True},
+        )
+        assert await fencing.complete_work(
+            factory,
+            work_id=residue.work_id,
+            fencing_token=residue.lease.fencing_token,
+        )
+        drained += 1
+
+    uncontended = 24
+    claim_times: list[float] = []
+    accept_times: list[float] = []
+    complete_times: list[float] = []
+    uncontended_ids = []
+    for i in range(uncontended):
+        work_id = await _make_work(f"uc-{i}")
+        uncontended_ids.append(work_id)
+        t0 = time.perf_counter()
+        claimed = await fencing.claim_next(factory, owner_id="bench-solo")
+        claim_times.append(time.perf_counter() - t0)
+        assert claimed is not None and claimed.work_id == work_id
+        t0 = time.perf_counter()
+        await fencing.accept(
+            factory,
+            work_id=work_id,
+            fencing_token=claimed.lease.fencing_token,
+            result={"item": i, "pages": 4},
+        )
+        accept_times.append(time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        assert await fencing.complete_work(
+            factory, work_id=work_id, fencing_token=claimed.lease.fencing_token
+        )
+        complete_times.append(time.perf_counter() - t0)
+
+    # --- concurrent dispatch stress: contending workers, distinct work -
+    stress_items = 32
+    stress_workers = 4
+    stress_ids = {
+        await _make_work(f"st-{i}"): i for i in range(stress_items)
+    }
+    e2e_times: list[float] = []
+
+    async def _stress_worker(worker: int) -> None:
+        while stress_ids:
+            t0 = time.perf_counter()
+            claimed = await fencing.claim_next(
+                factory, owner_id=f"bench-worker-{worker}"
+            )
+            if claimed is None:
+                # everything claimable is in flight elsewhere; yield
+                await asyncio.sleep(0.005)
+                continue
+            stress_ids.pop(claimed.work_id, None)
+            await fencing.accept(
+                factory,
+                work_id=claimed.work_id,
+                fencing_token=claimed.lease.fencing_token,
+                result={"worker": worker},
+            )
+            assert await fencing.complete_work(
+                factory,
+                work_id=claimed.work_id,
+                fencing_token=claimed.lease.fencing_token,
+            )
+            e2e_times.append(time.perf_counter() - t0)
+
+    t0 = time.perf_counter()
+    await asyncio.gather(*(_stress_worker(w) for w in range(stress_workers)))
+    stress_seconds = time.perf_counter() - t0
+
+    # --- stale-fence rejection after takeover --------------------------
+    stale_id = await _make_work("stale-probe")
+    stale_lease = await fencing.acquire(
+        factory, work_id=stale_id, owner_id="bench-stale", lease_seconds=0.05
+    )
+    await asyncio.sleep(0.07)
+    successor = await fencing.acquire(
+        factory, work_id=stale_id, owner_id="bench-successor"
+    )
+    assert successor.fencing_token == stale_lease.fencing_token + 1
+    t0 = time.perf_counter()
+    stale_rejected = False
+    try:
+        await fencing.accept(
+            factory,
+            work_id=stale_id,
+            fencing_token=stale_lease.fencing_token,
+            result={"stale": True},
+        )
+    except StaleFenceError:
+        stale_rejected = True
+    stale_reject_seconds = time.perf_counter() - t0
+    assert stale_rejected
+    await fencing.accept(
+        factory, work_id=stale_id, fencing_token=successor.fencing_token, result={}
+    )
+
+    await engine.dispose()
+
+    # --- restart: fresh engine resolves durable authority ---------------
+    engine2 = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory2 = async_sessionmaker(engine2, class_=AsyncSession, expire_on_commit=False)
+    t0 = time.perf_counter()
+    restarted_lease = await fencing.get_lease(factory2, work_id=uncontended_ids[0])
+    restarted_publication = await fencing.get_publication(
+        factory2, work_id=uncontended_ids[0]
+    )
+    restart_resolve_seconds = time.perf_counter() - t0
+    await engine2.dispose()
+
+    conn = sqlite3.connect(db_path)
+    try:
+        lease_rows = conn.execute("SELECT COUNT(*) FROM kernel_work_leases").fetchone()[0]
+        publication_rows = conn.execute(
+            "SELECT COUNT(*) FROM kernel_publications"
+        ).fetchone()[0]
+        outbox_done = conn.execute(
+            "SELECT COUNT(*) FROM kernel_outbox WHERE state = 'done'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    return {
+        "fixture": {
+            "residue_items_drained": drained,
+            "uncontended_items": uncontended,
+            "stress_items": stress_items,
+            "stress_workers": stress_workers,
+        },
+        "uncontended_latency_ms": {
+            "claim_next_incl_fence": _pct(claim_times),
+            "accept_publication": _pct(accept_times),
+            "complete_work": _pct(complete_times),
+        },
+        "concurrent_stress": {
+            "items_per_worker_e2e_ms": _pct(e2e_times),
+            "wall_seconds": round(stress_seconds, 3),
+        },
+        "stale_fence": {
+            "rejected": stale_rejected,
+            "reject_seconds": round(stale_reject_seconds, 4),
+        },
+        "rows_added_per_work": {
+            "kernel_work_leases": 1,
+            "kernel_publications": 1,
+        },
+        "durable_rows": {
+            "kernel_work_leases": lease_rows,
+            "kernel_publications": publication_rows,
+            "outbox_done": outbox_done,
+            "exactly_one_publication_per_accepted_work": (
+                lease_rows == publication_rows
+                == drained + uncontended + stress_items + 1
+            ),
+        },
+        "restart": {
+            "lease_resolved": restarted_lease is not None,
+            "publication_resolved": restarted_publication is not None,
+            "resolve_seconds": round(restart_resolve_seconds, 4),
+        },
+    }
+
+
 async def run(
     db_dir: Path,
     *,
@@ -580,6 +807,9 @@ async def run(
     # --- PR65B: retention + garbage-collection envelope -----------------
     retention_report = await _retention_section(db_dir, url, db_path)
 
+    # --- PR66: fenced ownership + accepted-publication envelope --------
+    fencing_report = await _fencing_section(db_dir, url, db_path)
+
     conn = sqlite3.connect(db_path)
     try:
         journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
@@ -667,6 +897,7 @@ async def run(
         },
         "generations": generation_report,
         "retention_gc": retention_report,
+        "fencing_publication": fencing_report,
         "runtime": {
             "platform": platform.platform(),
             "python": sys.version.split()[0],

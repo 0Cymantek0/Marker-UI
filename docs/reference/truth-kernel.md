@@ -1,10 +1,11 @@
-# Truth Kernel — Commit Spine + Payload Durability + Snapshots & Generations + Retention/GC (PR63A/PR64/PR65A/PR65B)
+# Truth Kernel — Commit Spine + Payload Durability + Snapshots & Generations + Retention/GC + Fenced Publication (PR63A/PR64/PR65A/PR65B/PR66)
 
 Status: implemented (V3.2 amendment 4C / PR63 slice A, then amendment
 18C/19C PR64, then PR65 slice A, then PR65 slice B — retention roots,
-reader pins, and safe local garbage collection). This page is the
+reader pins, and safe local garbage collection — then PR66 — fenced
+work ownership and exactly-once accepted publication). This page is the
 authoritative description of what the local Truth Kernel guarantees,
-what it deliberately does not guarantee yet, and how PR66 and later
+what it deliberately does not guarantee yet, and how PR67 and later
 subsystems are expected to attach. The canonical identity contract it
 consumes is documented separately in
 [canonical-identity.md](canonical-identity.md); the migration authority
@@ -23,7 +24,10 @@ snapshot-pinned immutable materialized read generations:
   `kernel_payload_objects`, `kernel_outbox`), and revision
   `20260815_0006` (PR65A: `kernel_generations`,
   `kernel_generation_records`, `kernel_generation_edges`,
-  `kernel_generation_heads`);
+  `kernel_generation_heads`), revision `20260815_0007` (PR65B:
+`kernel_retention_roots`, `kernel_reader_pins`,
+`kernel_payload_retirements`), and revision `20260816_0008` (PR66:
+`kernel_work_leases`, `kernel_publications`);
 - one internal commit authority, `app.kernel.commit.KernelCommitService`,
   through which every kernel mutation enters SQLite;
 - per-workspace causal commit chains ordered by `kernel_commit_id`
@@ -164,8 +168,11 @@ quarantine evidence.
   and the intent content (`marker.kernel.outbox_intent.v1` framing), so
   a retried commit protocol cannot duplicate an intent; duplicate
   intents inside one batch collapse to one row.
-- No dispatcher exists yet; PR66 owns scheduling, leases/fencing, and
-  exactly-once accepted publication.
+- A deliberately minimal dispatch seam exists since PR66:
+  `fencing.claim_next` claims the oldest pending item and binds it to a
+  durable fenced lease; scheduling policy, fairness, and heartbeats
+  remain PR67. See *Fenced work ownership and accepted publication*
+  below.
 
 ## Identity rules
 
@@ -304,9 +311,9 @@ Guarantees proven by test (`tests/test_kernel_snapshot.py`,
 
 ### Deliberate limits at the PR65B boundary
 
-- No worker leases/fencing, exactly-once accepted publication, or
-  dispatcher; the builder and the collector are plain in-process
-  services — **PR66** remains untouched.
+- The builder and the collector are plain in-process services; work
+  leases/fencing and accepted publication are now PR66 primitives
+  layered *on top of* this seam, not part of it.
 - No pack-segment compaction or materialized FTS/vector indexes — the
   local store is still one content-addressed file per object; PR65B
   measures object-count implications and leaves the pack seam open.
@@ -416,15 +423,103 @@ that verify are `available` again regardless of tombstone history.
   single-process topology caveat of the payload store itself.
 
 
+## Fenced work ownership and accepted publication (PR66)
+
+PR66 adds the durable authority boundary the at-least-once outbox
+always needed (Alembic revision `20260816_0008`: `kernel_work_leases`,
+`kernel_publications`; module `app.kernel.fencing`). Duplicate
+execution, redelivery, crash, and failover remain expected; what is new
+is that the database can always answer *which ownership generation may
+turn an executed result into accepted state*.
+
+### What makes an owner current
+
+- One lease row per outbox work item holds the current authority:
+  a monotonically increasing `fencing_token`, the `owner_id`, a
+  wall-clock `lease_expires_at`, and a lifecycle `state`
+  (`leased` / `released` / `accepted`).
+- Every ownership transition advances the token inside one conditional
+  transaction: first acquire creates it at 1; takeover after lapse or
+  vacate advances it; `release` vacates *and* advances, so a releasing
+  owner is immediately stale. Re-acquisition by the still-current
+  owner renews the lease without moving the token (safe duplicate
+  delivery).
+- **Wall-clock expiry is eligibility, never authority.** An expired but
+  unsuperseded token may still accept; a superseded token is stale
+  forever, even after restart, even if its worker is still running.
+- Restart reconstructs nothing in memory: `get_lease` /
+  `get_publication` read the durable rows.
+
+### The acceptance linearization point
+
+`fencing.accept(work_id, fencing_token, result)` runs one transaction
+that, in order:
+
+1. verifies the submitted token is the current lease authority
+   (`leased`, or `accepted` when retrying) — otherwise
+   `StaleFenceError`, and an unauthorized submission is never even
+   compared against accepted state;
+2. checks the `(workspace_id, work_id)` publication scope — an
+   existing row with the same `result_hash` returns
+   `already_accepted` (idempotent retry), a different one raises
+   `PublicationConflictError` with accepted state unchanged;
+3. inserts the immutable `kernel_publications` row (deterministic
+   `publication_id` + `result_hash` under the
+   `marker.kernel.work_result.v1` / `marker.kernel.publication.v1`
+   framings) and flips the lease to `accepted` under the same
+   conditional token check.
+
+The commit of that transaction **is** the linearization point: crash
+before it means no accepted publication and recoverable work; crash
+after it means exactly one accepted publication the retry converges to.
+The unique scope constraint is the database-enforced backstop — two
+transactions can never both believe they won.
+
+### Fenced acknowledgement and dispatch
+
+- `fencing.complete_work` moves the outbox row to `done` only inside a
+  transaction that also observes the accepted publication and the
+  still-current accepting fence: acknowledgement can never become
+  durable before the accepted result it represents, and a stale worker
+  cannot acknowledge.
+- `fencing.claim_next(owner_id)` is the deliberately minimal dispatch
+  seam: oldest pending item, one outbox claim, one fenced acquire, no
+  fairness/policy/heartbeat (PR67 owns those). A claimed-but-
+  unfenceable item is returned to pending so nothing gets stuck.
+- `outbox.ack` remains the lower-level PR64 primitive; fenced
+  dispatch must use `complete_work`.
+
+### Workspace isolation and external honesty
+
+- Leases and publications are scoped by the workspace derived from the
+  outbox row itself; identical intents in different workspaces never
+  share fencing or acceptance state.
+- Exactly-once here is a **local database** claim only. Any webhook,
+  notification, or remote upload driven from an accepted publication is
+  at-least-once (or reconciliation-required) unless the destination
+  supplies a real idempotency primitive; PR66 adds no external effect
+  ledger and claims none.
+
+### Deliberate PR66 boundaries
+
+- No scheduler fairness, quotas, admission control, or challenge
+  heartbeat — **PR67**.
+- The accepted publication is a single-work primitive; the atomic
+  multi-generation `PublicationSet` protocol is **PR76**, which can
+  build on this fence-proof primitive without being constrained by it.
+- Legacy `TaskManager`/GUI/API execution paths are untouched; wiring
+  production dispatch to the fence is later runtime integration work.
+
 ## What this kernel does NOT guarantee (deliberate non-goals)
 
 - No pack-segment compaction or size-bounded pack storage — PR65B
   measures object-count/inode implications of the one-file-per-object
   store and leaves the pack seam open; compaction is a later experiment.
 - No materialized FTS/vector/visual indexes — later work.
-- No lease/fencing for workers, no exactly-once accepted publication,
-  no stable/provisional publication namespaces, no external effect
-  ledger — **PR66**. Outbox delivery is at-least-once by declaration.
+- Fenced work ownership and exactly-once accepted publication exist
+  (PR66) as *local database* guarantees; no external effect ledger, no
+  stable/provisional publication namespaces (**PR67+/PR76**), and
+  outbox delivery itself is still at-least-once by declaration.
 - No scheduler/job-state changes, no source/content/access identity
   (snapshot future bindings stay explicitly unbound), no patch
   semantics, no verification policy resolution, no server-side query
@@ -539,6 +634,24 @@ metadata-only, 10 fresh unreachable payload commits + 1 staged orphan):
   objects, not records;
 - restart reconciliation (fresh engine, nothing pending): ≈ 5–7 ms.
 
+PR66 delta (same box; fencing block: 1 residue item drained, 24
+uncontended claim->accept->complete samples, 32 stress items across 4
+contending workers, 1 stale-rejection probe, restart resolution on a
+fresh engine):
+
+- uncontended latency p50: `claim_next` incl. fenced acquire ≈ 29 ms,
+  accepted publication ≈ 14 ms, fenced acknowledgement ≈ 13 ms
+  (p95 ≤ 34 ms) — three short write transactions, in the same band as
+  one payload-less commit;
+- concurrent dispatch stress: end-to-end per item p50 ≈ 129 ms /
+  p95 ≈ 398 ms wall across 4 workers (32 items in ≈ 2.1 s) — SQLite
+  writer serialization dominates; every item still settled exactly one
+  lease + one publication;
+- stale-fence rejection after takeover ≈ 4 ms (a read + conditional
+  check, no write); restart authority/publication resolution ≈ 10 ms;
+- durable cost per work item: one `kernel_work_leases` row and, on
+  acceptance, one `kernel_publications` row — no per-attempt rows.
+
 These are single-machine observations with the runtime profile recorded
 beside them, not universal claims; rerun
 `backend/scripts/kernel_characterization.py` to reproduce.
@@ -618,19 +731,21 @@ never-activated-only purge → residue tests.
 
 ## Extension points for later PRs
 
-- **Future retention producers (PR66+):** `declare_hold(...)` with a
+- **Future retention producers (PR67+):** `declare_hold(...)` with a
   new `root_kind` and producer context is the entire attachment
   surface — jobs, reviews, cursors, exports, legal holds, claim proof
   closures, and PublicationSets register retention without the
   collector changing. `kernel_payload_retirements` rows are the point
-  PR66+ effect ledgers can observe reclamation from.
-- **PR66 (fencing/publication):** `KernelCommitReceipt` is the
-  commit-identity token later fencing work can chain from;
-  `kernel_outbox` rows (dedupe key + attempts + states) are the claim
-  surface leases/fencing will extend; generation activation is
-  idempotent and safe to drive from an at-least-once dispatcher; the
-  commit-side tombstone rescue shows the pattern for fenced writes
-  interacting with GC.
+  later effect ledgers can observe reclamation from.
+- **PR67 (scheduler/runtime):** `fencing.claim_next` is the entire
+  dispatch surface to replace with a fair scheduler — leases, tokens,
+  acceptance, and fenced acknowledgement stay unchanged underneath;
+  `KernelCommitReceipt` remains the commit-identity token work chains
+  from, and generation activation is idempotent and safe to drive from
+  an at-least-once dispatcher.
+- **PR76 (PublicationSet):** `kernel_publications` proves the
+  one-fenced-accepted-outcome primitive; the multi-generation atomic
+  bundle protocol wraps a seam like it rather than mutating it.
 - **Pack compaction (later experiment):** the store remains
   one-file-per-object; `LocalPayloadStore.delete_object` and the
   tombstone sweep are the seam a pack builder would sit behind, with

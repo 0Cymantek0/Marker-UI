@@ -117,3 +117,33 @@ renames, or type changes.
     on this row. Downgrade of this revision discards generation state
     (a rebuild restores the derived content, not the activation
     history).
+- Truth Kernel retention contract (V3.2 PR65B, revision `20260815_0007`;
+  see [../reference/truth-kernel.md](../reference/truth-kernel.md)):
+  - `KernelRetentionRoot` → `kernel_retention_roots` — declared durable
+    retention holds over a cut and a required payload class; roots are
+    what collection must treat as live (the intrinsic current-generation
+    roots are read from `kernel_generation_heads` and are not stored
+    here).
+  - `KernelReaderPin` → `kernel_reader_pins` — bounded wall-clock read
+    leases over one generation; an unexpired pin is an active root and a
+    crashed reader's pin lapses when its lease expires.
+  - `KernelPayloadRetirement` → `kernel_payload_retirements` — durable
+    GC tombstones (pending/deleted/failed) so crash recovery converges
+    idempotently; the payload registry row is deliberately kept as an
+    honest availability fact.
+- Truth Kernel fenced work authority (V3.2 PR66, revision
+  `20260816_0008`; see
+  [../reference/truth-kernel.md](../reference/truth-kernel.md)):
+  - `KernelWorkLease` → `kernel_work_leases` — one row per outbox work
+    item holding the current fenced ownership: a monotonically
+    increasing fencing token (advanced inside every ownership
+    transition transaction), the current owner, a wall-clock lease
+    expiry (takeover eligibility only, never authority), and the
+    leased/released/accepted lifecycle state.
+  - `KernelPublication` → `kernel_publications` — the exactly-once
+    accepted result for one work identity, uniquely scoped by
+    `(workspace_id, work_id)` so the database itself enforces "at most
+    one accepted publication"; deterministic publication id and result
+    hash make same-result retries converge and different results fail
+    as classified conflicts. Downgrade of this revision discards
+    fencing and accepted-publication truth irreversibly.
