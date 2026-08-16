@@ -147,3 +147,26 @@ renames, or type changes.
     hash make same-result retries converge and different results fail
     as classified conflicts. Downgrade of this revision discards
     fencing and accepted-publication truth irreversibly.
+- Truth Kernel fair scheduling, challenge liveness, and semantic events
+  (V3.2 PR67A, revision `20260816_0009`; see
+  [../reference/truth-kernel.md](../reference/truth-kernel.md)):
+  - `KernelSchedulingEntry` → `kernel_scheduling_entries` — per-work
+    policy metadata (resource class, scheduling group, deadline) keyed
+    1:1 to the outbox row; the outbox remains the only work truth.
+  - `KernelSchedulingGroup` → `kernel_scheduling_groups` — per-(class,
+    group) fair-share policy (weight, fan-out window, age boost) and
+    non-authoritative served-count bookkeeping.
+  - `KernelLiveness` → `kernel_liveness` — rotating challenge nonce,
+    monotonic progress high-water mark, active-request binding,
+    topology generation, and cancellation observation backing
+    evidence-bearing lease renewal.
+  - `KernelEvent` → `kernel_events` — append-only durable semantic
+    events with the authoritative per-(workspace, stream)
+    `semantic_sequence`.
+  - `KernelProgress` → `kernel_progress` — coalescible latest progress
+    snapshot, one row per (workspace, work), updated in place.
+    Downgrade of this revision discards scheduler, liveness, and event
+    truth (including the semantic sequence) irreversibly; PR66 fencing
+    and publication authority survive. The upgrade creates these
+    tables empty — no historical scheduler/liveness/event truth is
+    fabricated for pre-revision work.

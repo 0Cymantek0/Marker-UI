@@ -170,9 +170,11 @@ quarantine evidence.
   intents inside one batch collapse to one row.
 - A deliberately minimal dispatch seam exists since PR66:
   `fencing.claim_next` claims the oldest pending item and binds it to a
-  durable fenced lease; scheduling policy, fairness, and heartbeats
-  remain PR67. See *Fenced work ownership and accepted publication*
-  below.
+  durable fenced lease. Since PR67A the fair policy lives one layer up
+  in `scheduler.claim_fair` (with challenge liveness and semantic
+  events); `claim_next` stays as the measured baseline/fallback. See
+  *Fenced work ownership and accepted publication* and the PR67A
+  section below.
 
 ## Identity rules
 
@@ -484,8 +486,10 @@ transactions can never both believe they won.
   cannot acknowledge.
 - `fencing.claim_next(owner_id)` is the deliberately minimal dispatch
   seam: oldest pending item, one outbox claim, one fenced acquire, no
-  fairness/policy/heartbeat (PR67 owns those). A claimed-but-
-  unfenceable item is returned to pending so nothing gets stuck.
+  fairness/policy/heartbeat (the PR67A fair seam `scheduler.claim_fair`
+  now owns policy; this oldest-first seam stays as baseline and
+  emergency fallback). A claimed-but-unfenceable item is returned to
+  pending so nothing gets stuck.
 - `outbox.ack` remains the lower-level PR64 primitive; fenced
   dispatch must use `complete_work`.
 
@@ -503,12 +507,132 @@ transactions can never both believe they won.
 ### Deliberate PR66 boundaries
 
 - No scheduler fairness, quotas, admission control, or challenge
-  heartbeat — **PR67**.
+  heartbeat inside the PR66 revision itself — the PR67A layer above
+  (`app.kernel.scheduler` / `app.kernel.liveness` / `app.kernel.events`,
+  revision `20260816_0009`) supplies them without moving any PR66
+  authority seam.
 - The accepted publication is a single-work primitive; the atomic
   multi-generation `PublicationSet` protocol is **PR76**, which can
   build on this fence-proof primitive without being constrained by it.
 - Legacy `TaskManager`/GUI/API execution paths are untouched; wiring
   production dispatch to the fence is later runtime integration work.
+
+## Fair scheduling, challenge liveness, and durable semantic events (PR67A)
+
+PR67A adds the runtime-truth slice immediately above the fence (Alembic
+revision `20260816_0009`: `kernel_scheduling_entries`,
+`kernel_scheduling_groups`, `kernel_liveness`, `kernel_events`,
+`kernel_progress`; modules `app.kernel.scheduler`, `app.kernel.liveness`,
+`app.kernel.events`). It changes **policy and evidence**, never
+authority: every claim still goes through the PR66 outbox claim + fenced
+acquire, acceptance stays exactly-once in `kernel_publications`, and
+acknowledgement still happens only behind accepted truth.
+
+### Fair bounded dispatch (`scheduler.claim_fair`)
+
+- Work is partitioned into **resource classes** (capacity separation)
+  and, inside a class, **scheduling groups** — by default the workspace
+  id, registerable finer (`register_work`, e.g. workspace:document).
+- Priority is **weighted fair queuing by virtual finish**
+  `served_count / weight` in exact rational arithmetic. Equal weights
+  interleave strictly (measured prefix service gap ≤ 2 at every point
+  of a 3-group mixed drain); a 2:1 weight ratio makes the groups finish
+  together on 2:1 inventories instead of the light group draining early.
+  `served_count` is deliberately **non-authoritative bookkeeping** —
+  losing or reseeding it changes interleaving, never truth.
+- **Age boost** (item older than `age_boost_after_seconds` divides
+  virtual finish by `age_boost_factor`) and **deadline pressure**
+  (×2 near, ×4 past) keep old eligible work from perpetual displacement.
+- **Bounded fan-out**: a group at `max_in_flight` currently-leased items
+  is skipped — a parent flow's huge child backlog cannot monopolize the
+  class, and backpressure reduces further fan-out rather than queueing
+  unbounded work. A coordinator waiting on children holds no lease and
+  consumes no slot. The window is a backpressure bound, not a hard
+  invariant: N concurrent dispatchers may overshoot by their own count.
+- **Bounded look-ahead**: each pass scores the K oldest pending items
+  *per group* (window-partitioned, never a global id-ordered scan that
+  would keep late-arriving groups invisible). Items fenced by a still
+  *valid* lease are unavailable and do not shadow their group's
+  claimable work; expired leases free both the window slot and
+  candidacy (takeover remains the PR66 eligibility path).
+- `scheduler.accept_work` wraps `fencing.accept` and then records the
+  `work.accepted` semantic event (idempotent for converged retries);
+  `scheduler.reconcile_dispatch` deterministically returns orphan
+  in-flight deliveries (claimed, never fenced) to pending and re-derives
+  missing `work.claimed` / `work.accepted` events from the lease and
+  publication authorities — repair, never invention.
+
+Measured (characterization `scheduler_liveness_events` section): the
+late interactive item is served at dispatch positions 6–8 of 39 while
+three 12-item backlogs are still active, versus 6/12/**24** (dead last)
+under the oldest-first `claim_next` baseline; per-item dispatch cost
+77.9 ms p50 vs 55.0 ms baseline (~23 ms fairness tax at this scale).
+
+### Challenge-backed liveness (`liveness.renew_lease`)
+
+Renewal is **evidence-bearing, not timer-bearing**. One transaction
+requires, in authority order:
+
+1. the current fence (`owner_id` + `fencing_token` + `leased`) — a
+   superseded worker fails here forever;
+2. the **current challenge nonce** — issued to the claimer inside the
+   claim bookkeeping transaction and rotated on every successful
+   renewal, handed only to the responder; the nonce never appears in
+   any read view (`get_liveness` excludes it), so a component that
+   merely reads the database cannot forge renewal evidence;
+3. **strictly advancing progress** over the durable high-water mark —
+   a frozen or replayed counter is not a responsive control loop;
+4. a coherent **active request/stage identity**: while a request is
+   bound and unexpired, renewal must serve that same id; after it
+   lapses, only a *new* id renews (an honest stage transition);
+5. the **topology generation** the fence was issued under, when one was
+   declared at claim time.
+
+Durably observed cancellation (`report_cancellation`, fence-gated,
+idempotent) defeats any later evidence. A wedged worker simply stops
+renewing; its lease lapses and PR66 takeover eligibility applies — the
+in-flight window ignores expired leases so a wedged group cannot jam
+its own recovery. Renewal never advances the fencing token. Measured:
+renew p50 12.6 ms; forced-wedge takeover ≈ lease + poll granularity
+(0.47 s at a 0.4 s lease); stale-nonce rejection 5.3 ms.
+
+### Durable semantic events and lossy progress (`app.kernel.events`)
+
+- `kernel_events` is append-only with an authoritative
+  per-(workspace, stream) `semantic_sequence` allocated inside the
+  append transaction (writer-serialized MAX+1): the sequence cannot
+  fork or regress under concurrent producers, and replay never depends
+  on timestamps. Claim/accept/cancel transitions append events in the
+  same transactions that record the bookkeeping; renewal events are
+  opt-in (`emit_event`) to control write amplification.
+- `kernel_progress` coalesces: exactly one row per (workspace, work),
+  updated in place. A 500-tick flood measured **1** durable row and
+  never forced a per-tick event; durable events are never dropped as a
+  consequence of progress backpressure.
+- Reading is pull-based: `replay(after_sequence)` answers from the
+  database; `follow()` is a polling cursor adapter that opens a fresh
+  short session per batch — a slow consumer slows only itself.
+  Disconnecting ends the iteration without touching work; reconnecting
+  resumes from the last delivered sequence. Measured: append p50
+  10.3 ms, replay of 200 events 5.8 ms p50, slow-consumer completion
+  delta ≈ 0.10 s over a 6-item batch, restart replay identical.
+
+### Deliberate PR67A boundaries
+
+- Scheduling groups are two-level (resource class → group); there is no
+  general workflow DAG scheduler — deeper hierarchy attaches when a
+  real runtime consumer needs it, via the same group/window contract.
+- `claim_next` stays as the measured oldest-first baseline and
+  emergency fallback; it creates no competing authority.
+- The semantic log is local-database truth; transport adapters (SSE
+  `Last-Event-ID` mapping, signed cursors, authorization epochs) are
+  **PR79**. `follow()` is the transport-independent surface only.
+- Production `TaskManager`/GUI/API/SSE paths remain unwired; attaching
+  live dispatch to `claim_fair` + `renew_lease` + `follow` is the
+  PR67B/runtime integration seam.
+- Pre-`20260816_0009` history has no semantic events: the upgrade
+  creates the tables empty, and nothing fabricates events for work that
+  ran before them.
 
 ## What this kernel does NOT guarantee (deliberate non-goals)
 
@@ -737,12 +861,18 @@ never-activated-only purge → residue tests.
   closures, and PublicationSets register retention without the
   collector changing. `kernel_payload_retirements` rows are the point
   later effect ledgers can observe reclamation from.
-- **PR67 (scheduler/runtime):** `fencing.claim_next` is the entire
-  dispatch surface to replace with a fair scheduler — leases, tokens,
-  acceptance, and fenced acknowledgement stay unchanged underneath;
-  `KernelCommitReceipt` remains the commit-identity token work chains
-  from, and generation activation is idempotent and safe to drive from
-  an at-least-once dispatcher.
+- **PR67B (runtime wiring):** the PR67A foundation slice delivered the
+  kernel-side contracts — `scheduler.claim_fair` (fair bounded
+  dispatch), `liveness.renew_lease` (challenge heartbeat), and
+  `events.replay`/`events.follow` (durable semantic sequencing). The
+  clean next seam is wiring the live runtime: `TaskManager`/executors
+  claim through `claim_fair`, keep leases alive through
+  `renew_lease` from their real control loops, and surface status by
+  projecting `kernel_events`/`kernel_progress` instead of in-memory
+  polling. Leases, tokens, acceptance, and fenced acknowledgement stay
+  unchanged underneath; `KernelCommitReceipt` remains the
+  commit-identity token work chains from, and generation activation is
+  idempotent and safe to drive from an at-least-once dispatcher.
 - **PR76 (PublicationSet):** `kernel_publications` proves the
   one-fenced-accepted-outcome primitive; the multi-generation atomic
   bundle protocol wraps a seam like it rather than mutating it.
