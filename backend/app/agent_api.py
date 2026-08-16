@@ -63,6 +63,10 @@ from app.services.policy import (
     output_root,
 )
 from app.services.safe_url_fetcher import SafeUrlFetchError, download_source_url
+from app.services.source_acquisition import (
+    SOURCE_CONFIG_KEY,
+    default_source_acquisition_service,
+)
 from app.utils.secrets import decrypt_value, encrypt_value, is_masked, is_sensitive_key, mask_value
 
 
@@ -482,6 +486,37 @@ async def submit_conversion_job(
         config["local_filepath"] = stored_path
     if source_url_safe:
         config["source_url"] = source_url_safe
+
+    # Kernel-mode source truth (PR70/71 local slice): acquire BEFORE
+    # probing so probe, config, and conversion observe one committed
+    # immutable revision. Shares the REST seam's service.
+    from app.services.task_manager import TaskManager as _TaskManagerEarly
+
+    kernel_active = KERNEL_RUNTIME_ENABLED and isinstance(
+        _get_app_state().task_manager, _TaskManagerEarly
+    ) and _get_app_state().task_manager.kernel_runtime is not None
+    if kernel_active:
+        from app.kernel.source_store import IncoherentSourceError
+
+        acquisition_service = default_source_acquisition_service()
+        try:
+            acquired = await acquisition_service.acquire(
+                Path(stored_path),
+                source_kind="local_path" if is_local else "url",
+                suffix=suffix.lower(),
+                job_id=job_id,
+                source_key_override=(f"url:{source_url_safe}" if source_url_safe else None),
+            )
+        except IncoherentSourceError as exc:
+            if source_url_safe:
+                Path(stored_path).unlink(missing_ok=True)
+            raise UsageError(
+                f"Source changed while being acquired; retry the submission. ({exc})"
+            ) from exc
+        stored_path = str(await acquisition_service.artifact_path_for(acquired))
+        config[SOURCE_CONFIG_KEY] = acquired.to_config()
+        config["durable_filepath"] = stored_path
+
     if suffix == ".pdf":
         probe_result = await asyncio.to_thread(
             probe_pdf,
@@ -499,14 +534,6 @@ async def submit_conversion_job(
         app_state.conversion_service,
         source_name=original_name,
     )
-
-    # Kernel dispatch is active only when the mode is on AND the runtime
-    # coordinator bound to the manager (startup failure falls back).
-    from app.services.task_manager import TaskManager as _TaskManager
-
-    kernel_active = KERNEL_RUNTIME_ENABLED and isinstance(
-        app_state.task_manager, _TaskManager
-    ) and app_state.task_manager.kernel_runtime is not None
 
     # The kernel dispatcher resolves the source from the persisted config
     # (the legacy durable queue used to inject this via enqueue).

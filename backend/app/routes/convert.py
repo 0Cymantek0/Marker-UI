@@ -45,6 +45,10 @@ from app.services.policy import (
     assert_rest_local_input_allowed,
     assert_rest_output_write_allowed,
 )
+from app.services.source_acquisition import (
+    SOURCE_CONFIG_KEY,
+    default_source_acquisition_service,
+)
 from app.services.audit import record_audit_event
 from app.services.safe_url_fetcher import (
     SafeUrlFetchError,
@@ -911,6 +915,46 @@ async def upload_file(
             raise HTTPException(status_code=400, detail=exc.message) from exc
         config["output_dir"] = output_dir
 
+    # Kernel-mode source truth (PR70/71 local slice): acquire the source
+    # into a committed content revision BEFORE probing so the probe, the
+    # persisted config, and the eventual conversion all observe the same
+    # immutable revision instead of a mutable external path.
+    from app.main import _app_state
+    from app.core.config import KERNEL_RUNTIME_ENABLED
+    from app.services.task_manager import TaskManager as _TaskManager
+
+    kernel_active = KERNEL_RUNTIME_ENABLED and isinstance(
+        _app_state.task_manager, _TaskManager
+    ) and _app_state.task_manager.kernel_runtime is not None
+
+    # The marker-owned upload/URL copy is what error paths may clean up;
+    # a content-addressed artifact is shared truth and must never be
+    # unlinked by request validation.
+    ingress_cleanup_path = stored_path if not is_local else None
+
+    if kernel_active:
+        from app.kernel.source_store import IncoherentSourceError
+
+        acquisition_service = default_source_acquisition_service()
+        try:
+            acquired = await acquisition_service.acquire(
+                Path(stored_path),
+                source_kind="local_path" if is_local else ("url" if source_url_safe else "upload"),
+                suffix=suffix.lower(),
+                job_id=job_id,
+                source_key_override=(f"url:{source_url_safe}" if source_url_safe else None),
+            )
+        except IncoherentSourceError as exc:
+            if ingress_cleanup_path:
+                Path(ingress_cleanup_path).unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=409,
+                detail=f"Source changed while being acquired; retry the submission. ({exc})",
+            ) from exc
+        stored_path = str(await acquisition_service.artifact_path_for(acquired))
+        config[SOURCE_CONFIG_KEY] = acquired.to_config()
+        config["durable_filepath"] = stored_path
+
     if suffix == ".pdf":
         probe_result = await asyncio.to_thread(
             probe_pdf,
@@ -921,8 +965,6 @@ async def upload_file(
         if page_range and probe_result.page_count > 0:
             _validate_page_range(page_range, probe_result.page_count)
 
-    from app.main import _app_state
-
     conversion_service = _app_state.conversion_service
     try:
         requested_formats = require_supported_output_formats(
@@ -932,21 +974,10 @@ async def upload_file(
             source_name=original_name,
         )
     except UnsupportedFormatError as exc:
-        if not is_local:
-            Path(stored_path).unlink(missing_ok=True)
+        if ingress_cleanup_path:
+            Path(ingress_cleanup_path).unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=exc.message) from exc
     effective_output_format = requested_formats[0]
-
-    # DB record
-    from app.core.config import KERNEL_RUNTIME_ENABLED
-    from app.services.task_manager import TaskManager as _TaskManager
-
-    # Kernel dispatch is active only when the mode is on AND the runtime
-    # coordinator actually bound to this manager (a failed coordinator
-    # startup falls back to the legacy runtime instead of losing jobs).
-    kernel_active = KERNEL_RUNTIME_ENABLED and isinstance(
-        _app_state.task_manager, _TaskManager
-    ) and _app_state.task_manager.kernel_runtime is not None
 
     # The kernel dispatcher resolves the source from the persisted config
     # (the legacy durable queue used to inject this via enqueue). Without
@@ -1640,14 +1671,23 @@ def _read_stored_config(job: ConversionJob) -> dict[str, Any]:
         return {}
 
 
-def _job_source_path(job: ConversionJob) -> Path | None:
-    """Resolve the stored source file for a job (local path or upload dir copy).
+async def _job_source_path(job: ConversionJob) -> Path | None:
+    """Resolve the stored source file for a job (revision artifact, upload copy, or local path).
 
-    Upload copies live in UPLOAD_DIR under ``job.filename`` and are only removed
-    when the job is deleted, so a completed job's source is still available for a
-    format regeneration. Local-path jobs keep their original absolute path.
+    Kernel-mode jobs carry a committed source revision whose artifact
+    outranks the external world: it is tried first so retries and format
+    regeneration reuse owned immutable bytes even after the original
+    upload/local file disappeared or changed. Upload copies live in
+    UPLOAD_DIR under ``job.filename``; local-path jobs keep their
+    original absolute path.
     """
     cfg = _read_stored_config(job)
+    block = cfg.get(SOURCE_CONFIG_KEY)
+    if isinstance(block, dict):
+        service = default_source_acquisition_service()
+        resolved = await service.resolve(block)
+        if resolved is not None:
+            return Path(await service.artifact_path_for(resolved))
     local = cfg.get("local_filepath")
     if local and Path(local).is_file():
         return Path(local)
@@ -1687,7 +1727,7 @@ async def regenerate_format(
             detail="Job must be completed before regenerating a format.",
         )
 
-    source_path = _job_source_path(job)
+    source_path = await _job_source_path(job)
     if source_path is None:
         raise HTTPException(
             status_code=409,
@@ -1794,7 +1834,7 @@ async def retry_job(
             detail="Job is still running. Cancel it before retrying.",
         )
 
-    source_path = _job_source_path(job)
+    source_path = await _job_source_path(job)
     if source_path is None:
         raise HTTPException(
             status_code=409,
@@ -1850,11 +1890,56 @@ async def retry_job(
 
     new_job_id = str(uuid.uuid4())
     stored_path = str(source_path)
+    original_name = config.get("original_name") or job.original_name
+    input_format = (Path(original_name).suffix.lstrip(".") or job.input_format or "").lower()
+
+    if kernel_active:
+        # Retry source truth: reuse the original job's committed revision
+        # when its bytes are still owned; otherwise re-acquire from the
+        # resolved fallback source (a NEW revision — never silent reuse
+        # of dead truth). A changed revision invalidates the stored probe
+        # result, which described different bytes.
+        from app.kernel.source_store import IncoherentSourceError as _Incoherent
+
+        retry_service = default_source_acquisition_service()
+        old_block = config.get(SOURCE_CONFIG_KEY)
+        resolved = (
+            await retry_service.resolve(old_block) if isinstance(old_block, dict) else None
+        )
+        try:
+            if resolved is not None:
+                acquired = resolved
+            else:
+                fallback = Path(stored_path)
+                marker_owned = UPLOAD_DIR.resolve() in fallback.resolve().parents
+                acquired = await retry_service.acquire(
+                    fallback,
+                    source_kind="upload" if marker_owned else "local_path",
+                    suffix=fallback.suffix.lower(),
+                    job_id=new_job_id,
+                    source_key_override=(
+                        f"url:{config['source_url']}" if config.get("source_url") else None
+                    ),
+                )
+        except _Incoherent as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Source changed while being re-acquired for retry. ({exc})",
+            ) from exc
+        stored_path = str(await retry_service.artifact_path_for(acquired))
+        config[SOURCE_CONFIG_KEY] = acquired.to_config()
+        if (
+            isinstance(old_block, dict)
+            and old_block.get("content_revision_id") != acquired.content_revision_id
+        ):
+            config.pop("probe_result", None)
+            if Path(original_name).suffix.lower() == ".pdf":
+                probe_result = await asyncio.to_thread(probe_pdf, stored_path)
+                config["probe_result"] = probe_result.to_dict()
+
     # The kernel dispatcher (and legacy recovery) resolve the source from
     # the persisted config; the retried job's source is this run's path.
     config["durable_filepath"] = stored_path
-    original_name = config.get("original_name") or job.original_name
-    input_format = (Path(original_name).suffix.lstrip(".") or job.input_format or "").lower()
 
     new_job = ConversionJob(
         id=new_job_id,

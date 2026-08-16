@@ -75,8 +75,10 @@ from app.utils.canonical import (
 
 __all__ = [
     "AcquiredSourceRevision",
-    "SourceAcquisitionService",
     "SOURCE_CONFIG_KEY",
+    "SourceAcquisitionService",
+    "default_source_acquisition_service",
+    "set_default_source_acquisition_service",
 ]
 
 #: config_json key carrying the committed source-revision block.
@@ -618,3 +620,42 @@ class SourceAcquisitionService:
             )
         except KernelError:  # noqa: BLE001 - audit must not mask the rejection
             pass
+
+
+# ----------------------------------------------------------------------
+# process-wide default (production ingress + runtime share one service
+# over one database and one artifact store; tests swap it explicitly)
+# ----------------------------------------------------------------------
+
+_default_service: SourceAcquisitionService | None = None
+
+
+def default_source_acquisition_service() -> SourceAcquisitionService:
+    """Process-wide service bound to the production engine.
+
+    Commits fail closed until the kernel schema is verified ready; the
+    artifact store is rooted at ``MARKER_SOURCE_STORE_ROOT`` (default
+    ``<data>/source_store``). Shares the kernel runtime's workspace so
+    revisions acquired at ingress resolve inside authorization.
+    """
+    global _default_service
+    if _default_service is None:
+        from app.core.config import KERNEL_RUNTIME_WORKSPACE, SOURCE_STORE_ROOT
+        from app.database import async_session_factory
+        from app.kernel.commit import default_commit_service
+
+        _default_service = SourceAcquisitionService(
+            async_session_factory,
+            default_commit_service(),
+            LocalSourceStore(SOURCE_STORE_ROOT),
+            workspace_id=KERNEL_RUNTIME_WORKSPACE,
+        )
+    return _default_service
+
+
+def set_default_source_acquisition_service(
+    service: SourceAcquisitionService | None,
+) -> None:
+    """Test seam: bind/restore the process-wide service."""
+    global _default_service
+    _default_service = service
