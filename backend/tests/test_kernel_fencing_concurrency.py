@@ -215,8 +215,13 @@ async def test_redelivery_after_lost_ack_is_fenced_and_reconcilable(payload_env)
     factory, _store, _service = payload_env
     work_id = await _new_work(payload_env, tag="redeliver")
 
+    # Wide enough that the "fence still valid" phase below cannot race
+    # the lease expiry on a loaded host (the reset + re-claim round
+    # trips measurably exceed SHORT_LEASE); narrow enough that the
+    # takeover wait stays test-sized.
+    lease = 0.8
     first = await fencing.claim_next(
-        factory, owner_id="worker-a", lease_seconds=SHORT_LEASE
+        factory, owner_id="worker-a", lease_seconds=lease
     )
     assert first is not None and first.lease.fencing_token == 1
 
@@ -231,7 +236,7 @@ async def test_redelivery_after_lost_ack_is_fenced_and_reconcilable(payload_env)
     assert rows[work_id] == "pending"
 
     # After the fence lapses, worker B takes over from durable state.
-    await asyncio.sleep(SHORT_LEASE + 0.02)
+    await asyncio.sleep(lease + 0.1)
     second = await fencing.claim_next(factory, owner_id="worker-b")
     assert second is not None and second.work_id == work_id
     assert second.lease.fencing_token == 2
