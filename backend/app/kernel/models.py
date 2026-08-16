@@ -1,5 +1,6 @@
 """Truth Kernel persistence models (V3.2 PR63A commit spine + PR64
-payload durability and outbox + PR65A materialized generations).
+payload durability and outbox + PR65A materialized generations + PR65B
+retention roots, reader pins, and payload retirement tombstones).
 
 Six tables establish the durable commit authority:
 
@@ -42,9 +43,32 @@ cut named by its generation and can be discarded and rebuilt at any time:
   accepted read generation. The single atomic pointer switch happens on
   this row; readers resolve it once and pin the named generation.
 
+Three PR65B tables hold the retention contract (revision
+``20260815_0007``). They describe what current policy *requires*; they
+never rewrite committed truth:
+
+* ``kernel_retention_roots`` — declared durable retention holds. Any
+  future subsystem (jobs, reviews, exports, legal holds, PublicationSets)
+  attaches retention by declaring a root naming a cut and a required
+  payload class; the intrinsic current-generation roots are read from
+  ``kernel_generation_heads`` and are not stored here.
+* ``kernel_reader_pins`` — bounded wall-clock read leases over one
+  generation. An unexpired pin is an active root: collection may not
+  retire the pinned generation or payload bytes its class requires. A
+  crashed reader's pin lapses when its lease expires — safety across
+  restart comes from durable rows, never process memory.
+* ``kernel_payload_retirements`` — durable GC tombstones. Presence of a
+  row means the database has authorized physical retirement of that
+  blob; ``state`` tracks pending/deleted/failed so crash recovery can
+  converge idempotently. The ``kernel_payload_objects`` registry row is
+  deliberately kept: retired bytes remain an honest availability fact,
+  never a fabricated "available".
+
 Wall-clock timestamps on these tables are audit metadata only. Causal
 order is ``kernel_commit_id``; nothing in this module may use timestamps
-for ordering, membership, or identity.
+for ordering, membership, or identity. Lease expiry on reader pins is
+the one deliberate wall-clock grace mechanism (mirroring the outbox's
+claimed-at timestamps), not a causal claim.
 """
 
 from __future__ import annotations
@@ -77,6 +101,10 @@ MAX_STORAGE_LOCATOR_LENGTH = 256
 MAX_GENERATION_STATE_LENGTH = 16
 MAX_COMPLETENESS_LENGTH = 16
 MAX_PAYLOAD_REQUIREMENT_LENGTH = 24
+MAX_ROOT_KIND_LENGTH = 50
+MAX_ROOT_STATE_LENGTH = 16
+MAX_RETIRE_STATE_LENGTH = 16
+MAX_RETIRE_REASON_LENGTH = 64
 
 
 class KernelCommitHead(Base):
@@ -422,3 +450,116 @@ class KernelGenerationHead(Base):
         DateTime(),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class KernelRetentionRoot(Base):
+    """One declared durable retention hold (PR65B).
+
+    ``root_id`` is deterministic over (workspace, kind, target, cut,
+    required class, producer context), so re-declaring the same hold is
+    idempotent. A root is *active* when ``state == 'active'`` and its
+    optional ``expires_at`` has not passed; expiry or release only stops
+    protecting data — it never deletes anything by itself. Collection
+    must treat an active root's cut and required payload class as live.
+    """
+
+    __tablename__ = "kernel_retention_roots"
+
+    root_id: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    root_kind: Mapped[str] = mapped_column(String(MAX_ROOT_KIND_LENGTH), nullable=False)
+    #: generation hold: the named generation (and its cut/class) is live.
+    #: snapshot hold: the row's own cut/class is live without a
+    #: materialized generation. Kinds are open-ended for future PRs.
+    target_generation_id: Mapped[str | None] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=True
+    )
+    kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    required_payload_state: Mapped[str] = mapped_column(
+        String(MAX_PAYLOAD_REQUIREMENT_LENGTH), nullable=False
+    )
+    producer_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    state: Mapped[str] = mapped_column(
+        String(MAX_ROOT_STATE_LENGTH), index=True, nullable=False, default="active"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelRetentionRoot(id={self.root_id!r}, kind={self.root_kind!r}, "
+            f"workspace={self.workspace_id!r}, cut={self.kernel_commit_id})>"
+        )
+
+
+class KernelReaderPin(Base):
+    """Bounded wall-clock read lease over one generation (PR65B).
+
+    Acquired before a reader relies on a superseded generation staying
+    readable; released (row deleted) when the reader finishes. A pin
+    whose lease has expired is inert — crash-orphaned pins therefore
+    lapse on their own and expired rows are purged by collection.
+    """
+
+    __tablename__ = "kernel_reader_pins"
+
+    pin_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), index=True, nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(), index=True, nullable=False)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelReaderPin(id={self.pin_id!r}, generation={self.generation_id!r})>"
+        )
+
+
+class KernelPayloadRetirement(Base):
+    """Durable GC tombstone for one payload object (PR65B).
+
+    A row exists only after collection re-validated, inside the
+    authorization transaction, that no live root requires the blob.
+    ``state``: ``pending`` (authorized, bytes not yet unlinked),
+    ``deleted`` (bytes absent by our decision), ``failed`` (unlink
+    attempted and errored — retryable, never a false success). The
+    ``kernel_payload_objects`` registry row is intentionally NOT
+    deleted: historical identity, length, and locator remain
+    interpretable, and availability classification reports the bytes as
+    ``retired`` rather than pretending they were never referenced.
+    """
+
+    __tablename__ = "kernel_payload_retirements"
+
+    blob_key: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), primary_key=True)
+    state: Mapped[str] = mapped_column(
+        String(MAX_RETIRE_STATE_LENGTH), index=True, nullable=False
+    )
+    reason: Mapped[str] = mapped_column(
+        String(MAX_RETIRE_REASON_LENGTH), nullable=False
+    )
+    decided_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    swept_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelPayloadRetirement(blob_key={self.blob_key!r}, "
+            f"state={self.state!r}, attempts={self.attempts})>"
+        )

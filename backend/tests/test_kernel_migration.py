@@ -37,7 +37,11 @@ from app.db_migration import (
 )
 from app.kernel.commit import KernelCommitBatch, KernelCommitService
 from app.kernel.generations import GenerationService
-from app.kernel.records import ClaimAssertionRecord
+from app.kernel.gc import plan_collection
+from app.kernel.payloads import LocalPayloadStore
+from app.kernel.records import ClaimAssertionRecord, ObservationRecord
+from app.kernel.reconcile import verify_payload_availability
+from app.kernel.retention import ROOT_KIND_SNAPSHOT_HOLD, declare_hold
 from app.kernel.snapshots import resolve_snapshot
 
 KERNEL_TABLES = {
@@ -55,13 +59,20 @@ PR64_TABLES = {
 PREVIOUS_HEAD = "20260709_0003"
 PR63A_HEAD = "20260815_0004"
 PR64_HEAD = "20260815_0005"
-CURRENT_HEAD = "20260815_0006"
+PR65A_HEAD = "20260815_0006"
+CURRENT_HEAD = "20260815_0007"
 
 PR65A_TABLES = {
     "kernel_generations",
     "kernel_generation_records",
     "kernel_generation_edges",
     "kernel_generation_heads",
+}
+
+PR65B_TABLES = {
+    "kernel_retention_roots",
+    "kernel_reader_pins",
+    "kernel_payload_retirements",
 }
 
 
@@ -471,3 +482,177 @@ async def test_pr65a_downgrade_drops_generations_then_reupgrade_converges(
     await engine.dispose()
     assert rebuilt.generation_id == ref.generation_id
     assert rebuilt.content_digest == ref.content_digest
+
+
+# ---------------------------------------------------------------------------
+# PR65B: 20260815_0006 -> 20260815_0007 retention contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upgrade_from_pr65a_head_preserves_committed_data(
+    tmp_path: Path,
+) -> None:
+    """A PR65A database with committed history, an active generation, and
+    a declared hold upgrades to the PR65B head with everything preserved
+    and the retention/GC tables arriving empty (no fabricated roots or
+    tombstones — nothing is retired by a migration)."""
+    db_path = tmp_path / "pr65a-full.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR65A_HEAD
+    )
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    gen_service = GenerationService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws-pr65b",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+            )
+        )
+        await gen_service.build_and_activate(
+            await resolve_snapshot(factory, "ws-pr65b")
+        )
+    finally:
+        await engine.dispose()
+
+    await upgrade_database(url=url)
+    status = await verify_database_ready(url=url)
+    assert status.state is DatabaseState.CURRENT
+
+    with sqlite3.connect(db_path) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == CURRENT_HEAD
+        records = conn.execute(
+            "SELECT COUNT(*) FROM kernel_records WHERE workspace_id = 'ws-pr65b'"
+        ).fetchone()[0]
+        generations = conn.execute(
+            "SELECT COUNT(*) FROM kernel_generations WHERE state = 'active'"
+        ).fetchone()[0]
+        roots = conn.execute(
+            "SELECT COUNT(*) FROM kernel_retention_roots"
+        ).fetchone()[0]
+        pins = conn.execute("SELECT COUNT(*) FROM kernel_reader_pins").fetchone()[0]
+        tombstones = conn.execute(
+            "SELECT COUNT(*) FROM kernel_payload_retirements"
+        ).fetchone()[0]
+    assert records == 1
+    assert generations == 1  # the active generation survived the upgrade
+    assert roots == 0 and pins == 0 and tombstones == 0  # nothing fabricated
+
+
+@pytest.mark.asyncio
+async def test_retention_calls_fail_closed_at_pr65a_head(tmp_path: Path) -> None:
+    """A database missing only the PR65B revision is PENDING_UPGRADE;
+    retention/GC calls fail closed on the missing tables — they never
+    self-heal the schema."""
+    db_path = tmp_path / "behind-pr65b.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR65A_HEAD
+    )
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        with pytest.raises(Exception) as hold_exc:
+            await declare_hold(
+                factory,
+                workspace_id="ws",
+                root_kind=ROOT_KIND_SNAPSHOT_HOLD,
+                kernel_commit_id=0,
+            )
+        assert "no such table" in str(hold_exc.value).lower()
+        with pytest.raises(Exception) as gc_exc:
+            await plan_collection(
+                factory, LocalPayloadStore(tmp_path / "payloads")
+            )
+        assert "no such table" in str(gc_exc.value).lower()
+    finally:
+        await engine.dispose()
+    assert PR65B_TABLES.isdisjoint(_kernel_tables_in(db_path))
+
+
+@pytest.mark.asyncio
+async def test_pr65b_downgrade_drops_retention_then_reupgrade_converges(
+    tmp_path: Path,
+) -> None:
+    """Downgrade forgets the retention contract (documented destructive
+    limitation): holds/pins/tombstone history are dropped while kernel
+    truth survives; re-upgrade recreates the tables empty. Downgrading
+    does NOT restore retired bytes — the only heal is re-staging the
+    exact bytes, which this test proves still works afterwards."""
+    db_path = tmp_path / "pr65b-downgrade.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+
+    store = LocalPayloadStore(tmp_path / "payloads")
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory, payload_store=store)
+    gen_service = GenerationService(factory)
+    await service.commit(
+        KernelCommitBatch(
+            workspace_id="ws",
+            records=(
+                ObservationRecord(
+                    observer="marker",
+                    derivation={"stage": "layout"},
+                    payload_bytes=b"retention downgrade probe",
+                ),
+            ),
+        )
+    )
+    await gen_service.build_and_activate(await resolve_snapshot(factory, "ws"))
+    hold = await declare_hold(
+        factory,
+        workspace_id="ws",
+        root_kind=ROOT_KIND_SNAPSHOT_HOLD,
+        kernel_commit_id=1,
+    )
+    assert hold.active
+    await engine.dispose()
+
+    assert PR65B_TABLES <= _kernel_tables_in(db_path)
+
+    def _downgrade_to_pr65a() -> None:
+        command.downgrade(db_migration._alembic_config(url), PR65A_HEAD)
+
+    await asyncio.to_thread(_downgrade_to_pr65a)
+    tables = _kernel_tables_in(db_path)
+    assert not (PR65B_TABLES & tables)
+    assert (KERNEL_TABLES | PR64_TABLES | PR65A_TABLES) <= tables  # truth intact
+
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+    await upgrade_database(url=url)
+    assert inspect_database(url=url).state is DatabaseState.CURRENT
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM kernel_retention_roots").fetchone()[0] == 0
+
+    # the hold is gone (no silent resurrection); declaring it again works,
+    # and payload bytes survived the round-trip untouched
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    redeclared = await declare_hold(
+        factory,
+        workspace_id="ws",
+        root_kind=ROOT_KIND_SNAPSHOT_HOLD,
+        kernel_commit_id=1,
+    )
+    assert redeclared.root_id == hold.root_id  # deterministic identity
+    availability = await verify_payload_availability(factory, store, workspace_id="ws")
+    assert availability.payload_backed_complete
+    await engine.dispose()
