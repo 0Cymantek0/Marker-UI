@@ -60,3 +60,10 @@ marker-ui/
   linearization point (see [Truth Kernel reference](../reference/truth-kernel.md)).
 - Location override: `MARKER_KERNEL_PAYLOAD_ROOT` environment variable
   (default `data/kernel_payloads`).
+- Physical retirement (V3.2 PR65B): a garbage-collection pass may unlink
+  objects whose hashes no live retention root (current generation,
+  declared hold, or reader pin) requires, but only after the database
+  recorded a durable tombstone authorizing it. The registry row stays,
+  and retired bytes surface as an explicit `retired` availability state —
+  history never pretends the bytes were never referenced. Re-supplying
+  the exact bytes through normal staging always re-publishes them.

@@ -1,12 +1,14 @@
-# Truth Kernel — Commit Spine + Payload Durability + Snapshots & Generations (PR63A/PR64/PR65A)
+# Truth Kernel — Commit Spine + Payload Durability + Snapshots & Generations + Retention/GC (PR63A/PR64/PR65A/PR65B)
 
 Status: implemented (V3.2 amendment 4C / PR63 slice A, then amendment
-18C/19C PR64, then PR65 slice A). This page is the authoritative
-description of what the local Truth Kernel guarantees, what it
-deliberately does not guarantee yet, and how PR65B/PR66 are expected to
-attach. The canonical identity contract it consumes is documented
-separately in [canonical-identity.md](canonical-identity.md); the
-migration authority in [../development/database.md](../development/database.md).
+18C/19C PR64, then PR65 slice A, then PR65 slice B — retention roots,
+reader pins, and safe local garbage collection). This page is the
+authoritative description of what the local Truth Kernel guarantees,
+what it deliberately does not guarantee yet, and how PR66 and later
+subsystems are expected to attach. The canonical identity contract it
+consumes is documented separately in
+[canonical-identity.md](canonical-identity.md); the migration authority
+in [../development/database.md](../development/database.md).
 
 ## Overview
 
@@ -300,31 +302,133 @@ Guarantees proven by test (`tests/test_kernel_snapshot.py`,
   the committed cut named in its manifest; dropping the generation
   tables and rebuilding reproduces the same identity and digest.
 
-### Deliberate PR65A limits (owned by PR65B/PR66)
+### Deliberate limits at the PR65B boundary
 
-- No proof-closure roots, reader/retention pins, or mark/recheck/sweep
-  GC; no kernel payload object is ever deleted — **PR65B**. Its
-  attachment points are `GenerationService.list_generations(state=...)`
-  (stale staging identification), `kernel_generation_heads` (active
-  roots), and snapshot watermarks.
-- No pack-segment compaction or materialized FTS/vector indexes —
-  **PR65B/later**.
 - No worker leases/fencing, exactly-once accepted publication, or
-  dispatcher; the builder is a plain in-process service — **PR66**
-  remains untouched.
+  dispatcher; the builder and the collector are plain in-process
+  services — **PR66** remains untouched.
+- No pack-segment compaction or materialized FTS/vector indexes — the
+  local store is still one content-addressed file per object; PR65B
+  measures object-count implications and leaves the pack seam open.
+
+## Retention roots, reader pins, and garbage collection (PR65B)
+
+PR65B adds the retention contract (Alembic revision `20260815_0007`):
+`kernel_retention_roots` (declared holds), `kernel_reader_pins`
+(bounded read leases), `kernel_payload_retirements` (GC tombstones).
+The database decides what must survive; the filesystem never does.
+
+### What is live
+
+A **retention root** is `(workspace, commit cut, required payload
+class)`. Three families, all read through one collector query:
+
+1. **Intrinsic roots** — each workspace's current generation with the
+   payload class that generation declared (read from
+   `kernel_generation_heads`, not stored as rows);
+2. **Declared holds** — `declare_hold(...)` rows. `snapshot_hold`
+   protects a cut directly; `generation_hold` protects one materialized
+   generation. Future producers (jobs, reviews, exports, legal holds,
+   PublicationSets) attach by inserting rows with their own `root_kind`
+   and producer context — the collector never knows them;
+3. **Reader pins** — unexpired `kernel_reader_pins` leases over one
+   generation (`open_pinned_generation` /
+   `open_current_generation(pin_lease_seconds=...)`; `reader.renew()`
+   extends, `reader.close()` releases, a crashed reader's pin lapses
+   when the lease expires — restart safety never depends on process
+   memory).
+
+The **live payload closure** is the union over all roots of the
+payload hashes of records `<= cut` in that root's workspace, for roots
+whose class is not `metadata_only`. Reachability is always computed
+store-wide (all workspaces union): blob keys are deduplicated across
+workspaces, so a workspace-scoped view can never justify deleting a
+shared object. (The workspace-scoped `orphan_objects` tuple in
+reconciliation remains a known reporting quirk and is never a deletion
+candidate list.)
+
+Commits newer than the newest protected cut are **not** intrinsically
+protected: the operating pattern is *materialize (or hold), then
+collect*. If collection runs while committed truth has advanced past
+every root, the uncovered bytes are collectible and later inspectable
+snapshots over them resolve degraded — honest, never silent.
+
+### What is collected, and how
+
+Only two things are ever removed:
+
+- **derived generation rows** — superseded/failed generations (and
+  staged/validated residue older than `stale_staging_seconds`, default
+  1 h) that no current pointer, active hold, or unexpired pin protects.
+  Current generations are structurally never candidates. Records, edges,
+  manifests, and registry rows are permanent metadata and are never
+  deleted;
+- **physical payload bytes** — content-addressed objects whose hashes
+  are outside every live closure, plus pre-commit orphan objects the
+  registry never accepted.
+
+Lifecycle (`app.kernel.gc`): `plan_collection` (mark) builds a
+read-only plan — evidence, never authorization. `execute_collection`
+opens **one** write transaction, write-first (expired-pin purge) takes
+the SQLite writer lock, recomputes the live closure from freshly read
+roots, and inserts `pending` tombstones for what is still unreachable.
+**That transaction's commit is the deletion linearization point.**
+Every root, pin, or hold committed before it is honored; every one
+committed after it is a post-decision root that sees honest `retired` /
+degraded availability and heals by re-staging the exact bytes through
+the normal publish path. The sweep then unlinks one object per short
+write transaction, write-first claiming the tombstone row so a
+concurrent commit's rescue (below) cannot interleave with the unlink.
+
+The commit protocol participates in the rescue: inside every commit
+transaction (which already holds the writer lock), any staged payload
+hash found tombstoned is either physically present — the tombstone is
+deleted; this commit is re-referencing the bytes — or absent, in which
+case the commit aborts, re-stages, and retries. A commit can therefore
+never land referencing retired bytes, regardless of interleaving with a
+sweep.
+
+### Crash and restart semantics
+
+`reconcile_retirements` resumes unfinished tombstones from durable
+state alone: `pending` + file present → unlink; `pending` + file
+absent → record `deleted` (idempotent convergence); `failed` → retry.
+Unlink failures (`OSError`) are recorded as retryable `failed` rows
+with `last_error` — never a false success, never claimed reclaimed
+bytes. Registry rows are deliberately kept after retirement so
+historical identity, length, and locator stay interpretable; the
+availability classification gains a distinct `retired` state
+(reconciliation + snapshot payload histograms) that never overstates:
+a historical inspectable cut over retired bytes resolves degraded with
+`retired` counts; metadata-only views stay complete; re-supplied bytes
+that verify are `available` again regardless of tombstone history.
+
+### Deliberate PR65B boundaries
+
+- The linearization point is the tombstone transaction, not the sweep:
+  a hold declared *after* authorization does not retroactively rescue;
+  it gets honest degradation plus the re-staging heal path.
+- `metadata_only` roots protect metadata only (metadata is never
+  collected anyway), not bytes.
+- Deleting a tombstoned object does not remove its registry row;
+  nothing about retirement is ever reported as `available`.
+- Multi-process collection against one store root shares the
+  single-process topology caveat of the payload store itself.
+
 
 ## What this kernel does NOT guarantee (deliberate non-goals)
 
-- No proof-closure garbage collection, physical blob deletion, retention
-  pins, or pack-segment compaction — **PR65B**. Orphan objects and
-  stale staged generations are classified and listable, never deleted.
+- No pack-segment compaction or size-bounded pack storage — PR65B
+  measures object-count/inode implications of the one-file-per-object
+  store and leaves the pack seam open; compaction is a later experiment.
+- No materialized FTS/vector/visual indexes — later work.
 - No lease/fencing for workers, no exactly-once accepted publication,
   no stable/provisional publication namespaces, no external effect
   ledger — **PR66**. Outbox delivery is at-least-once by declaration.
 - No scheduler/job-state changes, no source/content/access identity
   (snapshot future bindings stay explicitly unbound), no patch
-  semantics, no verification policy resolution, no materialized
-  FTS/vector/visual indexes, no server-side query engine, no UI.
+  semantics, no verification policy resolution, no server-side query
+  engine, no UI.
 - Production GUI/REST/CLI/MCP paths are still not wired to the kernel.
 - FK constraints are declared RESTRICT for documentation, but the app
   engine does not enable SQLite FK enforcement — referential visibility
@@ -414,6 +518,27 @@ the full-hash inspectable snapshot):
   staged generation, the prior generation stayed current, and rebuild
   digest equality held.
 
+PR65B delta (same box; default fixture 100×12 plus the retention block:
+inspectable hold at the half-way cut, current generation rebuilt
+metadata-only, 10 fresh unreachable payload commits + 1 staged orphan):
+
+- plan (mark) over 211 registry objects / 206 physical objects: ≈ 58 ms
+  small fixture, ≈ 124 ms at 400 commits × 12 records; live-closure
+  queries are per-root cut-bounded `DISTINCT` scans;
+- recheck+tombstone transaction: ≈ 75 ms small, ≈ 300 ms at scale
+  (211 objects considered, 111 unreachable + 6 orphans tombstoned);
+- sweep: one unlink per short write transaction ≈ 19 ms/object
+  (Windows fsync-dir caveat + per-object writer-lock claim), 117
+  objects in ≈ 2.3 s; `already_absent` convergence and `failed` retry
+  paths measured in the fault matrix, not this run;
+- reclaimed 61,359 bytes of 113,859 registered+orphan bytes; the hold's
+  100 objects (52,000 bytes) survived; post-pass availability showed
+  `available: 300 / retired: 311` and `verify_history` stayed green;
+- memory: tracemalloc peak ≈ 475 KiB (small) / ≈ 610 KiB (400-commit
+  fixture) — candidate/live sets are in-memory hash sets scaling with
+  objects, not records;
+- restart reconciliation (fresh engine, nothing pending): ≈ 5–7 ms.
+
 These are single-machine observations with the runtime profile recorded
 beside them, not universal claims; rerun
 `backend/scripts/kernel_characterization.py` to reproduce.
@@ -448,6 +573,31 @@ validated → active as three separate transactions with a single
 conditional pointer flip; per-record identity re-verification on
 bounded reads instead of whole-generation hashing per request.
 
+PR65B kept: retention expressed as bare `(workspace, cut, payload
+class)` root triples instead of a typed root-object hierarchy (future
+producers attach by inserting rows; the collector stays generic);
+durable GC tombstones separate from the payload registry (the registry
+row remains honest history, the tombstone is the lifecycle); one
+recheck+tombstone transaction with a write-first statement as the
+single deletion linearization point (mirrors the commit protocol's
+write-first head upsert); per-object sweep transactions that write-first
+claim the tombstone so the unlink and a commit-side rescue cannot
+interleave; the commit-side tombstone rescue as the only fix needed for
+the in-flight-commit race (no grace-period guessing); expired-hold and
+pin semantics as wall-clock facts on stored rows rather than lifecycle
+state machines.
+
+PR65B considered and rejected: reference counting as a deletion
+criterion (the master plan forbids it; reachability is recomputed at
+decision time); recomputing liveness again inside every sweep
+transaction (the tombstone transaction already linearizes the decision;
+a second pass would move, not remove, the boundary); a persisted
+snapshot-plan table (plans are in-memory evidence; durable intent
+begins at tombstones); persistent reader leases with heartbeats beyond
+a plain expires_at column (a lapsed lease plus re-staging heal covers
+the crash case with less machinery); deleting registry rows on
+retirement (would fabricate "never referenced" history).
+
 Considered and rejected: a persisted `kernel_snapshots` table (a second
 copy of derivable truth with drift risk — resolution is cheap and
 deterministic); one JSON blob column per generation (simplest rebuild,
@@ -468,18 +618,24 @@ never-activated-only purge → residue tests.
 
 ## Extension points for later PRs
 
-- **PR65B (proof-closure/GC/pack):** active generations and
-  `kernel_generation_heads` are the durable reader roots; snapshot
-  watermarks (`kernel_commit_id` cuts) bound reachability;
-  `GenerationService.list_generations(state="staged"/"failed")` names
-  reclaimable residue; superseded-but-readable generations are the
-  pin model retention must respect. No physical blob deletion exists
-  yet, by design.
+- **Future retention producers (PR66+):** `declare_hold(...)` with a
+  new `root_kind` and producer context is the entire attachment
+  surface — jobs, reviews, cursors, exports, legal holds, claim proof
+  closures, and PublicationSets register retention without the
+  collector changing. `kernel_payload_retirements` rows are the point
+  PR66+ effect ledgers can observe reclamation from.
 - **PR66 (fencing/publication):** `KernelCommitReceipt` is the
   commit-identity token later fencing work can chain from;
   `kernel_outbox` rows (dedupe key + attempts + states) are the claim
   surface leases/fencing will extend; generation activation is
-  idempotent and safe to drive from an at-least-once dispatcher.
+  idempotent and safe to drive from an at-least-once dispatcher; the
+  commit-side tombstone rescue shows the pattern for fenced writes
+  interacting with GC.
+- **Pack compaction (later experiment):** the store remains
+  one-file-per-object; `LocalPayloadStore.delete_object` and the
+  tombstone sweep are the seam a pack builder would sit behind, with
+  old-segment retirement reusing the same mark/recheck/tombstone
+  discipline.
 - **PR70+ (source identity):** `KernelSnapshot.UNBOUND_FIELDS` is the
   exact seam where content/access/verifier identities attach — binding
   them changes the snapshot identity domain by construction, so old

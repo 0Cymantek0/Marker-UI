@@ -23,6 +23,13 @@ page), generation storage growth per source kernel record, deterministic
 rebuild digest equality and cost, restart current-generation resolution
 latency, and staging residue after an injected build fault.
 
+PR65B retention/GC fields: dry-run plan counts (roots, live objects,
+candidates, superseded generations), destructive pass outcomes
+(rescued/tombstoned/swept/already-absent/failed, bytes reclaimed,
+generations retired), mark/recheck/sweep durations, tracemalloc peak
+during a full pass, availability summary after collection, and restart
+tombstone-reconciliation cost on a fresh engine.
+
 No hard threshold is imposed; the report is the measured operating
 envelope later PRs compare against and may then optimize.
 
@@ -56,6 +63,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.db_migration import upgrade_database  # noqa: E402
 from app.kernel.commit import KernelCommitBatch, KernelCommitService  # noqa: E402
 from app.kernel.errors import InjectedFaultError  # noqa: E402
+from app.kernel.gc import (  # noqa: E402
+    execute_collection,
+    plan_collection,
+    reconcile_retirements,
+)
 from app.kernel.generations import (  # noqa: E402
     GenerationReader,
     GenerationService,
@@ -74,8 +86,13 @@ from app.kernel.records import (  # noqa: E402
     ObservationRecord,
 )
 from app.kernel.replay import replay, verify_history  # noqa: E402
+from app.kernel.retention import (  # noqa: E402
+    ROOT_KIND_SNAPSHOT_HOLD,
+    declare_hold,
+)
 from app.kernel.snapshots import (  # noqa: E402
     PAYLOAD_REQUIREMENT_INSPECTABLE,
+    PAYLOAD_REQUIREMENT_METADATA_ONLY,
     resolve_snapshot,
 )
 
@@ -306,6 +323,133 @@ async def _generation_section(db_dir: Path, url: str, db_path: Path) -> dict:
     }
 
 
+async def _retention_section(db_dir: Path, url: str, db_path: Path) -> dict:
+    """PR65B measurement block over the finished workload database.
+
+    Scenario: the bench workspace's current generation is rebuilt at the
+    head as metadata-only, an inspectable hold protects the older half
+    of history, fresh unreachable payload commits plus one staged orphan
+    provide reclaimable bytes, then a full mark/recheck/sweep pass runs
+    under tracemalloc and a fresh engine performs restart reconciliation.
+    """
+    import tracemalloc
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    store = LocalPayloadStore(db_dir / "payloads")
+    commit_service = KernelCommitService(factory, payload_store=store)
+    gen_service = GenerationService(factory)
+
+    from app.kernel.replay import read_head
+
+    head = await read_head(factory, "bench")
+    objects_before = len(await store.list_objects())
+    conn = sqlite3.connect(db_path)
+    try:
+        generations_before = conn.execute(
+            "SELECT state, COUNT(*) FROM kernel_generations GROUP BY state"
+        ).fetchall()
+        registry_before = conn.execute(
+            "SELECT COUNT(*) FROM kernel_payload_objects"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    # an inspectable hold keeps the older half of history's bytes alive
+    hold_cut = max(head // 2, 1)
+    hold = await declare_hold(
+        factory,
+        workspace_id="bench",
+        root_kind=ROOT_KIND_SNAPSHOT_HOLD,
+        kernel_commit_id=hold_cut,
+        required_payload_state=PAYLOAD_REQUIREMENT_INSPECTABLE,
+    )
+
+    # the workspace drops to metadata-only serving: bytes beyond the
+    # hold's cut become eligible
+    meta_snapshot = await resolve_snapshot(
+        factory, "bench", required_payload_state=PAYLOAD_REQUIREMENT_METADATA_ONLY
+    )
+    await gen_service.build_and_activate(meta_snapshot)
+
+    # reclaimable input: fresh unreachable payload commits + one orphan
+    junk = 10
+    for i in range(junk):
+        record = ObservationRecord(
+            observer="gc-bench",
+            derivation={"case": "retention", "i": i},
+            payload_bytes=f"gc-reclaim-probe-{i}".encode() + b"x" * 512,
+        )
+        await commit_service.commit(
+            KernelCommitBatch(workspace_id="bench", records=(record,))
+        )
+    await store.stage(b"gc-orphan-probe" + os.urandom(8))
+
+    tracemalloc.start()
+    t0 = time.perf_counter()
+    plan = await plan_collection(factory, store)
+    mark_seconds = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    report = await execute_collection(factory, store, plan)
+    execute_seconds = time.perf_counter() - t0
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    current = await resolve_current_generation(factory, "bench")
+    assert current is not None
+    verify_ok = (await verify_generation(factory, current.generation_id)).ok
+    history_ok = (await verify_history(factory, "bench")).ok
+    availability = await verify_payload_availability(factory, store, workspace_id="bench")
+    objects_after = len(await store.list_objects())
+    await engine.dispose()
+
+    # restart view: a fresh engine reconciles any tombstone residue
+    engine2 = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory2 = async_sessionmaker(engine2, class_=AsyncSession, expire_on_commit=False)
+    store2 = LocalPayloadStore(db_dir / "payloads")
+    t0 = time.perf_counter()
+    restarted = await reconcile_retirements(factory2, store2)
+    restart_reconcile_seconds = time.perf_counter() - t0
+    await engine2.dispose()
+
+    return {
+        "fixture": {
+            "head_before": head,
+            "hold_cut": hold_cut,
+            "generations_before": dict(generations_before),
+            "registry_objects_before": registry_before,
+            "objects_before": objects_before,
+            "unreachable_commits_added": junk,
+            "orphan_staged": 1,
+        },
+        "plan": plan.summary(),
+        "pass": report.summary(),
+        "outcomes": {
+            "objects_after": objects_after,
+            "bytes_reclaimed": report.bytes_reclaimed,
+            "generations_retired": report.generations_retired,
+            "rescued_count": report.rescued_count,
+            "failed_count": len(report.failed_keys),
+            "busy_retries": report.busy_retries,
+            "expired_pins_purged": report.expired_pins_purged,
+        },
+        "integrity": {
+            "hold_active": hold.active,
+            "current_generation_ok": verify_ok,
+            "history_ok": history_ok,
+            "record_state_summary_after": availability.summary(),
+            "restart_reconcile_swept": restarted.swept_deleted
+            + restarted.already_absent,
+        },
+        "timing_seconds": {
+            "mark": round(mark_seconds, 3),
+            "recheck_tombstone_sweep": round(execute_seconds, 3),
+            "restart_reconcile": round(restart_reconcile_seconds, 3),
+            "tracemalloc_peak_kib": round(peak_bytes / 1024, 1),
+        },
+    }
+
+
 async def run(
     db_dir: Path,
     *,
@@ -388,7 +532,7 @@ async def run(
     availability = await verify_payload_availability(factory, store, workspace_id="bench")
     availability_scan_seconds = round(time.perf_counter() - t0, 3)
     t0 = time.perf_counter()
-    report_reconcile = await reconcile_after_restart(factory, store, tmp_older_than_seconds=0)
+    await reconcile_after_restart(factory, store, tmp_older_than_seconds=0)
     reconcile_seconds = round(time.perf_counter() - t0, 3)
 
     # --- PR64: injected pre-commit failure residue ---------------------
@@ -432,6 +576,9 @@ async def run(
 
     # --- PR65A: snapshot + materialized generation envelope ------------
     generation_report = await _generation_section(db_dir, url, db_path)
+
+    # --- PR65B: retention + garbage-collection envelope -----------------
+    retention_report = await _retention_section(db_dir, url, db_path)
 
     conn = sqlite3.connect(db_path)
     try:
@@ -519,6 +666,7 @@ async def run(
             "record_state_summary": restart_availability.summary(),
         },
         "generations": generation_report,
+        "retention_gc": retention_report,
         "runtime": {
             "platform": platform.platform(),
             "python": sys.version.split()[0],
