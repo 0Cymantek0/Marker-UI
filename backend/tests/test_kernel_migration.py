@@ -42,6 +42,9 @@ from app.db_migration import (
     verify_database_ready,
 )
 from app.kernel import fencing, outbox
+from app.kernel import events as kernel_events
+from app.kernel import liveness as kernel_liveness
+from app.kernel import scheduler as kernel_scheduler
 from app.kernel.commit import KernelCommitBatch, KernelCommitService
 from app.kernel.generations import GenerationService
 from app.kernel.gc import plan_collection
@@ -69,7 +72,8 @@ PR63A_HEAD = "20260815_0004"
 PR64_HEAD = "20260815_0005"
 PR65A_HEAD = "20260815_0006"
 PR65B_HEAD = "20260815_0007"
-CURRENT_HEAD = "20260816_0008"
+PR66_HEAD = "20260816_0008"
+CURRENT_HEAD = "20260816_0009"
 
 PR65A_TABLES = {
     "kernel_generations",
@@ -87,6 +91,14 @@ PR65B_TABLES = {
 PR66_TABLES = {
     "kernel_work_leases",
     "kernel_publications",
+}
+
+PR67A_TABLES = {
+    "kernel_scheduling_entries",
+    "kernel_scheduling_groups",
+    "kernel_liveness",
+    "kernel_events",
+    "kernel_progress",
 }
 
 
@@ -867,5 +879,225 @@ async def test_pr66_downgrade_drops_fencing_then_reupgrade_converges(
         assert outbox_state == "in_flight"
         lease = await fencing.acquire(factory, work_id=outbox_row.id, owner_id="w2")
         assert lease is not None and lease.fencing_token == 1
+    finally:
+        await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# PR67A: fair scheduling, challenge liveness, durable semantic events
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upgrade_from_pr66_head_preserves_committed_data(
+    tmp_path: Path,
+) -> None:
+    """A PR66 database with committed history, an outbox item under a
+    live fence, and an accepted publication upgrades to the PR67A head
+    with every prior authority fact preserved and the scheduler,
+    liveness, and event tables arriving empty — no fabricated
+    scheduling state, liveness evidence, or semantic history."""
+    db_path = tmp_path / "pr66-full.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR66_HEAD
+    )
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws-pr67a",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={"t": 1}),),
+            )
+        )
+        (outbox_row,) = await outbox.list_outbox(factory)
+        await outbox.claim(factory, outbox_row.id)
+        lease = await fencing.acquire(factory, work_id=outbox_row.id, owner_id="w1")
+        assert lease is not None
+        await fencing.accept(
+            factory, work_id=outbox_row.id, fencing_token=1, result={"ok": True}
+        )
+    finally:
+        await engine.dispose()
+
+    await upgrade_database(url=url)
+    status = await verify_database_ready(url=url)
+    assert status.state is DatabaseState.CURRENT
+
+    with sqlite3.connect(db_path) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == CURRENT_HEAD
+        leases = conn.execute("SELECT COUNT(*) FROM kernel_work_leases").fetchone()[0]
+        publications = conn.execute(
+            "SELECT COUNT(*) FROM kernel_publications"
+        ).fetchone()[0]
+        for table in sorted(PR67A_TABLES):
+            count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            assert count == 0, f"{table} must arrive empty, found {count}"
+    assert leases == 1 and publications == 1  # PR66 authority survived intact
+
+
+@pytest.mark.asyncio
+async def test_scheduler_calls_fail_closed_at_pr66_head(tmp_path: Path) -> None:
+    """A database missing only the PR67A revision is PENDING_UPGRADE;
+    scheduler, event, and liveness calls fail closed on the missing
+    tables — they never self-heal the schema."""
+    db_path = tmp_path / "behind-pr67a.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR66_HEAD
+    )
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={}),),
+            )
+        )
+        with pytest.raises(Exception) as claim_exc:
+            await kernel_scheduler.claim_fair(factory, owner_id="worker-a")
+        assert "no such table" in str(claim_exc.value).lower()
+        with pytest.raises(Exception) as append_exc:
+            await kernel_events.append(
+                factory, workspace_id="ws", event_type="probe.event", payload={}
+            )
+        assert "no such table" in str(append_exc.value).lower()
+        # The fence itself exists at this head; liveness evidence does not:
+        # renewal must fail closed on the missing evidence table after a
+        # legitimate acquire.
+        (outbox_row,) = await outbox.list_outbox(factory)
+        await outbox.claim(factory, outbox_row.id)
+        lease = await fencing.acquire(factory, work_id=outbox_row.id, owner_id="w1")
+        assert lease is not None
+        with pytest.raises(Exception) as renew_exc:
+            await kernel_liveness.renew_lease(
+                factory,
+                work_id=outbox_row.id,
+                owner_id="w1",
+                fencing_token=lease.fencing_token,
+                challenge_nonce="stale",
+                progress=1,
+                active_request_id="req-1",
+            )
+        assert "no such table" in str(renew_exc.value).lower()
+    finally:
+        await engine.dispose()
+    assert PR67A_TABLES.isdisjoint(_kernel_tables_in(db_path))
+
+
+@pytest.mark.asyncio
+async def test_pr67a_downgrade_drops_scheduler_then_reupgrade_converges(
+    tmp_path: Path,
+) -> None:
+    """Downgrade forgets scheduler, liveness, and event truth (documented
+    destructive limitation): PR66 ownership/publication authority and
+    outbox intent survive; a database below the PR67A head is honestly
+    PENDING_UPGRADE and never reports ready; re-upgrade converges with
+    empty scheduler/event tables, a fresh semantic sequence, and the
+    missing semantic history re-derivable from the surviving
+    authorities rather than resurrected."""
+    db_path = tmp_path / "pr67a-downgrade.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={}),),
+            )
+        )
+        claimed = await kernel_scheduler.claim_fair(factory, owner_id="worker-a")
+        assert claimed is not None and claimed.lease.fencing_token == 1
+        await kernel_events.append_progress(
+            factory, workspace_id="ws", work_id=claimed.work_id, counter=7
+        )
+        await kernel_liveness.renew_lease(
+            factory,
+            work_id=claimed.work_id,
+            owner_id="worker-a",
+            fencing_token=1,
+            challenge_nonce=claimed.challenge_nonce,
+            progress=1,
+            active_request_id="req-1",
+        )
+        assert await kernel_events.get_latest_sequence(factory, workspace_id="ws") >= 1
+    finally:
+        await engine.dispose()
+
+    assert PR67A_TABLES <= _kernel_tables_in(db_path)
+
+    def _downgrade_to_pr66() -> None:
+        command.downgrade(db_migration._alembic_config(url), PR66_HEAD)
+
+    await asyncio.to_thread(_downgrade_to_pr66)
+    tables = _kernel_tables_in(db_path)
+    assert not (PR67A_TABLES & tables)
+    assert (KERNEL_TABLES | PR64_TABLES | PR65A_TABLES | PR65B_TABLES | PR66_TABLES) <= (
+        tables
+    )
+
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+    with pytest.raises(IncompatibleDatabaseError):
+        await verify_database_ready(url=url)
+
+    await upgrade_database(url=url)
+    assert inspect_database(url=url).state is DatabaseState.CURRENT
+    with sqlite3.connect(db_path) as conn:
+        for table in sorted(PR67A_TABLES):
+            assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
+        outbox_state = conn.execute("SELECT state FROM kernel_outbox").fetchone()[0]
+        lease_token = conn.execute(
+            "SELECT fencing_token FROM kernel_work_leases"
+        ).fetchone()[0]
+    assert outbox_state == "in_flight"  # PR66 delivery truth survived
+    assert lease_token == 1  # ownership authority survived
+
+    # The semantic log restarts empty and never duplicates: the sequence
+    # begins again at 1, and repair derives only what the surviving
+    # authorities still prove.
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        assert await kernel_events.get_latest_sequence(factory, workspace_id="ws") == 0
+        repaired = await kernel_scheduler.reconcile_dispatch(factory)
+        assert len(repaired["events_repaired"]) == 1
+        first = repaired["events_repaired"][0]
+        assert first.event_type == "work.claimed" and first.semantic_sequence == 1
+        assert first.payload["repair"] is True
+        assert await kernel_scheduler.reconcile_dispatch(factory) == {
+            "orphaned_deliveries_released": 0,
+            "events_repaired": [],
+        }
     finally:
         await engine.dispose()

@@ -168,3 +168,53 @@ class PublicationConflictError(KernelError):
             f"{existing_result_hash} differs from submitted "
             f"{submitted_result_hash}"
         )
+
+
+# --- PR67A: fair scheduling, challenge liveness, semantic events ----------
+
+
+class InvalidGroupPolicyError(KernelError):
+    """A scheduling group policy value violated the fair-share contract
+    (non-positive weight or fan-out window, non-positive age boost)."""
+
+
+class InvalidChallengeError(KernelError):
+    """Lease renewal did not present the current challenge evidence: the
+    nonce was never issued for this lease, or it was superseded by a
+    later renewal that rotated it. A renewal path that cannot show the
+    live control loop's current nonce is rejected without touching the
+    fence."""
+
+
+class ProgressNotAdvancingError(KernelError):
+    """Liveness evidence reported a progress counter that does not
+    strictly advance the durable high-water mark (replay or stale
+    snapshot, not a responsive control loop)."""
+
+
+class RequestNotActiveError(KernelError):
+    """The active request/stage the renewal claims to serve is not known
+    active for the lease (never registered, expired, or unbound)."""
+
+
+class TopologyMismatchError(KernelError):
+    """Renewal evidence carries a topology generation that disagrees
+    with the generation the fence was issued under."""
+
+    def __init__(self, *, submitted_generation: int | None, current_generation: int | None) -> None:
+        self.submitted_generation = submitted_generation
+        self.current_generation = current_generation
+        super().__init__(
+            "topology generation mismatch: submitted "
+            f"{submitted_generation} vs fenced {current_generation}"
+        )
+
+
+class WorkCancelledError(KernelError):
+    """Cancellation was durably observed for this work item; liveness
+    evidence can no longer extend the lease."""
+
+
+class InvalidEventError(KernelError):
+    """A semantic event or progress update failed validation at the
+    kernel boundary (grammar, payload, or stream scope)."""

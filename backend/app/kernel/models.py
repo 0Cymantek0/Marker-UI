@@ -83,6 +83,33 @@ ownership generation may turn an executed result into accepted state*:
   the same logical acceptance converge idempotently while a materially
   different result is rejected as a conflict.
 
+Five PR67A tables hold fair scheduling, challenge liveness, and durable
+semantic events (revision ``20260816_0009``). None of them is an
+ownership or publication authority — that remains PR66; they add policy
+metadata, liveness evidence, and the authoritative semantic log:
+
+* ``kernel_scheduling_entries`` — per-work scheduling metadata (resource
+  class, group, deadline). Derived policy data keyed to the outbox row;
+  the outbox state remains the only work truth.
+* ``kernel_scheduling_groups`` — per-(resource class, group) policy and
+  non-authoritative service bookkeeping (weight, fan-out window, age
+  boost, served count). Fairness accounting may be rebuilt; it never
+  decides authority.
+* ``kernel_liveness`` — per-work challenge evidence for lease renewal:
+  the rotating challenge nonce, monotonic progress high-water mark,
+  active request binding, topology generation, request deadline, and
+  cancellation observation. Renewal without matching this evidence is
+  rejected; a wedged worker stops renewing and becomes takeover-eligible
+  through the PR66 lease-expiry path.
+* ``kernel_events`` — append-only durable semantic events with an
+  authoritative per-(workspace, stream) ``semantic_sequence`` assigned
+  inside the append transaction. Replay order is the sequence, never
+  wall-clock timestamps.
+* ``kernel_progress`` — coalescible progress snapshots: exactly one row
+  per (workspace, work), updated in place. Progress floods never
+  amplify into per-tick durable rows, and losing them never loses
+  semantic truth.
+
 Wall-clock timestamps on these tables are audit metadata only. Causal
 order is ``kernel_commit_id``; nothing in this module may use timestamps
 for ordering, membership, or identity. Lease expiry on reader pins is
@@ -96,7 +123,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -128,6 +164,13 @@ MAX_RETIRE_STATE_LENGTH = 16
 MAX_RETIRE_REASON_LENGTH = 64
 MAX_OWNER_ID_LENGTH = 64
 MAX_LEASE_STATE_LENGTH = 16
+MAX_RESOURCE_CLASS_LENGTH = 32
+MAX_GROUP_ID_LENGTH = 192
+MAX_CHALLENGE_NONCE_LENGTH = 64
+MAX_EVENT_STREAM_LENGTH = 64
+MAX_EVENT_TYPE_LENGTH = 100
+MAX_EVENT_DURABILITY_LENGTH = 16
+MAX_ACTIVE_REQUEST_ID_LENGTH = 192
 
 
 class KernelCommitHead(Base):
@@ -665,4 +708,198 @@ class KernelPublication(Base):
         return (
             f"<KernelPublication(work={self.work_id}, "
             f"result={self.result_hash!r}, token={self.fencing_token})>"
+        )
+
+
+class KernelSchedulingEntry(Base):
+    """Per-work scheduling metadata (PR67A).
+
+    Policy data keyed 1:1 to an outbox work item. The outbox row remains
+    the only work truth: an entry neither claims the work is runnable nor
+    records ownership — it tells the fair scheduler which resource class,
+    scheduling group, and deadline pressure this work belongs to. Rows
+    are created at ``register_work`` time or lazily with workspace
+    defaults by the first dispatch that meets an unregistered pending
+    item.
+    """
+
+    __tablename__ = "kernel_scheduling_entries"
+
+    work_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), nullable=False
+    )
+    resource_class: Mapped[str] = mapped_column(
+        String(MAX_RESOURCE_CLASS_LENGTH), nullable=False
+    )
+    group_id: Mapped[str] = mapped_column(String(MAX_GROUP_ID_LENGTH), nullable=False)
+    #: deadline pressure input; expiry does not cancel or reorder truth.
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        # group-window and per-class candidate scans
+        Index("ix_kernel_sched_entries_class_group", "resource_class", "group_id"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelSchedulingEntry(work={self.work_id}, "
+            f"class={self.resource_class!r}, group={self.group_id!r})>"
+        )
+
+
+class KernelSchedulingGroup(Base):
+    """Fair-share policy and service bookkeeping for one scheduling
+    group inside a resource class (PR67A).
+
+    ``served_count`` is deliberately *non-authoritative accounting*: it
+    feeds the weighted-fair ordering (virtual finish ≈ served / weight)
+    and may drift transiently under concurrent dispatchers without
+    affecting ownership, acceptance, or acknowledgement. Weights shape
+    long-run service shares; the age boost keeps an old eligible group
+    from being perpetually displaced; ``max_in_flight`` bounds how many
+    items of one group may be simultaneously outstanding (fan-out
+    backpressure that never occupies a slot while waiting).
+    """
+
+    __tablename__ = "kernel_scheduling_groups"
+
+    resource_class: Mapped[str] = mapped_column(
+        String(MAX_RESOURCE_CLASS_LENGTH), primary_key=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        String(MAX_GROUP_ID_LENGTH), primary_key=True
+    )
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    max_in_flight: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    age_boost_after_seconds: Mapped[float] = mapped_column(
+        Float, nullable=False, default=30.0
+    )
+    age_boost_factor: Mapped[float] = mapped_column(Float, nullable=False, default=4.0)
+    served_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelSchedulingGroup(class={self.resource_class!r}, "
+            f"group={self.group_id!r}, served={self.served_count}, "
+            f"weight={self.weight})>"
+        )
+
+
+class KernelLiveness(Base):
+    """Challenge evidence backing lease renewal for one work item
+    (PR67A).
+
+    Seeded in the same transaction that records a fair claim. Renewal
+    must present the *current* ``challenge_nonce`` (rotated on every
+    successful renewal, handed only to the responder), a progress
+    counter strictly advancing ``progress_high_water``, and the active
+    request identity the control loop is serving. A detached timer that
+    merely knows the owner id cannot satisfy this contract: its nonce
+    goes stale at the first rotation and its progress cannot advance.
+    """
+
+    __tablename__ = "kernel_liveness"
+
+    work_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    challenge_nonce: Mapped[str] = mapped_column(
+        String(MAX_CHALLENGE_NONCE_LENGTH), nullable=False
+    )
+    progress_high_water: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active_request_id: Mapped[str] = mapped_column(
+        String(MAX_ACTIVE_REQUEST_ID_LENGTH), nullable=False, default=""
+    )
+    topology_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: external request the control loop is waiting on; liveness ends
+    #: with it. Audit/eligibility input — never authority.
+    request_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    renew_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelLiveness(work={self.work_id}, "
+            f"renews={self.renew_count}, cancelled={self.cancelled_at is not None})>"
+        )
+
+
+class KernelEvent(Base):
+    """One durable semantic event in the authoritative per-scope
+    sequence (PR67A).
+
+    ``semantic_sequence`` is allocated inside the append transaction
+    (writer-serialized ``MAX+1``), so within ``(workspace_id, stream)``
+    the sequence cannot fork or regress, and replay never depends on
+    wall-clock timestamps. ``created_at`` is audit metadata only. Rows
+    are append-only; coalescible progress never lands in this table.
+    """
+
+    __tablename__ = "kernel_events"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), primary_key=True
+    )
+    stream: Mapped[str] = mapped_column(
+        String(MAX_EVENT_STREAM_LENGTH), primary_key=True
+    )
+    semantic_sequence: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(
+        String(MAX_EVENT_TYPE_LENGTH), nullable=False
+    )
+    durability: Mapped[str] = mapped_column(
+        String(MAX_EVENT_DURABILITY_LENGTH), nullable=False, default="durable"
+    )
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelEvent(ws={self.workspace_id!r}, stream={self.stream!r}, "
+            f"seq={self.semantic_sequence}, type={self.event_type!r})>"
+        )
+
+
+class KernelProgress(Base):
+    """Coalescible progress snapshot for one work item (PR67A).
+
+    Exactly one row per (workspace, work), updated in place: a progress
+    flood converges to the latest snapshot instead of one durable row
+    per tick. Progress is best-effort by design — dropping or lagging it
+    never loses durable semantic events, which live in ``kernel_events``.
+    """
+
+    __tablename__ = "kernel_progress"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), primary_key=True
+    )
+    work_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelProgress(work={self.work_id}, counter={self.counter})>"
         )
