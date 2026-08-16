@@ -31,10 +31,16 @@ Public surface:
 * :mod:`app.kernel.gc` (PR65B) — conservative two-phase collection
   (plan → recheck → tombstone → sweep) and restart reconciliation;
 * :mod:`app.kernel.errors` — boundary error contract;
+* :mod:`app.kernel.fencing` (PR66) — fenced work ownership and the
+  exactly-once accepted-publication boundary on top of the outbox
+  (acquire/release/takeover leases, monotonic fencing tokens,
+  acceptance linearization, fenced acknowledgement, and a deliberately
+  minimal claim-next dispatch seam);
 * :mod:`app.kernel.models` — ORM tables owned by Alembic revisions
   ``20260815_0004`` (commit spine), ``20260815_0005`` (payload
   registry + outbox), ``20260815_0006`` (materialized generations),
-  and ``20260815_0007`` (retention roots, reader pins, GC tombstones).
+  ``20260815_0007`` (retention roots, reader pins, GC tombstones), and
+  ``20260816_0008`` (work leases + accepted publications).
 
 What this slice guarantees and deliberately does not guarantee is
 documented in ``docs/reference/truth-kernel.md``.
@@ -49,6 +55,19 @@ from app.kernel.commit import (
     default_commit_service,
 )
 from app.kernel.errors import KernelError
+from app.kernel.fencing import (
+    AcceptOutcome,
+    ClaimedWork,
+    Publication,
+    WorkLease,
+    accept,
+    acquire,
+    claim_next,
+    complete_work,
+    get_lease,
+    get_publication,
+    release,
+)
 from app.kernel.gc import (
     CollectionPlan,
     CollectionReport,
@@ -94,6 +113,8 @@ from app.kernel.retention import (
 from app.kernel.snapshots import KernelSnapshot, resolve_snapshot
 
 __all__ = [
+    "AcceptOutcome",
+    "ClaimedWork",
     "CollectionPlan",
     "CollectionReport",
     "GenerationReader",
@@ -108,18 +129,26 @@ __all__ = [
     "OutboxIntent",
     "OutboxView",
     "PayloadAvailabilityResult",
+    "Publication",
     "ReaderPinView",
     "ReconcileReport",
     "ReplayResult",
     "RetentionHoldView",
     "StagedBlob",
     "VerificationResult",
+    "WorkLease",
+    "accept",
+    "acquire",
     "acquire_reader_pin",
     "active_reader_pins",
+    "claim_next",
     "collect",
+    "complete_work",
     "default_commit_service",
     "default_generation_service",
     "declare_hold",
+    "get_lease",
+    "get_publication",
     "open_current_generation",
     "open_pinned_generation",
     "plan_collection",
@@ -127,6 +156,7 @@ __all__ = [
     "reconcile",
     "reconcile_after_restart",
     "reconcile_retirements",
+    "release",
     "release_hold",
     "release_reader_pin",
     "renew_reader_pin",

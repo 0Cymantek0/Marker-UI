@@ -64,18 +64,39 @@ never rewrite committed truth:
   deliberately kept: retired bytes remain an honest availability fact,
   never a fabricated "available".
 
+Two PR66 tables hold the fenced work authority (revision
+``20260816_0008``). They answer one question durably — *which
+ownership generation may turn an executed result into accepted state*:
+
+* ``kernel_work_leases`` — one row per outbox work item holding the
+  current fenced ownership: a monotonically increasing
+  ``fencing_token``, the current ``owner_id``, a wall-clock
+  ``lease_expires_at`` (takeover eligibility only — never proof of
+  authority), and a lifecycle ``state`` (leased/released/accepted).
+  Every ownership transition (acquire, takeover, vacate) advances the
+  token inside one conditional transaction, so an older token is stale
+  forever, even after restart.
+* ``kernel_publications`` — the exactly-once accepted result for one
+  work identity. The unique ``(workspace_id, work_id)`` scope is the
+  database-enforced "at most one accepted publication" guarantee; the
+  deterministic ``publication_id`` plus ``result_hash`` make retrying
+  the same logical acceptance converge idempotently while a materially
+  different result is rejected as a conflict.
+
 Wall-clock timestamps on these tables are audit metadata only. Causal
 order is ``kernel_commit_id``; nothing in this module may use timestamps
 for ordering, membership, or identity. Lease expiry on reader pins is
 the one deliberate wall-clock grace mechanism (mirroring the outbox's
-claimed-at timestamps), not a causal claim.
+claimed-at timestamps), not a causal claim. Work-lease expiry follows
+the same rule: it permits takeover, it never authorizes an older token
+to accept.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -105,6 +126,8 @@ MAX_ROOT_KIND_LENGTH = 50
 MAX_ROOT_STATE_LENGTH = 16
 MAX_RETIRE_STATE_LENGTH = 16
 MAX_RETIRE_REASON_LENGTH = 64
+MAX_OWNER_ID_LENGTH = 64
+MAX_LEASE_STATE_LENGTH = 16
 
 
 class KernelCommitHead(Base):
@@ -562,4 +585,84 @@ class KernelPayloadRetirement(Base):
         return (
             f"<KernelPayloadRetirement(blob_key={self.blob_key!r}, "
             f"state={self.state!r}, attempts={self.attempts})>"
+        )
+
+
+class KernelWorkLease(Base):
+    """Current fenced ownership for one outbox work item (PR66).
+
+    ``fencing_token`` is the durable authority generation: it starts at
+    1 when the work is first acquired and is advanced by exactly one
+    inside every ownership transition transaction (first acquire,
+    takeover, vacate). An acceptance submitted with a token smaller
+    than the stored one is stale forever — wall-clock lease expiry may
+    *permit* takeover, but never revives or re-authorizes an old token.
+    """
+
+    __tablename__ = "kernel_work_leases"
+
+    work_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    work_kind: Mapped[str] = mapped_column(String(MAX_WORK_KIND_LENGTH), nullable=False)
+    fencing_token: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(MAX_OWNER_ID_LENGTH), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(MAX_LEASE_STATE_LENGTH), nullable=False, default="leased"
+    )
+    #: takeover eligibility only (see class docstring); never authority.
+    lease_expires_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelWorkLease(work={self.work_id}, token={self.fencing_token}, "
+            f"owner={self.owner_id!r}, state={self.state!r})>"
+        )
+
+
+class KernelPublication(Base):
+    """The one accepted publication for one work identity (PR66).
+
+    Inserted only inside the acceptance transaction that first verified
+    the submitting fence is current. ``publication_id`` is the
+    deterministic framed hash over (workspace, work, result hash), and
+    the unique ``(workspace_id, work_id)`` scope is what makes "exactly
+    one accepted publication" a database-enforced fact rather than a
+    convention. Rows are immutable once accepted.
+    """
+
+    __tablename__ = "kernel_publications"
+
+    publication_id: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    work_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    work_kind: Mapped[str] = mapped_column(String(MAX_WORK_KIND_LENGTH), nullable=False)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False)
+    result_hash: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    #: fencing token (and owner) that legitimately accepted this result.
+    fencing_token: Mapped[int] = mapped_column(Integer, nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(MAX_OWNER_ID_LENGTH), nullable=False)
+    accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "work_id", name="uq_kernel_publications_scope"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelPublication(work={self.work_id}, "
+            f"result={self.result_hash!r}, token={self.fencing_token})>"
         )

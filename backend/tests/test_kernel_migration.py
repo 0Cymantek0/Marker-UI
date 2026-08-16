@@ -1,5 +1,6 @@
 """Kernel spine migration tests (V3.2 PR63A, plan workstream A;
-PR64 payload/outbox revision coverage).
+PR64 payload/outbox, PR65A generation, PR65B retention, and PR66
+fencing/publication revision coverage).
 
 Extends the PR62 acceptance matrix to the kernel Alembic heads:
 
@@ -12,7 +13,12 @@ Extends the PR62 acceptance matrix to the kernel Alembic heads:
 - the kernel commit service refuses to run against an unmigrated
   database (no runtime self-heal of kernel schema);
 - downgraded spine schema is classified as PENDING_UPGRADE (fail-closed
-  classification, not repair).
+  classification, not repair);
+- PR66: a database at ``20260815_0007`` with committed kernel history,
+  an active generation, and declared retention upgrades to
+  ``20260816_0008`` with all prior truth preserved and the fencing
+  tables arriving empty; fencing calls fail closed on the missing
+  revision; downgrade drops fencing/publication truth honestly.
 """
 
 from __future__ import annotations
@@ -35,9 +41,11 @@ from app.db_migration import (
     upgrade_database,
     verify_database_ready,
 )
+from app.kernel import fencing, outbox
 from app.kernel.commit import KernelCommitBatch, KernelCommitService
 from app.kernel.generations import GenerationService
 from app.kernel.gc import plan_collection
+from app.kernel.outbox import OutboxIntent
 from app.kernel.payloads import LocalPayloadStore
 from app.kernel.records import ClaimAssertionRecord, ObservationRecord
 from app.kernel.reconcile import verify_payload_availability
@@ -60,7 +68,8 @@ PREVIOUS_HEAD = "20260709_0003"
 PR63A_HEAD = "20260815_0004"
 PR64_HEAD = "20260815_0005"
 PR65A_HEAD = "20260815_0006"
-CURRENT_HEAD = "20260815_0007"
+PR65B_HEAD = "20260815_0007"
+CURRENT_HEAD = "20260816_0008"
 
 PR65A_TABLES = {
     "kernel_generations",
@@ -73,6 +82,11 @@ PR65B_TABLES = {
     "kernel_retention_roots",
     "kernel_reader_pins",
     "kernel_payload_retirements",
+}
+
+PR66_TABLES = {
+    "kernel_work_leases",
+    "kernel_publications",
 }
 
 
@@ -656,3 +670,202 @@ async def test_pr65b_downgrade_drops_retention_then_reupgrade_converges(
     availability = await verify_payload_availability(factory, store, workspace_id="ws")
     assert availability.payload_backed_complete
     await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# PR66: 20260815_0007 -> 20260816_0008 fenced work authority
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upgrade_from_pr65b_head_preserves_committed_data(
+    tmp_path: Path,
+) -> None:
+    """A PR65B database with committed history, payload state, an outbox
+    row, an active generation, and declared retention upgrades to the
+    PR66 head with everything preserved and the fencing tables arriving
+    empty (no fabricated ownership or accepted results)."""
+    db_path = tmp_path / "pr65b-full.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR65B_HEAD
+    )
+
+    store = LocalPayloadStore(tmp_path / "payloads")
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory, payload_store=store)
+    gen_service = GenerationService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws-pr66",
+                records=(
+                    ObservationRecord(
+                        observer="marker",
+                        derivation={"stage": "layout"},
+                        payload_bytes=b"pr66 upgrade probe",
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={"t": 1}),),
+            )
+        )
+        await gen_service.build_and_activate(await resolve_snapshot(factory, "ws-pr66"))
+        await declare_hold(
+            factory,
+            workspace_id="ws-pr66",
+            root_kind=ROOT_KIND_SNAPSHOT_HOLD,
+            kernel_commit_id=1,
+        )
+    finally:
+        await engine.dispose()
+
+    await upgrade_database(url=url)
+    status = await verify_database_ready(url=url)
+    assert status.state is DatabaseState.CURRENT
+
+    with sqlite3.connect(db_path) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == CURRENT_HEAD
+        records = conn.execute(
+            "SELECT COUNT(*) FROM kernel_records WHERE workspace_id = 'ws-pr66'"
+        ).fetchone()[0]
+        payloads = conn.execute(
+            "SELECT COUNT(*) FROM kernel_payload_objects"
+        ).fetchone()[0]
+        outbox_rows = conn.execute("SELECT COUNT(*) FROM kernel_outbox").fetchone()[0]
+        generations = conn.execute(
+            "SELECT COUNT(*) FROM kernel_generations WHERE state = 'active'"
+        ).fetchone()[0]
+        roots = conn.execute(
+            "SELECT COUNT(*) FROM kernel_retention_roots"
+        ).fetchone()[0]
+        leases = conn.execute("SELECT COUNT(*) FROM kernel_work_leases").fetchone()[0]
+        publications = conn.execute(
+            "SELECT COUNT(*) FROM kernel_publications"
+        ).fetchone()[0]
+    assert records == 1 and payloads == 1 and outbox_rows == 1
+    assert generations == 1 and roots == 1  # PR65B truth survived
+    assert leases == 0 and publications == 0  # nothing fabricated
+
+
+@pytest.mark.asyncio
+async def test_fencing_calls_fail_closed_at_pr65b_head(tmp_path: Path) -> None:
+    """A database missing only the PR66 revision is PENDING_UPGRADE;
+    fencing calls fail closed on the missing tables — they never
+    self-heal the schema."""
+    db_path = tmp_path / "behind-pr66.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR65B_HEAD
+    )
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={}),),
+            )
+        )
+        (outbox_row,) = await outbox.list_outbox(factory)
+        with pytest.raises(Exception) as acquire_exc:
+            await fencing.acquire(
+                factory, work_id=outbox_row.id, owner_id="worker-a"
+            )
+        assert "no such table" in str(acquire_exc.value).lower()
+        with pytest.raises(Exception) as accept_exc:
+            await fencing.accept(
+                factory, work_id=outbox_row.id, fencing_token=1, result={}
+            )
+        assert "no such table" in str(accept_exc.value).lower()
+    finally:
+        await engine.dispose()
+    assert PR66_TABLES.isdisjoint(_kernel_tables_in(db_path))
+
+
+@pytest.mark.asyncio
+async def test_pr66_downgrade_drops_fencing_then_reupgrade_converges(
+    tmp_path: Path,
+) -> None:
+    """Downgrade forgets fencing and accepted-publication truth
+    (documented destructive limitation): kernel truth, payloads, and
+    outbox intent survive; a database below the PR66 head is honestly
+    PENDING_UPGRADE and never reports ready; re-upgrade converges to
+    empty fencing tables from which fresh authority can be built."""
+    db_path = tmp_path / "pr66-downgrade.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="materialize", payload={}),),
+            )
+        )
+        (outbox_row,) = await outbox.list_outbox(factory)
+        await outbox.claim(factory, outbox_row.id)
+        lease = await fencing.acquire(factory, work_id=outbox_row.id, owner_id="w1")
+        assert lease is not None and lease.fencing_token == 1
+        outcome = await fencing.accept(
+            factory, work_id=outbox_row.id, fencing_token=1, result={"ok": True}
+        )
+        assert not outcome.already_accepted
+    finally:
+        await engine.dispose()
+
+    assert PR66_TABLES <= _kernel_tables_in(db_path)
+
+    def _downgrade_to_pr65b() -> None:
+        command.downgrade(db_migration._alembic_config(url), PR65B_HEAD)
+
+    await asyncio.to_thread(_downgrade_to_pr65b)
+    tables = _kernel_tables_in(db_path)
+    assert not (PR66_TABLES & tables)
+    assert (KERNEL_TABLES | PR64_TABLES | PR65A_TABLES | PR65B_TABLES) <= tables
+
+    # An interrupted/failed upgrade state is never reported ready (T15).
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.PENDING_UPGRADE
+    with pytest.raises(IncompatibleDatabaseError):
+        await verify_database_ready(url=url)
+
+    await upgrade_database(url=url)
+    assert inspect_database(url=url).state is DatabaseState.CURRENT
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM kernel_work_leases").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM kernel_publications").fetchone()[0] == 0
+        outbox_state = conn.execute(
+            "SELECT state FROM kernel_outbox"
+        ).fetchone()[0]
+
+    # outbox truth survived the downgrade; fresh fencing works after the
+    # re-upgrade (the dropped authority is rebuilt, not resurrected).
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        assert outbox_state == "in_flight"
+        lease = await fencing.acquire(factory, work_id=outbox_row.id, owner_id="w2")
+        assert lease is not None and lease.fencing_token == 1
+    finally:
+        await engine.dispose()

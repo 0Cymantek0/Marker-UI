@@ -12,8 +12,14 @@ Delivery semantics at this stage are honestly **at-least-once**:
   and increments its attempt counter;
 * after a process crash, ``reset_in_flight`` returns every stuck
   ``in_flight`` item to pending — redelivery is expected and consumers
-  must be idempotent (the PR66 exactly-once/fencing layer builds on
-  this seam and is deliberately absent here).
+  must be idempotent.
+
+The PR66 fencing layer (:mod:`app.kernel.fencing`) builds the durable
+authority boundary on top of this seam: only the current fenced
+ownership generation may turn a result into the one accepted
+publication, and fenced acknowledgement (``complete_work``) replaces
+bare ``ack`` on the dispatch path. This module remains the honest
+lower-level at-least-once surface it always was.
 
 Identity: ``dedupe_key`` deterministically derives from the authorizing
 commit and the intent content, so a retried commit protocol cannot
