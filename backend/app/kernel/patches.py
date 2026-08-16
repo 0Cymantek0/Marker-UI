@@ -22,9 +22,12 @@ Identity rules follow the kernel contract: semantic identity comes from
 ``identity_payload()`` through the PR61 canonical utilities; ``record_id``
 is an event id and never identity; identity-affecting payloads reject
 unknown fields on rematerialization (fail closed). Claim-assessment
-preconditions are deliberately deferred to PR74 — the field exists, is
-versioned with the schema, and non-empty values are rejected at
-construction rather than silently ignored.
+preconditions are live since PR74: ``required_claims`` carries typed
+:class:`~app.kernel.proofs.ClaimRequirement` entries evaluated
+authoritatively against committed assessment state inside the commit
+transaction (see :mod:`app.kernel.proofs`); the PR73-era placeholder
+key ``required_claim_refs`` is accepted on rematerialization only when
+empty and points to the new field.
 
 Operations stay domain-specific payloads behind this small envelope;
 there is deliberately no universal patch language. v1 ships three
@@ -51,6 +54,7 @@ from app.kernel.errors import (
     SourceRevisionMismatchError,
     StaleBaseRevisionError,
 )
+from app.kernel.proofs import ClaimRequirement, evaluate_claim_requirements
 from app.kernel.reading_order import (
     NODE_KIND_CONTENT,
     OrderEdge,
@@ -370,16 +374,19 @@ class PatchPreconditions:
     the proposer read (RFC 9110 ``If-Match`` discipline: state-changing
     requests must carry the strong validator they observed).
 
-    ``required_claim_refs`` is deliberately deferred to PR74: the field
-    exists so the contract is extensible without a schema break, and
-    non-empty values fail closed at construction rather than being
-    silently ignored.
+    ``required_claims`` (PR74) gates the patch on claim/assessment
+    state: each :class:`~app.kernel.proofs.ClaimRequirement` must be
+    satisfied by committed, in-policy, fresh, structurally valid
+    assessment state when the commit transaction evaluates the
+    advancement — missing, stale, wrong-assertion, policy-mismatched,
+    or proof-invalid assessments fail closed and roll back the entire
+    patch commit.
     """
 
     base_revision_id: str | None
     target_checks: tuple[TargetCheck, ...] = ()
     required_source_revision_refs: tuple[str, ...] = ()
-    required_claim_refs: tuple[str, ...] = ()
+    required_claims: tuple[ClaimRequirement, ...] = ()
 
     def __post_init__(self) -> None:
         if self.base_revision_id is not None:
@@ -405,13 +412,13 @@ class PatchPreconditions:
         for ref in source_refs:
             validate_record_ref(ref, field_name="required source revision ref")
         object.__setattr__(self, "required_source_revision_refs", source_refs)
-        claim_refs = tuple(self.required_claim_refs)
-        if claim_refs:
-            raise KernelError(
-                "claim-assessment preconditions arrive with PR74; this slice "
-                "fails closed instead of accepting a precondition it cannot "
-                "evaluate"
-            )
+        claim_reqs = tuple(self.required_claims)
+        for req in claim_reqs:
+            if not isinstance(req, ClaimRequirement):
+                raise KernelError(
+                    f"required_claims must be ClaimRequirement, got {type(req).__name__}"
+                )
+        object.__setattr__(self, "required_claims", claim_reqs)
 
     def canonical_value(self) -> dict[str, Any]:
         return {
@@ -422,7 +429,7 @@ class PatchPreconditions:
                 )
             ],
             "required_source_revision_refs": sorted(self.required_source_revision_refs),
-            "required_claim_refs": [],
+            "required_claims": [req.canonical_value() for req in self.required_claims],
         }
 
     @classmethod
@@ -433,16 +440,21 @@ class PatchPreconditions:
             "base_revision_id",
             "target_checks",
             "required_source_revision_refs",
+            # PR73 placeholder key: only its empty form was ever
+            # committable, so accepting empty payloads keeps stored
+            # proposals rematerializable; non-empty values point at the
+            # PR74 field instead of failing with an opaque message.
             "required_claim_refs",
+            "required_claims",
         }
         unknown = set(value) - allowed
         if unknown:
             raise KernelError(f"unknown precondition fields {sorted(unknown)}")
-        claim_refs = value.get("required_claim_refs") or []
-        if claim_refs:
+        legacy_claim_refs = value.get("required_claim_refs") or []
+        if legacy_claim_refs:
             raise KernelError(
-                "claim-assessment preconditions arrive with PR74; refusing "
-                "to rematerialize a precondition this slice cannot evaluate"
+                "required_claim_refs was the PR73 fail-closed placeholder; use "
+                "required_claims (typed ClaimRequirement entries) instead"
             )
         return cls(
             base_revision_id=value.get("base_revision_id"),
@@ -452,23 +464,27 @@ class PatchPreconditions:
             required_source_revision_refs=tuple(
                 value.get("required_source_revision_refs") or ()
             ),
+            required_claims=tuple(
+                ClaimRequirement.from_canonical(req)
+                for req in value.get("required_claims") or []
+            ),
         )
 
 
 def evaluate_preconditions(
     current_view: ViewDocumentRecord, preconditions: PatchPreconditions
 ) -> None:
-    """Evaluate every enforceable precondition against one current view.
+    """Evaluate every view-local precondition against one current view.
 
     Pure: raises the typed conflict for the FIRST violated precondition
     (stale-base comparison itself belongs to the view head, not to a
     single document). This is the same evaluation the commit transaction
-    runs authoritatively.
+    runs authoritatively. Claim requirements are deliberately NOT
+    evaluated here — they need committed assessment state, and their
+    authoritative evaluation lives in
+    :func:`app.kernel.proofs.evaluate_claim_requirements`, called
+    inside the commit transaction by ``check_view_advancement``.
     """
-    if preconditions.required_claim_refs:
-        raise KernelError(
-            "claim-assessment preconditions arrive with PR74; never accepted here"
-        )
     if preconditions.required_source_revision_refs:
         required = tuple(preconditions.required_source_revision_refs)
         observed = current_view.content_revision_ref
@@ -955,7 +971,17 @@ async def check_view_advancement(
         raise InvalidViewAdvancementError(
             "the proposal targets a different base revision than the "
             "advancement declares"
-        )
+    )
+    # PR74 claim preconditions: evaluated authoritatively here, under
+    # the writer lock, against committed assessment state — a missing,
+    # stale, policy-mismatched, or proof-invalid assessment raises the
+    # typed conflict and rolls the whole patch commit back.
+    await evaluate_claim_requirements(
+        session,
+        workspace_id,
+        proposal.preconditions.required_claims,
+        current_head=next_commit_id - 1,
+    )
 
     rebase_ops = [
         op for op in proposal.operations if op.op_type == OP_TYPE_REBASE_SOURCE

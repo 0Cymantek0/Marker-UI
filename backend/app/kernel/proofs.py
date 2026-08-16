@@ -827,10 +827,17 @@ async def evaluate_claim_requirements(
             raise _unmet(
                 context, "declared evidence and support graph no longer agree"
             )
-        await _check_grounding(
-            session,
-            workspace_id,
-            graph,
-            [(holder, f"assessment {holder!r}")],
-            {holder: "claim_assessment"},
-        )
+        try:
+            await _check_grounding(
+                session,
+                workspace_id,
+                graph,
+                [(holder, f"assessment {holder!r}")],
+                {holder: "claim_assessment"},
+            )
+        except ProofInputIntegrityError as exc:
+            # A proof that was valid at its commit can be tainted by
+            # later commits (e.g. a new derivation edge laundering it);
+            # at precondition time that must surface as the typed patch
+            # conflict, not as a batch-validation error.
+            raise _unmet(context, str(exc)) from None

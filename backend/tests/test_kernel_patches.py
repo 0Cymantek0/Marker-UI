@@ -110,12 +110,24 @@ def test_preconditions_reject_malformed_hashes_and_duplicate_targets():
         )
 
 
-def test_preconditions_fail_closed_on_pr74_claims():
-    with pytest.raises(KernelError, match="PR74"):
-        PatchPreconditions(
-            base_revision_id=view_text_hash("x"),
-            required_claim_refs=("claim-1",),
-        )
+def test_preconditions_accept_and_round_trip_pr74_claims():
+    from app.kernel.proofs import ClaimRequirement
+
+    requirement = ClaimRequirement(
+        assertion_ref="assertion-1",
+        policy_id="policy.default",
+        policy_revision="rev-3",
+    )
+    preconditions = PatchPreconditions(
+        base_revision_id=view_text_hash("x"),
+        required_claims=(requirement,),
+    )
+    assert set(preconditions.required_claims[0].accepted_outcomes) == {
+        "source_exact",
+        "verified",
+    }
+    round_trip = PatchPreconditions.from_canonical(preconditions.canonical_value())
+    assert round_trip.canonical_value() == preconditions.canonical_value()
 
 
 def test_preconditions_canonical_value_is_order_insensitive():
@@ -140,14 +152,24 @@ def test_preconditions_canonical_value_is_order_insensitive():
     assert round_trip.canonical_value() == a.canonical_value()
 
 
-def test_preconditions_from_canonical_rejects_claims_and_unknown_fields():
+def test_preconditions_from_canonical_rejects_legacy_claims_and_unknown_fields():
     payload = PatchPreconditions(base_revision_id=view_text_hash("x")).canonical_value()
-    with pytest.raises(KernelError, match="PR74"):
+    with pytest.raises(KernelError, match="required_claims"):
         PatchPreconditions.from_canonical(
             {**payload, "required_claim_refs": ["claim-1"]}
         )
     with pytest.raises(KernelError, match="unknown precondition fields"):
         PatchPreconditions.from_canonical({**payload, "surprise": 1})
+
+
+def test_preconditions_from_canonical_accepts_legacy_empty_claim_refs():
+    """Stored PR73 proposals carry the empty placeholder key; they must
+    rematerialize unchanged (schema compatibility)."""
+    payload = PatchPreconditions(base_revision_id=view_text_hash("x")).canonical_value()
+    legacy = {**payload, "required_claim_refs": []}
+    remat = PatchPreconditions.from_canonical(legacy)
+    assert remat.required_claims == ()
+    assert remat.canonical_value() == payload
 
 
 # ---------------------------------------------------------------------------

@@ -44,7 +44,9 @@ from app.kernel.patches import (
     evaluate_preconditions,
     view_text_hash,
 )
+from app.kernel.proofs import evaluate_claim_requirements
 from app.kernel.reading_order import ReadingOrderGraph
+from app.kernel.replay import read_head
 from app.utils.canonical import payload_byte_hash
 from app.kernel.records import (
     EDGE_KIND_DEPENDS_ON,
@@ -245,6 +247,18 @@ async def submit_patch(
             observed_base_revision_id=current.revision_id,
         )
     evaluate_preconditions(current.view, proposal.preconditions)
+    # Advisory claim-precondition check (PR74) — same typed conflict the
+    # commit transaction re-evaluates authoritatively under its writer
+    # lock; a race between the two can never let an unmet claim
+    # precondition through.
+    if proposal.preconditions.required_claims:
+        async with session_factory() as session:
+            await evaluate_claim_requirements(
+                session,
+                workspace_id,
+                proposal.preconditions.required_claims,
+                current_head=await read_head(session_factory, workspace_id),
+            )
     next_view = _build_next_view(workspace_id, current, proposal)
     outcome = PatchOutcomeRecord(
         record_id=_scoped_record_id(workspace_id, f"outcome-{proposal.record_id}"),
