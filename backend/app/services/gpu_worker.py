@@ -116,6 +116,36 @@ def _worker_progress_reporter(job_id: str, percent: int, label: str) -> None:
     _emit_progress(percent, label)
 
 
+def _stage_payload_handles(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Move eligible large result fields into verified file handles (PR68A).
+
+    The seam is deliberately best-effort at the producer: any failure keeps
+    the classic inline payload, so the data plane can never fail a
+    conversion. The parent-side resolver is the strict half. Disable
+    entirely with ``MARKER_ARTIFACT_HANDLES=false``.
+    """
+    try:
+        from app.core.config import ARTIFACT_HANDLES_ENABLED, ARTIFACT_HANDLE_INLINE_LIMIT
+
+        if not ARTIFACT_HANDLES_ENABLED:
+            return payload
+        from app.services.artifact_handles import default_store, stage_worker_payload
+
+        return stage_worker_payload(
+            payload,
+            store=default_store(),
+            job_id=job_id,
+            inline_limit=ARTIFACT_HANDLE_INLINE_LIMIT,
+        )
+    except Exception:  # noqa: BLE001 - degrade to inline, never fail the job
+        logger.exception(
+            "worker %d: artifact handle staging failed for job %s; emitting inline payload",
+            _worker_id,
+            job_id,
+        )
+        return payload
+
+
 # ---------------------------------------------------------------------------
 # Initializer — runs once per process at pool spawn
 # ---------------------------------------------------------------------------
@@ -281,6 +311,8 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
                 "result": result,
                 "formats_payload": formats_envelopes,
             }
+
+        payload = _stage_payload_handles(envelope.job_id, payload)
 
         _emit(
             WorkerEvent(

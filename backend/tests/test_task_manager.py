@@ -1242,3 +1242,136 @@ async def test_finalize_job_retries_briefly_when_row_not_yet_visible(
         assert row.result_text == "# Delayed commit"
 
     await engine.dispose()
+
+
+class TestArtifactPayloadResolution:
+    """PR68A: handle envelopes resolve strictly before finalization."""
+
+    def _stage_big_payload(self, store, job_id: str):
+        from app.services import artifact_handles
+
+        big_text = "resolve me\n" * 60_000  # ~660 KB
+        html_text = "<p>html</p>" * 40_000
+        payload = {
+            "result": {
+                "text": big_text,
+                "extension": "md",
+                "images": {},
+                "metadata": {"page_count": 1},
+                "assets": [],
+            },
+            "formats_payload": {
+                "html": {
+                    "text": html_text,
+                    "extension": "html",
+                    "images": {},
+                    "metadata": {},
+                    "assets": [],
+                }
+            },
+        }
+        wire = artifact_handles.stage_worker_payload(payload, store=store, job_id=job_id)
+        assert artifact_handles.is_handle_envelope(wire)
+        return wire, big_text, html_text
+
+    def test_handle_envelope_resolved_before_finalize(self, task_manager: TaskManager, tmp_path):
+        from app.services.artifact_handles import ArtifactHandleStore
+
+        store = ArtifactHandleStore(tmp_path / "handles")
+        task_manager._artifact_store = store
+        wire, big_text, html_text = self._stage_big_payload(store, "w-art")
+
+        captured: dict[str, object] = {}
+
+        async def fake_finalize(job_id, result, config, formats_payload=None):
+            captured.update(
+                job_id=job_id, result=result, formats_payload=formats_payload
+            )
+
+        task_manager._proc_configs["w-art"] = {"output_format": "markdown"}
+        with patch.object(task_manager, "_finalize_job", new=fake_finalize):
+            task_manager._finalize_proc_job("w-art", wire)
+
+        assert captured["job_id"] == "w-art"
+        assert captured["result"]["text"] == big_text
+        assert captured["formats_payload"]["html"]["text"] == html_text
+        assert store.count_blobs() == 0  # consumed, nothing leaked
+
+    def test_resolution_failure_fails_job_instead_of_completing(
+        self, task_manager: TaskManager, tmp_path
+    ):
+        from app.services.artifact_handles import ArtifactHandleStore
+
+        store = ArtifactHandleStore(tmp_path / "handles")
+        task_manager._artifact_store = store
+        wire, _, _ = self._stage_big_payload(store, "w-tamper")
+        store.sweep(older_than_seconds=0)  # backing vanished: consumer crash window
+
+        finalize_mock = MagicMock(return_value="finalize-coro")
+        fail_mock = MagicMock(return_value="fail-coro")
+        with patch.object(task_manager, "_finalize_job", new=finalize_mock), \
+             patch.object(task_manager, "_fail_job", new=fail_mock), \
+             patch.object(task_manager, "_run_async") as mock_run:
+            task_manager._proc_configs["w-tamper"] = {"output_format": "markdown"}
+            task_manager._finalize_proc_job("w-tamper", wire)
+
+        finalize_mock.assert_not_called()  # no false completion path
+        fail_mock.assert_called_once()
+        assert "artifact handoff failed" in fail_mock.call_args[0][1]
+        assert task_manager._proc_jobs.get("w-tamper") == "failed"
+        assert task_manager._progress["w-tamper"] == 0
+
+    def test_envelope_without_store_fails_closed(self, task_manager: TaskManager, tmp_path):
+        from app.services.artifact_handles import ArtifactHandleStore
+
+        # Thread-backend managers have no store; an envelope still must not
+        # be finalized as if it were a logical result.
+        assert task_manager._artifact_store is None
+        store = ArtifactHandleStore(tmp_path / "handles")
+        wire, _, _ = self._stage_big_payload(store, "w-nostore")
+
+        fail_mock = MagicMock(return_value="fail-coro")
+        finalize_mock = MagicMock(return_value="finalize-coro")
+        with patch.object(task_manager, "_finalize_job", new=finalize_mock), \
+             patch.object(task_manager, "_fail_job", new=fail_mock), \
+             patch.object(task_manager, "_run_async") as mock_run:
+            task_manager._finalize_proc_job("w-nostore", wire)
+
+        finalize_mock.assert_not_called()
+        fail_mock.assert_called_once()
+
+    def test_inline_payload_unaffected_by_resolution(self, task_manager: TaskManager):
+        captured: dict[str, object] = {}
+
+        async def fake_finalize(job_id, result, config, formats_payload=None):
+            captured["result"] = result
+
+        payload = {"text": "# plain", "extension": "md", "images": {}}
+        task_manager._proc_configs["w-plain"] = {"output_format": "markdown"}
+        with patch.object(task_manager, "_finalize_job", new=fake_finalize):
+            task_manager._finalize_proc_job("w-plain", payload)
+        assert captured["result"]["text"] == "# plain"
+
+    def test_periodic_sweep_triggers_after_threshold_results(
+        self, task_manager: TaskManager, tmp_path
+    ):
+        from app.services.artifact_handles import ArtifactHandleStore
+
+        store = ArtifactHandleStore(tmp_path / "handles")
+        task_manager._artifact_store = store
+        swept: list[int] = []
+
+        def fake_sweep():
+            swept.append(1)
+
+        with patch.object(task_manager, "_sweep_stale_artifacts", new=fake_sweep):
+            task_manager._maybe_sweep_artifacts()  # 1
+            assert swept == []
+            for _ in range(24):
+                task_manager._maybe_sweep_artifacts()
+            assert swept == [1]  # fired exactly at the 25th result
+            task_manager._maybe_sweep_artifacts()
+            assert swept == [1]
+            for _ in range(25):
+                task_manager._maybe_sweep_artifacts()
+            assert swept == [1, 1]  # next window fires again

@@ -244,3 +244,108 @@ class TestQueueLogHandler:
         assert events[0].type == WorkerEventType.log
         assert "hello" in events[0].message
         assert events[0].job_id == "job-9"
+
+
+class TestArtifactHandleEmission:
+    """PR68A: large worker results travel by verified handle, small stay inline."""
+
+    def _prepare(self, qq, monkeypatch, tmp_path, *, enabled=True, limit=256 * 1024):
+        from app.core import config
+        from app.services import artifact_handles
+
+        _reset_globals()
+        gpu_worker._event_queue = qq
+        gpu_worker._worker_id = 3
+        gpu_worker._device_str = "cpu"
+        monkeypatch.setattr(config, "ARTIFACT_HANDLES_ENABLED", enabled)
+        monkeypatch.setattr(config, "ARTIFACT_HANDLE_INLINE_LIMIT", limit)
+        monkeypatch.setattr(config, "ARTIFACT_HANDLE_ROOT", tmp_path / "handles")
+        monkeypatch.setattr(artifact_handles, "_DEFAULT_STORE", None)
+        return artifact_handles
+
+    def test_large_result_emits_compact_handle_envelope(self, monkeypatch, tmp_path):
+        import os
+
+        qq = _q.Queue()
+        ah = self._prepare(qq, monkeypatch, tmp_path)
+
+        big_text = "markdown line\n" * 45_000  # ~675 KB utf-8
+        big_image = os.urandom(400_000)
+        fake_svc = MagicMock()
+        fake_svc.convert_file.return_value = {
+            "text": big_text,
+            "extension": "md",
+            "images": {"p1.png": big_image},
+            "metadata": {"page_count": 2},
+        }
+        env = JobEnvelope(job_id="job-big", filepath="/tmp/x.pdf", config={"output_format": "markdown"})
+        with patch("app.services.marker_service.MarkerService", return_value=fake_svc):
+            gpu_worker.worker_run_job(env)
+
+        result_ev = next(e for e in _drain(qq) if e.type is WorkerEventType.result)
+        wire = result_ev.payload
+        assert ah.is_handle_envelope(wire)
+        # The control message no longer embeds the large bytes.
+        inline = wire[ah.HANDLE_WIRE_KEY]["inline"]
+        assert "text" not in inline  # single-format payload: result dict is the root
+        assert "p1.png" not in inline["images"]
+        assert inline["metadata"].get("page_count") == 2
+
+        # The parent-side resolution rebuilds the exact logical result.
+        store = ah.default_store()
+        rebuilt = ah.resolve_worker_payload(wire, store=store, job_id="job-big")
+        assert rebuilt["text"] == big_text
+        assert rebuilt["images"]["p1.png"] == big_image
+        assert store.count_blobs() == 0
+
+    def test_small_result_stays_inline_when_enabled(self, monkeypatch, tmp_path):
+        qq = _q.Queue()
+        self._prepare(qq, monkeypatch, tmp_path)
+
+        fake_svc = MagicMock()
+        fake_svc.convert_file.return_value = {"text": "# tiny", "extension": "md", "images": {}}
+        env = JobEnvelope(job_id="job-small", filepath="/tmp/x.pdf", config={"output_format": "markdown"})
+        with patch("app.services.marker_service.MarkerService", return_value=fake_svc):
+            gpu_worker.worker_run_job(env)
+
+        result_ev = next(e for e in _drain(qq) if e.type is WorkerEventType.result)
+        assert result_ev.payload["text"] == "# tiny"
+
+    def test_staging_failure_degrades_to_inline_payload(self, monkeypatch, tmp_path):
+        import os
+
+        from app.services.artifact_handles import ArtifactHandleStore
+
+        qq = _q.Queue()
+        self._prepare(qq, monkeypatch, tmp_path)
+
+        big_text = "x" * 600_000
+        big_image = os.urandom(400_000)
+        fake_svc = MagicMock()
+        fake_svc.convert_file.return_value = {
+            "text": big_text,
+            "extension": "md",
+            "images": {"p1.png": big_image},
+        }
+        env = JobEnvelope(job_id="job-fallback", filepath="/tmp/x.pdf", config={"output_format": "markdown"})
+        with patch("app.services.marker_service.MarkerService", return_value=fake_svc), \
+             patch.object(ArtifactHandleStore, "stage", side_effect=OSError("disk full")):
+            gpu_worker.worker_run_job(env)
+
+        result_ev = next(e for e in _drain(qq) if e.type is WorkerEventType.result)
+        # Classic inline contract preserved: the job still completes truthfully.
+        assert result_ev.payload["text"] == big_text
+        assert result_ev.payload["images"]["p1.png"] == big_image
+
+    def test_disabled_flag_keeps_pure_inline_transport(self, monkeypatch, tmp_path):
+        qq = _q.Queue()
+        self._prepare(qq, monkeypatch, tmp_path, enabled=False)
+
+        fake_svc = MagicMock()
+        fake_svc.convert_file.return_value = {"text": "y" * 600_000, "extension": "md", "images": {}}
+        env = JobEnvelope(job_id="job-off", filepath="/tmp/x.pdf", config={"output_format": "markdown"})
+        with patch("app.services.marker_service.MarkerService", return_value=fake_svc):
+            gpu_worker.worker_run_job(env)
+
+        result_ev = next(e for e in _drain(qq) if e.type is WorkerEventType.result)
+        assert result_ev.payload["text"] == "y" * 600_000

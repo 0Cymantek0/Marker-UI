@@ -44,6 +44,7 @@ from sse_starlette.event import ServerSentEvent
 from app.conversion.formats import OUTPUT_FORMAT_SET
 from app.database import async_session_factory
 from app.models.job import ConversionJob
+from app.services import artifact_handles
 from app.services.output_writer import write_conversion_output
 from app.services.queue_backends import DurableQueueBackend
 from app.services.job_transport import (
@@ -545,6 +546,14 @@ class TaskManager:
         self._drain_stop = threading.Event()
         self._drain_thread: Optional[threading.Thread] = None
 
+        # Local ArtifactHandle data plane (PR68A): the parent-side store that
+        # resolves worker result handles before finalization. Only the process
+        # backend crosses the pickled-result boundary the seam optimizes.
+        self._artifact_store: Optional[artifact_handles.ArtifactHandleStore] = None
+        if self._backend.is_process:
+            self._artifact_store = artifact_handles.default_store()
+        self._artifact_results_since_sweep = 0
+
         # Register custom log handler for marker and app (thread backend only;
         # harmless when unused in process mode).
         self._log_handler = JobLogHandler(self)
@@ -755,6 +764,9 @@ class TaskManager:
         from app.services import progress_tracker  # noqa: F401 - keep reference warm
 
         transport = self._backend.transport  # type: ignore[attr-defined]
+        # Startup reclamation: orphaned blobs from a previous crashed session
+        # die here, before any live handoff could race the sweep.
+        self._sweep_stale_artifacts()
         while not self._drain_stop.is_set():
             for event in transport.drain(timeout=0.5):
                 try:
@@ -792,6 +804,11 @@ class TaskManager:
     def _finalize_proc_job(self, job_id: str, result: dict[str, Any]) -> None:
         """Persist a worker-completed job and mark it done (process backend)."""
         config = self._proc_configs.pop(job_id, {})
+        resolved = self._resolve_artifact_payload(job_id, result)
+        if resolved is None:
+            # Resolution already failed the job honestly; nothing to finalize.
+            return
+        result = resolved
         formats_payload = None
         if isinstance(result, dict) and "result" in result:
             formats_payload = result.get("formats_payload")
@@ -805,6 +822,56 @@ class TaskManager:
         self._progress[job_id] = 100
         self._job_status_text[job_id] = "Conversion completed successfully."
         self._cleanup_proc_job(job_id, config, state="done")
+        self._maybe_sweep_artifacts()
+
+    def _resolve_artifact_payload(self, job_id: str, payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """Rebuild the logical payload from an ArtifactHandle wire envelope.
+
+        Consumer side is strict by contract (PR68A): a missing, corrupt,
+        truncated, cross-job, or incompatible handle fails the job with a
+        truthful message rather than letting wrong bytes become accepted
+        output. Inline payloads pass through untouched.
+        """
+        if not artifact_handles.is_handle_envelope(payload):
+            return payload
+        store = self._artifact_store
+        if store is None:
+            logger.error("artifact envelope for job %s rejected: store unavailable", job_id)
+            self._fail_proc_job(job_id, "artifact handoff rejected: handle store unavailable")
+            return None
+        try:
+            return artifact_handles.resolve_worker_payload(payload, store=store, job_id=job_id)
+        except artifact_handles.ArtifactHandleError as exc:
+            logger.error("artifact handoff failed for job %s: %s", job_id, exc)
+            self._fail_proc_job(job_id, f"artifact handoff failed: {exc}")
+            return None
+        except Exception:  # noqa: BLE001 - never let a data-plane bug fake a completion
+            logger.exception("unexpected artifact resolution failure for job %s", job_id)
+            self._fail_proc_job(job_id, "artifact handoff failed unexpectedly")
+            return None
+
+    def _sweep_stale_artifacts(self) -> None:
+        """Reclaim orphaned artifact blobs older than the configured age."""
+        store = self._artifact_store
+        if store is None:
+            return
+        try:
+            from app.core.config import ARTIFACT_HANDLE_SWEEP_SECONDS
+
+            removed = store.sweep(older_than_seconds=ARTIFACT_HANDLE_SWEEP_SECONDS)
+            if removed:
+                logger.info("artifact sweep removed %d stale blob(s)", len(removed))
+        except Exception:  # noqa: BLE001 - reclamation is best effort
+            logger.exception("artifact sweep failed")
+
+    def _maybe_sweep_artifacts(self, *, every: int = 25) -> None:
+        """Periodic reclamation so long-running sessions stay bounded."""
+        if self._artifact_store is None:
+            return
+        self._artifact_results_since_sweep += 1
+        if self._artifact_results_since_sweep >= every:
+            self._artifact_results_since_sweep = 0
+            self._sweep_stale_artifacts()
 
     def _fail_proc_job(self, job_id: str, error_message: str) -> None:
         """Record a worker failure (process backend)."""
