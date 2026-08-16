@@ -33,14 +33,18 @@ from app.kernel.patches import (
     DEFAULT_VIEW_ID,
     OP_TYPE_REBASE_SOURCE,
     PatchOutcomeRecord,
+    PatchPreconditions,
     PatchProposalRecord,
+    TargetCheck,
     ViewAdvancement,
     ViewDocumentRecord,
     apply_operation,
     apply_rebase_source,
     evaluate_preconditions,
+    view_text_hash,
 )
 from app.kernel.reading_order import ReadingOrderGraph
+from app.utils.canonical import payload_byte_hash
 from app.kernel.records import (
     EDGE_KIND_DEPENDS_ON,
     EDGE_KIND_DERIVED_FROM,
@@ -56,6 +60,7 @@ __all__ = [
     "initialize_view",
     "load_view_history",
     "read_current_view",
+    "rebase_proposal",
     "submit_patch",
 ]
 
@@ -78,6 +83,20 @@ class PatchAcceptance:
     proposal_id: str
     previous: ViewRevision
     result: ViewRevision
+
+
+def _scoped_record_id(workspace_id: str, name: str) -> str:
+    """Deterministic record id unique within one database.
+
+    ``kernel_records.id`` is a global primary key, so ids minted by this
+    service carry the workspace; long workspace ids are shortened under
+    a digest prefix so the result stays within the 128-char grammar.
+    """
+    if len(workspace_id) > 64:
+        digest = payload_byte_hash(workspace_id.encode("utf-8")).split(":")[1][:8]
+        workspace_id = workspace_id[:55] + "-" + digest
+    scoped = f"{name}-{workspace_id}"
+    return scoped[:128]
 
 
 async def read_current_view(
@@ -141,7 +160,7 @@ async def initialize_view(
     extracted (PR72 native tracers), never from this module.
     """
     view = ViewDocumentRecord(
-        record_id=f"view-{view_id}-genesis",
+        record_id=_scoped_record_id(workspace_id, f"view-{view_id}-genesis"),
         content_revision_ref=content_revision_ref,
         graph=graph,
         texts=dict(texts),
@@ -177,13 +196,13 @@ async def initialize_view(
 
 
 def _build_next_view(
-    current: ViewRevision, proposal: PatchProposalRecord
+    workspace_id: str, current: ViewRevision, proposal: PatchProposalRecord
 ) -> ViewDocumentRecord:
     graph, texts = current.view.graph, dict(current.view.texts)
     for op in proposal.operations:
         graph, texts = apply_operation(graph, texts, op)
     return ViewDocumentRecord(
-        record_id=f"view-{proposal.record_id}-result",
+        record_id=_scoped_record_id(workspace_id, f"view-{proposal.record_id}-result"),
         content_revision_ref=current.view.content_revision_ref,
         graph=graph,
         texts=texts,
@@ -223,9 +242,9 @@ async def submit_patch(
             observed_base_revision_id=current.revision_id,
         )
     evaluate_preconditions(current.view, proposal.preconditions)
-    next_view = _build_next_view(current, proposal)
+    next_view = _build_next_view(workspace_id, current, proposal)
     outcome = PatchOutcomeRecord(
-        record_id=f"outcome-{proposal.record_id}",
+        record_id=_scoped_record_id(workspace_id, f"outcome-{proposal.record_id}"),
         proposal_identity=proposal.proposal_id(),
         outcome="accepted",
         observed={
@@ -276,6 +295,50 @@ async def submit_patch(
             record_id=next_view.record_id,
             kernel_commit_id=receipt.kernel_commit_id,
         ),
+    )
+
+
+def rebase_proposal(
+    proposal: PatchProposalRecord,
+    current: ViewRevision,
+    *,
+    record_id: str,
+    allow_value_clobber: bool = False,
+) -> PatchProposalRecord | None:
+    """Explicitly re-target a conflicted proposal at the current revision.
+
+    The tested rebase rule, deliberately conservative: the operations are
+    preserved verbatim, the base moves to the current revision, and every
+    before-value check is re-derived from the current view. Rebase is
+    impossible (returns ``None``) when a target node no longer exists,
+    when a target's value changed and the caller has not explicitly
+    accepted overwriting it (``allow_value_clobber``), or when the
+    current view is bound to a source revision the proposal does not
+    accept. Nothing about arrival order silently decides document truth:
+    the loser only lands after a revalidation under these declared rules.
+    """
+    checks: list[TargetCheck] = []
+    for check in proposal.preconditions.target_checks:
+        try:
+            text = current.view.text_of(check.node_id)
+        except KernelError:
+            return None  # target gone (e.g. consumed by a split)
+        current_hash = view_text_hash(text)
+        if current_hash != check.before_hash and not allow_value_clobber:
+            return None  # intent no longer holds; clobbering requires an explicit choice
+        checks.append(TargetCheck(node_id=check.node_id, before_hash=current_hash))
+    source_refs = proposal.preconditions.required_source_revision_refs
+    if source_refs and current.view.content_revision_ref not in tuple(source_refs):
+        return None  # authored under a source this view no longer binds
+    return PatchProposalRecord(
+        record_id=record_id,
+        preconditions=PatchPreconditions(
+            base_revision_id=current.revision_id,
+            target_checks=tuple(checks),
+            required_source_revision_refs=tuple(source_refs),
+        ),
+        operations=proposal.operations,
+        producer=dict(proposal.producer),
     )
 
 

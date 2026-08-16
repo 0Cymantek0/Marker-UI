@@ -159,7 +159,7 @@ async def test_lineage_edges_link_proposal_outcome_and_revisions(env):
     assert ("derived_from", acceptance.result.record_id, genesis.record_id) in triples
     assert (
         "evidence_for",
-        f"outcome-{proposal.record_id}",
+        f"outcome-{proposal.record_id}-{WS}",
         acceptance.result.record_id,
     ) in triples
 
