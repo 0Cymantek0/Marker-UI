@@ -40,5 +40,29 @@ KERNEL_PAYLOAD_ROOT: Path = Path(
     os.getenv("MARKER_KERNEL_PAYLOAD_ROOT", str(DATA_DIR / "kernel_payloads"))
 )
 
+# Local ArtifactHandle data plane (PR68A): verified ephemeral file handles
+# that move large process-worker result fields out of the pickled control
+# message. Kill switch restores pure queue-inline transport everywhere.
+ARTIFACT_HANDLES_ENABLED: bool = os.getenv(
+    "MARKER_ARTIFACT_HANDLES", "true"
+).lower() in ("true", "1", "yes")
+ARTIFACT_HANDLE_ROOT: Path = Path(
+    os.getenv("MARKER_ARTIFACT_HANDLE_ROOT", str(DATA_DIR / "artifact_handles"))
+)
+# Fields whose encoded size is at or below this stay inline in the control
+# message; larger fields travel through verified handles.
+ARTIFACT_HANDLE_INLINE_LIMIT: int = int(
+    os.getenv("MARKER_ARTIFACT_HANDLE_INLINE_LIMIT", str(256 * 1024))
+)
+# Orphaned blobs (producer/consumer crash, cancelled jobs) are reclaimed
+# once older than this; must comfortably exceed any stage->consume window.
+ARTIFACT_HANDLE_SWEEP_SECONDS: float = float(
+    os.getenv("MARKER_ARTIFACT_HANDLE_SWEEP_SECONDS", "3600")
+)
+# Hard bound on any single handle read; larger claims fail closed.
+ARTIFACT_HANDLE_MAX_BYTES: int = int(
+    os.getenv("MARKER_ARTIFACT_HANDLE_MAX_BYTES", str(1 << 30))
+)
+
 # Encryption
 SECRET_KEY_PATH: Path = DATA_DIR / ".secret_key"
