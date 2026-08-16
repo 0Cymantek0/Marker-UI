@@ -316,3 +316,65 @@ class MissingViewTargetError(KernelError):
             f"patch target {node_id!r} does not exist in view revision "
             f"{view_revision_id!r}"
         )
+
+
+# --- PR74: claim proof authority & integrity --------------------------------
+
+
+class ProofCycleError(KernelError):
+    """The proof-support graph (proof edges plus derivation lineage)
+    contains a cycle, so authority would recursively launder itself.
+
+    Attributes carry the offending path (record ids, reliance order) so
+    the rejected submitter can see the exact loop. The whole commit
+    batch rolls back — no partial authoritative state survives."""
+
+    def __init__(self, *, cycle_path: list[str]) -> None:
+        self.cycle_path = tuple(cycle_path)
+        super().__init__(
+            "proof-support cycle rejected: " + " -> ".join(cycle_path)
+        )
+
+
+class ProofInputIntegrityError(KernelError):
+    """A proof's declared inputs disagree with its actual structure.
+
+    Raised for: evidence listed on an assessment that its support graph
+    does not cover (or vice versa), a derived input whose derivation
+    path is absent, a witness presented as independent while carrying
+    derivation lineage, evidence drawn from an authority-consumer
+    record, duplicate support for one (holder, evidence) pair, or a
+    support path that reaches a claim/assessment/decision record. The
+    result never becomes authority-bearing."""
+
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(f"proof input integrity violation: {detail}")
+
+
+class InvalidClaimAssessmentError(KernelError):
+    """A claim assessment failed the commit-boundary contract.
+
+    Covers: an authority-bearing outcome without proof support, a
+    snapshot that names a future commit cut, and references that do not
+    resolve inside the workspace (assertion, evidence, or proof
+    holder). Historical assessments stay readable; only new commits are
+    gated."""
+
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(f"invalid claim assessment: {detail}")
+
+
+class ClaimPreconditionUnmetError(KernelError):
+    """A patch's claim/assessment precondition is not satisfied by
+    current authoritative state (missing, wrong assertion, policy or
+    snapshot mismatch, non-accepted outcome, or a proof that no longer
+    validates at the current cut).
+
+    Fail-closed like every PR73 conflict: the entire patch commit rolls
+    back, never a partial application."""
+
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(f"claim precondition unmet: {detail}")

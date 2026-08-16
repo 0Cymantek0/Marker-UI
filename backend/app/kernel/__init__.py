@@ -86,6 +86,12 @@ from app.kernel.generations import (
 )
 from app.kernel.outbox import OutboxIntent, OutboxView
 from app.kernel.payloads import LocalPayloadStore, StagedBlob
+from app.kernel.proofs import (
+    ClaimRequirement,
+    ProofSupportRecord,
+    check_batch_proof_integrity,
+    evaluate_claim_requirements,
+)
 from app.kernel.reconcile import (
     PayloadAvailabilityResult,
     ReconcileReport,
@@ -114,6 +120,7 @@ from app.kernel.snapshots import KernelSnapshot, resolve_snapshot
 
 __all__ = [
     "AcceptOutcome",
+    "ClaimRequirement",
     "ClaimedWork",
     "CollectionPlan",
     "CollectionReport",
@@ -129,6 +136,7 @@ __all__ = [
     "OutboxIntent",
     "OutboxView",
     "PayloadAvailabilityResult",
+    "ProofSupportRecord",
     "Publication",
     "ReaderPinView",
     "ReconcileReport",
@@ -141,12 +149,14 @@ __all__ = [
     "acquire",
     "acquire_reader_pin",
     "active_reader_pins",
+    "check_batch_proof_integrity",
     "claim_next",
     "collect",
     "complete_work",
     "default_commit_service",
     "default_generation_service",
     "declare_hold",
+    "evaluate_claim_requirements",
     "get_lease",
     "get_publication",
     "open_current_generation",
