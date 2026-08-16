@@ -148,9 +148,52 @@ class NativeFactRecord(KernelRecord):
         }
 
 
+#: PR74 assessment-outcome vocabulary (V3.2 §4.4). The named set is the
+#: versioned contract later PR75 calibration/risk artifacts attach to;
+#: unknown outcome strings remain committable as explicitly NON-
+#: authority-bearing historical results (PR63 compatibility) — the
+#: kernel never treats an outcome it does not know as authority.
+CLAIM_OUTCOME_SOURCE_EXACT = "source_exact"
+CLAIM_OUTCOME_VERIFIED = "verified"
+CLAIM_OUTCOME_ACCEPTED_WITH_WARNING = "accepted_with_warning"
+CLAIM_OUTCOME_UNCERTAIN = "uncertain"
+CLAIM_OUTCOME_UNAVAILABLE = "unavailable"
+CLAIM_OUTCOME_ABSTAINED = "abstained"
+CLAIM_OUTCOME_FAILED = "failed"
+
+CLAIM_ASSESSMENT_OUTCOMES = frozenset(
+    {
+        CLAIM_OUTCOME_SOURCE_EXACT,
+        CLAIM_OUTCOME_VERIFIED,
+        CLAIM_OUTCOME_ACCEPTED_WITH_WARNING,
+        CLAIM_OUTCOME_UNCERTAIN,
+        CLAIM_OUTCOME_UNAVAILABLE,
+        CLAIM_OUTCOME_ABSTAINED,
+        CLAIM_OUTCOME_FAILED,
+    }
+)
+
+#: Outcomes that may only be committed together with a structurally
+#: valid proof-support graph (see ``app/kernel/proofs.py``).
+AUTHORITY_BEARING_OUTCOMES = frozenset(
+    {CLAIM_OUTCOME_SOURCE_EXACT, CLAIM_OUTCOME_VERIFIED}
+)
+
+
 @dataclass(kw_only=True)
 class ClaimAssertionRecord(KernelRecord):
-    """Immutable assertion meaning + subject identity (stable claim)."""
+    """Immutable assertion meaning + subject identity (stable claim).
+
+    PR74 identity decision (explicit, fixture-pinned): ``claim_key`` IS
+    part of semantic identity. It is the caller's stable external key
+    that scopes the assertion's referent (its claim namespace); two
+    assertions with different keys are two claims even when the
+    subject/predicate/value triple coincides. Renaming the key mints a
+    new claim rather than relabeling the old one, so no payload/identity
+    split is needed and every PR63-era stored assertion keeps its
+    identity. Changing evidence, policy, or assessment outcomes never
+    touches this record.
+    """
 
     record_class: ClassVar[str] = _RECORD_CLASS_CLAIM_ASSERTION
     record_type: ClassVar[str] = RECORD_TYPES[_RECORD_CLASS_CLAIM_ASSERTION]
@@ -161,6 +204,15 @@ class ClaimAssertionRecord(KernelRecord):
     value: Any
     qualifiers: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.claim_key, str) or not self.claim_key:
+            raise KernelError(f"invalid claim_key: {self.claim_key!r}")
+        for name in ("subject", "predicate"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise KernelError(f"invalid {name}: {value!r}")
+
     def identity_payload(self) -> dict[str, Any]:
         return {
             "claim_key": self.claim_key,
@@ -170,13 +222,52 @@ class ClaimAssertionRecord(KernelRecord):
             "qualifiers": dict(self.qualifiers),
         }
 
+    @classmethod
+    def from_payload(
+        cls, payload: Mapping[str, Any], *, record_id: str
+    ) -> ClaimAssertionRecord:
+        """Rematerialize a stored assertion payload (fail-closed)."""
+        if not isinstance(payload, Mapping):
+            raise KernelError(f"assertion payload must be a mapping, got {payload!r}")
+        allowed = {"claim_key", "subject", "predicate", "value", "qualifiers"}
+        unknown = set(payload) - allowed
+        if unknown:
+            raise KernelError(f"unknown assertion payload fields {sorted(unknown)}")
+        try:
+            return cls(
+                record_id=record_id,
+                claim_key=payload["claim_key"],
+                subject=payload["subject"],
+                predicate=payload["predicate"],
+                value=payload["value"],
+                qualifiers=dict(payload.get("qualifiers") or {}),
+            )
+        except KeyError as exc:
+            raise KernelError(f"assertion payload is missing {exc.args[0]!r}") from None
+
 
 @dataclass(kw_only=True)
 class ClaimAssessmentRecord(KernelRecord):
     """Append-only assessment of an assertion under a declared context.
 
-    Stores the policy/evidence/snapshot context fields it knows; full
-    verifier policy resolution is PR74/75 and is intentionally absent.
+    PR74 binds the context that makes the outcome meaningful into typed,
+    identity-affecting fields:
+
+    * ``policy_id``/``policy_revision`` — the verifier policy the
+      outcome is relative to (there is no policy-free claim status);
+    * ``evidence_refs`` — the unordered evidence set; at commit time it
+      must agree exactly with the assessment's proof-support records;
+    * ``snapshot_commit_id`` — the committed kernel head the assessment
+      was computed against (the as-of cut); validated ``<= current
+      head`` at commit so an assessment can never claim a future cut;
+    * ``workflow_class`` — versioned workflow/risk class label (a
+      PR75 hook; deliberately a plain string here).
+
+    ``declared_context`` is retained from PR63 and stays identity-
+    affecting for stored-record compatibility. Statistical sufficiency
+    of the proof (calibration, risk bounds) is PR75 and is intentionally
+    absent: an authority-bearing outcome requires a structurally valid
+    proof, never a statistically sufficient one.
     """
 
     record_class: ClassVar[str] = _RECORD_CLASS_CLAIM_ASSESSMENT
@@ -187,14 +278,30 @@ class ClaimAssessmentRecord(KernelRecord):
     policy_id: str
     policy_revision: str
     evidence_refs: tuple[str, ...] = ()
+    snapshot_commit_id: int = 0
+    workflow_class: str = ""
     declared_context: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         validate_record_ref(self.assertion_ref, field_name="assertion_ref")
+        if not isinstance(self.outcome, str) or not self.outcome:
+            raise KernelError(f"invalid outcome: {self.outcome!r}")
+        for name in ("policy_id", "policy_revision"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise KernelError(f"invalid {name}: {value!r}")
         self.evidence_refs = tuple(
             validate_record_ref(ref, field_name="evidence_ref") for ref in self.evidence_refs
         )
+        if (
+            not isinstance(self.snapshot_commit_id, int)
+            or isinstance(self.snapshot_commit_id, bool)
+            or self.snapshot_commit_id < 0
+        ):
+            raise KernelError(f"invalid snapshot_commit_id: {self.snapshot_commit_id!r}")
+        if not isinstance(self.workflow_class, str):
+            raise KernelError(f"invalid workflow_class: {self.workflow_class!r}")
 
     def identity_payload(self) -> dict[str, Any]:
         return {
@@ -202,8 +309,53 @@ class ClaimAssessmentRecord(KernelRecord):
             "outcome": self.outcome,
             "policy": {"policy_id": self.policy_id, "revision": self.policy_revision},
             "evidence_refs": sorted(self.evidence_refs),
+            "snapshot_commit_id": self.snapshot_commit_id,
+            "workflow_class": self.workflow_class,
             "declared_context": dict(self.declared_context),
         }
+
+    @classmethod
+    def from_payload(
+        cls, payload: Mapping[str, Any], *, record_id: str
+    ) -> ClaimAssessmentRecord:
+        """Rematerialize a stored assessment payload (fail-closed).
+
+        Stored PR63 payloads predate ``snapshot_commit_id`` and
+        ``workflow_class``; they rematerialize with the honest defaults
+        (snapshot 0 = the empty cut, no workflow class). Historical
+        outcome strings outside the PR74 vocabulary stay readable —
+        append-only history is never rewritten, and commit-time
+        authority rules only ever apply to newly committed records.
+        """
+        if not isinstance(payload, Mapping):
+            raise KernelError(f"assessment payload must be a mapping, got {payload!r}")
+        allowed = {
+            "assertion_ref",
+            "outcome",
+            "policy",
+            "evidence_refs",
+            "snapshot_commit_id",
+            "workflow_class",
+            "declared_context",
+        }
+        unknown = set(payload) - allowed
+        if unknown:
+            raise KernelError(f"unknown assessment payload fields {sorted(unknown)}")
+        try:
+            policy = payload["policy"]
+            return cls(
+                record_id=record_id,
+                assertion_ref=payload["assertion_ref"],
+                outcome=payload["outcome"],
+                policy_id=policy["policy_id"],
+                policy_revision=policy["revision"],
+                evidence_refs=tuple(payload.get("evidence_refs") or ()),
+                snapshot_commit_id=payload.get("snapshot_commit_id", 0),
+                workflow_class=payload.get("workflow_class", ""),
+                declared_context=dict(payload.get("declared_context") or {}),
+            )
+        except KeyError as exc:
+            raise KernelError(f"assessment payload is missing {exc.args[0]!r}") from None
 
 
 @dataclass(kw_only=True)
