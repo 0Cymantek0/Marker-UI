@@ -1,0 +1,1176 @@
+{
+  "$schema": "marker.verification_risk_vectors.v1",
+  "canonicalization_profile": "marker.canonical.v1",
+  "corpus": {
+    "path": "backend/conformance/fixtures/verification_risk_corpus_v1.json",
+    "semantic_identity": "sha256:a6cde0976cdfb22daf1900ebaf6b5446db0f52c52e9c81181b9e1aecf6df7103"
+  },
+  "description": "PR75 canonical identity, pair/calibration, baseline, and conservative promotion vectors. Runtime is deliberately absent.",
+  "evaluation_cases": [
+    {
+      "baseline_order": [
+        "deterministic_source_native_only",
+        "best_single_witness",
+        "naive_majority_vote",
+        "correlation_blind_ensemble",
+        "dependency_aware_policy"
+      ],
+      "baselines": {
+        "best_single_witness": {
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 0,
+          "false_verified_count": 1,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:b224a2e11dcd6dad53a2f733fa45e2d8f7eae77a18050b4f22e9f602ef909c69",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 1,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:5fcb7179c9c51d2e124e9f2945d136410a5be1420cc1b75a6c517d3a71ed8124",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 1,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-b",
+            "source-native"
+          ],
+          "semantic_identity": "sha256:a655fd730fd2d09f4f69449307e5cefb625198311e20e4b2c3d0c42a22c367c7",
+          "status": "insufficient_support"
+        },
+        "deterministic_source_native_only": {
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 0,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "source-native"
+          ],
+          "semantic_identity": "sha256:529463b4780b89b789d55422680bdbfdce9edec9501146452ac32d456b9af074",
+          "status": "ok"
+        },
+        "naive_majority_vote": {
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 1,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:fd75a7389d8ad5d8be764ef1f095a12f5b61b0ad0a94335142486fa707e16681",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 1,
+          "denominator": 2,
+          "rate": 0.5,
+          "status": "defined"
+        },
+        "brier_score": 0.0,
+        "distribution": null,
+        "expected_calibration_error": 0.0,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 2,
+        "status": "insufficient_support",
+        "support_required": 5,
+        "support_sufficient": false,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 1,
+          "denominator": 2,
+          "rate": 0.5,
+          "status": "defined"
+        },
+        "catastrophic_joint_failures": {
+          "count": 0,
+          "denominator": 0,
+          "rate": null,
+          "status": "undefined_zero_denominator"
+        },
+        "conditional_error_when_agree": {
+          "count": 0,
+          "denominator": 1,
+          "rate": 0.0,
+          "status": "defined"
+        },
+        "conditional_error_when_disagree": {
+          "count": 1,
+          "denominator": 1,
+          "rate": 1.0,
+          "status": "defined"
+        },
+        "disagreement": {
+          "count": 1,
+          "denominator": 2,
+          "rate": 0.5,
+          "status": "defined"
+        },
+        "joint_error": {
+          "count": 0,
+          "denominator": 2,
+          "rate": 0.0,
+          "status": "defined"
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 1,
+            "denominator": 2,
+            "rate": 0.5,
+            "status": "defined"
+          },
+          "model-b": {
+            "count": 0,
+            "denominator": 2,
+            "rate": 0.0,
+            "status": "defined"
+          }
+        },
+        "sample_count": 2,
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "abstain",
+        "reason": "pair ('model-a', 'model-b') support 2 is below required 5",
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "sample_count": 2,
+      "semantic_identity": "sha256:88d5545e480aa16f0b6a901b4931b55af30ac129ccf15a4ee65aca4f0afac023",
+      "slice_id": "calibration-fit"
+    },
+    {
+      "baseline_order": [
+        "deterministic_source_native_only",
+        "best_single_witness",
+        "naive_majority_vote",
+        "correlation_blind_ensemble",
+        "dependency_aware_policy"
+      ],
+      "baselines": {
+        "best_single_witness": {
+          "accepted_count": 10,
+          "catastrophic_error_count": 1,
+          "disagreement_count": 0,
+          "false_verified_count": 2,
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:dabeab430d0c9b60fd37ecdbdb71624305ecb650b8bea5632dfa7738eb028e39",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "accepted_count": 10,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 7,
+          "false_verified_count": 0,
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:460f5b2d0e7c01c7ea0d825fa590d09b55f975a073f3c2f81b51d8fb99b95eb7",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "accepted_count": 10,
+          "catastrophic_error_count": 1,
+          "disagreement_count": 4,
+          "false_verified_count": 2,
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a",
+            "model-b",
+            "source-native"
+          ],
+          "semantic_identity": "sha256:0e253c636c0ef4ce8241511c787824526feec663cb62b7799b66d17d35700ccc",
+          "status": "ok"
+        },
+        "deterministic_source_native_only": {
+          "accepted_count": 10,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 0,
+          "false_verified_count": 0,
+          "sample_count": 10,
+          "selected_witnesses": [
+            "source-native"
+          ],
+          "semantic_identity": "sha256:6d2d185904860ddb21669ebaeeb77b3ed77d9c76e2a1189dee166888c2e51dbb",
+          "status": "ok"
+        },
+        "naive_majority_vote": {
+          "accepted_count": 10,
+          "catastrophic_error_count": 1,
+          "disagreement_count": 7,
+          "false_verified_count": 1,
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:fecab2251977bdce52a6f8d80d7e2e4b7faba15c204a7fd99788206c21350f65",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 8,
+          "denominator": 10,
+          "rate": 0.8,
+          "status": "defined"
+        },
+        "brier_score": 0.16000000000000006,
+        "distribution": null,
+        "expected_calibration_error": 1.1102230246251565e-16,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 10,
+        "status": "ok",
+        "support_required": 5,
+        "support_sufficient": true,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 8,
+          "denominator": 10,
+          "rate": 0.8,
+          "status": "defined"
+        },
+        "catastrophic_joint_failures": {
+          "count": 1,
+          "denominator": 1,
+          "rate": 1.0,
+          "status": "defined"
+        },
+        "conditional_error_when_agree": {
+          "count": 2,
+          "denominator": 8,
+          "rate": 0.25,
+          "status": "defined"
+        },
+        "conditional_error_when_disagree": {
+          "count": 2,
+          "denominator": 2,
+          "rate": 1.0,
+          "status": "defined"
+        },
+        "disagreement": {
+          "count": 2,
+          "denominator": 10,
+          "rate": 0.2,
+          "status": "defined"
+        },
+        "joint_error": {
+          "count": 2,
+          "denominator": 10,
+          "rate": 0.2,
+          "status": "defined"
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 2,
+            "denominator": 10,
+            "rate": 0.2,
+            "status": "defined"
+          },
+          "model-b": {
+            "count": 4,
+            "denominator": 10,
+            "rate": 0.4,
+            "status": "defined"
+          }
+        },
+        "sample_count": 10,
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "shadow",
+        "reason": null,
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "sample_count": 10,
+      "semantic_identity": "sha256:cff96115130f7f1661a88f44d75114323ea95be2e062b93e3884e75e89cfb3df",
+      "slice_id": "matched"
+    },
+    {
+      "baseline_order": [
+        "deterministic_source_native_only",
+        "best_single_witness",
+        "naive_majority_vote",
+        "correlation_blind_ensemble",
+        "dependency_aware_policy"
+      ],
+      "baselines": {
+        "best_single_witness": {
+          "accepted_count": 5,
+          "catastrophic_error_count": 1,
+          "disagreement_count": 0,
+          "false_verified_count": 4,
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:69c9a75f0cfb53c85b76c7219222b0d69a5d8928e98fc08abac1f0d02fc25c50",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "accepted_count": 4,
+          "catastrophic_error_count": 1,
+          "disagreement_count": 3,
+          "false_verified_count": 4,
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:043f5143f8742691ce19dd36d2731a8017ec67548919b54c49bf62608cf8d57e",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 2,
+          "false_verified_count": 0,
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a",
+            "model-b"
+          ],
+          "semantic_identity": "sha256:ca5755e6aedd5e4200e712af3844a3902aa964656646faf76ee1e24e00182172",
+          "status": "risk_bound_not_met"
+        },
+        "deterministic_source_native_only": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 0,
+          "false_verified_count": 0,
+          "sample_count": 5,
+          "selected_witnesses": [],
+          "semantic_identity": "sha256:b8d59c12af899b48191af372535dcbfde5be6e9aa4a4a829db82b09450159236",
+          "status": "not_applicable"
+        },
+        "naive_majority_vote": {
+          "accepted_count": 4,
+          "catastrophic_error_count": 1,
+          "disagreement_count": 3,
+          "false_verified_count": 4,
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:6a4dffc207d0d01195bca0b78929b1c2551cb87f0621e57a8e878d1873880ad3",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 1,
+          "denominator": 5,
+          "rate": 0.2,
+          "status": "defined"
+        },
+        "brier_score": 0.7224999999999999,
+        "distribution": null,
+        "expected_calibration_error": 0.75,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 5,
+        "status": "ok",
+        "support_required": 5,
+        "support_sufficient": true,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 3,
+          "denominator": 5,
+          "rate": 0.6,
+          "status": "defined"
+        },
+        "catastrophic_joint_failures": {
+          "count": 1,
+          "denominator": 1,
+          "rate": 1.0,
+          "status": "defined"
+        },
+        "conditional_error_when_agree": {
+          "count": 3,
+          "denominator": 3,
+          "rate": 1.0,
+          "status": "defined"
+        },
+        "conditional_error_when_disagree": {
+          "count": 2,
+          "denominator": 2,
+          "rate": 1.0,
+          "status": "defined"
+        },
+        "disagreement": {
+          "count": 2,
+          "denominator": 5,
+          "rate": 0.4,
+          "status": "defined"
+        },
+        "joint_error": {
+          "count": 3,
+          "denominator": 5,
+          "rate": 0.6,
+          "status": "defined"
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 4,
+            "denominator": 5,
+            "rate": 0.8,
+            "status": "defined"
+          },
+          "model-b": {
+            "count": 4,
+            "denominator": 5,
+            "rate": 0.8,
+            "status": "defined"
+          }
+        },
+        "sample_count": 5,
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "abstain",
+        "reason": "pair ('model-a', 'model-b') joint-error Wilson upper 0.8823792257673521 exceeds policy bound 0.6",
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "sample_count": 5,
+      "semantic_identity": "sha256:9c8f0723bc7054f748757e81b7d4721400fca118b8d6576109fb7e8b7d2ef197",
+      "slice_id": "shifted"
+    },
+    {
+      "baseline_order": [
+        "deterministic_source_native_only",
+        "best_single_witness",
+        "naive_majority_vote",
+        "correlation_blind_ensemble",
+        "dependency_aware_policy"
+      ],
+      "baselines": {
+        "best_single_witness": {
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 0,
+          "false_verified_count": 1,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:47102e707b2ddd1f9d19a8e633663d35f6323eabcb05f2f5d744440826335a72",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 1,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:41f504d06849cf17d53eee9840864aae429d6b8be1927136388f593d7d339f2b",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 1,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-b"
+          ],
+          "semantic_identity": "sha256:f4ed806edfb263234b268f88405599790f67bd5d6add379dfefac7cac7fc63a8",
+          "status": "insufficient_support"
+        },
+        "deterministic_source_native_only": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 0,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [],
+          "semantic_identity": "sha256:adb0ee61c1d4a569cb58303e7f20535eab241bfbb7329892642f2b9e6aec3d0e",
+          "status": "not_applicable"
+        },
+        "naive_majority_vote": {
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "disagreement_count": 1,
+          "false_verified_count": 0,
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:a189461535df149cc24a91691c78d8b9321bffaee72509daf784c43f3a69c324",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 1,
+          "denominator": 2,
+          "rate": 0.5,
+          "status": "defined"
+        },
+        "brier_score": 0.41000000000000003,
+        "distribution": null,
+        "expected_calibration_error": 0.4,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 2,
+        "status": "insufficient_support",
+        "support_required": 5,
+        "support_sufficient": false,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 1,
+          "denominator": 2,
+          "rate": 0.5,
+          "status": "defined"
+        },
+        "catastrophic_joint_failures": {
+          "count": 0,
+          "denominator": 0,
+          "rate": null,
+          "status": "undefined_zero_denominator"
+        },
+        "conditional_error_when_agree": {
+          "count": 0,
+          "denominator": 1,
+          "rate": 0.0,
+          "status": "defined"
+        },
+        "conditional_error_when_disagree": {
+          "count": 1,
+          "denominator": 1,
+          "rate": 1.0,
+          "status": "defined"
+        },
+        "disagreement": {
+          "count": 1,
+          "denominator": 2,
+          "rate": 0.5,
+          "status": "defined"
+        },
+        "joint_error": {
+          "count": 0,
+          "denominator": 2,
+          "rate": 0.0,
+          "status": "defined"
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 1,
+            "denominator": 2,
+            "rate": 0.5,
+            "status": "defined"
+          },
+          "model-b": {
+            "count": 0,
+            "denominator": 2,
+            "rate": 0.0,
+            "status": "defined"
+          }
+        },
+        "sample_count": 2,
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "abstain",
+        "reason": "pair ('model-a', 'model-b') support 2 is below required 5",
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "sample_count": 2,
+      "semantic_identity": "sha256:5c1e1368959b067c31f485868491ce3ce105df05267c842c7ef155365b8cd122",
+      "slice_id": "insufficient"
+    }
+  ],
+  "identity_cases": [
+    {
+      "expect": {
+        "identity_hash": "sha256:a9c80c674891565fa4a838fd72fff3201f826506e326afee180550eb184ef88e"
+      },
+      "id": "disclosure-set-order",
+      "payload": {
+        "architecture_family": "transformer",
+        "base_model_family": "checkpoint-a",
+        "detector_profile": "detector-v1",
+        "disclosure_quality": "complete",
+        "layout_profile": "layout-v1",
+        "metadata": {
+          "labels": [
+            "b",
+            "a"
+          ],
+          "owner": "fixture"
+        },
+        "postprocessor_profile": "normalize-v1",
+        "preprocessor_profile": "preprocess-v1",
+        "profile_version": "profile.v1",
+        "prompt_template": "prompt-v1",
+        "quantization_profile": "none",
+        "renderer_profile": "renderer-v1",
+        "runtime_profile": "cpu-fp32",
+        "shared_dependency_refs": [
+          "renderer-v1",
+          "detector-v1"
+        ],
+        "teacher_lineage": [
+          "teacher-v1"
+        ],
+        "training_sources": [
+          "dataset-b",
+          "dataset-a"
+        ],
+        "witness_ref": "model-a"
+      },
+      "record_class": "dependency_disclosure",
+      "variant_expectation": "same",
+      "variants": [
+        {
+          "id": "reordered-set-members",
+          "payload": {
+            "architecture_family": "transformer",
+            "base_model_family": "checkpoint-a",
+            "detector_profile": "detector-v1",
+            "disclosure_quality": "complete",
+            "layout_profile": "layout-v1",
+            "metadata": {
+              "labels": [
+                "b",
+                "a"
+              ],
+              "owner": "fixture"
+            },
+            "postprocessor_profile": "normalize-v1",
+            "preprocessor_profile": "preprocess-v1",
+            "profile_version": "profile.v1",
+            "prompt_template": "prompt-v1",
+            "quantization_profile": "none",
+            "renderer_profile": "renderer-v1",
+            "runtime_profile": "cpu-fp32",
+            "shared_dependency_refs": [
+              "detector-v1",
+              "renderer-v1"
+            ],
+            "teacher_lineage": [
+              "teacher-v1"
+            ],
+            "training_sources": [
+              "dataset-a",
+              "dataset-b"
+            ],
+            "witness_ref": "model-a"
+          }
+        }
+      ]
+    },
+    {
+      "expect": {
+        "identity_hash": "sha256:a9c80c674891565fa4a838fd72fff3201f826506e326afee180550eb184ef88e"
+      },
+      "id": "disclosure-material-profile",
+      "payload": {
+        "architecture_family": "transformer",
+        "base_model_family": "checkpoint-a",
+        "detector_profile": "detector-v1",
+        "disclosure_quality": "complete",
+        "layout_profile": "layout-v1",
+        "metadata": {
+          "labels": [
+            "b",
+            "a"
+          ],
+          "owner": "fixture"
+        },
+        "postprocessor_profile": "normalize-v1",
+        "preprocessor_profile": "preprocess-v1",
+        "profile_version": "profile.v1",
+        "prompt_template": "prompt-v1",
+        "quantization_profile": "none",
+        "renderer_profile": "renderer-v1",
+        "runtime_profile": "cpu-fp32",
+        "shared_dependency_refs": [
+          "renderer-v1",
+          "detector-v1"
+        ],
+        "teacher_lineage": [
+          "teacher-v1"
+        ],
+        "training_sources": [
+          "dataset-b",
+          "dataset-a"
+        ],
+        "witness_ref": "model-a"
+      },
+      "record_class": "dependency_disclosure",
+      "variant_expectation": "different",
+      "variants": [
+        {
+          "id": "runtime-profile-changed",
+          "payload": {
+            "architecture_family": "transformer",
+            "base_model_family": "checkpoint-a",
+            "detector_profile": "detector-v1",
+            "disclosure_quality": "complete",
+            "layout_profile": "layout-v1",
+            "metadata": {
+              "labels": [
+                "b",
+                "a"
+              ],
+              "owner": "fixture"
+            },
+            "postprocessor_profile": "normalize-v1",
+            "preprocessor_profile": "preprocess-v1",
+            "profile_version": "profile.v1",
+            "prompt_template": "prompt-v1",
+            "quantization_profile": "none",
+            "renderer_profile": "renderer-v1",
+            "runtime_profile": "cuda-fp16",
+            "shared_dependency_refs": [
+              "renderer-v1",
+              "detector-v1"
+            ],
+            "teacher_lineage": [
+              "teacher-v1"
+            ],
+            "training_sources": [
+              "dataset-b",
+              "dataset-a"
+            ],
+            "witness_ref": "model-a"
+          }
+        }
+      ]
+    },
+    {
+      "expect": {
+        "identity_hash": "sha256:a7d2854639eaa2ef372da083942fcef960576c4dde1d032946d02c79144ccf27"
+      },
+      "id": "evidence-set-order",
+      "payload": {
+        "claim_authority_class": "source_native",
+        "consensus": false,
+        "dependency_status": "independent_looking",
+        "disagreement_rate": "0.100",
+        "disclosure_refs": [
+          "disclosure-b",
+          "disclosure-a"
+        ],
+        "evaluated_at": "2026-08-17T00:00:00Z",
+        "evaluation_slice_id": "matched",
+        "evidence_kind": "source_native",
+        "expires_at": "2026-09-17T00:00:00Z",
+        "joint_error_rate": "0.002",
+        "joint_error_rates": {
+          "model-a|model-b": "0.002"
+        },
+        "marginal_error_rates": {
+          "model-a": "0.010",
+          "model-b": "0.020"
+        },
+        "metadata": {
+          "runtime_profile": "cpu-fp32"
+        },
+        "method_id": "wilson-upper-bound",
+        "method_version": "marker.risk.wilson.v1",
+        "metrics": {
+          "support": 100
+        },
+        "model_only": false,
+        "policy": {
+          "policy_id": "policy.high-risk",
+          "revision": "rev-1"
+        },
+        "risk_estimate": "0.004",
+        "risk_upper_bound": "0.010",
+        "sample_count": 100,
+        "shift_status": "matched",
+        "witness_refs": [
+          "model-b",
+          "model-a"
+        ],
+        "workflow_class": "high-risk.invoice-total.v1"
+      },
+      "record_class": "verification_risk_evidence",
+      "variant_expectation": "same",
+      "variants": [
+        {
+          "id": "refs-reordered",
+          "payload": {
+            "claim_authority_class": "source_native",
+            "consensus": false,
+            "dependency_status": "independent_looking",
+            "disagreement_rate": "0.100",
+            "disclosure_refs": [
+              "disclosure-a",
+              "disclosure-b"
+            ],
+            "evaluated_at": "2026-08-17T00:00:00Z",
+            "evaluation_slice_id": "matched",
+            "evidence_kind": "source_native",
+            "expires_at": "2026-09-17T00:00:00Z",
+            "joint_error_rate": "0.002",
+            "joint_error_rates": {
+              "model-a|model-b": "0.002"
+            },
+            "marginal_error_rates": {
+              "model-a": "0.010",
+              "model-b": "0.020"
+            },
+            "metadata": {
+              "runtime_profile": "cpu-fp32"
+            },
+            "method_id": "wilson-upper-bound",
+            "method_version": "marker.risk.wilson.v1",
+            "metrics": {
+              "support": 100
+            },
+            "model_only": false,
+            "policy": {
+              "policy_id": "policy.high-risk",
+              "revision": "rev-1"
+            },
+            "risk_estimate": "0.004",
+            "risk_upper_bound": "0.010",
+            "sample_count": 100,
+            "shift_status": "matched",
+            "witness_refs": [
+              "model-a",
+              "model-b"
+            ],
+            "workflow_class": "high-risk.invoice-total.v1"
+          }
+        }
+      ]
+    },
+    {
+      "expect": {
+        "identity_hash": "sha256:a7d2854639eaa2ef372da083942fcef960576c4dde1d032946d02c79144ccf27"
+      },
+      "id": "evidence-policy-revision",
+      "payload": {
+        "claim_authority_class": "source_native",
+        "consensus": false,
+        "dependency_status": "independent_looking",
+        "disagreement_rate": "0.100",
+        "disclosure_refs": [
+          "disclosure-b",
+          "disclosure-a"
+        ],
+        "evaluated_at": "2026-08-17T00:00:00Z",
+        "evaluation_slice_id": "matched",
+        "evidence_kind": "source_native",
+        "expires_at": "2026-09-17T00:00:00Z",
+        "joint_error_rate": "0.002",
+        "joint_error_rates": {
+          "model-a|model-b": "0.002"
+        },
+        "marginal_error_rates": {
+          "model-a": "0.010",
+          "model-b": "0.020"
+        },
+        "metadata": {
+          "runtime_profile": "cpu-fp32"
+        },
+        "method_id": "wilson-upper-bound",
+        "method_version": "marker.risk.wilson.v1",
+        "metrics": {
+          "support": 100
+        },
+        "model_only": false,
+        "policy": {
+          "policy_id": "policy.high-risk",
+          "revision": "rev-1"
+        },
+        "risk_estimate": "0.004",
+        "risk_upper_bound": "0.010",
+        "sample_count": 100,
+        "shift_status": "matched",
+        "witness_refs": [
+          "model-b",
+          "model-a"
+        ],
+        "workflow_class": "high-risk.invoice-total.v1"
+      },
+      "record_class": "verification_risk_evidence",
+      "variant_expectation": "different",
+      "variants": [
+        {
+          "id": "policy-revision-changed",
+          "payload": {
+            "claim_authority_class": "source_native",
+            "consensus": false,
+            "dependency_status": "independent_looking",
+            "disagreement_rate": "0.100",
+            "disclosure_refs": [
+              "disclosure-b",
+              "disclosure-a"
+            ],
+            "evaluated_at": "2026-08-17T00:00:00Z",
+            "evaluation_slice_id": "matched",
+            "evidence_kind": "source_native",
+            "expires_at": "2026-09-17T00:00:00Z",
+            "joint_error_rate": "0.002",
+            "joint_error_rates": {
+              "model-a|model-b": "0.002"
+            },
+            "marginal_error_rates": {
+              "model-a": "0.010",
+              "model-b": "0.020"
+            },
+            "metadata": {
+              "runtime_profile": "cpu-fp32"
+            },
+            "method_id": "wilson-upper-bound",
+            "method_version": "marker.risk.wilson.v1",
+            "metrics": {
+              "support": 100
+            },
+            "model_only": false,
+            "policy": {
+              "policy_id": "policy.high-risk",
+              "revision": "rev-2"
+            },
+            "risk_estimate": "0.004",
+            "risk_upper_bound": "0.010",
+            "sample_count": 100,
+            "shift_status": "matched",
+            "witness_refs": [
+              "model-b",
+              "model-a"
+            ],
+            "workflow_class": "high-risk.invoice-total.v1"
+          }
+        }
+      ]
+    }
+  ],
+  "rematerialization_cases": [
+    {
+      "expect": {
+        "identity_hash": "sha256:a9c80c674891565fa4a838fd72fff3201f826506e326afee180550eb184ef88e"
+      },
+      "id": "disclosure-round-trip",
+      "payload": {
+        "architecture_family": "transformer",
+        "base_model_family": "checkpoint-a",
+        "detector_profile": "detector-v1",
+        "disclosure_quality": "complete",
+        "layout_profile": "layout-v1",
+        "metadata": {
+          "labels": [
+            "b",
+            "a"
+          ],
+          "owner": "fixture"
+        },
+        "postprocessor_profile": "normalize-v1",
+        "preprocessor_profile": "preprocess-v1",
+        "profile_version": "profile.v1",
+        "prompt_template": "prompt-v1",
+        "quantization_profile": "none",
+        "renderer_profile": "renderer-v1",
+        "runtime_profile": "cpu-fp32",
+        "shared_dependency_refs": [
+          "renderer-v1",
+          "detector-v1"
+        ],
+        "teacher_lineage": [
+          "teacher-v1"
+        ],
+        "training_sources": [
+          "dataset-b",
+          "dataset-a"
+        ],
+        "witness_ref": "model-a"
+      },
+      "record_class": "dependency_disclosure"
+    },
+    {
+      "expect": {
+        "identity_hash": "sha256:a7d2854639eaa2ef372da083942fcef960576c4dde1d032946d02c79144ccf27"
+      },
+      "id": "evidence-round-trip",
+      "payload": {
+        "claim_authority_class": "source_native",
+        "consensus": false,
+        "dependency_status": "independent_looking",
+        "disagreement_rate": "0.100",
+        "disclosure_refs": [
+          "disclosure-b",
+          "disclosure-a"
+        ],
+        "evaluated_at": "2026-08-17T00:00:00Z",
+        "evaluation_slice_id": "matched",
+        "evidence_kind": "source_native",
+        "expires_at": "2026-09-17T00:00:00Z",
+        "joint_error_rate": "0.002",
+        "joint_error_rates": {
+          "model-a|model-b": "0.002"
+        },
+        "marginal_error_rates": {
+          "model-a": "0.010",
+          "model-b": "0.020"
+        },
+        "metadata": {
+          "runtime_profile": "cpu-fp32"
+        },
+        "method_id": "wilson-upper-bound",
+        "method_version": "marker.risk.wilson.v1",
+        "metrics": {
+          "support": 100
+        },
+        "model_only": false,
+        "policy": {
+          "policy_id": "policy.high-risk",
+          "revision": "rev-1"
+        },
+        "risk_estimate": "0.004",
+        "risk_upper_bound": "0.010",
+        "sample_count": 100,
+        "shift_status": "matched",
+        "witness_refs": [
+          "model-b",
+          "model-a"
+        ],
+        "workflow_class": "high-risk.invoice-total.v1"
+      },
+      "record_class": "verification_risk_evidence"
+    }
+  ]
+}
