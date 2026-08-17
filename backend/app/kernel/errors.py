@@ -366,6 +366,46 @@ class InvalidClaimAssessmentError(KernelError):
         super().__init__(f"invalid claim assessment: {detail}")
 
 
+# --- PR76: atomic publication sets + immutable lexical generations --------
+
+
+class UnknownLexicalGenerationError(KernelError):
+    """No lexical generation exists with the requested identity."""
+
+
+class LexicalStateError(KernelError):
+    """A lexical generation lifecycle transition was requested from a
+    state that does not permit it."""
+
+
+class LexicalIntegrityError(KernelError):
+    """Lexical generation content failed integrity verification (digest,
+    count, locator, or FTS index consistency); it may not be treated as
+    valid index state."""
+
+
+class UnknownPublicationSetError(KernelError):
+    """No publication set exists with the requested identity."""
+
+
+class PublicationStateError(KernelError):
+    """A publication-set lifecycle transition was requested from a state
+    that does not permit it (e.g. activating a set that is not validated)."""
+
+
+class PublicationIntegrityError(KernelError):
+    """Publication-set members or the published head failed integrity
+    verification; the set may not be treated as valid published state."""
+
+
+class InvalidPublicationProfileError(KernelError):
+    """A publication profile id does not match the profile grammar."""
+
+
+class LexicalQueryError(KernelError):
+    """A lexical query string was rejected (malformed FTS syntax)."""
+
+
 class VerificationRiskGateError(KernelError):
     """A high-risk source-native assessment failed its PR75 risk gate.
 
