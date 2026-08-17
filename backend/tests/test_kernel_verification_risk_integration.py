@@ -69,16 +69,18 @@ def make_risk(**changes) -> VerificationRiskEvidenceRecord:
     return VerificationRiskEvidenceRecord(**values)
 
 
-def make_fact() -> NativeFactRecord:
-    return NativeFactRecord(
-        record_id="native-fact-1",
-        native_object_ref="native-object-1",
-        property_name="invoice.total",
-        raw_representation="1250.00",
-        typed_interpretation="1250.00",
-        extractor_name="marker-native",
-        extractor_version="1.0.0",
-    )
+def make_fact(**changes) -> NativeFactRecord:
+    values = {
+        "record_id": "native-fact-1",
+        "native_object_ref": "doc:invoice-42",
+        "property_name": "total_amount",
+        "raw_representation": "1250.00",
+        "typed_interpretation": "1250.00",
+        "extractor_name": "marker-native",
+        "extractor_version": "1.0.0",
+    }
+    values.update(changes)
+    return NativeFactRecord(**values)
 
 
 def make_assessment(
@@ -123,7 +125,12 @@ def make_support(
     )
 
 
-def valid_batch(*, risk: VerificationRiskEvidenceRecord | None = None, **changes):
+def valid_batch(
+    *,
+    risk: VerificationRiskEvidenceRecord | None = None,
+    fact: NativeFactRecord | None = None,
+    **changes,
+):
     risk = risk or make_risk()
     assessment = make_assessment(**changes)
     return KernelCommitBatch(
@@ -137,7 +144,7 @@ def valid_batch(*, risk: VerificationRiskEvidenceRecord | None = None, **changes
                 value="1250.00",
             ),
             risk,
-            make_fact(),
+            fact or make_fact(),
             assessment,
             make_support("support-risk", risk.record_id, role=PROOF_ROLE_INPUT),
             make_support("support-fact", "native-fact-1"),
@@ -166,6 +173,44 @@ async def test_valid_high_risk_source_native_commit(kernel_env):
     receipt = await KernelCommitService(kernel_env).commit(valid_batch())
     assert receipt.kernel_commit_id == 1
     assert receipt.record_count == 6
+    assert await read_head(kernel_env, WORKSPACE) == 1
+
+
+@pytest.mark.parametrize(
+    "fact_changes",
+    [
+        {"native_object_ref": "doc:other-42"},
+        {"property_name": "tax_amount"},
+        {"typed_interpretation": "12.50"},
+    ],
+)
+async def test_claim_relative_native_fact_mismatch_is_rejected_atomically(
+    kernel_env, fact_changes
+):
+    await assert_rejected_atomically(
+        kernel_env,
+        valid_batch(fact=make_fact(**fact_changes)),
+        match="not competent for claim",
+    )
+
+
+async def test_unrelated_native_fact_cannot_authorize_high_risk_claim_atomically(
+    kernel_env,
+):
+    batch = valid_batch(fact=make_fact(native_object_ref="doc:other-42"))
+    await assert_rejected_atomically(
+        kernel_env, batch, match="native_fact.*not competent for claim"
+    )
+
+
+async def test_native_binding_stays_outside_standard_workflow(kernel_env):
+    receipt = await KernelCommitService(kernel_env).commit(
+        valid_batch(
+            fact=make_fact(native_object_ref="doc:other-42"),
+            workflow_class="standard.v1",
+        )
+    )
+    assert receipt.kernel_commit_id == 1
     assert await read_head(kernel_env, WORKSPACE) == 1
 
 

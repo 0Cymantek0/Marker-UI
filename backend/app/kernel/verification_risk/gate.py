@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from app.kernel.errors import KernelError, VerificationRiskGateError
+from app.kernel.records import ClaimAssertionRecord, NativeFactRecord
+from app.utils.canonical import canonical_json_str, to_json_ready
 from .policy import (
     AUTHORITY_SOURCE_NATIVE,
     EVIDENCE_SOURCE_NATIVE,
@@ -52,6 +54,77 @@ def _risk_gate_mapping(
     return value
 
 
+def _risk_gate_assertion(
+    payload: Mapping[str, Any], *, record_id: str
+) -> ClaimAssertionRecord:
+    """Rematerialize assessed assertion before consuming native authority."""
+    try:
+        return ClaimAssertionRecord.from_payload(payload, record_id=record_id)
+    except (KernelError, TypeError, ValueError) as exc:
+        raise VerificationRiskGateError(
+            f"assertion {record_id!r} is invalid for native authority binding: "
+            f"{exc}"
+        ) from None
+
+
+def _risk_gate_native_fact(
+    payload: Mapping[str, Any], *, record_id: str
+) -> NativeFactRecord:
+    """Rematerialize native fact identity fields before claim comparison.
+
+    NativeFactRecord predates a public ``from_payload`` helper.  Rebuild it
+    from its immutable stored identity shape so malformed historical payloads
+    cannot silently become authority for a claim.
+    """
+    allowed = {
+        "native_object_ref",
+        "property_name",
+        "raw_representation",
+        "typed_interpretation",
+        "extractor_lineage",
+        "anchor",
+    }
+    unknown = set(payload) - allowed
+    if unknown:
+        raise VerificationRiskGateError(
+            f"native_fact {record_id!r} has unknown payload fields "
+            f"{sorted(unknown)}"
+        )
+    try:
+        lineage = payload["extractor_lineage"]
+        if not isinstance(lineage, Mapping):
+            raise TypeError("extractor_lineage must be an object")
+        if set(lineage) != {"name", "version"}:
+            raise ValueError(
+                "extractor_lineage must name exactly ['name', 'version']"
+            )
+        return NativeFactRecord(
+            record_id=record_id,
+            native_object_ref=payload["native_object_ref"],
+            property_name=payload["property_name"],
+            raw_representation=payload["raw_representation"],
+            typed_interpretation=payload["typed_interpretation"],
+            extractor_name=lineage["name"],
+            extractor_version=lineage["version"],
+            anchor=payload.get("anchor"),
+        )
+    except (KeyError, KernelError, TypeError, ValueError) as exc:
+        raise VerificationRiskGateError(
+            f"native_fact {record_id!r} is invalid for native authority binding: "
+            f"{exc}"
+        ) from None
+
+
+def _risk_gate_values_equal(left: Any, right: Any) -> bool:
+    """Compare claim values in canonical form, preserving JSON types."""
+    try:
+        return canonical_json_str(to_json_ready(left)) == canonical_json_str(
+            to_json_ready(right)
+        )
+    except (TypeError, ValueError):
+        return False
+
+
 async def check_batch_verification_risk(
     session: Any,
     *,
@@ -89,6 +162,9 @@ async def check_batch_verification_risk(
 
     refs: set[str] = set()
     for record_id, payload in active:
+        assertion_ref = payload.get("assertion_ref")
+        if isinstance(assertion_ref, str):
+            refs.add(assertion_ref)
         evidence_refs = payload.get("evidence_refs") or ()
         if isinstance(evidence_refs, str) or not isinstance(evidence_refs, Sequence):
             raise VerificationRiskGateError(
@@ -245,6 +321,78 @@ async def check_batch_verification_risk(
                 f"assessment {assessment_id!r} must present its native_fact "
                 "authority as role=witness"
             )
+
+        assertion_ref = assessment.get("assertion_ref")
+        if not isinstance(assertion_ref, str) or not assertion_ref:
+            raise VerificationRiskGateError(
+                f"assessment {assessment_id!r} must name a non-empty assertion_ref "
+                "for native authority binding"
+            )
+        assertion_record = batch_records.get(assertion_ref)
+        if assertion_record is not None:
+            assertion_class = getattr(assertion_record, "record_class", None)
+            assertion_payload = _risk_gate_payload(
+                assertion_record, record_id=assertion_ref
+            )
+        else:
+            committed_assertion = committed_records.get(assertion_ref)
+            if committed_assertion is None:
+                raise VerificationRiskGateError(
+                    f"assertion {assertion_ref!r} is not visible in workspace "
+                    f"{workspace_id!r}"
+                )
+            assertion_class, assertion_payload_json = committed_assertion
+            assertion_payload = _risk_gate_payload_json(
+                assertion_payload_json, record_id=assertion_ref
+            )
+        if assertion_class != "claim_assertion":
+            raise VerificationRiskGateError(
+                f"assessment {assessment_id!r} assertion {assertion_ref!r} "
+                f"resolves to {assertion_class!r}, not claim_assertion"
+            )
+        assertion = _risk_gate_assertion(assertion_payload, record_id=assertion_ref)
+
+        for support_payload in native_fact_supports:
+            fact_ref = support_payload.get("evidence_ref")
+            if not isinstance(fact_ref, str) or not fact_ref:
+                raise VerificationRiskGateError(
+                    f"assessment {assessment_id!r} native_fact support must "
+                    "name a non-empty evidence_ref"
+                )
+            fact_record = batch_records.get(fact_ref)
+            if fact_record is not None:
+                fact_class = getattr(fact_record, "record_class", None)
+                fact_payload = _risk_gate_payload(fact_record, record_id=fact_ref)
+            else:
+                committed_fact = committed_records.get(fact_ref)
+                if committed_fact is None:
+                    raise VerificationRiskGateError(
+                        f"native_fact {fact_ref!r} is not visible in workspace "
+                        f"{workspace_id!r}"
+                    )
+                fact_class, fact_payload_json = committed_fact
+                fact_payload = _risk_gate_payload_json(
+                    fact_payload_json, record_id=fact_ref
+                )
+            if fact_class != "native_fact":
+                raise VerificationRiskGateError(
+                    f"assessment {assessment_id!r} witness {fact_ref!r} "
+                    f"resolves to {fact_class!r}, not native_fact"
+                )
+            fact = _risk_gate_native_fact(fact_payload, record_id=fact_ref)
+            if not (
+                fact.native_object_ref == assertion.subject
+                and fact.property_name == assertion.predicate
+                and _risk_gate_values_equal(
+                    fact.typed_interpretation, assertion.value
+                )
+            ):
+                raise VerificationRiskGateError(
+                    f"assessment {assessment_id!r} native_fact {fact_ref!r} "
+                    f"is not competent for claim assertion {assertion_ref!r}: "
+                    "native_object_ref/property_name/typed_interpretation must "
+                    "match subject/predicate/value"
+                )
 
         risk_record = batch_records.get(evidence_ref)
         if risk_record is not None:
