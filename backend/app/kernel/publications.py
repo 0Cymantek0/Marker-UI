@@ -113,6 +113,7 @@ from app.utils.canonical import (
 __all__ = [
     "DEFAULT_PUBLICATION_PROFILE",
     "FTS_TABLE_PREFIX",
+    "HIGH_ASSURANCE_PROFILE_PREFIX",
     "LEXICAL_INDEX_ID",
     "LEXICAL_INDEX_VERSION",
     "LEXICAL_SCHEMA_VERSION",
@@ -150,6 +151,8 @@ __all__ = [
     "default_publication_service",
     "extract_lexical_corpus",
     "fts_table_name",
+    "high_assurance_partition_key",
+    "high_assurance_profile",
     "open_pinned_publication",
     "open_published_reader",
     "purge_expired_publication_pins",
@@ -200,6 +203,13 @@ PUBLICATION_STATE_FAILED = "failed"
 DEFAULT_PUBLICATION_PROFILE = "default"
 
 PUBLICATION_PROFILE_PATTERN = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
+
+#: Reserved profile prefix for PR78 high-assurance security-domain
+#: partitions. These profiles are derived server-side from trusted
+#: authorization state; callers can never name one directly (the typed
+#: query contract rejects the prefix, and a partition that was never
+#: published fails closed instead of falling back to a shared index).
+HIGH_ASSURANCE_PROFILE_PREFIX = "ha."
 
 DEFAULT_BUSY_RETRY_ATTEMPTS = 8
 DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
@@ -279,6 +289,26 @@ def validate_publication_profile(profile: str) -> str:
     return profile
 
 
+def high_assurance_partition_key(domains: Sequence[str] | set[str] | frozenset[str]) -> str:
+    """Deterministic partition identity for a set of security domains.
+
+    The key is order-independent (domains are canonicalized to a sorted
+    set), so the same authorization-visible domain set always names the
+    same high-assurance partition.
+    """
+    return payload_byte_hash(canonical_json_bytes(to_json_ready(sorted(set(domains)))))
+
+
+def high_assurance_profile(
+    domains: Sequence[str] | set[str] | frozenset[str],
+) -> str:
+    """Publication profile of a high-assurance partition. Derived, never
+    caller-named: profile grammar is unchanged and the ``ha.`` prefix is
+    reserved so a request profile can never address a partition."""
+    key = high_assurance_partition_key(domains)
+    return f"{HIGH_ASSURANCE_PROFILE_PREFIX}{key.removeprefix('sha256:')[:12]}"
+
+
 # ---------------------------------------------------------------------------
 # Deterministic identities
 # ---------------------------------------------------------------------------
@@ -292,20 +322,30 @@ def compute_lexical_identity(
     source_generation_id: str,
     tokenizer: str = LEXICAL_TOKENIZER,
     tokenizer_config_json: str = "{}",
+    partition_key: str = "",
 ) -> str:
-    """Deterministic lexical generation identity over declared inputs."""
+    """Deterministic lexical generation identity over declared inputs.
+
+    ``partition_key`` is included only when set, so unpartitioned
+    identities are byte-identical to their pre-PR78 form and a
+    partitioned build over the same source generation can never collide
+    with (or borrow rows from) the shared one.
+    """
+    payload: dict[str, Any] = {
+        "workspace_id": workspace_id,
+        "kernel_commit_id": kernel_commit_id,
+        "snapshot_id": snapshot_id,
+        "source_generation_id": source_generation_id,
+        "index": {"id": LEXICAL_INDEX_ID, "version": LEXICAL_INDEX_VERSION},
+        "tokenizer": tokenizer,
+        "tokenizer_config": json.loads(tokenizer_config_json),
+    }
+    if partition_key:
+        payload["partition_key"] = partition_key
     return record_identity_hash(
         record_type=LEXICAL_RECORD_TYPE,
         schema_version=LEXICAL_ID_SCHEMA_VERSION,
-        payload={
-            "workspace_id": workspace_id,
-            "kernel_commit_id": kernel_commit_id,
-            "snapshot_id": snapshot_id,
-            "source_generation_id": source_generation_id,
-            "index": {"id": LEXICAL_INDEX_ID, "version": LEXICAL_INDEX_VERSION},
-            "tokenizer": tokenizer,
-            "tokenizer_config": json.loads(tokenizer_config_json),
-        },
+        payload=payload,
     )
 
 
@@ -756,9 +796,19 @@ class PublicationService:
         *,
         tokenizer: str = LEXICAL_TOKENIZER,
         tokenizer_config: Mapping[str, Any] | None = None,
+        partition_domains: frozenset[str] | set[str] | None = None,
         _inject_fault_at: str | None = None,
     ) -> LexicalGenerationRef:
         """Build one immutable lexical generation from a pinned source.
+
+        With ``partition_domains`` the corpus is restricted to view
+        documents whose committed source lineage (view → content
+        revision → source → latest in-generation domain assignment)
+        resolves to one of those security domains; unattributed or
+        unresolvably-lineaged records are excluded, never guessed in.
+        The partition becomes part of the generation identity, so the
+        partitioned corpus is physically separate FTS5 statistics from
+        the shared build over the same source generation.
 
         Returns the generation in state ``validated`` (or its existing
         immutable row for an idempotent rebuild). The result is staging
@@ -771,6 +821,9 @@ class PublicationService:
             source_generation_id,
             tokenizer=tokenizer,
             tokenizer_config=tokenizer_config,
+            partition_domains=frozenset(partition_domains)
+            if partition_domains is not None
+            else None,
             fault=_inject_fault_at,
         )
 
@@ -780,6 +833,7 @@ class PublicationService:
         *,
         tokenizer: str,
         tokenizer_config: Mapping[str, Any] | None,
+        partition_domains: frozenset[str] | None,
         fault: str | None,
     ) -> LexicalGenerationRef:
         def maybe_inject(phase: str) -> None:
@@ -819,6 +873,19 @@ class PublicationService:
         maybe_inject(PHASE_PUB_LEXICAL_SOURCE_READ)
 
         corpus = extract_lexical_corpus(view_rows)
+        partition_key = ""
+        if partition_domains is not None:
+            partition_key = high_assurance_partition_key(partition_domains)
+            lineage = await _read_domain_lineage(
+                self._session_factory, source_generation_id
+            )
+            payloads = {record.record_id: record.payload for record in view_rows}
+            corpus = [
+                row
+                for row in corpus
+                if _lineage_domain(payloads.get(row.record_id), lineage)
+                in partition_domains
+            ]
         rows = _corpus_rows(corpus)
         digest, row_count, text_chars = _lexical_content_digest(
             workspace_id=source.workspace_id,
@@ -834,6 +901,7 @@ class PublicationService:
             source_generation_id=source_generation_id,
             tokenizer=tokenizer,
             tokenizer_config_json=tokenizer_config_json,
+            partition_key=partition_key,
         )
 
         existing = await _load_lexical(self._session_factory, lexical_generation_id)
@@ -1143,6 +1211,7 @@ class PublicationService:
                 materialized_generation_id,
                 tokenizer=LEXICAL_TOKENIZER,
                 tokenizer_config=None,
+                partition_domains=None,
                 fault=_inject_fault_at
                 if _inject_fault_at in _LEXICAL_BUILD_PHASES
                 else None,
@@ -1585,6 +1654,45 @@ class PublicationService:
             else None,
         )
 
+    async def publish_high_assurance(
+        self,
+        *,
+        materialized_generation_id: str,
+        partition_domains: frozenset[str] | set[str],
+        _inject_fault_at: str | None = None,
+    ) -> PublicationSetRef:
+        """Publish the high-assurance partition for a set of security
+        domains.
+
+        The lexical corpus is restricted to records whose committed
+        lineage resolves into ``partition_domains``, and the set is
+        published under the derived ``ha.`` profile — a physically
+        separate FTS5 corpus, so forbidden-domain material cannot
+        influence BM25 statistics or top-K competition of authorized
+        queries. The materialized generation is shared with the default
+        set (content is identical); only the searchable corpus differs.
+        """
+        await self._ensure_ready()
+        domains = frozenset(partition_domains)
+        if not domains:
+            raise KernelError(
+                "a high-assurance partition requires at least one security domain"
+            )
+        profile = high_assurance_profile(domains)
+        lexical = await self.build_lexical(
+            materialized_generation_id,
+            partition_domains=domains,
+            _inject_fault_at=_inject_fault_at
+            if _inject_fault_at in _LEXICAL_BUILD_PHASES
+            else None,
+        )
+        return await self.publish(
+            materialized_generation_id=materialized_generation_id,
+            lexical_generation_id=lexical.lexical_generation_id,
+            profile=profile,
+            _inject_fault_at=_inject_fault_at,
+        )
+
     async def get_publication_set(
         self, publication_set_id: str
     ) -> PublicationSetRef:
@@ -1689,6 +1797,97 @@ async def _read_view_documents(
             )
         )
     return records
+
+
+@dataclass(frozen=True)
+class _DomainLineage:
+    """Cut-pinned source→domain truth read from a materialized
+    generation (content revisions and domain assignments are materialized
+    like every other record, so partition membership is derived from
+    immutable committed state, never from live policy)."""
+
+    revision_source: dict[str, str]
+    source_domain: dict[str, str]
+
+
+async def _read_domain_lineage(
+    session_factory: async_sessionmaker, source_generation_id: str
+) -> _DomainLineage:
+    """Resolve, inside one generation: content revision → source, and
+    the latest security-domain assignment per source by causal commit
+    order. Malformed payloads fail closed — a partition build never
+    guesses a record into the corpus."""
+    async with session_factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(
+                        KernelGenerationRecord.record_id,
+                        KernelGenerationRecord.record_class,
+                        KernelGenerationRecord.kernel_commit_id,
+                        KernelGenerationRecord.payload_json,
+                    ).where(
+                        KernelGenerationRecord.generation_id == source_generation_id,
+                        KernelGenerationRecord.record_class.in_(
+                            ("content_revision", "security_domain")
+                        ),
+                    )
+                )
+            )
+            .all()
+        )
+    revision_source: dict[str, str] = {}
+    source_domain: dict[str, str] = {}
+    assignment_commit: dict[str, int] = {}
+    for record_id, record_class, commit_id, payload_json in rows:
+        try:
+            payload = json.loads(payload_json)
+        except Exception as exc:
+            raise LexicalIntegrityError(
+                f"source generation={source_generation_id} record={record_id!r}: "
+                f"{record_class} payload unreadable: {exc}"
+            ) from exc
+        if record_class == "content_revision":
+            source_ref = payload.get("source_ref")
+            if isinstance(source_ref, str) and source_ref:
+                revision_source[record_id] = source_ref
+        else:
+            source_ref = payload.get("source_ref")
+            domain_key = payload.get("domain_key")
+            if not (
+                isinstance(source_ref, str)
+                and source_ref
+                and isinstance(domain_key, str)
+                and domain_key
+            ):
+                raise LexicalIntegrityError(
+                    f"source generation={source_generation_id} record={record_id!r}: "
+                    "security_domain payload is malformed; refusing to guess "
+                    "partition membership"
+                )
+            if commit_id >= assignment_commit.get(source_ref, -1):
+                assignment_commit[source_ref] = commit_id
+                source_domain[source_ref] = domain_key
+    return _DomainLineage(
+        revision_source=revision_source, source_domain=source_domain
+    )
+
+
+def _lineage_domain(
+    payload: Mapping[str, Any] | None, lineage: _DomainLineage
+) -> str | None:
+    """Domain of one view-document payload through its committed lineage
+    (view → content_revision_ref → source → latest assignment). ``None``
+    means the lineage does not resolve inside the pinned generation."""
+    if not isinstance(payload, Mapping):
+        return None
+    revision_ref = payload.get("content_revision_ref")
+    if not isinstance(revision_ref, str) or not revision_ref:
+        return None
+    source_ref = lineage.revision_source.get(revision_ref)
+    if source_ref is None:
+        return None
+    return lineage.source_domain.get(source_ref)
 
 
 async def _lexical_integrity_problems(
@@ -2297,19 +2496,23 @@ class PublicationReader:
         )
 
     async def search(
-        self, query: str, *, limit: int = 100
+        self, query: str, *, limit: int = 100, offset: int = 0
     ) -> tuple[LexicalHit, ...]:
         """Query the pinned lexical generation only.
 
         The query must be a valid FTS5 MATCH expression; malformed
         syntax raises :class:`LexicalQueryError` rather than being
         guessed at. Results are ordered by bm25 rank with row-index
-        tie-breaking for determinism.
+        tie-breaking for determinism. ``offset`` pages through that
+        deterministic order — safe exactly because the generation (and
+        therefore the ranked sequence) is immutable.
         """
         if not isinstance(query, str) or not query.strip():
             raise LexicalQueryError("lexical query must be a non-empty string")
         if limit <= 0:
             raise KernelError("limit must be positive")
+        if offset < 0:
+            raise KernelError("offset must be non-negative")
         fts = self._lexical.fts_table
         try:
             async with self._session_factory() as session:
@@ -2320,9 +2523,9 @@ class PublicationReader:
                                 f'SELECT rowid, record_id, view_id, node_id, text, '
                                 f'bm25("{fts}") AS bm25_rank FROM "{fts}" '
                                 f'WHERE "{fts}" MATCH :query '
-                                "ORDER BY bm25_rank, rowid LIMIT :limit"
+                                "ORDER BY bm25_rank, rowid LIMIT :limit OFFSET :offset"
                             ),
-                            {"query": query, "limit": limit},
+                            {"query": query, "limit": limit, "offset": offset},
                         )
                     )
                     .mappings()

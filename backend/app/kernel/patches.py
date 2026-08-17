@@ -531,6 +531,11 @@ class ViewDocumentRecord(KernelRecord):
     content_revision_ref: str
     graph: ReadingOrderGraph
     texts: Mapping[str, str] = field(default_factory=dict)
+    #: Logical view this revision belongs to. The default keeps the
+    #: one-document workspaces of earlier slices; distinct view ids let
+    #: one workspace carry multiple view documents (PR78 multi-domain
+    #: corpora) with independent view heads.
+    view_id: str = DEFAULT_VIEW_ID
     evidence: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -539,6 +544,11 @@ class ViewDocumentRecord(KernelRecord):
         if not isinstance(self.graph, ReadingOrderGraph):
             raise KernelError(
                 f"graph must be a ReadingOrderGraph, got {type(self.graph).__name__}"
+            )
+        if not isinstance(self.view_id, str) or not VIEW_ID_PATTERN.match(self.view_id):
+            raise KernelError(
+                f"invalid view_id: {self.view_id!r} must match "
+                f"{VIEW_ID_PATTERN.pattern}"
             )
         if not isinstance(self.texts, Mapping):
             raise KernelError(f"texts must be a mapping, got {self.texts!r}")
@@ -563,11 +573,16 @@ class ViewDocumentRecord(KernelRecord):
             )
 
     def identity_payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "content_revision_ref": self.content_revision_ref,
             "graph": self.graph.canonical_payload(),
             "texts": dict(self.texts),
         }
+        # Included only when non-default so pre-PR78 stored view rows
+        # keep verifying byte-for-byte against their recorded identity.
+        if self.view_id != DEFAULT_VIEW_ID:
+            payload["view_id"] = self.view_id
+        return payload
 
     def view_revision_id(self) -> str:
         """Deterministic identity/digest of this declared view state."""
@@ -589,7 +604,7 @@ class ViewDocumentRecord(KernelRecord):
     ) -> ViewDocumentRecord:
         if not isinstance(payload, Mapping):
             raise KernelError(f"view payload must be a mapping, got {payload!r}")
-        allowed = {"content_revision_ref", "graph", "texts"}
+        allowed = {"content_revision_ref", "graph", "texts", "view_id"}
         unknown = set(payload) - allowed
         if unknown:
             raise KernelError(f"unknown view payload fields {sorted(unknown)}")
@@ -598,6 +613,7 @@ class ViewDocumentRecord(KernelRecord):
             content_revision_ref=payload["content_revision_ref"],
             graph=ReadingOrderGraph.from_payload(payload["graph"]),
             texts=dict(payload.get("texts") or {}),
+            view_id=str(payload.get("view_id") or DEFAULT_VIEW_ID),
         )
 
 
