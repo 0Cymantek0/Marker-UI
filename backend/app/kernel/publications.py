@@ -1101,7 +1101,8 @@ class PublicationService:
         """
         if _inject_fault_at is not None and (
             _inject_fault_at
-            not in _LEXICAL_BUILD_PHASES | {PHASE_PUB_SET_STAGED}
+            not in _LEXICAL_BUILD_PHASES
+            | {PHASE_PUB_SET_STAGED, PHASE_PUB_LEXICAL_VALIDATED}
         ):
             raise KernelError(f"unknown fault phase {_inject_fault_at!r}")
         await self._ensure_ready()
@@ -1130,6 +1131,8 @@ class PublicationService:
                 f"lexical generation={lexical.lexical_generation_id}: cannot "
                 f"stage a set from lexical state {lexical.state!r}"
             )
+        if _inject_fault_at == PHASE_PUB_LEXICAL_VALIDATED:
+            raise InjectedFaultError(PHASE_PUB_LEXICAL_VALIDATED)
         self._check_member_compatibility(source, lexical)
 
         if vector_generation_id is not None and (
@@ -1538,7 +1541,8 @@ class PublicationService:
             profile=profile,
             _inject_fault_at=_inject_fault_at
             if _inject_fault_at
-            in _LEXICAL_BUILD_PHASES | {PHASE_PUB_SET_STAGED}
+            in _LEXICAL_BUILD_PHASES
+            | {PHASE_PUB_SET_STAGED, PHASE_PUB_LEXICAL_VALIDATED}
             else None,
         )
         if staged.state == PUBLICATION_STATE_PUBLISHED:
