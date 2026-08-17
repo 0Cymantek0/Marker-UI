@@ -21,6 +21,7 @@ from app.kernel.commit import KernelCommitBatch, KernelCommitService
 from app.kernel.errors import (
     KernelError,
     LexicalIntegrityError,
+    LexicalQueryError,
     UnknownGenerationError,
 )
 from app.kernel.generations import GenerationService
@@ -30,14 +31,18 @@ from app.kernel.publications import (
     LEXICAL_STATE_STAGED,
     LEXICAL_STATE_VALIDATED,
     LEXICAL_TOKENIZER,
+    PublicationReader,
     PublicationService,
+    active_publication_pins,
     extract_lexical_corpus,
     fts_table_name,
+    open_published_reader,
     resolve_published_set,
     verify_lexical_generation,
     verify_publication_set,
 )
 from app.kernel.reading_order import OrderNode, ReadingOrderGraph
+from app.utils.canonical import payload_byte_hash
 from app.kernel.records import ClaimAssertionRecord
 from app.kernel.snapshots import resolve_snapshot
 
@@ -141,7 +146,7 @@ def _corpus_record(record_id: str, commit: int, payload: dict) -> object:
     )
 
 
-def test_corpus_extracts_latest_revision_per_view_only() -> None:
+async def test_corpus_extracts_latest_revision_per_view_only() -> None:
     records = [
         _corpus_record(
             "view-1",
@@ -163,7 +168,7 @@ def test_corpus_extracts_latest_revision_per_view_only() -> None:
     assert all(row.record_id == "view-2" for row in rows)
 
 
-def test_corpus_groups_by_view_and_orders_deterministically() -> None:
+async def test_corpus_groups_by_view_and_orders_deterministically() -> None:
     records = [
         _corpus_record(
             "view-a",
@@ -184,7 +189,7 @@ def test_corpus_groups_by_view_and_orders_deterministically() -> None:
     ]
 
 
-def test_corpus_rejects_non_mapping_texts() -> None:
+async def test_corpus_rejects_non_mapping_texts() -> None:
     records = [_corpus_record("view-1", 1, {"texts": ["not", "a", "mapping"]})]
     with pytest.raises(LexicalIntegrityError):
         extract_lexical_corpus(records)
@@ -634,8 +639,6 @@ async def test_orphan_lexical_locator_rejected(payload_env: tuple) -> None:
     gen2 = await _materialized(factory, "ws-a")
     lexical2 = await pubs.build_lexical(gen2.generation_id)
 
-    from app.kernel.publications import payload_byte_hash
-
     async with factory() as session:
         session.add(
             KernelLexicalRow(
@@ -726,3 +729,178 @@ async def test_full_rebuild_reproduces_set_identity(payload_env: tuple) -> None:
     )
     assert rebuilt.publication_set_id == p1.publication_set_id
     assert rebuilt.content_digest == p1.content_digest
+
+
+# ---------------------------------------------------------------------------
+# pinned publication reader + lexical search
+# ---------------------------------------------------------------------------
+
+
+async def test_reader_search_resolves_hits_to_sources(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    reader = await open_published_reader(factory, "ws-a")
+    assert reader is not None and reader.pinned
+    try:
+        hits = await reader.search("alpha")
+        assert len(hits) == 1
+        hit = hits[0]
+        assert hit.publication_set_id == p1.publication_set_id
+        assert hit.node_id == "n1"
+        assert hit.text == "alpha"
+        assert hit.revision_ref == _view(
+            "view-1", {"n1": "alpha"}, "rev-s1"
+        ).view_revision_id()
+        assert hit.text_hash == payload_byte_hash(b"alpha")
+        explain = reader.explain()
+        assert explain["publication_set_id"] == p1.publication_set_id
+        assert explain["lexical_generation_id"] == p1.lexical_generation_id
+        assert explain["tokenizer"] == "unicode61"
+    finally:
+        await reader.close()
+    assert not reader.pinned
+    assert (await active_publication_pins(factory)) == ()
+
+
+async def test_reader_pinned_across_publication_switch(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    reader = await open_published_reader(factory, "ws-a")
+    assert reader is not None
+    try:
+        await _commit_view(
+            service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+        )
+        gen2 = await _materialized(factory, "ws-a")
+        p2 = await pubs.publish(materialized_generation_id=gen2.generation_id)
+
+        # the pinned reader keeps resolving P1/L1 only
+        hits = await reader.search("alpha")
+        assert [hit.text for hit in hits] == ["alpha"]
+        assert hits[0].publication_set_id == p1.publication_set_id
+        assert hits[0].lexical_generation_id == p1.lexical_generation_id
+        assert await reader.search("beta") == ()
+
+        # a fresh reader resolves P2/L2 only
+        fresh = await open_published_reader(factory, "ws-a")
+        assert fresh is not None
+        try:
+            assert fresh.publication_set_id == p2.publication_set_id
+            assert await fresh.search("alpha") == ()
+            beta_hits = await fresh.search("beta")
+            assert [hit.text for hit in beta_hits] == ["beta"]
+        finally:
+            await fresh.close()
+    finally:
+        await reader.close()
+
+
+async def test_reindex_never_blends_generations(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    await _commit_view(
+        service,
+        "ws-a",
+        _view("view-2", {"n1": "alpha beta", "n2": "beta"}, "rev-s2"),
+        advance=False,
+    )
+    gen2 = await _materialized(factory, "ws-a")
+    p2 = await pubs.publish(materialized_generation_id=gen2.generation_id)
+
+    pinned_p1 = await open_published_reader(factory, "ws-a")
+    assert pinned_p1 is not None
+    assert pinned_p1.publication_set_id == p2.publication_set_id  # new default
+    await pinned_p1.close()
+
+    # every query is attributable wholly to L1 or L2 — never a mixture
+    p1_reader = PublicationReader(
+        factory,
+        await pubs.get_publication_set(p1.publication_set_id),
+        await pubs.get_lexical_generation(p1.lexical_generation_id),
+    )
+    p1_alpha = await p1_reader.search("alpha")
+    p1_beta = await p1_reader.search("beta")
+    assert [hit.node_id for hit in p1_alpha] == ["n1"]
+    assert p1_beta == ()
+    assert all(
+        hit.lexical_generation_id == p1.lexical_generation_id for hit in p1_alpha
+    )
+
+    p2_reader = PublicationReader(
+        factory,
+        await pubs.get_publication_set(p2.publication_set_id),
+        await pubs.get_lexical_generation(p2.lexical_generation_id),
+    )
+    p2_alpha = await p2_reader.search("alpha")
+    p2_beta = await p2_reader.search("beta")
+    assert [hit.node_id for hit in sorted(p2_alpha, key=lambda h: h.row_index)] == ["n1"]
+    assert [hit.node_id for hit in sorted(p2_beta, key=lambda h: h.row_index)] == [
+        "n1",
+        "n2",
+    ]
+    assert all(
+        hit.lexical_generation_id == p2.lexical_generation_id for hit in p2_beta
+    )
+
+
+async def test_reader_search_rejects_malformed_query(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    await _publish_first(factory, service, "ws-a")
+
+    reader = await open_published_reader(factory, "ws-a")
+    assert reader is not None
+    try:
+        with pytest.raises(LexicalQueryError):
+            await reader.search('"unbalanced OR AND (')
+        with pytest.raises(LexicalQueryError):
+            await reader.search("   ")
+    finally:
+        await reader.close()
+
+
+async def test_reader_hit_tamper_fails_closed(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    lexical = await pubs.get_lexical_generation(p1.lexical_generation_id)
+    with sqlite3.connect(_db_path(factory)) as conn:
+        conn.execute(
+            f'UPDATE "{lexical.fts_table}" SET text = ? WHERE rowid = 0',
+            ("silently swapped",),
+        )
+        conn.commit()
+
+    reader = await open_published_reader(factory, "ws-a")
+    assert reader is not None
+    try:
+        from app.kernel.errors import PublicationIntegrityError
+
+        # querying the tampered text surfaces the hash mismatch
+        with pytest.raises(PublicationIntegrityError, match="tampered"):
+            await reader.search("swapped")
+    finally:
+        await reader.close()
+
+
+async def test_open_published_reader_without_publication(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    assert await open_published_reader(factory, "ws-never") is None
+
+
+async def test_reader_pin_renew_extends_lease(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    await _publish_first(factory, service, "ws-a")
+
+    reader = await open_published_reader(factory, "ws-a", pin_lease_seconds=60)
+    assert reader is not None
+    try:
+        (pin,) = await active_publication_pins(factory)
+        first_expiry = pin.expires_at
+        await reader.renew(lease_seconds=120)
+        (renewed,) = await active_publication_pins(factory)
+        assert renewed.expires_at > first_expiry
+    finally:
+        await reader.close()

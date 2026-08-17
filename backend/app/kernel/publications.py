@@ -65,8 +65,9 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import delete, func, select, text, update
@@ -79,12 +80,15 @@ from app.kernel.errors import (
     InvalidPublicationProfileError,
     KernelError,
     LexicalIntegrityError,
+    LexicalQueryError,
     LexicalStateError,
     PublicationIntegrityError,
     PublicationStateError,
+    RetentionContractError,
     UnknownGenerationError,
     UnknownLexicalGenerationError,
     UnknownPublicationSetError,
+    UnknownReaderPinError,
 )
 from app.kernel.models import (
     KernelGeneration,
@@ -93,8 +97,10 @@ from app.kernel.models import (
     KernelLexicalGeneration,
     KernelLexicalRow,
     KernelPublicationHead,
+    KernelPublicationPin,
     KernelPublicationSet,
 )
+from app.kernel.retention import DEFAULT_PIN_LEASE_SECONDS
 from app.utils.canonical import (
     CanonicalValueError,
     canonical_json_bytes,
@@ -115,6 +121,7 @@ __all__ = [
     "LEXICAL_STATE_VALIDATED",
     "LEXICAL_TOKENIZER",
     "LexicalGenerationRef",
+    "LexicalHit",
     "LexicalRowRef",
     "LexicalVerification",
     "PHASE_PUB_LEXICAL_BEGIN",
@@ -130,14 +137,22 @@ __all__ = [
     "PUBLICATION_STATE_SUPERSEDED",
     "PUBLICATION_STATE_VALIDATED",
     "PUBLICATION_SET_RECORD_TYPE",
+    "PublicationPinView",
+    "PublicationReader",
     "PublicationService",
     "PublicationSetRef",
     "PublicationSetVerification",
+    "acquire_publication_pin",
+    "active_publication_pins",
     "compute_lexical_identity",
     "compute_publication_set_identity",
     "default_publication_service",
     "extract_lexical_corpus",
     "fts_table_name",
+    "open_published_reader",
+    "purge_expired_publication_pins",
+    "release_publication_pin",
+    "renew_publication_pin",
     "resolve_published_set",
     "validate_publication_profile",
     "verify_lexical_generation",
@@ -245,6 +260,12 @@ def _retry_delay(base: float, attempt: int) -> float:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=timezone.utc)
 
 
 def validate_publication_profile(profile: str) -> str:
@@ -471,6 +492,54 @@ class PublicationSetVerification:
     publication_set_id: str
     ok: bool
     problems: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PublicationPinView:
+    """View of one durable publication reader pin."""
+
+    pin_id: str
+    publication_set_id: str
+    workspace_id: str
+    created_at: datetime
+    expires_at: datetime
+
+    @property
+    def active(self) -> bool:
+        return self.expires_at > _utcnow()
+
+
+def _pin_view(row: KernelPublicationPin) -> PublicationPinView:
+    return PublicationPinView(
+        pin_id=row.pin_id,
+        publication_set_id=row.publication_set_id,
+        workspace_id=row.workspace_id,
+        created_at=_as_utc(row.created_at),
+        expires_at=_as_utc(row.expires_at) or _utcnow(),
+    )
+
+
+@dataclass(frozen=True)
+class LexicalHit:
+    """One source-resolvable lexical query hit.
+
+    FTS text alone is never sufficient provenance: every hit carries
+    the locator of the materialized record/node it resolves through and
+    the re-verified text hash, plus the identity of the publication set
+    and lexical generation that produced it (I12: reads are
+    attributable).
+    """
+
+    publication_set_id: str
+    lexical_generation_id: str
+    row_index: int
+    record_id: str
+    view_id: str
+    node_id: str
+    revision_ref: str
+    text_hash: str
+    rank: float
+    text: str
 
 
 def _lexical_ref(row: KernelLexicalGeneration) -> LexicalGenerationRef:
@@ -1927,6 +1996,375 @@ async def verify_publication_set(
         publication_set_id=publication_set_id,
         ok=not problems,
         problems=tuple(problems),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Publication reader pins (bounded leases over published sets)
+# ---------------------------------------------------------------------------
+
+
+async def acquire_publication_pin(
+    session_factory: async_sessionmaker,
+    publication_set_id: str,
+    *,
+    lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS,
+) -> PublicationPinView:
+    """Acquire a durable read lease over one publication set.
+
+    The pin protects the set and every member generation from
+    collection until it expires, is released, or is renewed. A crashed
+    reader's pin lapses when the lease expires — safety never depends
+    on process memory.
+    """
+    if lease_seconds <= 0:
+        raise RetentionContractError("lease_seconds must be positive")
+    now = _utcnow()
+    expires = now + timedelta(seconds=lease_seconds)
+    async with session_factory() as session:
+        async with session.begin():
+            row = await session.get(KernelPublicationSet, publication_set_id)
+            if row is None:
+                raise UnknownPublicationSetError(
+                    f"publication set={publication_set_id}: no such set"
+                )
+            pin = KernelPublicationPin(
+                pin_id=str(uuid.uuid4()),
+                publication_set_id=publication_set_id,
+                workspace_id=row.workspace_id,
+                created_at=now,
+                expires_at=expires,
+            )
+            session.add(pin)
+    return PublicationPinView(
+        pin_id=pin.pin_id,
+        publication_set_id=publication_set_id,
+        workspace_id=row.workspace_id,
+        created_at=now,
+        expires_at=expires,
+    )
+
+
+async def renew_publication_pin(
+    session_factory: async_sessionmaker,
+    pin_id: str,
+    *,
+    lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS,
+) -> PublicationPinView:
+    """Extend one publication pin's lease from now; expired pins cannot
+    be revived."""
+    if lease_seconds <= 0:
+        raise RetentionContractError("lease_seconds must be positive")
+    async with session_factory() as session:
+        async with session.begin():
+            row = await session.get(KernelPublicationPin, pin_id)
+            view = _pin_view(row) if row is not None else None
+            if view is None or not view.active:
+                raise UnknownReaderPinError(
+                    f"publication pin {pin_id!r}: no such active pin "
+                    "(released, purged, or the lease expired)"
+                )
+            row.expires_at = _utcnow() + timedelta(seconds=lease_seconds)
+            session.add(row)
+        refreshed = await session.get(KernelPublicationPin, pin_id)
+    assert refreshed is not None
+    return _pin_view(refreshed)
+
+
+async def release_publication_pin(
+    session_factory: async_sessionmaker, pin_id: str
+) -> bool:
+    """Release one publication pin (row deleted); False when gone."""
+    async with session_factory() as session:
+        async with session.begin():
+            result = await session.execute(
+                delete(KernelPublicationPin).where(
+                    KernelPublicationPin.pin_id == pin_id
+                )
+            )
+            released = result.rowcount == 1
+    return released
+
+
+async def active_publication_pins(
+    session_factory: async_sessionmaker,
+    *,
+    publication_set_id: str | None = None,
+) -> tuple[PublicationPinView, ...]:
+    """All currently active (unexpired) publication pins."""
+    stmt = select(KernelPublicationPin).where(
+        KernelPublicationPin.expires_at > _utcnow()
+    )
+    if publication_set_id is not None:
+        stmt = stmt.where(
+            KernelPublicationPin.publication_set_id == publication_set_id
+        )
+    async with session_factory() as session:
+        rows = (await session.execute(stmt)).scalars().all()
+    return tuple(_pin_view(row) for row in rows)
+
+
+async def purge_expired_publication_pins(
+    session_factory: async_sessionmaker,
+) -> int:
+    """Delete lapsed publication pin rows (called by collection)."""
+    async with session_factory() as session:
+        async with session.begin():
+            result = await session.execute(
+                delete(KernelPublicationPin).where(
+                    KernelPublicationPin.expires_at <= _utcnow()
+                )
+            )
+            purged = result.rowcount
+    return purged
+
+
+# ---------------------------------------------------------------------------
+# Published-set-pinned reader with lexical search
+# ---------------------------------------------------------------------------
+
+
+class PublicationReader:
+    """Bounded, publication-set-pinned read surface (internal probe).
+
+    The reader resolves the published set ONCE at construction and uses
+    that identity for its whole lifetime: a publication switch mid-read
+    cannot change any layer underneath it. Lexical queries run only
+    against the lexical generation named by the pinned set, and every
+    hit is re-verified against its stored locator (text hash, row
+    alignment) before it is returned as valid — an orphan or tampered
+    hit fails closed instead of surfacing.
+
+    GC protection: a reader constructed with ``pin_id`` holds a durable
+    lease that keeps the set and its members alive until :meth:`close`
+    releases it (or the lease lapses).
+    """
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker,
+        set_ref: PublicationSetRef,
+        lexical: LexicalGenerationRef,
+        *,
+        pin_id: str | None = None,
+    ) -> None:
+        self._session_factory = session_factory
+        self._set = set_ref
+        self._lexical = lexical
+        self.pin_id = pin_id
+
+    async def __aenter__(self) -> "PublicationReader":
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.close()
+
+    @property
+    def publication_set_id(self) -> str:
+        return self._set.publication_set_id
+
+    @property
+    def lexical_generation_id(self) -> str:
+        return self._lexical.lexical_generation_id
+
+    @property
+    def pinned(self) -> bool:
+        return self.pin_id is not None
+
+    def explain(self) -> dict[str, Any]:
+        """Attribution metadata for this reader's reads (I12)."""
+        return {
+            "publication_set_id": self._set.publication_set_id,
+            "workspace_id": self._set.workspace_id,
+            "profile": self._set.profile,
+            "kernel_commit_id": self._set.kernel_commit_id,
+            "snapshot_id": self._set.snapshot_id,
+            "materialized_generation_id": self._set.materialized_generation_id,
+            "lexical_generation_id": self._lexical.lexical_generation_id,
+            "tokenizer": self._lexical.tokenizer,
+            "vector_generation_id": self._set.vector_generation_id,
+            "lexical_row_count": self._lexical.row_count,
+        }
+
+    async def renew(self, *, lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS) -> None:
+        """Extend this reader's GC lease from now (long reads)."""
+        if self.pin_id is None:
+            raise KernelError(
+                "reader holds no pin; open with open_published_reader to renew"
+            )
+        await renew_publication_pin(
+            self._session_factory, self.pin_id, lease_seconds=lease_seconds
+        )
+
+    async def close(self) -> None:
+        """Release this reader's pin (unpinned readers: no-op)."""
+        if self.pin_id is not None:
+            await release_publication_pin(self._session_factory, self.pin_id)
+            self.pin_id = None
+
+    async def summary(self) -> PublicationSetRef:
+        ref = await _load_set(self._session_factory, self._set.publication_set_id)
+        if ref is None:
+            raise UnknownPublicationSetError(
+                f"publication set={self._set.publication_set_id}: no such set"
+            )
+        return ref
+
+    async def verify(self) -> PublicationSetVerification:
+        return await verify_publication_set(
+            self._session_factory, self._set.publication_set_id
+        )
+
+    async def search(
+        self, query: str, *, limit: int = 100
+    ) -> tuple[LexicalHit, ...]:
+        """Query the pinned lexical generation only.
+
+        The query must be a valid FTS5 MATCH expression; malformed
+        syntax raises :class:`LexicalQueryError` rather than being
+        guessed at. Results are ordered by bm25 rank with row-index
+        tie-breaking for determinism.
+        """
+        if not isinstance(query, str) or not query.strip():
+            raise LexicalQueryError("lexical query must be a non-empty string")
+        if limit <= 0:
+            raise KernelError("limit must be positive")
+        fts = self._lexical.fts_table
+        try:
+            async with self._session_factory() as session:
+                fts_rows = (
+                    (
+                        await session.execute(
+                            text(
+                                f'SELECT rowid, record_id, view_id, node_id, text, '
+                                f'bm25("{fts}") AS bm25_rank FROM "{fts}" '
+                                f'WHERE "{fts}" MATCH :query '
+                                "ORDER BY bm25_rank, rowid LIMIT :limit"
+                            ),
+                            {"query": query, "limit": limit},
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                if fts_rows:
+                    locators = {
+                        row.row_index: row
+                        for row in (
+                            (
+                                await session.execute(
+                                    select(KernelLexicalRow).where(
+                                        KernelLexicalRow.lexical_generation_id
+                                        == self._lexical.lexical_generation_id,
+                                        KernelLexicalRow.row_index.in_(
+                                            [int(r["rowid"]) for r in fts_rows]
+                                        ),
+                                    )
+                                )
+                            )
+                            .scalars()
+                            .all()
+                        )
+                    }
+                else:
+                    locators = {}
+        except OperationalError as exc:
+            # The statement is parameterized and the table provably exists
+            # (the reader was built from a validated manifest), so a
+            # non-busy operational failure here is the FTS5 engine
+            # rejecting the MATCH expression itself ("syntax error",
+            # "unterminated string", "malformed MATCH expression", ...).
+            # Surface that as a typed query rejection, never as a raw
+            # database error and never as a partial result.
+            if not _is_busy(exc):
+                raise LexicalQueryError(f"lexical query rejected: {exc}") from exc
+            raise
+
+        hits: list[LexicalHit] = []
+        for fts_row in fts_rows:
+            row_index = int(fts_row["rowid"])
+            node_text = fts_row["text"] or ""
+            text_hash = payload_byte_hash(node_text.encode("utf-8"))
+            locator = locators.get(row_index)
+            if locator is None:
+                raise PublicationIntegrityError(
+                    f"lexical hit row {row_index} has no locator in generation "
+                    f"{self._lexical.lexical_generation_id}; refusing to serve "
+                    "an orphan hit"
+                )
+            if (
+                locator.record_id != fts_row["record_id"]
+                or locator.view_id != fts_row["view_id"]
+                or locator.node_id != fts_row["node_id"]
+            ):
+                raise PublicationIntegrityError(
+                    f"lexical hit row {row_index} locator mismatch between "
+                    "index and stored rows"
+                )
+            if text_hash != locator.text_hash or len(node_text) != locator.text_chars:
+                raise PublicationIntegrityError(
+                    f"lexical hit row {row_index} text hash mismatch "
+                    f"(stored {locator.text_hash}, indexed {text_hash}); the "
+                    "pinned lexical generation was tampered with"
+                )
+            hits.append(
+                LexicalHit(
+                    publication_set_id=self._set.publication_set_id,
+                    lexical_generation_id=self._lexical.lexical_generation_id,
+                    row_index=row_index,
+                    record_id=locator.record_id,
+                    view_id=locator.view_id,
+                    node_id=locator.node_id,
+                    revision_ref=locator.revision_ref,
+                    text_hash=locator.text_hash,
+                    rank=float(fts_row["bm25_rank"]),
+                    text=node_text,
+                )
+            )
+        return tuple(hits)
+
+
+async def open_published_reader(
+    session_factory: async_sessionmaker,
+    workspace_id: str,
+    *,
+    profile: str = DEFAULT_PUBLICATION_PROFILE,
+    pin_lease_seconds: float | None = DEFAULT_PIN_LEASE_SECONDS,
+) -> PublicationReader | None:
+    """Resolve the published set once, then pin it for this reader.
+
+    ``None`` means the scope has never published. The reader's identity
+    is frozen at construction: later publication switches do not affect
+    an open reader (I9). ``pin_lease_seconds=None`` opens an unpinned
+    reader — appropriate only while the set is expected to stay current.
+    """
+    resolved = await resolve_published_set(
+        session_factory, workspace_id, profile=profile
+    )
+    if resolved is None:
+        return None
+    async with session_factory() as session:
+        lexical_row = await session.get(
+            KernelLexicalGeneration, resolved.lexical_generation_id
+        )
+    if lexical_row is None:
+        raise PublicationIntegrityError(
+            f"publication set={resolved.publication_set_id}: lexical member "
+            f"{resolved.lexical_generation_id!r} is missing"
+        )
+    pin_id = None
+    if pin_lease_seconds is not None:
+        pin = await acquire_publication_pin(
+            session_factory,
+            resolved.publication_set_id,
+            lease_seconds=pin_lease_seconds,
+        )
+        pin_id = pin.pin_id
+    return PublicationReader(
+        session_factory,
+        resolved,
+        _lexical_ref(lexical_row),
+        pin_id=pin_id,
     )
 
 
