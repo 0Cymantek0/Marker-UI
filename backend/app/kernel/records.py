@@ -43,6 +43,8 @@ _RECORD_CLASS_CONTENT_REVISION = "content_revision"
 _RECORD_CLASS_ACCESS_POLICY_REVISION = "access_policy_revision"
 _RECORD_CLASS_AUTHORIZATION_EPOCH = "authorization_epoch"
 _RECORD_CLASS_SOURCE_OBSERVATION = "source_observation"
+_RECORD_CLASS_SECURITY_DOMAIN = "security_domain"
+_RECORD_CLASS_ACCESS_DENIAL = "access_denial"
 
 #: Framing record_type per record class. Together with the per-class
 #: schema_version this is the identity domain separator consumed by
@@ -59,6 +61,8 @@ RECORD_TYPES: dict[str, str] = {
     _RECORD_CLASS_ACCESS_POLICY_REVISION: "marker.kernel.access_policy_revision.v1",
     _RECORD_CLASS_AUTHORIZATION_EPOCH: "marker.kernel.authorization_epoch.v1",
     _RECORD_CLASS_SOURCE_OBSERVATION: "marker.kernel.source_observation.v1",
+    _RECORD_CLASS_SECURITY_DOMAIN: "marker.kernel.security_domain.v1",
+    _RECORD_CLASS_ACCESS_DENIAL: "marker.kernel.access_denial.v1",
 }
 
 
@@ -677,6 +681,127 @@ class SourceObservationRecord(KernelRecord):
             "access_policy_ref": self.access_policy_ref,
             "authorization_epoch": self.authorization_epoch,
             "evidence": dict(self.evidence),
+        }
+
+
+#: Security-domain key grammar — intentionally aligned with the PR76
+#: publication-profile grammar so a domain set can name its high-assurance
+#: partition profile without a second encoding.
+_DOMAIN_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
+
+#: Live-deny targets. A denial is authoritative query-time state: it must
+#: win over stale published/indexed material without waiting for any
+#: background rebuild (PR78).
+ACCESS_DENIAL_TARGET_DOMAIN = "domain"
+ACCESS_DENIAL_TARGET_SOURCE = "source"
+ACCESS_DENIAL_TARGET_RECORD = "record"
+ACCESS_DENIAL_TARGET_KINDS = frozenset(
+    {
+        ACCESS_DENIAL_TARGET_DOMAIN,
+        ACCESS_DENIAL_TARGET_SOURCE,
+        ACCESS_DENIAL_TARGET_RECORD,
+    }
+)
+
+
+@dataclass(kw_only=True)
+class SecurityDomainRecord(KernelRecord):
+    """Assignment of one logical source to a security domain (PR78).
+
+    Security domains are the partition dimension of authorization-first
+    retrieval: a domain assignment is *policy*, deliberately separate
+    from content identity (a reassignment mints this record and leaves
+    every ContentRevisionRecord untouched) and from the workspace
+    AuthorizationEpochRecord (which tracks the local domain facts, not
+    per-source membership). ``assignment_basis`` participates in
+    identity so the stored record is self-describing, mirroring
+    ``AuthorizationEpochRecord.domain_facts``.
+    """
+
+    record_class: ClassVar[str] = _RECORD_CLASS_SECURITY_DOMAIN
+    record_type: ClassVar[str] = RECORD_TYPES[_RECORD_CLASS_SECURITY_DOMAIN]
+
+    source_ref: str
+    domain_key: str
+    #: self-describing assignment context (operator, reason, ...)
+    assignment_basis: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        validate_record_ref(self.source_ref, field_name="source_ref")
+        if not isinstance(self.domain_key, str) or not _DOMAIN_KEY_PATTERN.match(
+            self.domain_key
+        ):
+            raise KernelError(
+                f"invalid domain_key: {self.domain_key!r} must match "
+                f"{_DOMAIN_KEY_PATTERN.pattern}"
+            )
+
+    def identity_payload(self) -> dict[str, Any]:
+        return {
+            "source_ref": self.source_ref,
+            "domain_key": self.domain_key,
+            "assignment_basis": dict(self.assignment_basis),
+        }
+
+
+@dataclass(kw_only=True)
+class AccessDenialRecord(KernelRecord):
+    """One live-deny state event for a domain, source, or record (PR78).
+
+    Denial state is an append-only event chain keyed to stable identity
+    (domain key / source record id / record id), never to a display
+    path. The latest event per target is authoritative: ``denied=True``
+    refuses the target immediately — even if a pinned PublicationSet or
+    its lexical generation still contains the material — and
+    ``denied=False`` is the explicit re-authorization (lifting a deny is
+    a new event, never a mutation of history). ``supersedes`` names the
+    previous event for the same target so a deny→allow→deny cycle never
+    collides with an earlier semantically identical record.
+    ``denial_basis`` participates in identity so the stored record is
+    self-describing, mirroring ``AuthorizationEpochRecord.domain_facts``.
+    """
+
+    record_class: ClassVar[str] = _RECORD_CLASS_ACCESS_DENIAL
+    record_type: ClassVar[str] = RECORD_TYPES[_RECORD_CLASS_ACCESS_DENIAL]
+
+    target_kind: str
+    target_ref: str
+    denied: bool
+    #: previous AccessDenialRecord for the same target, or None
+    supersedes: str | None = None
+    #: self-describing denial context (operator, reason, ...)
+    denial_basis: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.target_kind not in ACCESS_DENIAL_TARGET_KINDS:
+            raise KernelError(
+                f"invalid target_kind: {self.target_kind!r}; allowed: "
+                f"{sorted(ACCESS_DENIAL_TARGET_KINDS)}"
+            )
+        if not isinstance(self.denied, bool):
+            raise KernelError(f"invalid denied flag: {self.denied!r}")
+        if self.target_kind == ACCESS_DENIAL_TARGET_DOMAIN:
+            if not isinstance(self.target_ref, str) or not _DOMAIN_KEY_PATTERN.match(
+                self.target_ref
+            ):
+                raise KernelError(
+                    f"invalid domain target_ref: {self.target_ref!r} must match "
+                    f"{_DOMAIN_KEY_PATTERN.pattern}"
+                )
+        else:
+            validate_record_ref(self.target_ref, field_name="target_ref")
+        if self.supersedes is not None:
+            validate_record_ref(self.supersedes, field_name="supersedes")
+
+    def identity_payload(self) -> dict[str, Any]:
+        return {
+            "target_kind": self.target_kind,
+            "target_ref": self.target_ref,
+            "denied": self.denied,
+            "supersedes": self.supersedes,
+            "denial_basis": dict(self.denial_basis),
         }
 
 
