@@ -351,6 +351,14 @@ async def check_batch_verification_risk(
                 f"resolves to {assertion_class!r}, not claim_assertion"
             )
         assertion = _risk_gate_assertion(assertion_payload, record_id=assertion_ref)
+        if assertion.qualifiers:
+            raise VerificationRiskGateError(
+                f"assessment {assessment_id!r} assertion {assertion_ref!r} "
+                "declares qualifiers but workflow "
+                f"{HIGH_RISK_SOURCE_NATIVE_WORKFLOW!r} defines no "
+                "anchor-to-qualifier binding; native facts are not "
+                "claim-competent for qualified assertions"
+            )
 
         for support_payload in native_fact_supports:
             fact_ref = support_payload.get("evidence_ref")

@@ -129,6 +129,7 @@ def valid_batch(
     *,
     risk: VerificationRiskEvidenceRecord | None = None,
     fact: NativeFactRecord | None = None,
+    assertion: ClaimAssertionRecord | None = None,
     **changes,
 ):
     risk = risk or make_risk()
@@ -136,7 +137,8 @@ def valid_batch(
     return KernelCommitBatch(
         workspace_id=WORKSPACE,
         records=(
-            ClaimAssertionRecord(
+            assertion
+            or ClaimAssertionRecord(
                 record_id="assertion-1",
                 claim_key="invoice.total",
                 subject="doc:invoice-42",
@@ -200,6 +202,24 @@ async def test_unrelated_native_fact_cannot_authorize_high_risk_claim_atomically
     batch = valid_batch(fact=make_fact(native_object_ref="doc:other-42"))
     await assert_rejected_atomically(
         kernel_env, batch, match="native_fact.*not competent for claim"
+    )
+
+
+async def test_qualified_assertion_cannot_use_native_authority_atomically(
+    kernel_env,
+):
+    qualified = ClaimAssertionRecord(
+        record_id="assertion-1",
+        claim_key="invoice.total",
+        subject="doc:invoice-42",
+        predicate="total_amount",
+        value="1250.00",
+        qualifiers={"page": 2},
+    )
+    await assert_rejected_atomically(
+        kernel_env,
+        valid_batch(assertion=qualified),
+        match="no anchor-to-qualifier binding",
     )
 
 
