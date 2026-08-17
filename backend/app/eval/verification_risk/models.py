@@ -10,6 +10,9 @@ from .common import (
     VERIFICATION_RISK_CORPUS_SCHEMA_VERSION,
     Disclosure,
     _DEPENDENCY_PROFILE_FIELDS,
+    _LIST_OUTCOME_FIELDS,
+    _OUTCOME_FIELDS,
+    _SAMPLE_FIELDS,
     _WITNESS_FIELDS,
     _as_bool,
     _as_probability,
@@ -206,9 +209,15 @@ class WitnessOutcome:
         *,
         label: Any,
         witness_id: str,
+        allow_witness_id_fields: bool = False,
     ) -> "WitnessOutcome":
         if not isinstance(data, Mapping):
             raise VerificationRiskError(f"outcome for witness {witness_id!r} must be an object")
+        _reject_unknown_fields(
+            data,
+            _LIST_OUTCOME_FIELDS if allow_witness_id_fields else _OUTCOME_FIELDS,
+            context=f"outcome for witness {witness_id!r}",
+        )
         if "prediction" in data:
             prediction = data["prediction"]
         elif "value" in data:
@@ -285,6 +294,7 @@ class LabeledSample:
             raise VerificationRiskError("sample entry must be an object")
         sample_id = _as_text(data.get("sample_id", data.get("id")), field_name="sample_id")
         assert sample_id is not None
+        _reject_unknown_fields(data, _SAMPLE_FIELDS, context=f"sample {sample_id!r}")
         if "label" in data:
             label = data["label"]
         elif "truth" in data:
@@ -332,6 +342,8 @@ class LabeledSample:
                 raw_outcome,
                 label=label,
                 witness_id=witness_id,
+                allow_witness_id_fields=isinstance(raw_outcomes, Sequence)
+                and not isinstance(raw_outcomes, (str, bytes, bytearray)),
             )
         if len(outcomes) < 1:
             raise VerificationRiskError(f"sample {sample_id!r} must contain at least one outcome")

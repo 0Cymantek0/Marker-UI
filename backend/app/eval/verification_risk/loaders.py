@@ -9,7 +9,9 @@ from typing import Any
 
 from .common import (
     VERIFICATION_RISK_CORPUS_SCHEMA_VERSION,
+    _CORPUS_FIELDS,
     _as_text,
+    _reject_unknown_fields,
     VerificationRiskError,
 )
 from .models import LabeledSample, VerificationRiskCorpus, WitnessProfile
@@ -38,6 +40,7 @@ def load_verification_risk_corpus(
         source_name = str(path)
     if not isinstance(data, Mapping):
         raise VerificationRiskError(f"corpus {source_name} root must be an object")
+    _reject_unknown_fields(data, _CORPUS_FIELDS, context="corpus")
     schema_version = data.get("schema_version", data.get("$schema"))
     if schema_version != VERIFICATION_RISK_CORPUS_SCHEMA_VERSION:
         raise VerificationRiskError(

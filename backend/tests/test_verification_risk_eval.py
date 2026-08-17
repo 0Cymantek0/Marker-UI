@@ -97,6 +97,81 @@ def test_unknown_profile_fields_and_non_boolean_flags_fail_closed():
         load_verification_risk_corpus(bad_outcome_catastrophic)
 
 
+def test_unknown_identity_fields_fail_closed_at_every_corpus_level():
+    decoded = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    unknown_root = copy.deepcopy(decoded)
+    unknown_root["future_identity"] = "v2"
+    with pytest.raises(VerificationRiskError, match="unknown fields: future_identity"):
+        load_verification_risk_corpus(unknown_root)
+
+    unknown_sample = copy.deepcopy(decoded)
+    unknown_sample["samples"][0]["observation_id"] = "obs-1"
+    with pytest.raises(VerificationRiskError, match="unknown fields: observation_id"):
+        load_verification_risk_corpus(unknown_sample)
+
+    unknown_mapping_outcome = copy.deepcopy(decoded)
+    unknown_mapping_outcome["samples"][0]["outcomes"]["model-a"][
+        "calibrated_confidence"
+    ] = 0.9
+    with pytest.raises(
+        VerificationRiskError,
+        match="unknown fields: calibrated_confidence",
+    ):
+        load_verification_risk_corpus(unknown_mapping_outcome)
+
+    unknown_list_outcome = copy.deepcopy(decoded)
+    unknown_list_outcome["samples"][0]["outcomes"] = [
+        {"witness_id": witness_id, **outcome}
+        for witness_id, outcome in unknown_list_outcome["samples"][0]["outcomes"].items()
+    ]
+    unknown_list_outcome["samples"][0]["outcomes"][0]["calibrated_confidence"] = 0.9
+    with pytest.raises(
+        VerificationRiskError,
+        match="unknown fields: calibrated_confidence",
+    ):
+        load_verification_risk_corpus(unknown_list_outcome)
+
+    unknown_dependency = copy.deepcopy(decoded)
+    unknown_dependency["witnesses"][0]["dependency_profile"]["future_identity"] = "v2"
+    with pytest.raises(VerificationRiskError, match="unknown fields: future_identity"):
+        load_verification_risk_corpus(unknown_dependency)
+
+
+def test_documented_aliases_and_list_outcomes_remain_supported():
+    decoded = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    decoded.pop("schema_version")
+    decoded["metadata"]["vendor_extension"] = {"future_identity": "metadata-v2"}
+    decoded["witnesses"][0]["metadata"] = {"vendor_extension": "witness-v2"}
+    decoded["samples"] = [copy.deepcopy(decoded["samples"][0])]
+    sample = decoded["samples"][0]
+    sample["metadata"] = {"vendor_extension": "sample-v2"}
+    sample["truth"] = sample.pop("label")
+    sample["slice_id"] = sample.pop("slice")
+    sample["witnesses"] = [
+        {"id": witness_id, **outcome}
+        for witness_id, outcome in sample.pop("outcomes").items()
+    ]
+    sample["witnesses"][0]["metadata"] = {"vendor_extension": "outcome-v2"}
+
+    corpus = load_verification_risk_corpus(decoded)
+
+    assert corpus.schema_version == "marker.verification_risk_corpus.v1"
+    assert corpus.samples[0].label is True
+    assert corpus.samples[0].slice_id == "matched"
+    assert corpus.metadata["vendor_extension"] == {"future_identity": "metadata-v2"}
+    assert corpus.witnesses[0].metadata["vendor_extension"] == "witness-v2"
+    assert corpus.samples[0].metadata["vendor_extension"] == "sample-v2"
+    assert corpus.samples[0].outcomes["model-a"].metadata["vendor_extension"] == "outcome-v2"
+    assert set(corpus.samples[0].outcomes) == {
+        "model-a",
+        "model-b",
+        "model-c",
+        "unknown-model",
+        "source-native",
+    }
+
+
 def test_slice_and_distribution_filters_do_not_leak():
     decoded = json.loads(FIXTURE.read_text(encoding="utf-8"))
     decoded["samples"][0]["slice"] = "fit-only"

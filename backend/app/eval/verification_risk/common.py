@@ -12,6 +12,46 @@ WILSON_Z_95 = 1.959963984540054
 
 Disclosure = Literal["complete", "partial", "unknown"]
 
+_CORPUS_FIELDS = frozenset(
+    {
+        "$schema",
+        "schema_version",
+        "name",
+        "witnesses",
+        "samples",
+        "metadata",
+    }
+)
+_SAMPLE_FIELDS = frozenset(
+    {
+        "sample_id",
+        "id",
+        "label",
+        "truth",
+        "outcomes",
+        "witnesses",
+        "slice",
+        "slice_id",
+        "case",
+        "distribution",
+        "risk_level",
+        "catastrophic",
+        "catastrophic_label",
+        "metadata",
+    }
+)
+_OUTCOME_FIELDS = frozenset(
+    {
+        "prediction",
+        "value",
+        "correct",
+        "confidence",
+        "score",
+        "catastrophic",
+        "metadata",
+    }
+)
+_LIST_OUTCOME_FIELDS = _OUTCOME_FIELDS | frozenset({"id", "witness_id"})
 _WITNESS_FIELDS = frozenset(
     {
         "id",
