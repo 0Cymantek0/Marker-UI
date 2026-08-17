@@ -11,6 +11,7 @@ from __future__ import annotations
 
 __all__ = [
     "QueryError",
+    "QueryAuthorizationError",
     "QueryBudgetError",
     "QueryContractError",
     "UnsupportedOperatorError",
@@ -19,6 +20,14 @@ __all__ = [
 
 class QueryError(Exception):
     """Base class for typed query-contract failures."""
+
+
+class QueryAuthorizationError(QueryError):
+    """Trusted authorization state could not be resolved, or a required
+    authorization-bound resource (for example a high-assurance
+    partition) is not available. Resolution fails closed: the query is
+    refused rather than falling back to weaker or unrestricted
+    retrieval."""
 
 
 class QueryContractError(QueryError):

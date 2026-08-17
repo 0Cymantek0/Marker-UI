@@ -28,7 +28,10 @@ from app.context_runtime.errors import (
     QueryContractError,
     UnsupportedOperatorError,
 )
-from app.kernel.publications import validate_publication_profile
+from app.kernel.publications import (
+    HIGH_ASSURANCE_PROFILE_PREFIX,
+    validate_publication_profile,
+)
 
 __all__ = [
     "DEFAULT_QUERY_BUDGET",
@@ -40,6 +43,7 @@ __all__ = [
     "SUPPORTED_OPERATIONS",
     "LexicalMode",
     "LexicalSearchOp",
+    "QueryAssurance",
     "QueryBudget",
     "QueryRequest",
     "QuerySecurityContext",
@@ -87,6 +91,14 @@ class _StrictModel(BaseModel):
 
 
 LexicalMode = Literal["all_terms", "any_term", "phrase"]
+
+#: Retrieval assurance mode. ``standard`` serves from the shared
+#: publication profile with authorization-aware candidate traversal and
+#: the live deny overlay. ``high`` routes to the security-domain
+#: partition derived from trusted state — a physically isolated corpus.
+#: A caller can raise assurance, never lower the authorization bound:
+#: domains and partitions are server-derived either way.
+QueryAssurance = Literal["standard", "high"]
 
 
 class LexicalSearchOp(_StrictModel):
@@ -167,6 +179,7 @@ class QueryRequest(_StrictModel):
     schema_version: str
     workspace_id: str = Field(min_length=1, max_length=256)
     profile: str = Field(default="default", min_length=1, max_length=64)
+    assurance: QueryAssurance = "standard"
     operations: list[Operation] = Field(min_length=1, max_length=MAX_OPERATIONS_HARD)
     output: OutputDirective = Field(default_factory=OutputDirective)
     context: QuerySecurityContext = Field(default_factory=QuerySecurityContext)
@@ -189,6 +202,13 @@ class QueryRequest(_StrictModel):
             validate_publication_profile(value)
         except Exception as exc:
             raise ValueError(f"invalid publication profile: {exc}") from exc
+        if value.startswith(HIGH_ASSURANCE_PROFILE_PREFIX):
+            raise ValueError(
+                "publication profiles with the reserved "
+                f"{HIGH_ASSURANCE_PROFILE_PREFIX!r} prefix are derived "
+                "server-side from trusted authorization state; a caller "
+                "cannot name a high-assurance partition"
+            )
         return value
 
 
@@ -274,6 +294,7 @@ def normalized_query(request: QueryRequest) -> dict[str, Any]:
         "schema_version": request.schema_version,
         "workspace_id": request.workspace_id,
         "profile": request.profile,
+        "assurance": request.assurance,
         "operations": operations,
         "output": {"include_text": request.output.include_text},
         "context": {
