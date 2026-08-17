@@ -1,0 +1,193 @@
+{
+  "acceptance": {
+    "corpus_nodes": 2000,
+    "evidence_units_within_caps": true,
+    "over_budget_partial_explicit": true,
+    "packet_identity_stable": true,
+    "pinned_across_publication_switch": true,
+    "server_operations_bounded_by_request": true,
+    "single_set_attribution": true,
+    "wedge_note": "one bounded server-side call answers over the whole 2000-node corpus; no page-by-page client traversal"
+  },
+  "benchmark": "pr77-bounded-query",
+  "corpus": {
+    "docs": 100,
+    "kind": "synthetic view document (unicode61 tokenizer)",
+    "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+    "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+    "node_text_chars": 400,
+    "nodes": 2000,
+    "nodes_per_doc": 20,
+    "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43"
+  },
+  "machine": "AMD64",
+  "method": "each typed query repeated 30x via time.perf_counter; acceptance is structural/count-based, wall-clock is evidence only; runtime metadata is non-semantic",
+  "migration": {
+    "action": "initialized",
+    "to_revision": "20260817_0011"
+  },
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "schema_version": "marker.bounded_query_measurements.v1",
+  "slices": {
+    "across_publication_switch": {
+      "candidates_considered": 50,
+      "follow_up_saw_new_set": true,
+      "identity_id": "sha256:6e9b829172929e0ad9b7e17ceaac7f4e2ce0f928dc7be57ef3ac2f1ceb70e9a3",
+      "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+      "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+      "omission_reasons": [
+        "candidate_budget",
+        "duplicate"
+      ],
+      "operations_executed": 2,
+      "output_chars": 16472,
+      "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
+      "query_runtime_ms": 396.183,
+      "single_set_attribution": true,
+      "status": "partial",
+      "stayed_on_pinned_set": true,
+      "units_included": 25,
+      "units_omitted": 27,
+      "within_budget": true
+    },
+    "exact_selector": {
+      "budget": {
+        "candidates_considered": 0,
+        "max_candidates": 200,
+        "max_evidence_units": 50,
+        "max_operations": 8,
+        "max_output_chars": 100000,
+        "operations_executed": 1,
+        "output_chars": 652,
+        "truncated": false,
+        "units_included": 1,
+        "units_omitted": 0
+      },
+      "candidates_considered": 0,
+      "identity_id": "sha256:eaccc35513fc8a2ce900332f1d37def27f5b6c15bf957c665a0a20f824ed32f3",
+      "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+      "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+      "mean_ms": 146.185,
+      "omission_reasons": [],
+      "operations_executed": 1,
+      "output_chars": 652,
+      "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
+      "query_latency_ms": {
+        "p50": 143.016,
+        "p95": 157.873,
+        "p99": 159.156
+      },
+      "single_set_attribution": true,
+      "status": "complete",
+      "units_included": 1,
+      "units_omitted": 0,
+      "within_budget": true
+    },
+    "high_hit_lexical": {
+      "budget": {
+        "candidates_considered": 200,
+        "max_candidates": 200,
+        "max_evidence_units": 50,
+        "max_operations": 8,
+        "max_output_chars": 100000,
+        "operations_executed": 1,
+        "output_chars": 32992,
+        "truncated": true,
+        "units_included": 50,
+        "units_omitted": 151
+      },
+      "candidates_considered": 200,
+      "identity_id": "sha256:c9f561387889e75cc6b4170c4fea13bfe0d90f64c1ab753c0f488e0304dbcee0",
+      "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+      "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+      "mean_ms": 57.422,
+      "omission_reasons": [
+        "candidate_budget",
+        "unit_budget"
+      ],
+      "operations_executed": 1,
+      "output_chars": 32992,
+      "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
+      "query_latency_ms": {
+        "p50": 56.38,
+        "p95": 65.583,
+        "p99": 79.813
+      },
+      "single_set_attribution": true,
+      "status": "partial",
+      "units_included": 50,
+      "units_omitted": 151,
+      "within_budget": true
+    },
+    "over_budget_request": {
+      "budget": {
+        "candidates_considered": 200,
+        "max_candidates": 200,
+        "max_evidence_units": 5,
+        "max_operations": 8,
+        "max_output_chars": 20000,
+        "operations_executed": 1,
+        "output_chars": 3291,
+        "truncated": true,
+        "units_included": 5,
+        "units_omitted": 196
+      },
+      "candidates_considered": 200,
+      "identity_id": "sha256:f6270da55fbf7c48483a5fd169305dac484aa3ed5fe0fc7d8b309c7db63dcf62",
+      "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+      "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+      "mean_ms": 55.073,
+      "omission_reasons": [
+        "candidate_budget",
+        "unit_budget"
+      ],
+      "operations_executed": 1,
+      "output_chars": 3291,
+      "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
+      "query_latency_ms": {
+        "p50": 54.147,
+        "p95": 61.425,
+        "p99": 65.965
+      },
+      "single_set_attribution": true,
+      "status": "partial",
+      "units_included": 5,
+      "units_omitted": 196,
+      "within_budget": true
+    },
+    "selective_lexical": {
+      "budget": {
+        "candidates_considered": 1,
+        "max_candidates": 200,
+        "max_evidence_units": 50,
+        "max_operations": 8,
+        "max_output_chars": 100000,
+        "operations_executed": 1,
+        "output_chars": 656,
+        "truncated": false,
+        "units_included": 1,
+        "units_omitted": 0
+      },
+      "candidates_considered": 1,
+      "identity_id": "sha256:8bb599500960e192f0815633805416a942b14da4b24b6e835ab7b35d2a41ddc6",
+      "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+      "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+      "mean_ms": 31.606,
+      "omission_reasons": [],
+      "operations_executed": 1,
+      "output_chars": 656,
+      "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
+      "query_latency_ms": {
+        "p50": 31.086,
+        "p95": 36.25,
+        "p99": 37.911
+      },
+      "single_set_attribution": true,
+      "status": "complete",
+      "units_included": 1,
+      "units_omitted": 0,
+      "within_budget": true
+    }
+  }
+}
