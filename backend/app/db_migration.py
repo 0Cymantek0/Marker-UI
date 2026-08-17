@@ -193,6 +193,13 @@ def _run_stamp(url: str, revision: str) -> None:
 
 Contract = dict[str, dict[str, Any]]
 
+#: Runtime-managed FTS5 virtual tables (one per lexical generation, PR76)
+#: and their shadow tables share this prefix. They are rebuildable
+#: derived serving state created at index-build time — never Alembic
+#: schema authority and never ORM models — so both sides of every
+#: contract comparison exclude them symmetrically.
+RUNTIME_FTS_TABLE_PREFIX = "kernel_fts_"
+
 
 _AFFINITY_RULES = (
     ("INT", "INTEGER"),
@@ -239,6 +246,10 @@ def _read_contract(conn: sqlite3.Connection) -> Contract:
             "SELECT name FROM sqlite_master WHERE type = 'table' "
             "AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version'"
         )
+        # Runtime-managed FTS5 serving state (PR76): rebuildable derived
+        # index tables that exist only after a build. Excluded from both
+        # sides of every comparison, exactly like sqlite_ internals.
+        if not row[0].startswith(RUNTIME_FTS_TABLE_PREFIX)
     ]
     contract: Contract = {}
     for table in tables:

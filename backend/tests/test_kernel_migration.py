@@ -73,7 +73,6 @@ PR64_HEAD = "20260815_0005"
 PR65A_HEAD = "20260815_0006"
 PR65B_HEAD = "20260815_0007"
 PR66_HEAD = "20260816_0008"
-CURRENT_HEAD = "20260817_0010"
 
 PR65A_TABLES = {
     "kernel_generations",
@@ -102,6 +101,18 @@ PR67A_TABLES = {
 }
 
 PR73_TABLES = {"kernel_view_heads"}
+
+PR73_HEAD = "20260817_0010"
+PR76_HEAD = "20260817_0011"
+CURRENT_HEAD = PR76_HEAD
+
+PR76_TABLES = {
+    "kernel_lexical_generations",
+    "kernel_lexical_rows",
+    "kernel_publication_sets",
+    "kernel_publication_heads",
+    "kernel_publication_pins",
+}
 
 
 def _db_url(path: Path) -> str:
@@ -1305,3 +1316,89 @@ async def test_pr73_downgrade_drops_view_heads_then_reupgrade_converges(
         assert "already committed" in str(dup_exc.value)
     finally:
         await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# PR76: atomic publication sets + immutable lexical generations
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upgrade_from_pr73_head_preserves_committed_data(tmp_path: Path) -> None:
+    """A PR73 database with committed history and an active generation
+    upgrades to the PR76 head with everything preserved and the
+    publication/lexical tables arriving empty — no fabricated published
+    state or index truth for pre-PR76 work."""
+    db_path = tmp_path / "pr73-full.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+    await asyncio.to_thread(
+        command.downgrade, db_migration._alembic_config(url), PR73_HEAD
+    )
+
+    engine = create_async_engine(url, connect_args={"check_same_thread": False})
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    service = KernelCommitService(factory)
+    gen_service = GenerationService(factory)
+    try:
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="ws-pr76",
+                records=(
+                    ClaimAssertionRecord(
+                        claim_key="k", subject="doc:x.pdf", predicate="p", value=1
+                    ),
+                ),
+            )
+        )
+        await gen_service.build_and_activate(await resolve_snapshot(factory, "ws-pr76"))
+    finally:
+        await engine.dispose()
+
+    await upgrade_database(url=url)
+    status = await verify_database_ready(url=url)
+    assert status.state is DatabaseState.CURRENT
+
+    with sqlite3.connect(db_path) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == CURRENT_HEAD
+        for table in sorted(PR76_TABLES):
+            count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            assert count == 0, f"{table} must arrive empty, found {count}"
+        records = conn.execute(
+            "SELECT COUNT(*) FROM kernel_records WHERE workspace_id = 'ws-pr76'"
+        ).fetchone()[0]
+        generations = conn.execute(
+            "SELECT COUNT(*) FROM kernel_generations WHERE state = 'active'"
+        ).fetchone()[0]
+    assert records == 1 and generations == 1  # pre-PR76 truth survived
+
+
+@pytest.mark.asyncio
+async def test_runtime_fts_tables_do_not_break_head_classification(
+    tmp_path: Path,
+) -> None:
+    """Runtime-managed FTS5 virtual tables are derived serving state, not
+    schema authority: a head database carrying built lexical indexes (and
+    their shadow tables) must still classify as CURRENT, not
+    HEAD_DIVERGENT, because the contract comparison excludes the
+    documented ``kernel_fts_`` prefix on both sides."""
+    db_path = tmp_path / "fts-present.db"
+    url = _db_url(db_path)
+    await upgrade_database(url=url)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE VIRTUAL TABLE kernel_fts_probe USING fts5(a)")
+        conn.execute("INSERT INTO kernel_fts_probe(rowid, a) VALUES (1, 'alpha')")
+        conn.commit()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    assert any(name.startswith("kernel_fts_probe") for name in tables)
+
+    status = inspect_database(url=url)
+    assert status.state is DatabaseState.CURRENT
+    await verify_database_ready(url=url)

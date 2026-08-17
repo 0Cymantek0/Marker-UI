@@ -110,6 +110,30 @@ metadata, liveness evidence, and the authoritative semantic log:
   amplify into per-tick durable rows, and losing them never loses
   semantic truth.
 
+Five PR76 tables hold the atomic publication serving state (revision
+``20260817_0011``). They answer one question — *which one immutable
+compatible collection of queryable products is the currently published
+state* — and are derived, rebuildable state over kernel truth, never a
+second truth authority:
+
+* ``kernel_lexical_generations`` — one immutable manifest per lexical
+  (FTS5) index generation built from a pinned materialized generation.
+  The FTS5 virtual tables themselves are runtime-managed (one per
+  generation, ``kernel_fts_``-prefixed), created at build time and
+  never mutated after staging.
+* ``kernel_lexical_rows`` — source-resolvable locators for every
+  searchable row (materialized record id, view id, node id, view
+  revision ref, text hash).
+* ``kernel_publication_sets`` — one immutable manifest per publication
+  set naming its exact member generations and an optional vector slot
+  whose NULL is an explicit "absent", never a fallback.
+* ``kernel_publication_heads`` — one row per (workspace, profile)
+  naming the current published set. The single atomic publication
+  switch is the transactional update of this row.
+* ``kernel_publication_pins`` — bounded wall-clock read leases over one
+  publication set; an unexpired pin protects the set and all members
+  from collection.
+
 Wall-clock timestamps on these tables are audit metadata only. Causal
 order is ``kernel_commit_id``; nothing in this module may use timestamps
 for ordering, membership, or identity. Lease expiry on reader pins is
@@ -172,6 +196,11 @@ MAX_EVENT_STREAM_LENGTH = 64
 MAX_EVENT_TYPE_LENGTH = 100
 MAX_EVENT_DURABILITY_LENGTH = 16
 MAX_ACTIVE_REQUEST_ID_LENGTH = 192
+MAX_PROFILE_LENGTH = 64
+MAX_TOKENIZER_LENGTH = 64
+MAX_FTS_TABLE_NAME_LENGTH = 96
+MAX_NODE_ID_LENGTH = 128
+MAX_PUBLICATION_STATE_LENGTH = 16
 
 
 class KernelCommitHead(Base):
@@ -944,4 +973,213 @@ class KernelProgress(Base):
     def __repr__(self) -> str:
         return (
             f"<KernelProgress(work={self.work_id}, counter={self.counter})>"
+        )
+
+
+# --- PR76: atomic publication sets + immutable lexical generations ----------
+
+
+class KernelLexicalGeneration(Base):
+    """One immutable lexical (FTS5) index generation manifest (PR76).
+
+    Derived, rebuildable serving state over one pinned materialized
+    generation — never a second truth authority. ``lexical_generation_id``
+    is deterministic over (workspace, cut, snapshot, source generation,
+    tokenizer identity, config), so rebuilding the same declared inputs
+    reproduces the same row or fails closed. The FTS5 virtual table named
+    by ``fts_table`` is created at build time (not by Alembic) and is
+    never mutated after staging: a reindex or tokenizer change produces a
+    new generation, never a rewrite.
+    """
+
+    __tablename__ = "kernel_lexical_generations"
+
+    lexical_generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    source_generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), index=True, nullable=False
+    )
+    kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_id: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    tokenizer: Mapped[str] = mapped_column(String(MAX_TOKENIZER_LENGTH), nullable=False)
+    tokenizer_config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    schema_version: Mapped[str] = mapped_column(
+        String(MAX_SCHEMA_VERSION_LENGTH), nullable=False
+    )
+    fts_table: Mapped[str] = mapped_column(
+        String(MAX_FTS_TABLE_NAME_LENGTH), nullable=False
+    )
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    text_char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_digest: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(MAX_PUBLICATION_STATE_LENGTH), index=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelLexicalGeneration(id={self.lexical_generation_id!r}, "
+            f"source={self.source_generation_id!r}, state={self.state!r})>"
+        )
+
+
+class KernelLexicalRow(Base):
+    """Source-resolvable locator for one searchable lexical row (PR76).
+
+    Maps every FTS row (by shared row index) back to the materialized
+    view-document record, its immutable view revision identity, and the
+    content node the text came from. FTS text alone is never sufficient
+    provenance: a hit is valid only through this locator.
+    """
+
+    __tablename__ = "kernel_lexical_rows"
+
+    lexical_generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), primary_key=True
+    )
+    row_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    view_id: Mapped[str] = mapped_column(String(MAX_VIEW_ID_LENGTH), nullable=False)
+    node_id: Mapped[str] = mapped_column(String(MAX_NODE_ID_LENGTH), nullable=False)
+    revision_ref: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=False
+    )
+    text_hash: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    text_chars: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_kernel_lexical_rows_record",
+            "lexical_generation_id",
+            "record_id",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelLexicalRow(gen={self.lexical_generation_id!r}, "
+            f"row={self.row_index}, record={self.record_id!r}, "
+            f"node={self.node_id!r})>"
+        )
+
+
+class KernelPublicationSet(Base):
+    """One immutable publication-set manifest (PR76).
+
+    Names the exact member generations that belong together as one
+    compatible queryable state: the required materialized generation and
+    lexical generation, plus an optional vector slot whose ``NULL`` is an
+    explicit "absent" — a set without a vector layer never borrows one
+    from an older publication. Accepted sets never mutate; a change is a
+    new set. Publication sets are derived serving state subordinate to
+    kernel truth (``kernel_commit_id`` ordering).
+    """
+
+    __tablename__ = "kernel_publication_sets"
+
+    publication_set_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    profile: Mapped[str] = mapped_column(String(MAX_PROFILE_LENGTH), nullable=False)
+    kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_id: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    materialized_generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=False
+    )
+    lexical_generation_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=False
+    )
+    vector_generation_id: Mapped[str | None] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=True
+    )
+    content_digest: Mapped[str] = mapped_column(String(MAX_HASH_LENGTH), nullable=False)
+    state: Mapped[str] = mapped_column(
+        String(MAX_PUBLICATION_STATE_LENGTH), index=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelPublicationSet(id={self.publication_set_id!r}, "
+            f"ws={self.workspace_id!r}, profile={self.profile!r}, "
+            f"state={self.state!r})>"
+        )
+
+
+class KernelPublicationHead(Base):
+    """Current published set for one (workspace, profile) (PR76).
+
+    One row per scope naming the single authoritative published state.
+    The atomic publication switch is the transactional conditional update
+    of this row: readers resolve it once and pin the named set for their
+    whole request. There are deliberately no independent per-layer
+    "current" pointers.
+    """
+
+    __tablename__ = "kernel_publication_heads"
+
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), primary_key=True
+    )
+    profile: Mapped[str] = mapped_column(String(MAX_PROFILE_LENGTH), primary_key=True)
+    current_publication_set_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelPublicationHead(ws={self.workspace_id!r}, "
+            f"profile={self.profile!r}, "
+            f"set={self.current_publication_set_id!r})>"
+        )
+
+
+class KernelPublicationPin(Base):
+    """Bounded wall-clock read lease over one publication set (PR76).
+
+    The publication twin of ``kernel_reader_pins``: an unexpired pin
+    protects the set and every member generation from collection until
+    released or lapsed; a crashed reader's pin expires on its own.
+    """
+
+    __tablename__ = "kernel_publication_pins"
+
+    pin_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    publication_set_id: Mapped[str] = mapped_column(
+        String(MAX_HASH_LENGTH), index=True, nullable=False
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(), index=True, nullable=False)
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelPublicationPin(id={self.pin_id!r}, "
+            f"set={self.publication_set_id!r})>"
         )
