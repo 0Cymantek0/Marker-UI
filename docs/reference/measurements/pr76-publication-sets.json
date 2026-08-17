@@ -1,0 +1,107 @@
+{
+  "benchmark": "pr76-publication-sets",
+  "corpus": {
+    "kind": "synthetic view documents (unicode61 tokenizer)",
+    "node_text_chars": 400,
+    "slices": {
+      "large": [
+        100,
+        20
+      ],
+      "small": [
+        20,
+        10
+      ]
+    }
+  },
+  "machine": "AMD64",
+  "method": "best-of-3 wall milliseconds via time.perf_counter for build/activation slices; full distribution for query latency; index size from PRAGMA page_count before/after the lexical build; runtime metadata is non-semantic",
+  "migration": {
+    "action": "initialized",
+    "to_revision": "20260817_0011"
+  },
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "schema_version": "marker.publication_sets_measurements.v1",
+  "slices": [
+    {
+      "docs": 20,
+      "index_bytes": 241664,
+      "index_bytes_per_text_char": 3.021,
+      "nodes_per_doc": 10,
+      "rows": 200,
+      "rows_per_second": 2574.5,
+      "runtime_ms": 77.686,
+      "semantic_identity": {
+        "content_digest": "sha256:eea6469de1c0d4da1ee21b80142fee92d4b77fd82faf946e0c8ab7b85f82cc8a",
+        "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+        "source_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+        "tokenizer": "unicode61"
+      },
+      "slice": "small",
+      "text_chars": 80000
+    },
+    {
+      "docs": 100,
+      "index_bytes": 2166784,
+      "index_bytes_per_text_char": 2.708,
+      "nodes_per_doc": 20,
+      "rows": 2000,
+      "rows_per_second": 5703.1,
+      "runtime_ms": 350.689,
+      "semantic_identity": {
+        "content_digest": "sha256:ba2a5b3ba962548d02d90fdc2e56125c745b98e09630d7e951627cefffa8ec7f",
+        "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+        "source_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
+        "tokenizer": "unicode61"
+      },
+      "slice": "large",
+      "text_chars": 800000
+    },
+    {
+      "hits_total": 20000,
+      "latency_ms": {
+        "p50": 7.815,
+        "p95": 9.046,
+        "p99": 9.64
+      },
+      "mean_ms": 8.11,
+      "query_samples": 200,
+      "semantic_identity": {
+        "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+        "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43"
+      },
+      "slice": "query-steady-state"
+    },
+    {
+      "activations": 5,
+      "runtime_ms": {
+        "best": 17.6,
+        "max": 24.803,
+        "median": 18.995
+      },
+      "semantic_identity": {
+        "publication_set_ids": [
+          "sha256:a270097ec66e2012c624942e43c2cf3d420d205118f09c74e9561a591d6cedb2",
+          "sha256:340f5904c5cf618a23cd95c9d78ac8ba8d94bcc8de3214eda03495ec15df7e6f",
+          "sha256:d0a7db5304c503403c6e93fb1177613f056665a90b6f2c02a8525946342194c5",
+          "sha256:6c20b657f17daa84583b02d744fe8082a320da3a8ac790bb7fa58ddef86810c0",
+          "sha256:1b7cf0798813f93d44a5cb2f1603dd0b715d0be34c6c8f920a6c79acbcd7b6ed"
+        ]
+      },
+      "slice": "activation-transaction"
+    },
+    {
+      "hits_after": 100,
+      "hits_before": 100,
+      "reindex_plus_publication_ms": 362.024,
+      "semantic_identity": {
+        "pinned_lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
+        "pinned_publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
+        "pinned_reader_stayed_on_pinned_generation": true,
+        "published_after_reindex": "sha256:9186f03a010819e617aad9155cebb50b901c7c56e65759c8cc5a429e7577c97f"
+      },
+      "slice": "reader-across-reindex"
+    }
+  ]
+}
