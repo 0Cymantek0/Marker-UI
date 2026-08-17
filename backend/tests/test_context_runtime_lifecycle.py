@@ -8,7 +8,6 @@ error, and cancellation — never leaked past the call.
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 
 import pytest
 from sqlalchemy import update

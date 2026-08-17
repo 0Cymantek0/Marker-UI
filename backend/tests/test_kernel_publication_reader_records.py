@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import update
 
+from app.kernel.commit import KernelCommitService
 from app.kernel.errors import PublicationIntegrityError
 from app.kernel.generations import GenerationService
 from app.kernel.models import KernelGenerationRecord
