@@ -142,6 +142,7 @@ __all__ = [
     "PublicationService",
     "PublicationSetRef",
     "PublicationSetVerification",
+    "PublishedRecord",
     "acquire_publication_pin",
     "active_publication_pins",
     "compute_lexical_identity",
@@ -541,6 +542,28 @@ class LexicalHit:
     text_hash: str
     rank: float
     text: str
+
+
+@dataclass(frozen=True)
+class PublishedRecord:
+    """One materialized record read through a pinned publication set.
+
+    The record is served from the materialized generation named by the
+    pinned set — never from "current" materialized state — and its
+    semantic identity hash is recomputed before it is returned, so a
+    tampered materialized row fails closed instead of being served as
+    valid published state.
+    """
+
+    record_id: str
+    workspace_id: str
+    kernel_commit_id: int
+    record_class: str
+    record_type: str
+    schema_version: str
+    identity_hash: str
+    payload: dict
+    payload_byte_hash: str | None
 
 
 def _lexical_ref(row: KernelLexicalGeneration) -> LexicalGenerationRef:
@@ -2218,6 +2241,59 @@ class PublicationReader:
     async def verify(self) -> PublicationSetVerification:
         return await verify_publication_set(
             self._session_factory, self._set.publication_set_id
+        )
+
+    async def get_record(self, record_id: str) -> PublishedRecord | None:
+        """Read one record from the pinned set's materialized member.
+
+        The lookup is scoped to ``materialized_generation_id`` of the
+        pinned set, so a concurrent publication switch or generation
+        head move cannot change what is served. The record's semantic
+        identity hash is recomputed from its payload: a mismatch means
+        the materialized row was tampered with and fails closed as a
+        :class:`PublicationIntegrityError` — never a silent fallback.
+        ``None`` means the pinned materialized generation holds no
+        record with that id.
+        """
+        async with self._session_factory() as session:
+            row = await session.scalar(
+                select(KernelGenerationRecord).where(
+                    KernelGenerationRecord.generation_id
+                    == self._set.materialized_generation_id,
+                    KernelGenerationRecord.record_id == record_id,
+                )
+            )
+        if row is None:
+            return None
+        try:
+            payload = json.loads(row.payload_json)
+            recomputed = record_identity_hash(
+                record_type=row.record_type,
+                schema_version=row.schema_version,
+                payload=to_json_ready(payload),
+            )
+        except Exception as exc:
+            raise PublicationIntegrityError(
+                f"publication set={self._set.publication_set_id} record="
+                f"{record_id!r}: payload unreadable/rejected: {exc}"
+            ) from exc
+        if recomputed != row.identity_hash:
+            raise PublicationIntegrityError(
+                f"publication set={self._set.publication_set_id} record="
+                f"{record_id!r}: identity hash mismatch (stored "
+                f"{row.identity_hash}, recomputed {recomputed}); the "
+                "pinned materialized generation was tampered with"
+            )
+        return PublishedRecord(
+            record_id=row.record_id,
+            workspace_id=row.workspace_id,
+            kernel_commit_id=row.kernel_commit_id,
+            record_class=row.record_class,
+            record_type=row.record_type,
+            schema_version=row.schema_version,
+            identity_hash=row.identity_hash,
+            payload=payload,
+            payload_byte_hash=row.payload_byte_hash,
         )
 
     async def search(
