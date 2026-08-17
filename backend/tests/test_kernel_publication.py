@@ -33,7 +33,9 @@ from app.kernel.publications import (
     PublicationService,
     extract_lexical_corpus,
     fts_table_name,
+    resolve_published_set,
     verify_lexical_generation,
+    verify_publication_set,
 )
 from app.kernel.reading_order import OrderNode, ReadingOrderGraph
 from app.kernel.records import ClaimAssertionRecord
@@ -440,3 +442,287 @@ def _fresh_factory(db_path: Path) -> async_sessionmaker:
     url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
     engine = create_async_engine(url, connect_args={"check_same_thread": False})
     return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+# ---------------------------------------------------------------------------
+# publication set staging, validation, activation, resolution
+# ---------------------------------------------------------------------------
+
+
+async def _publish_first(
+    factory: async_sessionmaker, service: KernelCommitService, workspace: str
+):
+    pubs = PublicationService(factory)
+    await _commit_view(service, workspace, _view("view-1", {"n1": "alpha"}, "rev-s1"))
+    gen = await _materialized(factory, workspace)
+    ref = await pubs.publish(materialized_generation_id=gen.generation_id)
+    return pubs, gen, ref
+
+
+async def test_publish_first_set_resolves_published(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    assert p1.state == "published"
+    resolved = await resolve_published_set(factory, "ws-a")
+    assert resolved is not None
+    assert resolved.publication_set_id == p1.publication_set_id
+    assert resolved.materialized_generation_id == gen.generation_id
+    assert resolved.kernel_commit_id == gen.kernel_commit_id
+    assert (await verify_publication_set(factory, p1.publication_set_id)).ok
+
+
+async def test_staged_second_set_is_invisible(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    await _commit_view(
+        service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+    )
+    gen2 = await _materialized(factory, "ws-a")
+    staged = await pubs.stage_publication_set(
+        materialized_generation_id=gen2.generation_id
+    )
+    assert staged.state == "staged"
+
+    resolved = await resolve_published_set(factory, "ws-a")
+    assert resolved is not None
+    assert resolved.publication_set_id == p1.publication_set_id
+
+
+async def test_failed_validation_keeps_prior_set_published(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    await _commit_view(
+        service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+    )
+    gen2 = await _materialized(factory, "ws-a")
+    staged = await pubs.stage_publication_set(
+        materialized_generation_id=gen2.generation_id
+    )
+    lexical = await pubs.get_lexical_generation(staged.lexical_generation_id)
+
+    with sqlite3.connect(_db_path(factory)) as conn:
+        conn.execute(
+            f'UPDATE "{lexical.fts_table}" SET text = ? WHERE rowid = 0',
+            ("corrupted",),
+        )
+        conn.commit()
+
+    from app.kernel.errors import PublicationIntegrityError
+
+    with pytest.raises(PublicationIntegrityError, match="lexical integrity"):
+        await pubs.validate_publication_set(staged.publication_set_id)
+    failed = await pubs.get_publication_set(staged.publication_set_id)
+    assert failed.state == "failed"
+
+    resolved = await resolve_published_set(factory, "ws-a")
+    assert resolved is not None
+    assert resolved.publication_set_id == p1.publication_set_id
+    assert (await verify_publication_set(factory, p1.publication_set_id)).ok
+
+
+async def test_activate_second_set_supersedes_first(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    await _commit_view(
+        service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+    )
+    gen2 = await _materialized(factory, "ws-a")
+    p2 = await pubs.publish(materialized_generation_id=gen2.generation_id)
+
+    assert p2.state == "published"
+    resolved = await resolve_published_set(factory, "ws-a")
+    assert resolved is not None
+    assert resolved.publication_set_id == p2.publication_set_id
+    assert (
+        await pubs.get_publication_set(p1.publication_set_id)
+    ).state == "superseded"
+    assert (await verify_publication_set(factory, p2.publication_set_id)).ok
+
+
+async def test_publish_is_idempotent_for_live_set(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    again = await pubs.publish(materialized_generation_id=gen.generation_id)
+    assert again.publication_set_id == p1.publication_set_id
+    assert again.state == "published"
+    sets = await pubs.list_publication_sets(workspace_id="ws-a")
+    assert len(sets) == 1
+
+
+async def test_activation_requires_validated_state(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    await _commit_view(
+        service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+    )
+    gen2 = await _materialized(factory, "ws-a")
+    staged = await pubs.stage_publication_set(
+        materialized_generation_id=gen2.generation_id
+    )
+
+    from app.kernel.errors import PublicationStateError
+
+    with pytest.raises(PublicationStateError, match="cannot activate"):
+        await pubs.activate_publication_set(staged.publication_set_id)
+    resolved = await resolve_published_set(factory, "ws-a")
+    assert resolved is not None
+    assert resolved.publication_set_id == p1.publication_set_id
+
+
+async def test_mixed_cut_members_rejected_at_staging(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    await _commit_view(service, "ws-a", _view("view-1", {"n1": "alpha"}, "rev-s1"))
+    gen1 = await _materialized(factory, "ws-a")
+    await _commit_view(
+        service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+    )
+    gen2 = await _materialized(factory, "ws-a")
+
+    pubs = PublicationService(factory)
+    lexical1 = await pubs.build_lexical(gen1.generation_id)
+    from app.kernel.errors import PublicationIntegrityError
+
+    with pytest.raises(PublicationIntegrityError, match="incompatible"):
+        await pubs.stage_publication_set(
+            materialized_generation_id=gen2.generation_id,
+            lexical_generation_id=lexical1.lexical_generation_id,
+        )
+
+
+async def test_missing_required_member_fails_closed(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    from app.kernel.errors import PublicationIntegrityError
+
+    raw_set_id = "sha256:" + "0" * 64
+    with sqlite3.connect(_db_path(factory)) as conn:
+        conn.execute(
+            "INSERT INTO kernel_publication_sets "
+            "(publication_set_id, workspace_id, profile, kernel_commit_id, "
+            " snapshot_id, materialized_generation_id, lexical_generation_id, "
+            " vector_generation_id, content_digest, state) "
+            "VALUES (?, 'ws-a', 'default', 99, 'sha256:x', "
+            " 'sha256:missing-gen', 'sha256:missing-lex', NULL, 'sha256:d', "
+            " 'staged')",
+            (raw_set_id,),
+        )
+        conn.commit()
+
+    with pytest.raises(PublicationIntegrityError, match="missing"):
+        await pubs.validate_publication_set(raw_set_id)
+    failed = await pubs.get_publication_set(raw_set_id)
+    assert failed.state == "failed"
+    resolved = await resolve_published_set(factory, "ws-a")
+    assert resolved is not None
+    assert resolved.publication_set_id == p1.publication_set_id
+
+
+async def test_orphan_lexical_locator_rejected(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    await _commit_view(
+        service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+    )
+    gen2 = await _materialized(factory, "ws-a")
+    lexical2 = await pubs.build_lexical(gen2.generation_id)
+
+    from app.kernel.publications import payload_byte_hash
+
+    async with factory() as session:
+        session.add(
+            KernelLexicalRow(
+                lexical_generation_id=lexical2.lexical_generation_id,
+                row_index=99,
+                record_id="orphan-record",
+                view_id="document",
+                node_id="ghost",
+                revision_ref="sha256:ghost",
+                text_hash=payload_byte_hash(b"ghost"),
+                text_chars=5,
+            )
+        )
+        await session.commit()
+
+    staged = await pubs.stage_publication_set(
+        materialized_generation_id=gen2.generation_id,
+        lexical_generation_id=lexical2.lexical_generation_id,
+    )
+    from app.kernel.errors import PublicationIntegrityError
+
+    with pytest.raises(PublicationIntegrityError, match="outside the materialized"):
+        await pubs.validate_publication_set(staged.publication_set_id)
+    assert (
+        await pubs.get_publication_set(staged.publication_set_id)
+    ).state == "failed"
+
+
+async def test_vector_absence_is_explicit_never_inherited(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    await _commit_view(service, "ws-a", _view("view-1", {"n1": "alpha"}, "rev-s1"))
+    gen1 = await _materialized(factory, "ws-a")
+    pubs = PublicationService(factory)
+    p1 = await pubs.publish(
+        materialized_generation_id=gen1.generation_id,
+        vector_generation_id="vector-v1",
+    )
+    assert p1.vector_generation_id == "vector-v1"
+
+    await _commit_view(
+        service, "ws-a", _view("view-2", {"n1": "beta"}, "rev-s2"), advance=False
+    )
+    gen2 = await _materialized(factory, "ws-a")
+    p2 = await pubs.publish(materialized_generation_id=gen2.generation_id)
+    assert p2.vector_generation_id is None  # absent, not borrowed from P1
+
+    resolved = await resolve_published_set(factory, "ws-a")
+    assert resolved is not None
+    assert resolved.publication_set_id == p2.publication_set_id
+    assert resolved.vector_generation_id is None
+
+    with sqlite3.connect(_db_path(factory)) as conn:
+        conn.execute(
+            "UPDATE kernel_publication_sets SET vector_generation_id = "
+            "'vector-v1' WHERE publication_set_id = ?",
+            (p2.publication_set_id,),
+        )
+        conn.commit()
+    assert not (
+        await verify_publication_set(factory, p2.publication_set_id)
+    ).ok
+
+
+async def test_profiles_are_independent_scopes(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    aux = await pubs.publish(
+        materialized_generation_id=gen.generation_id, profile="aux"
+    )
+    assert aux.publication_set_id != p1.publication_set_id
+
+    default_resolved = await resolve_published_set(factory, "ws-a")
+    aux_resolved = await resolve_published_set(factory, "ws-a", profile="aux")
+    assert default_resolved is not None
+    assert aux_resolved is not None
+    assert default_resolved.publication_set_id == p1.publication_set_id
+    assert aux_resolved.publication_set_id == aux.publication_set_id
+
+
+async def test_full_rebuild_reproduces_set_identity(payload_env: tuple) -> None:
+    factory, store, service = payload_env
+    pubs, gen, p1 = await _publish_first(factory, service, "ws-a")
+
+    rebuilt = await pubs.publish(
+        materialized_generation_id=gen.generation_id,
+        vector_generation_id=p1.vector_generation_id,
+    )
+    assert rebuilt.publication_set_id == p1.publication_set_id
+    assert rebuilt.content_digest == p1.content_digest

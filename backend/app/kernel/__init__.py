@@ -85,6 +85,11 @@ from app.kernel.generations import (
     open_pinned_generation,
     resolve_current_generation,
 )
+from app.kernel.publications import (
+    PublicationService,
+    PublicationSetRef,
+    resolve_published_set,
+)
 from app.kernel.outbox import OutboxIntent, OutboxView
 from app.kernel.payloads import LocalPayloadStore, StagedBlob
 from app.kernel.proofs import (
@@ -140,7 +145,10 @@ __all__ = [
     "PayloadAvailabilityResult",
     "ProofSupportRecord",
     "Publication",
+    "PublicationService",
+    "PublicationSetRef",
     "ReaderPinView",
+    "resolve_published_set",
     "ReconcileReport",
     "ReplayResult",
     "RetentionHoldView",

@@ -70,6 +70,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -79,8 +80,11 @@ from app.kernel.errors import (
     KernelError,
     LexicalIntegrityError,
     LexicalStateError,
+    PublicationIntegrityError,
+    PublicationStateError,
     UnknownGenerationError,
     UnknownLexicalGenerationError,
+    UnknownPublicationSetError,
 )
 from app.kernel.models import (
     KernelGeneration,
@@ -88,6 +92,8 @@ from app.kernel.models import (
     KernelGenerationRecord,
     KernelLexicalGeneration,
     KernelLexicalRow,
+    KernelPublicationHead,
+    KernelPublicationSet,
 )
 from app.utils.canonical import (
     CanonicalValueError,
@@ -125,13 +131,17 @@ __all__ = [
     "PUBLICATION_STATE_VALIDATED",
     "PUBLICATION_SET_RECORD_TYPE",
     "PublicationService",
+    "PublicationSetRef",
+    "PublicationSetVerification",
     "compute_lexical_identity",
     "compute_publication_set_identity",
     "default_publication_service",
     "extract_lexical_corpus",
     "fts_table_name",
+    "resolve_published_set",
     "validate_publication_profile",
     "verify_lexical_generation",
+    "verify_publication_set",
 ]
 
 #: Framing domains separating PR76 identities from other kernel hashes.
@@ -435,6 +445,34 @@ class LexicalVerification:
     checked_rows: int
 
 
+@dataclass(frozen=True)
+class PublicationSetRef:
+    """Manifest-level view of one publication set."""
+
+    publication_set_id: str
+    workspace_id: str
+    profile: str
+    kernel_commit_id: int
+    snapshot_id: str
+    materialized_generation_id: str
+    lexical_generation_id: str
+    vector_generation_id: str | None
+    content_digest: str
+    state: str
+    created_at: str | None
+    validated_at: str | None
+    published_at: str | None
+
+
+@dataclass(frozen=True)
+class PublicationSetVerification:
+    """Deep verification result for one publication set."""
+
+    publication_set_id: str
+    ok: bool
+    problems: tuple[str, ...]
+
+
 def _lexical_ref(row: KernelLexicalGeneration) -> LexicalGenerationRef:
     return LexicalGenerationRef(
         lexical_generation_id=row.lexical_generation_id,
@@ -453,6 +491,32 @@ def _lexical_ref(row: KernelLexicalGeneration) -> LexicalGenerationRef:
         created_at=row.created_at.isoformat() if row.created_at else None,
         validated_at=row.validated_at.isoformat() if row.validated_at else None,
     )
+
+
+def _set_ref(row: KernelPublicationSet) -> PublicationSetRef:
+    return PublicationSetRef(
+        publication_set_id=row.publication_set_id,
+        workspace_id=row.workspace_id,
+        profile=row.profile,
+        kernel_commit_id=row.kernel_commit_id,
+        snapshot_id=row.snapshot_id,
+        materialized_generation_id=row.materialized_generation_id,
+        lexical_generation_id=row.lexical_generation_id,
+        vector_generation_id=row.vector_generation_id,
+        content_digest=row.content_digest,
+        state=row.state,
+        created_at=row.created_at.isoformat() if row.created_at else None,
+        validated_at=row.validated_at.isoformat() if row.validated_at else None,
+        published_at=row.published_at.isoformat() if row.published_at else None,
+    )
+
+
+async def _load_set(
+    session_factory: async_sessionmaker, publication_set_id: str
+) -> PublicationSetRef | None:
+    async with session_factory() as session:
+        row = await session.get(KernelPublicationSet, publication_set_id)
+    return _set_ref(row) if row is not None else None
 
 
 async def _load_lexical(
@@ -497,6 +561,36 @@ def _lexical_content_digest(
     digest = payload_byte_hash(canonical_json_bytes(to_json_ready(view)))
     text_chars = sum(int(entry["text_chars"]) for entry in row_entries)
     return digest, len(row_entries), text_chars
+
+
+def _publication_set_digest(
+    *,
+    workspace_id: str,
+    profile: str,
+    kernel_commit_id: int,
+    snapshot_id: str,
+    materialized_generation_id: str,
+    lexical_generation_id: str,
+    vector_generation_id: str | None,
+    lexical_content_digest: str,
+) -> str:
+    """Deterministic content digest of one publication set's manifest.
+
+    Covers every compatibility dimension plus the lexical member's own
+    content digest, so a set row whose members were tampered with after
+    staging can never validate.
+    """
+    view = {
+        "workspace_id": workspace_id,
+        "profile": profile,
+        "kernel_commit_id": kernel_commit_id,
+        "snapshot_id": snapshot_id,
+        "materialized_generation_id": materialized_generation_id,
+        "lexical_generation_id": lexical_generation_id,
+        "vector_generation_id": vector_generation_id,
+        "lexical_content_digest": lexical_content_digest,
+    }
+    return payload_byte_hash(canonical_json_bytes(to_json_ready(view)))
 
 
 def _corpus_rows(corpus: Sequence[LexicalSourceRow]) -> list[LexicalRowRef]:
@@ -918,6 +1012,509 @@ class PublicationService:
             rows = (await session.execute(stmt)).scalars().all()
         return [_lexical_ref(row) for row in rows]
 
+    # -- publication set lifecycle ------------------------------------------
+
+    async def stage_publication_set(
+        self,
+        *,
+        materialized_generation_id: str,
+        lexical_generation_id: str | None = None,
+        vector_generation_id: str | None = None,
+        profile: str = DEFAULT_PUBLICATION_PROFILE,
+        _inject_fault_at: str | None = None,
+    ) -> PublicationSetRef:
+        """Stage one publication-set manifest naming its exact members.
+
+        The lexical member is built from the materialized generation
+        when not supplied. Staging is invisible: nothing is queryable
+        until a set is validated AND activated.
+        """
+        if _inject_fault_at is not None and (
+            _inject_fault_at
+            not in _LEXICAL_BUILD_PHASES | {PHASE_PUB_SET_STAGED}
+        ):
+            raise KernelError(f"unknown fault phase {_inject_fault_at!r}")
+        await self._ensure_ready()
+        profile = validate_publication_profile(profile)
+
+        async with self._session_factory() as session:
+            source = await session.get(KernelGeneration, materialized_generation_id)
+        if source is None:
+            raise UnknownGenerationError(
+                f"generation={materialized_generation_id}: no such generation"
+            )
+
+        if lexical_generation_id is None:
+            lexical = await self._build_lexical_validated(
+                materialized_generation_id,
+                tokenizer=LEXICAL_TOKENIZER,
+                tokenizer_config=None,
+                fault=_inject_fault_at
+                if _inject_fault_at in _LEXICAL_BUILD_PHASES
+                else None,
+            )
+        else:
+            lexical = await self.get_lexical_generation(lexical_generation_id)
+        if lexical.state != LEXICAL_STATE_VALIDATED:
+            raise LexicalStateError(
+                f"lexical generation={lexical.lexical_generation_id}: cannot "
+                f"stage a set from lexical state {lexical.state!r}"
+            )
+        self._check_member_compatibility(source, lexical)
+
+        if vector_generation_id is not None and (
+            not isinstance(vector_generation_id, str) or not vector_generation_id
+        ):
+            raise KernelError(
+                "vector_generation_id must be a non-empty string or None "
+                "(None is the explicit absent vector layer)"
+            )
+
+        publication_set_id = compute_publication_set_identity(
+            workspace_id=source.workspace_id,
+            profile=profile,
+            kernel_commit_id=source.kernel_commit_id,
+            snapshot_id=source.snapshot_id,
+            materialized_generation_id=materialized_generation_id,
+            lexical_generation_id=lexical.lexical_generation_id,
+            vector_generation_id=vector_generation_id,
+        )
+        digest = _publication_set_digest(
+            workspace_id=source.workspace_id,
+            profile=profile,
+            kernel_commit_id=source.kernel_commit_id,
+            snapshot_id=source.snapshot_id,
+            materialized_generation_id=materialized_generation_id,
+            lexical_generation_id=lexical.lexical_generation_id,
+            vector_generation_id=vector_generation_id,
+            lexical_content_digest=lexical.content_digest,
+        )
+
+        existing = await _load_set(self._session_factory, publication_set_id)
+        if existing is not None and existing.state not in (
+            PUBLICATION_STATE_STAGED,
+            PUBLICATION_STATE_FAILED,
+        ):
+            if existing.content_digest != digest:
+                raise PublicationIntegrityError(
+                    f"publication set={publication_set_id}: same declared "
+                    f"members produced different content (stored "
+                    f"{existing.content_digest}, rebuilt {digest}); refusing "
+                    "to rewrite an immutable publication set"
+                )
+            return existing  # idempotent restage
+
+        await self._retry(
+            lambda: self._stage_set_transaction(
+                publication_set_id,
+                workspace_id=source.workspace_id,
+                profile=profile,
+                kernel_commit_id=source.kernel_commit_id,
+                snapshot_id=source.snapshot_id,
+                materialized_generation_id=materialized_generation_id,
+                lexical_generation_id=lexical.lexical_generation_id,
+                vector_generation_id=vector_generation_id,
+                digest=digest,
+            )
+        )
+        if _inject_fault_at == PHASE_PUB_SET_STAGED:
+            raise InjectedFaultError(PHASE_PUB_SET_STAGED)
+        ref = await _load_set(self._session_factory, publication_set_id)
+        assert ref is not None
+        return ref
+
+    @staticmethod
+    def _check_member_compatibility(
+        source: KernelGeneration, lexical: LexicalGenerationRef
+    ) -> None:
+        """The compatibility key every staged set must already satisfy.
+
+        Workspace, kernel cut, snapshot, and source lineage must agree
+        between the required members; the lexical layer must have been
+        built from exactly the materialized generation it names.
+        """
+        problems: list[str] = []
+        if lexical.workspace_id != source.workspace_id:
+            problems.append(
+                f"lexical member workspace {lexical.workspace_id!r} != "
+                f"materialized {source.workspace_id!r}"
+            )
+        if lexical.kernel_commit_id != source.kernel_commit_id:
+            problems.append(
+                f"lexical member cut {lexical.kernel_commit_id} != "
+                f"materialized {source.kernel_commit_id}"
+            )
+        if lexical.snapshot_id != source.snapshot_id:
+            problems.append(
+                f"lexical member snapshot {lexical.snapshot_id!r} != "
+                f"materialized {source.snapshot_id!r}"
+            )
+        if lexical.source_generation_id != source.generation_id:
+            problems.append(
+                f"lexical member was built from source generation "
+                f"{lexical.source_generation_id!r}, not "
+                f"{source.generation_id!r}"
+            )
+        if problems:
+            raise PublicationIntegrityError(
+                "publication set members are incompatible: " + "; ".join(problems)
+            )
+
+    async def _stage_set_transaction(
+        self,
+        publication_set_id: str,
+        *,
+        workspace_id: str,
+        profile: str,
+        kernel_commit_id: int,
+        snapshot_id: str,
+        materialized_generation_id: str,
+        lexical_generation_id: str,
+        vector_generation_id: str | None,
+        digest: str,
+    ) -> None:
+        async with self._session_factory() as session:
+            async with session.begin():
+                existing = await session.get(KernelPublicationSet, publication_set_id)
+                if existing is not None and existing.state not in (
+                    PUBLICATION_STATE_STAGED,
+                    PUBLICATION_STATE_FAILED,
+                ):
+                    if existing.content_digest != digest:
+                        raise PublicationIntegrityError(
+                            f"publication set={publication_set_id}: same "
+                            "declared members produced different content "
+                            f"(stored {existing.content_digest}, rebuilt {digest})"
+                        )
+                    return  # durable; the caller re-reads the ref
+                await session.execute(
+                    delete(KernelPublicationSet).where(
+                        KernelPublicationSet.publication_set_id == publication_set_id,
+                        KernelPublicationSet.state.in_(
+                            [PUBLICATION_STATE_STAGED, PUBLICATION_STATE_FAILED]
+                        ),
+                    )
+                )
+                session.add(
+                    KernelPublicationSet(
+                        publication_set_id=publication_set_id,
+                        workspace_id=workspace_id,
+                        profile=profile,
+                        kernel_commit_id=kernel_commit_id,
+                        snapshot_id=snapshot_id,
+                        materialized_generation_id=materialized_generation_id,
+                        lexical_generation_id=lexical_generation_id,
+                        vector_generation_id=vector_generation_id,
+                        content_digest=digest,
+                        state=PUBLICATION_STATE_STAGED,
+                    )
+                )
+
+    async def validate_publication_set(
+        self, publication_set_id: str, *, _inject_fault_at: str | None = None
+    ) -> PublicationSetRef:
+        """Enforce the full compatibility key before activation.
+
+        A failed validation marks the set ``failed`` and raises; the
+        previously published set (if any) is untouched.
+        """
+        if _inject_fault_at is not None and (
+            _inject_fault_at != PHASE_PUB_VALIDATE_BEGIN
+        ):
+            raise KernelError(
+                f"fault phase {_inject_fault_at!r} does not apply to "
+                "validate_publication_set"
+            )
+        await self._ensure_ready()
+        if _inject_fault_at == PHASE_PUB_VALIDATE_BEGIN:
+            raise InjectedFaultError(PHASE_PUB_VALIDATE_BEGIN)
+        return await self._retry(
+            lambda: self._validate_set_transaction(publication_set_id)
+        )
+
+    async def _validate_set_transaction(
+        self, publication_set_id: str
+    ) -> PublicationSetRef:
+        async with self._session_factory() as session:
+            row = await session.get(KernelPublicationSet, publication_set_id)
+            if row is None:
+                raise UnknownPublicationSetError(
+                    f"publication set={publication_set_id}: no such set"
+                )
+            if row.state in (PUBLICATION_STATE_VALIDATED, PUBLICATION_STATE_PUBLISHED):
+                return _set_ref(row)  # concurrent validator won the race
+            if row.state != PUBLICATION_STATE_STAGED:
+                raise PublicationStateError(
+                    f"publication set={publication_set_id}: cannot validate "
+                    f"from state {row.state!r}"
+                )
+
+        problems = await _set_integrity_problems(
+            self._session_factory, publication_set_id
+        )
+        new_state = (
+            PUBLICATION_STATE_VALIDATED if not problems else PUBLICATION_STATE_FAILED
+        )
+        async with self._session_factory() as session:
+            async with session.begin():
+                result = await session.execute(
+                    update(KernelPublicationSet)
+                    .where(
+                        KernelPublicationSet.publication_set_id == publication_set_id,
+                        KernelPublicationSet.state == PUBLICATION_STATE_STAGED,
+                    )
+                    .values(
+                        state=new_state,
+                        validated_at=_utcnow()
+                        if new_state == PUBLICATION_STATE_VALIDATED
+                        else None,
+                    )
+                )
+                winner = None
+                if result.rowcount != 1:
+                    moved = await session.get(KernelPublicationSet, publication_set_id)
+                    advanced = (
+                        new_state == PUBLICATION_STATE_VALIDATED
+                        and moved is not None
+                        and moved.state
+                        in (PUBLICATION_STATE_VALIDATED, PUBLICATION_STATE_PUBLISHED)
+                    )
+                    if moved is not None and (moved.state == new_state or advanced):
+                        winner = moved
+                    else:
+                        raise PublicationStateError(
+                            f"publication set={publication_set_id}: state changed "
+                            f"to {None if moved is None else moved.state!r} "
+                            "concurrently during validation"
+                        )
+                else:
+                    winner = await session.get(KernelPublicationSet, publication_set_id)
+        if problems:
+            raise PublicationIntegrityError(
+                f"publication set={publication_set_id}: validation rejected: "
+                + "; ".join(problems)
+            )
+        assert winner is not None
+        return _set_ref(winner)
+
+    async def activate_publication_set(
+        self, publication_set_id: str, *, _inject_fault_at: str | None = None
+    ) -> PublicationSetRef:
+        """Atomically make one validated set the published state."""
+        if _inject_fault_at is not None and (
+            _inject_fault_at
+            not in {
+                PHASE_PUB_VALIDATED,
+                PHASE_PUB_PRE_ACTIVATE,
+                PHASE_PUB_POST_ACTIVATE,
+            }
+        ):
+            raise KernelError(
+                f"fault phase {_inject_fault_at!r} does not apply to "
+                "activate_publication_set"
+            )
+        await self._ensure_ready()
+        return await self._retry(
+            lambda: self._activate_set(publication_set_id, fault=_inject_fault_at)
+        )
+
+    async def _activate_set(
+        self, publication_set_id: str, *, fault: str | None
+    ) -> PublicationSetRef:
+        def maybe_inject(phase: str) -> None:
+            if fault == phase:
+                raise InjectedFaultError(phase)
+
+        async with self._session_factory() as session:
+            async with session.begin():
+                row = await session.get(KernelPublicationSet, publication_set_id)
+                if row is None:
+                    raise UnknownPublicationSetError(
+                        f"publication set={publication_set_id}: no such set"
+                    )
+                if row.state == PUBLICATION_STATE_PUBLISHED:
+                    current = await session.scalar(
+                        select(
+                            KernelPublicationHead.current_publication_set_id
+                        ).where(
+                            KernelPublicationHead.workspace_id == row.workspace_id,
+                            KernelPublicationHead.profile == row.profile,
+                        )
+                    )
+                    if current == publication_set_id:
+                        return _set_ref(row)  # idempotent activation
+                    raise PublicationStateError(
+                        f"publication set={publication_set_id}: published but "
+                        "not current; the pointer moved concurrently"
+                    )
+                if row.state != PUBLICATION_STATE_VALIDATED:
+                    raise PublicationStateError(
+                        f"publication set={publication_set_id}: cannot activate "
+                        f"from state {row.state!r}"
+                    )
+                maybe_inject(PHASE_PUB_PRE_ACTIVATE)
+
+                observed = await session.scalar(
+                    select(KernelPublicationHead.current_publication_set_id).where(
+                        KernelPublicationHead.workspace_id == row.workspace_id,
+                        KernelPublicationHead.profile == row.profile,
+                    )
+                )
+                if observed is not None and observed != publication_set_id:
+                    result = await session.execute(
+                        update(KernelPublicationSet)
+                        .where(
+                            KernelPublicationSet.publication_set_id == observed,
+                            KernelPublicationSet.state
+                            == PUBLICATION_STATE_PUBLISHED,
+                        )
+                        .values(state=PUBLICATION_STATE_SUPERSEDED)
+                    )
+                    if result.rowcount != 1:
+                        raise _ConcurrentPointerMove(
+                            f"previous publication set {observed} was not "
+                            "published; retrying with a fresh pointer observation"
+                        )
+                if observed is None:
+                    await session.execute(
+                        sqlite_insert(KernelPublicationHead)
+                        .values(
+                            workspace_id=row.workspace_id,
+                            profile=row.profile,
+                            current_publication_set_id=publication_set_id,
+                            updated_at=_utcnow(),
+                        )
+                        .on_conflict_do_nothing(
+                            index_elements=[
+                                KernelPublicationHead.workspace_id,
+                                KernelPublicationHead.profile,
+                            ]
+                        )
+                    )
+                    written = await session.scalar(
+                        select(
+                            KernelPublicationHead.current_publication_set_id
+                        ).where(
+                            KernelPublicationHead.workspace_id == row.workspace_id,
+                            KernelPublicationHead.profile == row.profile,
+                        )
+                    )
+                    if written != publication_set_id:
+                        raise _ConcurrentPointerMove(
+                            "publication head appeared concurrently; retrying"
+                        )
+                else:
+                    result = await session.execute(
+                        update(KernelPublicationHead)
+                        .where(
+                            KernelPublicationHead.workspace_id == row.workspace_id,
+                            KernelPublicationHead.profile == row.profile,
+                            KernelPublicationHead.current_publication_set_id.is_(
+                                observed
+                            ),
+                        )
+                        .values(
+                            current_publication_set_id=publication_set_id,
+                            updated_at=_utcnow(),
+                        )
+                    )
+                    if result.rowcount != 1:
+                        raise _ConcurrentPointerMove(
+                            "publication pointer moved concurrently; retrying"
+                        )
+                result = await session.execute(
+                    update(KernelPublicationSet)
+                    .where(
+                        KernelPublicationSet.publication_set_id == publication_set_id,
+                        KernelPublicationSet.state == PUBLICATION_STATE_VALIDATED,
+                    )
+                    .values(
+                        state=PUBLICATION_STATE_PUBLISHED,
+                        published_at=_utcnow(),
+                    )
+                )
+                if result.rowcount != 1:
+                    raise _ConcurrentPointerMove(
+                        "publication set state moved concurrently; retrying"
+                    )
+            # session.begin() exit == COMMIT == the publication
+            # linearization point.
+
+        maybe_inject(PHASE_PUB_POST_ACTIVATE)
+        ref = await _load_set(self._session_factory, publication_set_id)
+        assert ref is not None
+        return ref
+
+    async def publish(
+        self,
+        *,
+        materialized_generation_id: str,
+        lexical_generation_id: str | None = None,
+        vector_generation_id: str | None = None,
+        profile: str = DEFAULT_PUBLICATION_PROFILE,
+        _inject_fault_at: str | None = None,
+    ) -> PublicationSetRef:
+        """Convenience lifecycle: stage, validate, then atomically publish."""
+        if _inject_fault_at is not None and (
+            _inject_fault_at not in PUBLICATION_FAULT_PHASES
+        ):
+            raise KernelError(f"unknown fault phase {_inject_fault_at!r}")
+        await self._ensure_ready()
+
+        staged = await self.stage_publication_set(
+            materialized_generation_id=materialized_generation_id,
+            lexical_generation_id=lexical_generation_id,
+            vector_generation_id=vector_generation_id,
+            profile=profile,
+            _inject_fault_at=_inject_fault_at
+            if _inject_fault_at
+            in _LEXICAL_BUILD_PHASES | {PHASE_PUB_SET_STAGED}
+            else None,
+        )
+        if staged.state == PUBLICATION_STATE_PUBLISHED:
+            return staged  # idempotent republish of the live set
+
+        if _inject_fault_at == PHASE_PUB_VALIDATE_BEGIN:
+            raise InjectedFaultError(PHASE_PUB_VALIDATE_BEGIN)
+        validated = await self.validate_publication_set(staged.publication_set_id)
+
+        if _inject_fault_at == PHASE_PUB_VALIDATED:
+            raise InjectedFaultError(PHASE_PUB_VALIDATED)
+        return await self.activate_publication_set(
+            validated.publication_set_id,
+            _inject_fault_at=_inject_fault_at
+            if _inject_fault_at
+            in {PHASE_PUB_PRE_ACTIVATE, PHASE_PUB_POST_ACTIVATE}
+            else None,
+        )
+
+    async def get_publication_set(
+        self, publication_set_id: str
+    ) -> PublicationSetRef:
+        ref = await _load_set(self._session_factory, publication_set_id)
+        if ref is None:
+            raise UnknownPublicationSetError(
+                f"publication set={publication_set_id}: no such set"
+            )
+        return ref
+
+    async def list_publication_sets(
+        self,
+        *,
+        workspace_id: str | None = None,
+        state: str | None = None,
+    ) -> list[PublicationSetRef]:
+        stmt = select(KernelPublicationSet).order_by(
+            KernelPublicationSet.created_at.asc()
+        )
+        if workspace_id is not None:
+            stmt = stmt.where(KernelPublicationSet.workspace_id == workspace_id)
+        if state is not None:
+            stmt = stmt.where(KernelPublicationSet.state == state)
+        async with self._session_factory() as session:
+            rows = (await session.execute(stmt)).scalars().all()
+        return [_set_ref(row) for row in rows]
+
     # -- retry plumbing ----------------------------------------------------
 
     async def _retry(self, operation: Any) -> Any:
@@ -1139,6 +1736,197 @@ async def verify_lexical_generation(
         ok=not problems,
         problems=tuple(problems),
         checked_rows=row_count,
+    )
+
+
+async def _set_integrity_problems(
+    session_factory: async_sessionmaker, publication_set_id: str
+) -> list[str]:
+    """The full compatibility key, evaluated against durable state.
+
+    Enforced dimensions (derived from real branch semantics, not future
+    PR77/78 fields): scope and cut agreement of every required member,
+    source-generation lineage of the lexical layer, materialized member
+    lifecycle fitness, lexical deep integrity, per-row locator
+    membership in the materialized generation, and manifest digest
+    agreement. A NULL vector member is the explicit absent layer —
+    nothing is borrowed and nothing is checked beyond its grammar.
+    """
+    async with session_factory() as session:
+        row = await session.get(KernelPublicationSet, publication_set_id)
+        assert row is not None  # caller checked existence
+        materialized = await session.get(
+            KernelGeneration, row.materialized_generation_id
+        )
+        lexical = await session.get(KernelLexicalGeneration, row.lexical_generation_id)
+        if lexical is not None:
+            stored_rows = (
+                await session.execute(
+                    select(KernelLexicalRow.record_id)
+                    .where(
+                        KernelLexicalRow.lexical_generation_id
+                        == row.lexical_generation_id
+                    )
+                    .distinct()
+                )
+            ).all()
+            member_record_ids = {
+                value
+                for (value,) in (
+                    await session.execute(
+                        select(KernelGenerationRecord.record_id).where(
+                            KernelGenerationRecord.generation_id
+                            == row.materialized_generation_id
+                        )
+                    )
+                ).all()
+            }
+
+    problems: list[str] = []
+    if materialized is None:
+        problems.append(
+            f"materialized member {row.materialized_generation_id!r} is missing"
+        )
+    else:
+        if materialized.workspace_id != row.workspace_id:
+            problems.append(
+                f"materialized member workspace {materialized.workspace_id!r} != "
+                f"set {row.workspace_id!r}"
+            )
+        if materialized.kernel_commit_id != row.kernel_commit_id:
+            problems.append(
+                f"materialized member cut {materialized.kernel_commit_id} != "
+                f"set {row.kernel_commit_id}"
+            )
+        if materialized.snapshot_id != row.snapshot_id:
+            problems.append(
+                f"materialized member snapshot {materialized.snapshot_id!r} != "
+                f"set {row.snapshot_id!r}"
+            )
+        if materialized.state not in ("validated", "active", "superseded"):
+            problems.append(
+                "materialized member state "
+                f"{materialized.state!r} is not publishable"
+            )
+    if lexical is None:
+        problems.append(f"lexical member {row.lexical_generation_id!r} is missing")
+    else:
+        if lexical.workspace_id != row.workspace_id:
+            problems.append(
+                f"lexical member workspace {lexical.workspace_id!r} != "
+                f"set {row.workspace_id!r}"
+            )
+        if lexical.kernel_commit_id != row.kernel_commit_id:
+            problems.append(
+                f"lexical member cut {lexical.kernel_commit_id} != set "
+                f"{row.kernel_commit_id}"
+            )
+        if lexical.snapshot_id != row.snapshot_id:
+            problems.append(
+                f"lexical member snapshot {lexical.snapshot_id!r} != set "
+                f"{row.snapshot_id!r}"
+            )
+        if lexical.source_generation_id != row.materialized_generation_id:
+            problems.append(
+                "lexical member was built from source generation "
+                f"{lexical.source_generation_id!r}, not the set's "
+                f"{row.materialized_generation_id!r}"
+            )
+        if lexical.state != LEXICAL_STATE_VALIDATED:
+            problems.append(
+                f"lexical member state {lexical.state!r} is not validated"
+            )
+        problems.extend(
+            f"lexical integrity: {problem}"
+            for problem in await _lexical_integrity_problems(
+                session_factory, row.lexical_generation_id
+            )
+        )
+        orphan_record_ids = sorted(
+            {value for (value,) in stored_rows} - member_record_ids
+        )
+        if orphan_record_ids:
+            problems.append(
+                "lexical rows name records outside the materialized "
+                f"member: {orphan_record_ids[:5]}"
+                + (
+                    f" (+{len(orphan_record_ids) - 5} more)"
+                    if len(orphan_record_ids) > 5
+                    else ""
+                )
+            )
+    if row.vector_generation_id is not None and not row.vector_generation_id:
+        problems.append("vector member id is present but empty")
+
+    expected_digest = _publication_set_digest(
+        workspace_id=row.workspace_id,
+        profile=row.profile,
+        kernel_commit_id=row.kernel_commit_id,
+        snapshot_id=row.snapshot_id,
+        materialized_generation_id=row.materialized_generation_id,
+        lexical_generation_id=row.lexical_generation_id,
+        vector_generation_id=row.vector_generation_id,
+        lexical_content_digest=lexical.content_digest if lexical else "",
+    )
+    if expected_digest != row.content_digest:
+        problems.append(
+            f"set digest mismatch: manifest {row.content_digest}, "
+            f"recomputed {expected_digest}"
+        )
+    return problems
+
+
+async def resolve_published_set(
+    session_factory: async_sessionmaker,
+    workspace_id: str,
+    *,
+    profile: str = DEFAULT_PUBLICATION_PROFILE,
+) -> PublicationSetRef | None:
+    """The one authoritative published set, from durable state alone.
+
+    A fresh process recovers the published state here; ``None`` means
+    the scope has never published. A head naming a missing set fails
+    closed as an integrity fault — it is never silently skipped.
+    """
+    from app.kernel.commit import validate_workspace_id
+
+    validate_workspace_id(workspace_id)
+    validate_publication_profile(profile)
+    async with session_factory() as session:
+        current_id = await session.scalar(
+            select(KernelPublicationHead.current_publication_set_id).where(
+                KernelPublicationHead.workspace_id == workspace_id,
+                KernelPublicationHead.profile == profile,
+            )
+        )
+        if current_id is None:
+            return None
+        row = await session.get(KernelPublicationSet, current_id)
+    if row is None:
+        raise PublicationIntegrityError(
+            f"workspace={workspace_id!r} profile={profile!r}: published pointer "
+            f"names {current_id!r} but no such publication set row exists"
+        )
+    return _set_ref(row)
+
+
+async def verify_publication_set(
+    session_factory: async_sessionmaker, publication_set_id: str
+) -> PublicationSetVerification:
+    """Explicit deep verification of one publication set (read-only)."""
+    async with session_factory() as session:
+        row = await session.get(KernelPublicationSet, publication_set_id)
+        if row is None:
+            raise UnknownPublicationSetError(
+                f"publication set={publication_set_id}: no such set"
+            )
+    problems = await _set_integrity_problems(session_factory, publication_set_id)
+    if row.state != PUBLICATION_STATE_PUBLISHED:
+        problems.append(f"set state is {row.state!r}, not published")
+    return PublicationSetVerification(
+        publication_set_id=publication_set_id,
+        ok=not problems,
+        problems=tuple(problems),
     )
 
 
