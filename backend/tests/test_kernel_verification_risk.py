@@ -15,6 +15,7 @@ from app.kernel.verification_risk import (
     DEPENDENCY_UNKNOWN,
     DISCLOSURE_COMPLETE,
     DISCLOSURE_PARTIAL,
+    EVIDENCE_MIXED,
     EVIDENCE_MODEL,
     EVIDENCE_SOURCE_NATIVE,
     OUTCOME_ABSTAINED,
@@ -302,6 +303,72 @@ def test_require_independent_witnesses_fails_closed_without_disclosures():
     assert decision.reason_code == REASON_UNKNOWN_OR_CORRELATED
     assert decision.dependency_status == DEPENDENCY_UNKNOWN
     assert not decision.authority_granted
+
+
+def test_mixed_evidence_cannot_self_declare_independence():
+    evidence = risk_evidence(
+        evidence_kind=EVIDENCE_MIXED,
+        model_only=False,
+        consensus=False,
+        witness_refs=("model-a", "model-b"),
+        dependency_status=DEPENDENCY_INDEPENDENT,
+    )
+    decision = evaluate_verification_risk_policy(
+        evidence, policy(), as_of="2026-08-15"
+    )
+    assert decision.outcome == OUTCOME_ABSTAINED
+    assert decision.reason_code == REASON_UNKNOWN_OR_CORRELATED
+    assert decision.dependency_status == DEPENDENCY_UNKNOWN
+    assert not decision.authority_granted
+
+
+def test_mixed_evidence_with_correlated_disclosures_abstains():
+    disclosures = [
+        disclosure("disc-a", "model-a"),
+        disclosure(
+            "disc-b",
+            "model-b",
+            base_model_family="base-model-a",
+        ),
+    ]
+    evidence = risk_evidence(
+        evidence_kind=EVIDENCE_MIXED,
+        model_only=False,
+        consensus=False,
+        witness_refs=("model-a", "model-b"),
+        disclosure_refs=("disc-a", "disc-b"),
+        dependency_status=DEPENDENCY_INDEPENDENT,
+    )
+    decision = evaluate_verification_risk_policy(
+        evidence, policy(), disclosures=disclosures, as_of="2026-08-15"
+    )
+    assert decision.outcome == OUTCOME_ABSTAINED
+    assert decision.reason_code == REASON_UNKNOWN_OR_CORRELATED
+    assert decision.dependency_status == DEPENDENCY_CORRELATED
+    assert not decision.authority_granted
+
+
+def test_mixed_model_only_consensus_is_rejected_like_model_evidence():
+    evidence = risk_evidence(
+        evidence_kind=EVIDENCE_MIXED,
+        model_only=True,
+        consensus=True,
+        witness_refs=("model-a", "model-b"),
+    )
+    decision = evaluate_verification_risk_policy(
+        evidence, policy(), as_of="2026-08-15"
+    )
+    assert decision.outcome == OUTCOME_ABSTAINED
+    assert decision.reason_code == REASON_MODEL_ONLY_HIGH_RISK
+    assert not decision.authority_granted
+
+
+def test_source_native_evidence_skips_independence_requirement():
+    decision = evaluate_verification_risk_policy(
+        risk_evidence(), policy(), as_of="2026-08-15"
+    )
+    assert decision.outcome == OUTCOME_VERIFIED
+    assert decision.authority_granted
 
 
 @pytest.mark.parametrize(

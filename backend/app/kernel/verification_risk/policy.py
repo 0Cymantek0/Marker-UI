@@ -311,7 +311,8 @@ def evaluate_verification_risk_policy(
             return _decision(evidence=evidence, policy=policy, outcome=OUTCOME_UNAVAILABLE, reason_code=REASON_EXPIRED, reason="expiry cannot be established without an as-of time")
         if _parse_time(as_of) > _parse_time(evidence.expires_at):
             return _decision(evidence=evidence, policy=policy, outcome=OUTCOME_UNAVAILABLE, reason_code=REASON_EXPIRED, reason="risk evidence is expired")
-    if policy.high_risk and evidence.model_only and (evidence.consensus or evidence.evidence_kind == EVIDENCE_MODEL):
+    model_participating = evidence.evidence_kind in (EVIDENCE_MODEL, EVIDENCE_MIXED)
+    if policy.high_risk and evidence.model_only and (evidence.consensus or model_participating):
         return _decision(evidence=evidence, policy=policy, outcome=OUTCOME_ABSTAINED, reason_code=REASON_MODEL_ONLY_HIGH_RISK, reason="model-only evidence cannot establish high-risk verification")
     if (
         policy.high_risk
@@ -329,11 +330,9 @@ def evaluate_verification_risk_policy(
             ),
         )
     dependency_status = evidence.dependency_status
-    if evidence.evidence_kind == EVIDENCE_MODEL and (
-        disclosures or policy.require_independent_witnesses
-    ):
+    if model_participating and (disclosures or policy.require_independent_witnesses):
         dependency_status = classify_dependency_status(disclosures, evidence.witness_refs)
-    if policy.require_independent_witnesses and evidence.evidence_kind == EVIDENCE_MODEL and dependency_status != DEPENDENCY_INDEPENDENT:
+    if policy.require_independent_witnesses and model_participating and dependency_status != DEPENDENCY_INDEPENDENT:
         return _decision(evidence=evidence, policy=policy, outcome=OUTCOME_ABSTAINED if policy.high_risk else OUTCOME_ACCEPTED_WITH_WARNING, reason_code=REASON_UNKNOWN_OR_CORRELATED, reason="witness lineage is unknown or correlated; witness count is not independence", dependency_status=dependency_status)
     upper = evidence.risk_upper_bound if evidence.risk_upper_bound is not None else evidence.risk_estimate
     if upper is None or policy.risk_bound is None:
