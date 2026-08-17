@@ -1,0 +1,118 @@
+{
+  "acceptance": {
+    "authorized_only_counts": true,
+    "authorized_recall_preserved": true,
+    "caller_cannot_name_partition": true,
+    "high_assurance_rank_invariant": true,
+    "high_assurance_score_basis_invariant": true,
+    "high_assurance_top_k_invariant": true,
+    "missing_partition_fails_closed": true,
+    "no_forbidden_units_counted_for_caller": true,
+    "no_forbidden_units_returned": true,
+    "packet_identity_changed_on_authorization_epoch": true,
+    "packet_identity_changed_on_deny_revision": true,
+    "packet_identity_changed_on_policy_revision": true,
+    "packet_identity_stable_under_unrelated_commit": true,
+    "residual_risk_note": "standard mode serves from the shared index: bm25 values a caller sees can shift when hidden-domain content changes (declared residual); high assurance removes the channel by physical corpus isolation. Timing residuals on a shared machine are characterized, not claimed constant-time.",
+    "revocation_effective_without_reindex": true,
+    "single_publication_attribution": true,
+    "unauthorized_exact_nondisclosing": true
+  },
+  "benchmark": "pr78-authorization-retrieval",
+  "commit": "bab302889f796d7c973fc8a7fb331d681494082a",
+  "corpus": {
+    "alpha_docs": 4,
+    "authorized_domain": "dom-alpha",
+    "beta_docs": 12,
+    "forbidden_domain": "dom-beta",
+    "high_assurance_profile": "ha.11dbc71682d9",
+    "lexical_generation_id": "sha256:c9cd9e62d7cf8c021057e39928e040dc0995176421e7a48f7516aad1489dc444",
+    "materialized_generation_id": "sha256:d1a551152faa8fad121fb7da536360ffa4eaf46653aff2781c6fa0b3217362fb",
+    "nodes_per_doc": 6,
+    "publication_set_id": "sha256:4b29f07a5a0625f1d6d05e5fa102f1e6aa73464296aaa52476e5b8b6a964b4a6"
+  },
+  "exact": {
+    "allowed_returns_record": true,
+    "timing_ms": {
+      "allowed": {
+        "latency_ms": {
+          "p50": 57.095,
+          "p95": 65.037,
+          "p99": 65.931
+        },
+        "mean_ms": 52.488
+      },
+      "nonexistent": {
+        "latency_ms": {
+          "p50": 48.383,
+          "p95": 58.993,
+          "p99": 59.792
+        },
+        "mean_ms": 49.329
+      },
+      "unauthorized": {
+        "latency_ms": {
+          "p50": 62.092,
+          "p95": 68.21,
+          "p99": 79.013
+        },
+        "mean_ms": 57.893
+      }
+    },
+    "timing_note": "unauthorized and nonexistent follow the same code path by design; residuals are characterized, not claimed zero",
+    "unauthorized_leaks_no_content": true,
+    "unauthorized_shape_matches_nonexistent": true
+  },
+  "high_assurance": {
+    "caller_named_partition_rejected": true,
+    "forbidden_top_k_pressure_cannot_evict_allowed_hit": true,
+    "missing_partition_fails_closed": true,
+    "partition_profile": "ha.11dbc71682d9",
+    "rank_order_invariant_to_forbidden_growth": true,
+    "score_basis_invariant_to_forbidden_growth": true,
+    "shared_index_rank_shifted_by_forbidden_growth": true,
+    "single_set_attribution": true
+  },
+  "identity": {
+    "changed_on_access_policy_revision": true,
+    "changed_on_authorization_epoch": true,
+    "changed_on_deny_revision": true,
+    "stable_under_unrelated_commit": true
+  },
+  "lexical": {
+    "authorized_recall_preserved": true,
+    "candidates_considered_describe_authorized_universe": true,
+    "no_forbidden_units_counted_for_caller": true,
+    "no_forbidden_units_returned_after_deny": true,
+    "open_matches_include_both_domains": false,
+    "timing_ms": {
+      "after_deny": {
+        "latency_ms": {
+          "p50": 228.47,
+          "p95": 266.814,
+          "p99": 268.418
+        },
+        "mean_ms": 219.173
+      },
+      "before_deny": {
+        "latency_ms": {
+          "p50": 215.895,
+          "p95": 275.059,
+          "p99": 284.232
+        },
+        "mean_ms": 222.217
+      }
+    }
+  },
+  "machine": "AMD64",
+  "method": "deterministic two-domain corpus through the real commit spine and publication service; acceptance is structural, wall-clock is characterization evidence only (no constant-time claim)",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "query_schema_version": "marker.query.v1",
+  "repeats_per_query": 20,
+  "revocation": {
+    "packet_identity_changed_on_deny": true,
+    "revocation_effective_without_reindex": true,
+    "stale_fts_rows_still_present": 72
+  }
+}

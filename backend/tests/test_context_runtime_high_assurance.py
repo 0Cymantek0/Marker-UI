@@ -20,17 +20,8 @@ from app.context_runtime import (
     parse_query_request,
 )
 from app.context_runtime.errors import QueryAuthorizationError
-from app.kernel.commit import KernelCommitBatch, KernelCommitService
 from app.kernel.generations import GenerationService
 from app.kernel.publications import HIGH_ASSURANCE_PROFILE_PREFIX, PublicationService
-from app.kernel.records import (
-    SOURCE_CONSISTENCY_NATIVE_ATOMIC,
-    ContentRevisionRecord,
-    SecurityDomainRecord,
-    SourceIdentityRecord,
-)
-from app.kernel.reading_order import OrderNode, ReadingOrderGraph
-from app.kernel.patches import ViewDocumentRecord
 from app.kernel.snapshots import resolve_snapshot
 from app.services.query_policy import QueryPolicyService
 

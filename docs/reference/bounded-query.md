@@ -101,25 +101,26 @@ redaction/serialization dimension, changed budget or output directive —
 changes the identity.
 
 **The context fields are identity seams, not authorization proof.**
-They are carried and hashed exactly as supplied; PR78 owns real policy
-semantics and pre-retrieval scope constraints. Nothing in this layer
-claims an access decision.
+They are carried and hashed exactly as supplied; PR78 (see
+`authorization-retrieval.md`) now resolves trusted policy semantics
+before retrieval and binds the effective-authorization identity into
+every packet, while these caller fields still grant nothing.
 
 ## Known limits (deliberate)
 
 - No externally reachable retrieval endpoint. `execute_query` is the
   internal application-service callable; a future agent/MCP transport
-  (and PR78's authorization-first layer) wraps it. Publishing a
-  retrieval endpoint before authorization exists would permanently
-  bypass PR78.
+  wraps it (PR78's authorization-first layer is now in place beneath
+  it).
 - No signed/portable cursors or cross-client continuation (PR79). A
   `partial` packet is the whole continuation story in this slice.
 - No vector/visual retrieval (the PR76 vector slot stays an explicit
   absent until PR81); no natural-language/model query planning — the
   typed server contract comes first, a later model can draft typed
   plans into this validator.
-- The authorization seam is opaque caller-supplied ids only.
-- One lexical generation per set (unicode61 tokenizer), as in PR76.
+- One lexical generation per set (unicode61 tokenizer), as in PR76
+  (PR78 adds derived per-domain partition generations under reserved
+  profiles; the shared grammar is unchanged).
 
 ## Reproduce
 

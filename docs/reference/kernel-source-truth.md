@@ -135,7 +135,7 @@ The dominant cost is proportional to source bytes (hash + copy + verify), not to
 
 - Remote/object/HTTP version-pinned acquisition (strong ETags, version IDs, range consistency) — URL origins stay `best_effort_consistent`.
 - Connector inbox/cursor transactions, event dedup, gap recovery (PR71 remote half).
-- Enterprise authorization: group/ACL resolution, deny overlays, PR78 retrieval revocation. The local epoch advances only on permitted-roots/unrestricted changes.
+- Enterprise authorization: group/ACL resolution and per-principal grants. (PR78 shipped the local-v1 slice — security domains, live deny/lift overlay, and retrieval revocation — see `authorization-retrieval.md`; richer multi-principal models remain open.) The local epoch advances only on permitted-roots/unrestricted changes.
 - Source artifact retention/GC: artifacts accumulate like uploads (content-addressed, deduped); job deletion does not reclaim them. A retention story needs a PR65B-style tombstone authority for source blobs.
 - PR72+ anchors/patches/verification remain unbound snapshot fields (`verifier_policy_revision_id`, `schema_registry_revision`).
 - Move/rename continuity for local sources is a new logical source under the documented profile rule.

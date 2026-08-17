@@ -57,7 +57,6 @@ from app.kernel.errors import (
 from app.kernel.proofs import ClaimRequirement, evaluate_claim_requirements
 from app.kernel.reading_order import (
     NODE_KIND_CONTENT,
-    OrderEdge,
     OrderNode,
     ReadingOrderGraph,
     split_node,

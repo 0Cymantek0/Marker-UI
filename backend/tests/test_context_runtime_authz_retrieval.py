@@ -341,7 +341,7 @@ async def test_mixed_query_preserves_authorized_recall(payload_env: tuple) -> No
     factory, store, service = payload_env
     # dom-beta: 12 short high-frequency docs (bm25 darlings).
     crowd = {f"n{i}": f"needle beta {i}" for i in range(12)}
-    beta = await seed_domain_doc(
+    await seed_domain_doc(
         service, "ws-a", tag="crowd", domain="dom-beta", texts=crowd
     )
     # dom-alpha: one long, low-frequency authorized hit + padding.
