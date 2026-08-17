@@ -1,0 +1,425 @@
+{
+  "$schema": "marker.verification_risk_corpus.v1",
+  "schema_version": "marker.verification_risk_corpus.v1",
+  "name": "verification-risk-corpus-v1",
+  "metadata": {
+    "purpose": "Hand-checkable PR75 dependency and joint-error corpus",
+    "baseline_best_single_witness": "model-a",
+    "calibration_split": {
+      "fit_slice": "calibration-fit",
+      "evaluation_slice": "matched",
+      "shift_slice": "shifted",
+      "insufficient_support_slice": "insufficient",
+      "seed": null
+    },
+    "runtime": {
+      "generator": "fixture-only",
+      "elapsed_ms": 1
+    }
+  },
+  "witnesses": [
+    {
+      "id": "source-native",
+      "label": "Source-native deterministic value",
+      "kind": "source_native",
+      "source_native": true,
+      "authority_class": "source_native",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "source-document",
+        "runtime_profile": "deterministic-parser"
+      }
+    },
+    {
+      "id": "model-a",
+      "label": "Model A",
+      "kind": "model",
+      "model_family": "family-a",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "checkpoint-a",
+        "renderer": "renderer-a",
+        "cropper": "cropper-a",
+        "detector": "detector-a",
+        "preprocessor": "preprocessor-a",
+        "postprocessor": "normalize-v1",
+        "prompt_identity": "prompt-v1",
+        "runtime_profile": "cpu-fp32",
+        "quantization": "none"
+      }
+    },
+    {
+      "id": "model-b",
+      "label": "Model B",
+      "kind": "model",
+      "model_family": "family-b",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "checkpoint-b",
+        "renderer": "renderer-shared",
+        "cropper": "cropper-shared",
+        "detector": "detector-shared",
+        "preprocessor": "preprocessor-shared",
+        "shared_dependency_group": "shared-renderer-pipeline",
+        "runtime_profile": "cpu-fp32",
+        "quantization": "int8"
+      }
+    },
+    {
+      "id": "model-c",
+      "label": "Model C",
+      "kind": "model",
+      "model_family": "family-c",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "checkpoint-c",
+        "renderer": "renderer-shared",
+        "cropper": "cropper-shared",
+        "detector": "detector-shared",
+        "preprocessor": "preprocessor-shared",
+        "shared_dependency_group": "shared-renderer-pipeline",
+        "runtime_profile": "cpu-fp32",
+        "quantization": "none"
+      }
+    },
+    {
+      "id": "unknown-model",
+      "label": "Unknown black-box",
+      "kind": "model",
+      "model_family": "vendor-black-box",
+      "dependency_profile": {
+        "disclosure": "unknown"
+      }
+    },
+    {
+      "id": "model-a-int8",
+      "label": "Model A alternate quantization",
+      "kind": "model",
+      "model_family": "family-a",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "checkpoint-a",
+        "runtime_profile": "cpu-int8",
+        "quantization": "int8"
+      },
+      "metadata": {"fixture_case": "same-checkpoint-different-quantization"}
+    },
+    {
+      "id": "model-a-alias",
+      "label": "Model A endpoint alias",
+      "kind": "model",
+      "alias_of": "model-a",
+      "model_family": "family-a",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "checkpoint-a",
+        "runtime_profile": "remote-endpoint"
+      },
+      "metadata": {"fixture_case": "alias-duplicate"}
+    },
+    {
+      "id": "teacher-child-a",
+      "label": "Teacher child A",
+      "kind": "model",
+      "model_family": "student-family-a",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "student-checkpoint-a",
+        "teacher_lineage": "shared-teacher-v1"
+      },
+      "metadata": {"fixture_case": "teacher-shared-dependency"}
+    },
+    {
+      "id": "teacher-child-b",
+      "label": "Teacher child B",
+      "kind": "model",
+      "model_family": "student-family-b",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "student-checkpoint-b",
+        "teacher_lineage": "shared-teacher-v1"
+      },
+      "metadata": {"fixture_case": "teacher-shared-dependency"}
+    },
+    {
+      "id": "model-a-prompt-v2",
+      "label": "Model A prompt and postprocessor change",
+      "kind": "model",
+      "model_family": "family-a",
+      "dependency_profile": {
+        "disclosure": "complete",
+        "base_lineage": "checkpoint-a",
+        "prompt_identity": "prompt-v2",
+        "postprocessor": "normalize-v2",
+        "runtime_profile": "cpu-fp32",
+        "quantization": "none"
+      },
+      "metadata": {"fixture_case": "prompt-postprocessor-change"}
+    }
+  ],
+  "samples": [
+    {
+      "id": "matched-correlated-1",
+      "slice": "matched",
+      "case": "correlated",
+      "distribution": "matched",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.8},
+        "model-b": {"prediction": true, "confidence": 0.8},
+        "model-c": {"prediction": true, "confidence": 0.8},
+        "unknown-model": {"prediction": true, "confidence": 0.6},
+        "source-native": {"prediction": true, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-correlated-2",
+      "slice": "matched",
+      "case": "correlated",
+      "distribution": "matched",
+      "label": false,
+      "catastrophic": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.8},
+        "model-b": {"prediction": true, "confidence": 0.8},
+        "model-c": {"prediction": false, "confidence": 0.8},
+        "unknown-model": {"prediction": true, "confidence": 0.05},
+        "source-native": {"prediction": false, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-correlated-3",
+      "slice": "matched",
+      "case": "correlated",
+      "distribution": "matched",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.8},
+        "model-b": {"prediction": false, "confidence": 0.8},
+        "model-c": {"prediction": true, "confidence": 0.8},
+        "unknown-model": {"prediction": true, "confidence": 0.6},
+        "source-native": {"prediction": true, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-correlated-4",
+      "slice": "matched",
+      "case": "correlated",
+      "distribution": "matched",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.8},
+        "model-b": {"prediction": false, "confidence": 0.8},
+        "model-c": {"prediction": true, "confidence": 0.8},
+        "unknown-model": {"prediction": false, "confidence": 0.6},
+        "source-native": {"prediction": false, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-shared-1",
+      "slice": "matched",
+      "case": "shared-dependency",
+      "distribution": "matched",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.8},
+        "model-b": {"prediction": false, "confidence": 0.8},
+        "model-c": {"prediction": false, "confidence": 0.8},
+        "unknown-model": {"prediction": true, "confidence": 0.6},
+        "source-native": {"prediction": true, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-shared-2",
+      "slice": "matched",
+      "case": "shared-dependency",
+      "distribution": "matched",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.8},
+        "model-b": {"prediction": true, "confidence": 0.8},
+        "model-c": {"prediction": true, "confidence": 0.8},
+        "unknown-model": {"prediction": false, "confidence": 0.6},
+        "source-native": {"prediction": false, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-unknown-1",
+      "slice": "matched",
+      "case": "unknown-lineage",
+      "distribution": "matched",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.8},
+        "model-b": {"prediction": true, "confidence": 0.8},
+        "model-c": {"prediction": true, "confidence": 0.8},
+        "unknown-model": {"prediction": false, "confidence": 0.6},
+        "source-native": {"prediction": true, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-unknown-2",
+      "slice": "matched",
+      "case": "unknown-lineage",
+      "distribution": "matched",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.8},
+        "model-b": {"prediction": false, "confidence": 0.8},
+        "model-c": {"prediction": false, "confidence": 0.8},
+        "unknown-model": {"prediction": true, "confidence": 0.6},
+        "source-native": {"prediction": false, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-clean-1",
+      "slice": "matched",
+      "case": "matched",
+      "distribution": "matched",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.8},
+        "model-b": {"prediction": true, "confidence": 0.8},
+        "model-c": {"prediction": true, "confidence": 0.8},
+        "unknown-model": {"prediction": true, "confidence": 0.6},
+        "source-native": {"prediction": true, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "matched-clean-2",
+      "slice": "matched",
+      "case": "matched",
+      "distribution": "matched",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.8},
+        "model-b": {"prediction": false, "confidence": 0.8},
+        "model-c": {"prediction": false, "confidence": 0.8},
+        "unknown-model": {"prediction": false, "confidence": 0.6},
+        "source-native": {"prediction": false, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "calibration-fit-1",
+      "slice": "calibration-fit",
+      "case": "calibration-fit",
+      "distribution": "matched",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 1.0},
+        "model-b": {"prediction": true, "confidence": 0.8},
+        "model-c": {"prediction": true, "confidence": 0.8},
+        "unknown-model": {"prediction": true, "confidence": 0.6},
+        "source-native": {"prediction": true, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "calibration-fit-2",
+      "slice": "calibration-fit",
+      "case": "calibration-fit",
+      "distribution": "matched",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.0},
+        "model-b": {"prediction": false, "confidence": 0.8},
+        "model-c": {"prediction": false, "confidence": 0.8},
+        "unknown-model": {"prediction": false, "confidence": 0.6},
+        "source-native": {"prediction": false, "confidence": 1.0}
+      }
+    },
+    {
+      "id": "shifted-consensus-1",
+      "slice": "shifted",
+      "case": "model-consensus",
+      "distribution": "shifted",
+      "risk_level": "high",
+      "label": false,
+      "catastrophic": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.95},
+        "model-b": {"prediction": true, "confidence": 0.95},
+        "model-c": {"prediction": true, "confidence": 0.95},
+        "unknown-model": {"prediction": true, "confidence": 0.95}
+      }
+    },
+    {
+      "id": "shifted-consensus-2",
+      "slice": "shifted",
+      "case": "model-consensus",
+      "distribution": "shifted",
+      "risk_level": "high",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.95},
+        "model-b": {"prediction": false, "confidence": 0.95},
+        "model-c": {"prediction": false, "confidence": 0.95},
+        "unknown-model": {"prediction": false, "confidence": 0.95}
+      }
+    },
+    {
+      "id": "shifted-template-3",
+      "slice": "shifted",
+      "case": "shifted",
+      "distribution": "shifted",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.95},
+        "model-b": {"prediction": true, "confidence": 0.95},
+        "model-c": {"prediction": true, "confidence": 0.95},
+        "unknown-model": {"prediction": true, "confidence": 0.95}
+      }
+    },
+    {
+      "id": "shifted-template-4",
+      "slice": "shifted",
+      "case": "shifted",
+      "distribution": "shifted",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": false, "confidence": 0.95},
+        "model-b": {"prediction": false, "confidence": 0.95},
+        "model-c": {"prediction": true, "confidence": 0.95},
+        "unknown-model": {"prediction": false, "confidence": 0.95}
+      }
+    },
+    {
+      "id": "shifted-template-5",
+      "slice": "shifted",
+      "case": "shifted",
+      "distribution": "shifted",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.95},
+        "model-b": {"prediction": false, "confidence": 0.95},
+        "model-c": {"prediction": true, "confidence": 0.95},
+        "unknown-model": {"prediction": false, "confidence": 0.95}
+      }
+    },
+    {
+      "id": "insufficient-support-1",
+      "slice": "insufficient",
+      "case": "insufficient",
+      "distribution": "insufficient",
+      "label": true,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.9},
+        "model-b": {"prediction": true, "confidence": 0.9},
+        "model-c": {"prediction": true, "confidence": 0.9},
+        "unknown-model": {"prediction": true, "confidence": 0.9}
+      }
+    },
+    {
+      "id": "insufficient-support-2",
+      "slice": "insufficient",
+      "case": "insufficient",
+      "distribution": "insufficient",
+      "label": false,
+      "outcomes": {
+        "model-a": {"prediction": true, "confidence": 0.9},
+        "model-b": {"prediction": false, "confidence": 0.9},
+        "model-c": {"prediction": false, "confidence": 0.9},
+        "unknown-model": {"prediction": false, "confidence": 0.9}
+      }
+    }
+  ]
+}
