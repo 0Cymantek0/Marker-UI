@@ -17,12 +17,13 @@ npm test
 
 ## Test Suites Overview
 
-Current collection covers 1,163 backend pytest tests and 146 frontend Vitest tests:
+Current collection covers 2,215 backend pytest tests and 161 frontend Vitest tests:
 - **`test_crypto.py` / `test_secrets.py`**: Validates credential encryption at rest and key masking in JSON responses.
 - **`test_upload.py` / `test_convert.py`**: Verifies allowed file types, upload size limits, and job execution SSE streams.
 - **`test_settings.py` / `test_providers.py`**: Asserts configuration CRUD and LLM provider registration.
 - **`test_task_manager.py` / `test_gpu_workers.py` / `test_job_transport.py`**: Validates thread pools, GPU routing, process workers, and IPC events.
 - **`test_vlm_service.py` / `test_image_cost.py` / `test_image_router.py`**: Tests image routing, cost estimation, and VLM JSON extraction.
+- **`test_kernel_*.py`**: Covers the Truth Kernel — commit spine, payload durability, materialized generations, retention/GC, fenced publication, fair scheduling/liveness/events, runtime integration, source truth/anchors/reading order, patches, claims/proofs, verification risk, and publication sets with lexical (FTS5) generations.
 
 ---
 

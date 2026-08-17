@@ -180,7 +180,7 @@ The application will be served at `http://localhost:3000` via Nginx.
 
 ## Testing & Code Quality
 
-The repository currently collects over 1,300 automated backend and frontend tests, covering API endpoints, database operations, worker scheduling, conversion routing, output integrity, manifests, security controls, and UI behavior:
+The repository currently collects over 2,300 automated backend and frontend tests, covering API endpoints, database operations, worker scheduling, conversion routing, output integrity, manifests, security controls, and UI behavior:
 
 ```bash
 python -m pytest backend/tests -v

@@ -180,3 +180,40 @@ renames, or type changes.
     and publication authority survive. The upgrade creates these
     tables empty — no historical scheduler/liveness/event truth is
     fabricated for pre-revision work.
+- Truth Kernel current view-revision pointer (V3.2 PR73, revision
+  `20260817_0010`; see
+  [../reference/kernel-patches-incremental.md](../reference/kernel-patches-incremental.md)):
+  - `KernelViewHead` → `kernel_view_heads` — one row per (workspace,
+    view) naming the current immutable view revision and the kernel
+    commit that produced it. The row is written only inside kernel
+    commit transactions, so view-head ordering stays subordinate to
+    `kernel_commit_id` ordering by construction. New rows arrive empty;
+    downgrade discards current-view-revision truth.
+- Truth Kernel publication sets and lexical (FTS5) generations (V3.2
+  PR76, revision `20260817_0011`; see
+  [../reference/publication-sets.md](../reference/publication-sets.md)):
+  - `KernelLexicalGeneration` → `kernel_lexical_generations` — immutable
+    manifest row per lexical index generation: pinned source
+    materialized generation, tokenizer/config identity, deterministic
+    content digest, and staged/validated/active/superseded/failed
+    lifecycle.
+  - `KernelLexicalRow` → `kernel_lexical_rows` — per-row lexical
+    locators (record, view, node, revision ref, text hash) mapping
+    every searchable FTS row back to the materialized record it came
+    from. The FTS5 virtual tables themselves (`kernel_fts_<hex>`) are
+    runtime-managed rebuildable state and are deliberately not
+    migration-managed.
+  - `KernelPublicationSet` → `kernel_publication_sets` — immutable
+    manifest per publication set: exact member generation identities
+    (materialized + lexical, plus an optional vector slot whose NULL is
+    an explicit absent), pinned kernel cut, and
+    staged/validated/published/superseded/failed lifecycle.
+  - `KernelPublicationHead` → `kernel_publication_heads` — one row per
+    (workspace, profile) naming the current published set; the single
+    atomic publication switch is the transactional update of this row.
+  - `KernelPublicationPin` → `kernel_publication_pins` — bounded
+    wall-clock read leases over one publication set (the publication
+    twin of `kernel_reader_pins`); an unexpired pin protects the set
+    and every member generation from collection. All five tables are
+    derived, rebuildable serving state over kernel truth — downgrade
+    drops publication/index serving state, never kernel truth.

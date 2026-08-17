@@ -20,6 +20,8 @@ marker-ui/
     │   ├── objects/       # Content-addressed final objects (never rewritten)
     │   ├── tmp/           # Staging scratch (never referenced by truth)
     │   └── quarantine/    # Tampered objects displaced by verified re-staging
+    ├── source_store/      # Truth Kernel source-truth artifact store (PR70/71)
+    ├── artifact_handles/  # Verified ephemeral process-worker result handles (PR68A)
     ├── marker_ui.db       # SQLite database file
     └── .secret_key        # Auto-generated 32-byte Fernet key
 ```
@@ -62,8 +64,15 @@ marker-ui/
   (default `data/kernel_payloads`).
 - Physical retirement (V3.2 PR65B): a garbage-collection pass may unlink
   objects whose hashes no live retention root (current generation,
-  declared hold, or reader pin) requires, but only after the database
-  recorded a durable tombstone authorizing it. The registry row stays,
-  and retired bytes surface as an explicit `retired` availability state —
-  history never pretends the bytes were never referenced. Re-supplying
-  the exact bytes through normal staging always re-publishes them.
+  declared hold, reader pin, or live publication set) requires, but only
+  after the database recorded a durable tombstone authorizing it. The
+  registry row stays, and retired bytes surface as an explicit `retired`
+  availability state — history never pretends the bytes were never
+  referenced. Re-supplying the exact bytes through normal staging always
+  re-publishes them. Since PR76, the head-current published set and any
+  set protected by an unexpired publication pin are also retention
+  roots (their materialized member's payload closure survives
+  collection), while superseded/failed publication sets and
+  unreferenced lexical (FTS5) generations are retired by the same
+  mark/recheck/tombstone pass (see
+  [Publication Sets reference](../reference/publication-sets.md)).

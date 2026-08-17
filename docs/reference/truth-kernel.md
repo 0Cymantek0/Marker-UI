@@ -650,7 +650,10 @@ renew p50 12.6 ms; forced-wedge takeover ≈ lease + poll granularity
 - No pack-segment compaction or size-bounded pack storage — PR65B
   measures object-count/inode implications of the one-file-per-object
   store and leaves the pack seam open; compaction is a later experiment.
-- No materialized FTS/vector/visual indexes — later work.
+- No materialized vector/visual indexes — later work. Lexical (FTS5)
+  index generations are now materialized (PR76), but strictly as
+  rebuildable derived serving state bound to publication sets, never a
+  truth authority (see [publication-sets.md](publication-sets.md)).
 - Fenced work ownership and exactly-once accepted publication exist
   (PR66) as *local database* guarantees; no external effect ledger, no
   stable/provisional publication namespaces (**PR67+/PR76**), and

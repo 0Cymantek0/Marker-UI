@@ -32,7 +32,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 ## Local Development Setup
 
-To run Marker UI from source, you need **Python 3.10+** and **Node.js 18+**.
+To run Marker UI from source, you need **Python 3.11+** and **Node.js 22+**.
 
 ### Backend Setup
 
