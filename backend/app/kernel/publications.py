@@ -149,6 +149,7 @@ __all__ = [
     "default_publication_service",
     "extract_lexical_corpus",
     "fts_table_name",
+    "open_pinned_publication",
     "open_published_reader",
     "purge_expired_publication_pins",
     "release_publication_pin",
@@ -2365,6 +2366,44 @@ async def open_published_reader(
         resolved,
         _lexical_ref(lexical_row),
         pin_id=pin_id,
+    )
+
+
+async def open_pinned_publication(
+    session_factory: async_sessionmaker,
+    publication_set_id: str,
+    *,
+    lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS,
+) -> PublicationReader:
+    """Open one named publication set under a durable pin.
+
+    This is the long-reader entry point for sets that may not stay
+    current (a superseded set being read across a later publication):
+    the pin protects the named set and every member until released or
+    lapsed, independent of what the head currently names.
+    """
+    async with session_factory() as session:
+        row = await session.get(KernelPublicationSet, publication_set_id)
+        if row is None:
+            raise UnknownPublicationSetError(
+                f"publication set={publication_set_id}: no such set"
+            )
+        lexical_row = await session.get(
+            KernelLexicalGeneration, row.lexical_generation_id
+        )
+    if lexical_row is None:
+        raise PublicationIntegrityError(
+            f"publication set={publication_set_id}: lexical member "
+            f"{row.lexical_generation_id!r} is missing"
+        )
+    pin = await acquire_publication_pin(
+        session_factory, publication_set_id, lease_seconds=lease_seconds
+    )
+    return PublicationReader(
+        session_factory,
+        _set_ref(row),
+        _lexical_ref(lexical_row),
+        pin_id=pin.pin_id,
     )
 
 
