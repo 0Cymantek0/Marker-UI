@@ -1,0 +1,1620 @@
+{
+  "benchmark": "pr75-verification-risk",
+  "corpus": {
+    "path": "backend/conformance/fixtures/verification_risk_corpus_v1.json",
+    "semantic_identity": "sha256:a6cde0976cdfb22daf1900ebaf6b5446db0f52c52e9c81181b9e1aecf6df7103"
+  },
+  "machine": "AMD64",
+  "method": "best-of-5 wall milliseconds via time.perf_counter; runtime metadata is non-semantic",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "schema_version": "marker.verification_risk_measurements.v1",
+  "slices": {
+    "calibration-fit": {
+      "baselines": {
+        "best_single_witness": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "coverage": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "false_verified_count": 1,
+          "false_verified_fraction": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "name": "best_single_witness",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:b224a2e11dcd6dad53a2f733fa45e2d8f7eae77a18050b4f22e9f602ef909c69",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "coverage": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 1,
+          "disagreement_rate": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "correlation_blind_ensemble",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:5fcb7179c9c51d2e124e9f2945d136410a5be1420cc1b75a6c517d3a71ed8124",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "abstention_rate": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 0,
+            "lower": null,
+            "rate": null,
+            "status": "undefined_zero_denominator",
+            "upper": null
+          },
+          "coverage": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "disagreement_count": 1,
+          "disagreement_rate": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "dependency_aware_policy",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-b",
+            "source-native"
+          ],
+          "semantic_identity": "sha256:a655fd730fd2d09f4f69449307e5cefb625198311e20e4b2c3d0c42a22c367c7",
+          "status": "insufficient_support"
+        },
+        "deterministic_source_native_only": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "coverage": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "deterministic_source_native_only",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "source-native"
+          ],
+          "semantic_identity": "sha256:529463b4780b89b789d55422680bdbfdce9edec9501146452ac32d456b9af074",
+          "status": "ok"
+        },
+        "naive_majority_vote": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "coverage": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 1,
+          "disagreement_rate": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "naive_majority_vote",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:fd75a7389d8ad5d8be764ef1f095a12f5b61b0ad0a94335142486fa707e16681",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 1,
+          "denominator": 2,
+          "lower": 0.09453120573423071,
+          "rate": 0.5,
+          "status": "defined",
+          "upper": 0.9054687942657693
+        },
+        "brier_score": 0.0,
+        "distribution": null,
+        "expected_calibration_error": 0.0,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 2,
+        "status": "insufficient_support",
+        "support_required": 5,
+        "support_sufficient": false,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 1,
+          "denominator": 2,
+          "lower": 0.09453120573423071,
+          "rate": 0.5,
+          "status": "defined",
+          "upper": 0.9054687942657693
+        },
+        "catastrophic_joint_failures": {
+          "count": 0,
+          "denominator": 0,
+          "lower": null,
+          "rate": null,
+          "status": "undefined_zero_denominator",
+          "upper": null
+        },
+        "conditional_error_when_agree": {
+          "count": 0,
+          "denominator": 1,
+          "lower": 0.0,
+          "rate": 0.0,
+          "status": "defined",
+          "upper": 0.7934506856227626
+        },
+        "conditional_error_when_disagree": {
+          "count": 1,
+          "denominator": 1,
+          "lower": 0.20654931437723742,
+          "rate": 1.0,
+          "status": "defined",
+          "upper": 1.0
+        },
+        "disagreement": {
+          "count": 1,
+          "denominator": 2,
+          "lower": 0.09453120573423071,
+          "rate": 0.5,
+          "status": "defined",
+          "upper": 0.9054687942657693
+        },
+        "joint_error": {
+          "count": 0,
+          "denominator": 2,
+          "lower": 0.0,
+          "rate": 0.0,
+          "status": "defined",
+          "upper": 0.6576197724933469
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "model-b": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          }
+        },
+        "sample_count": 2,
+        "slice_id": "calibration-fit",
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "abstain",
+        "reason": "pair ('model-a', 'model-b') support 2 is below required 5",
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "report_semantic_identity": "sha256:88d5545e480aa16f0b6a901b4931b55af30ac129ccf15a4ee65aca4f0afac023",
+      "runtime_ms": {
+        "baselines": 0.8449000015389174,
+        "calibration": 0.5793999989691656,
+        "pair": 0.017399997886968777,
+        "report": 2.7673000004142523
+      },
+      "sample_count": 2,
+      "semantic_identity": "sha256:88d5545e480aa16f0b6a901b4931b55af30ac129ccf15a4ee65aca4f0afac023",
+      "slice_id": "calibration-fit"
+    },
+    "insufficient": {
+      "baselines": {
+        "best_single_witness": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "coverage": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "false_verified_count": 1,
+          "false_verified_fraction": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "name": "best_single_witness",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:47102e707b2ddd1f9d19a8e633663d35f6323eabcb05f2f5d744440826335a72",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "coverage": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 1,
+          "disagreement_rate": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "correlation_blind_ensemble",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:41f504d06849cf17d53eee9840864aae429d6b8be1927136388f593d7d339f2b",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "abstention_rate": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 0,
+            "lower": null,
+            "rate": null,
+            "status": "undefined_zero_denominator",
+            "upper": null
+          },
+          "coverage": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "disagreement_count": 1,
+          "disagreement_rate": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "dependency_aware_policy",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-b"
+          ],
+          "semantic_identity": "sha256:f4ed806edfb263234b268f88405599790f67bd5d6add379dfefac7cac7fc63a8",
+          "status": "insufficient_support"
+        },
+        "deterministic_source_native_only": {
+          "abstention_rate": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 0,
+            "lower": null,
+            "rate": null,
+            "status": "undefined_zero_denominator",
+            "upper": null
+          },
+          "coverage": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "deterministic_source_native_only",
+          "sample_count": 2,
+          "selected_witnesses": [],
+          "semantic_identity": "sha256:adb0ee61c1d4a569cb58303e7f20535eab241bfbb7329892642f2b9e6aec3d0e",
+          "status": "not_applicable"
+        },
+        "naive_majority_vote": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "accepted_count": 2,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "coverage": {
+            "count": 2,
+            "denominator": 2,
+            "lower": 0.3423802275066531,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 1,
+          "disagreement_rate": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          },
+          "name": "naive_majority_vote",
+          "sample_count": 2,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:a189461535df149cc24a91691c78d8b9321bffaee72509daf784c43f3a69c324",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 1,
+          "denominator": 2,
+          "lower": 0.09453120573423071,
+          "rate": 0.5,
+          "status": "defined",
+          "upper": 0.9054687942657693
+        },
+        "brier_score": 0.41000000000000003,
+        "distribution": null,
+        "expected_calibration_error": 0.4,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 2,
+        "status": "insufficient_support",
+        "support_required": 5,
+        "support_sufficient": false,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 1,
+          "denominator": 2,
+          "lower": 0.09453120573423071,
+          "rate": 0.5,
+          "status": "defined",
+          "upper": 0.9054687942657693
+        },
+        "catastrophic_joint_failures": {
+          "count": 0,
+          "denominator": 0,
+          "lower": null,
+          "rate": null,
+          "status": "undefined_zero_denominator",
+          "upper": null
+        },
+        "conditional_error_when_agree": {
+          "count": 0,
+          "denominator": 1,
+          "lower": 0.0,
+          "rate": 0.0,
+          "status": "defined",
+          "upper": 0.7934506856227626
+        },
+        "conditional_error_when_disagree": {
+          "count": 1,
+          "denominator": 1,
+          "lower": 0.20654931437723742,
+          "rate": 1.0,
+          "status": "defined",
+          "upper": 1.0
+        },
+        "disagreement": {
+          "count": 1,
+          "denominator": 2,
+          "lower": 0.09453120573423071,
+          "rate": 0.5,
+          "status": "defined",
+          "upper": 0.9054687942657693
+        },
+        "joint_error": {
+          "count": 0,
+          "denominator": 2,
+          "lower": 0.0,
+          "rate": 0.0,
+          "status": "defined",
+          "upper": 0.6576197724933469
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 1,
+            "denominator": 2,
+            "lower": 0.09453120573423071,
+            "rate": 0.5,
+            "status": "defined",
+            "upper": 0.9054687942657693
+          },
+          "model-b": {
+            "count": 0,
+            "denominator": 2,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.6576197724933469
+          }
+        },
+        "sample_count": 2,
+        "slice_id": "insufficient",
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "abstain",
+        "reason": "pair ('model-a', 'model-b') support 2 is below required 5",
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "report_semantic_identity": "sha256:5c1e1368959b067c31f485868491ce3ce105df05267c842c7ef155365b8cd122",
+      "runtime_ms": {
+        "baselines": 0.8288999997603241,
+        "calibration": 0.6203000011737458,
+        "pair": 0.01790000169421546,
+        "report": 2.722400000493508
+      },
+      "sample_count": 2,
+      "semantic_identity": "sha256:5c1e1368959b067c31f485868491ce3ce105df05267c842c7ef155365b8cd122",
+      "slice_id": "insufficient"
+    },
+    "matched": {
+      "baselines": {
+        "best_single_witness": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "accepted_count": 10,
+          "catastrophic_error_count": 1,
+          "catastrophic_error_rate": {
+            "count": 1,
+            "denominator": 10,
+            "lower": 0.01787621309507289,
+            "rate": 0.1,
+            "status": "defined",
+            "upper": 0.4041500267952385
+          },
+          "coverage": {
+            "count": 10,
+            "denominator": 10,
+            "lower": 0.7224672001371106,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999999
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "false_verified_count": 2,
+          "false_verified_fraction": {
+            "count": 2,
+            "denominator": 10,
+            "lower": 0.05668215145437522,
+            "rate": 0.2,
+            "status": "defined",
+            "upper": 0.5098375284633582
+          },
+          "name": "best_single_witness",
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:dabeab430d0c9b60fd37ecdbdb71624305ecb650b8bea5632dfa7738eb028e39",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "accepted_count": 10,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "coverage": {
+            "count": 10,
+            "denominator": 10,
+            "lower": 0.7224672001371106,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999999
+          },
+          "disagreement_count": 7,
+          "disagreement_rate": {
+            "count": 7,
+            "denominator": 10,
+            "lower": 0.3967781474611453,
+            "rate": 0.7,
+            "status": "defined",
+            "upper": 0.8922087325936988
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "name": "correlation_blind_ensemble",
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:460f5b2d0e7c01c7ea0d825fa590d09b55f975a073f3c2f81b51d8fb99b95eb7",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "accepted_count": 10,
+          "catastrophic_error_count": 1,
+          "catastrophic_error_rate": {
+            "count": 1,
+            "denominator": 10,
+            "lower": 0.01787621309507289,
+            "rate": 0.1,
+            "status": "defined",
+            "upper": 0.4041500267952385
+          },
+          "coverage": {
+            "count": 10,
+            "denominator": 10,
+            "lower": 0.7224672001371106,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999999
+          },
+          "disagreement_count": 4,
+          "disagreement_rate": {
+            "count": 4,
+            "denominator": 10,
+            "lower": 0.16818032970623617,
+            "rate": 0.4,
+            "status": "defined",
+            "upper": 0.6873262302663417
+          },
+          "false_verified_count": 2,
+          "false_verified_fraction": {
+            "count": 2,
+            "denominator": 10,
+            "lower": 0.05668215145437522,
+            "rate": 0.2,
+            "status": "defined",
+            "upper": 0.5098375284633582
+          },
+          "name": "dependency_aware_policy",
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a",
+            "model-b",
+            "source-native"
+          ],
+          "semantic_identity": "sha256:0e253c636c0ef4ce8241511c787824526feec663cb62b7799b66d17d35700ccc",
+          "status": "ok"
+        },
+        "deterministic_source_native_only": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "accepted_count": 10,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "coverage": {
+            "count": 10,
+            "denominator": 10,
+            "lower": 0.7224672001371106,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999999
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "name": "deterministic_source_native_only",
+          "sample_count": 10,
+          "selected_witnesses": [
+            "source-native"
+          ],
+          "semantic_identity": "sha256:6d2d185904860ddb21669ebaeeb77b3ed77d9c76e2a1189dee166888c2e51dbb",
+          "status": "ok"
+        },
+        "naive_majority_vote": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 10,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.2775327998628892
+          },
+          "accepted_count": 10,
+          "catastrophic_error_count": 1,
+          "catastrophic_error_rate": {
+            "count": 1,
+            "denominator": 10,
+            "lower": 0.01787621309507289,
+            "rate": 0.1,
+            "status": "defined",
+            "upper": 0.4041500267952385
+          },
+          "coverage": {
+            "count": 10,
+            "denominator": 10,
+            "lower": 0.7224672001371106,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999999
+          },
+          "disagreement_count": 7,
+          "disagreement_rate": {
+            "count": 7,
+            "denominator": 10,
+            "lower": 0.3967781474611453,
+            "rate": 0.7,
+            "status": "defined",
+            "upper": 0.8922087325936988
+          },
+          "false_verified_count": 1,
+          "false_verified_fraction": {
+            "count": 1,
+            "denominator": 10,
+            "lower": 0.01787621309507289,
+            "rate": 0.1,
+            "status": "defined",
+            "upper": 0.4041500267952385
+          },
+          "name": "naive_majority_vote",
+          "sample_count": 10,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:fecab2251977bdce52a6f8d80d7e2e4b7faba15c204a7fd99788206c21350f65",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 8,
+          "denominator": 10,
+          "lower": 0.4901624715366418,
+          "rate": 0.8,
+          "status": "defined",
+          "upper": 0.9433178485456247
+        },
+        "brier_score": 0.16000000000000006,
+        "distribution": null,
+        "expected_calibration_error": 1.1102230246251565e-16,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 10,
+        "status": "ok",
+        "support_required": 5,
+        "support_sufficient": true,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 8,
+          "denominator": 10,
+          "lower": 0.4901624715366418,
+          "rate": 0.8,
+          "status": "defined",
+          "upper": 0.9433178485456247
+        },
+        "catastrophic_joint_failures": {
+          "count": 1,
+          "denominator": 1,
+          "lower": 0.20654931437723742,
+          "rate": 1.0,
+          "status": "defined",
+          "upper": 1.0
+        },
+        "conditional_error_when_agree": {
+          "count": 2,
+          "denominator": 8,
+          "lower": 0.07147921275210901,
+          "rate": 0.25,
+          "status": "defined",
+          "upper": 0.5907245696898311
+        },
+        "conditional_error_when_disagree": {
+          "count": 2,
+          "denominator": 2,
+          "lower": 0.3423802275066531,
+          "rate": 1.0,
+          "status": "defined",
+          "upper": 1.0
+        },
+        "disagreement": {
+          "count": 2,
+          "denominator": 10,
+          "lower": 0.05668215145437522,
+          "rate": 0.2,
+          "status": "defined",
+          "upper": 0.5098375284633582
+        },
+        "joint_error": {
+          "count": 2,
+          "denominator": 10,
+          "lower": 0.05668215145437522,
+          "rate": 0.2,
+          "status": "defined",
+          "upper": 0.5098375284633582
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 2,
+            "denominator": 10,
+            "lower": 0.05668215145437522,
+            "rate": 0.2,
+            "status": "defined",
+            "upper": 0.5098375284633582
+          },
+          "model-b": {
+            "count": 4,
+            "denominator": 10,
+            "lower": 0.16818032970623617,
+            "rate": 0.4,
+            "status": "defined",
+            "upper": 0.6873262302663417
+          }
+        },
+        "sample_count": 10,
+        "slice_id": "matched",
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "shadow",
+        "reason": null,
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "report_semantic_identity": "sha256:cff96115130f7f1661a88f44d75114323ea95be2e062b93e3884e75e89cfb3df",
+      "runtime_ms": {
+        "baselines": 1.4857999995001592,
+        "calibration": 0.6102000006649178,
+        "pair": 0.021100000594742596,
+        "report": 3.4172999985457864
+      },
+      "sample_count": 10,
+      "semantic_identity": "sha256:cff96115130f7f1661a88f44d75114323ea95be2e062b93e3884e75e89cfb3df",
+      "slice_id": "matched"
+    },
+    "shifted": {
+      "baselines": {
+        "best_single_witness": {
+          "abstention_rate": {
+            "count": 0,
+            "denominator": 5,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.43448246478317476
+          },
+          "accepted_count": 5,
+          "catastrophic_error_count": 1,
+          "catastrophic_error_rate": {
+            "count": 1,
+            "denominator": 5,
+            "lower": 0.03622410863243013,
+            "rate": 0.2,
+            "status": "defined",
+            "upper": 0.6244653702374747
+          },
+          "coverage": {
+            "count": 5,
+            "denominator": 5,
+            "lower": 0.5655175352168252,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 5,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.43448246478317476
+          },
+          "false_verified_count": 4,
+          "false_verified_fraction": {
+            "count": 4,
+            "denominator": 5,
+            "lower": 0.37553462976252533,
+            "rate": 0.8,
+            "status": "defined",
+            "upper": 0.9637758913675698
+          },
+          "name": "best_single_witness",
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a"
+          ],
+          "semantic_identity": "sha256:69c9a75f0cfb53c85b76c7219222b0d69a5d8928e98fc08abac1f0d02fc25c50",
+          "status": "ok"
+        },
+        "correlation_blind_ensemble": {
+          "abstention_rate": {
+            "count": 1,
+            "denominator": 5,
+            "lower": 0.03622410863243013,
+            "rate": 0.2,
+            "status": "defined",
+            "upper": 0.6244653702374747
+          },
+          "accepted_count": 4,
+          "catastrophic_error_count": 1,
+          "catastrophic_error_rate": {
+            "count": 1,
+            "denominator": 4,
+            "lower": 0.045587260809700575,
+            "rate": 0.25,
+            "status": "defined",
+            "upper": 0.6993581574175981
+          },
+          "coverage": {
+            "count": 4,
+            "denominator": 5,
+            "lower": 0.37553462976252533,
+            "rate": 0.8,
+            "status": "defined",
+            "upper": 0.9637758913675698
+          },
+          "disagreement_count": 3,
+          "disagreement_rate": {
+            "count": 3,
+            "denominator": 5,
+            "lower": 0.23072428127601285,
+            "rate": 0.6,
+            "status": "defined",
+            "upper": 0.8823792257673521
+          },
+          "false_verified_count": 4,
+          "false_verified_fraction": {
+            "count": 4,
+            "denominator": 5,
+            "lower": 0.37553462976252533,
+            "rate": 0.8,
+            "status": "defined",
+            "upper": 0.9637758913675698
+          },
+          "name": "correlation_blind_ensemble",
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:043f5143f8742691ce19dd36d2731a8017ec67548919b54c49bf62608cf8d57e",
+          "status": "ok"
+        },
+        "dependency_aware_policy": {
+          "abstention_rate": {
+            "count": 5,
+            "denominator": 5,
+            "lower": 0.5655175352168252,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 0,
+            "lower": null,
+            "rate": null,
+            "status": "undefined_zero_denominator",
+            "upper": null
+          },
+          "coverage": {
+            "count": 0,
+            "denominator": 5,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.43448246478317476
+          },
+          "disagreement_count": 2,
+          "disagreement_rate": {
+            "count": 2,
+            "denominator": 5,
+            "lower": 0.11762077423264786,
+            "rate": 0.4,
+            "status": "defined",
+            "upper": 0.769275718723987
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 5,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.43448246478317476
+          },
+          "name": "dependency_aware_policy",
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a",
+            "model-b"
+          ],
+          "semantic_identity": "sha256:ca5755e6aedd5e4200e712af3844a3902aa964656646faf76ee1e24e00182172",
+          "status": "risk_bound_not_met"
+        },
+        "deterministic_source_native_only": {
+          "abstention_rate": {
+            "count": 5,
+            "denominator": 5,
+            "lower": 0.5655175352168252,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0
+          },
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "catastrophic_error_rate": {
+            "count": 0,
+            "denominator": 0,
+            "lower": null,
+            "rate": null,
+            "status": "undefined_zero_denominator",
+            "upper": null
+          },
+          "coverage": {
+            "count": 0,
+            "denominator": 5,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.43448246478317476
+          },
+          "disagreement_count": 0,
+          "disagreement_rate": {
+            "count": 0,
+            "denominator": 5,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.43448246478317476
+          },
+          "false_verified_count": 0,
+          "false_verified_fraction": {
+            "count": 0,
+            "denominator": 5,
+            "lower": 0.0,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.43448246478317476
+          },
+          "name": "deterministic_source_native_only",
+          "sample_count": 5,
+          "selected_witnesses": [],
+          "semantic_identity": "sha256:b8d59c12af899b48191af372535dcbfde5be6e9aa4a4a829db82b09450159236",
+          "status": "not_applicable"
+        },
+        "naive_majority_vote": {
+          "abstention_rate": {
+            "count": 1,
+            "denominator": 5,
+            "lower": 0.03622410863243013,
+            "rate": 0.2,
+            "status": "defined",
+            "upper": 0.6244653702374747
+          },
+          "accepted_count": 4,
+          "catastrophic_error_count": 1,
+          "catastrophic_error_rate": {
+            "count": 1,
+            "denominator": 4,
+            "lower": 0.045587260809700575,
+            "rate": 0.25,
+            "status": "defined",
+            "upper": 0.6993581574175981
+          },
+          "coverage": {
+            "count": 4,
+            "denominator": 5,
+            "lower": 0.37553462976252533,
+            "rate": 0.8,
+            "status": "defined",
+            "upper": 0.9637758913675698
+          },
+          "disagreement_count": 3,
+          "disagreement_rate": {
+            "count": 3,
+            "denominator": 5,
+            "lower": 0.23072428127601285,
+            "rate": 0.6,
+            "status": "defined",
+            "upper": 0.8823792257673521
+          },
+          "false_verified_count": 4,
+          "false_verified_fraction": {
+            "count": 4,
+            "denominator": 5,
+            "lower": 0.37553462976252533,
+            "rate": 0.8,
+            "status": "defined",
+            "upper": 0.9637758913675698
+          },
+          "name": "naive_majority_vote",
+          "sample_count": 5,
+          "selected_witnesses": [
+            "model-a",
+            "model-a-alias",
+            "model-a-int8",
+            "model-a-prompt-v2",
+            "model-b",
+            "model-c",
+            "source-native",
+            "teacher-child-a",
+            "teacher-child-b",
+            "unknown-model"
+          ],
+          "semantic_identity": "sha256:6a4dffc207d0d01195bca0b78929b1c2551cb87f0621e57a8e878d1873880ad3",
+          "status": "ok"
+        }
+      },
+      "calibration": {
+        "accuracy": {
+          "count": 1,
+          "denominator": 5,
+          "lower": 0.03622410863243013,
+          "rate": 0.2,
+          "status": "defined",
+          "upper": 0.6244653702374747
+        },
+        "brier_score": 0.7224999999999999,
+        "distribution": null,
+        "expected_calibration_error": 0.75,
+        "method_id": "equal_width_ece_and_brier",
+        "method_version": "marker.calibration.ece_brier.v1",
+        "sample_count": 5,
+        "status": "ok",
+        "support_required": 5,
+        "support_sufficient": true,
+        "witness_id": "model-a"
+      },
+      "pair": {
+        "agreement": {
+          "count": 3,
+          "denominator": 5,
+          "lower": 0.23072428127601285,
+          "rate": 0.6,
+          "status": "defined",
+          "upper": 0.8823792257673521
+        },
+        "catastrophic_joint_failures": {
+          "count": 1,
+          "denominator": 1,
+          "lower": 0.20654931437723742,
+          "rate": 1.0,
+          "status": "defined",
+          "upper": 1.0
+        },
+        "conditional_error_when_agree": {
+          "count": 3,
+          "denominator": 3,
+          "lower": 0.4385029682449545,
+          "rate": 1.0,
+          "status": "defined",
+          "upper": 1.0
+        },
+        "conditional_error_when_disagree": {
+          "count": 2,
+          "denominator": 2,
+          "lower": 0.3423802275066531,
+          "rate": 1.0,
+          "status": "defined",
+          "upper": 1.0
+        },
+        "disagreement": {
+          "count": 2,
+          "denominator": 5,
+          "lower": 0.11762077423264786,
+          "rate": 0.4,
+          "status": "defined",
+          "upper": 0.769275718723987
+        },
+        "joint_error": {
+          "count": 3,
+          "denominator": 5,
+          "lower": 0.23072428127601285,
+          "rate": 0.6,
+          "status": "defined",
+          "upper": 0.8823792257673521
+        },
+        "marginal_error": {
+          "model-a": {
+            "count": 4,
+            "denominator": 5,
+            "lower": 0.37553462976252533,
+            "rate": 0.8,
+            "status": "defined",
+            "upper": 0.9637758913675698
+          },
+          "model-b": {
+            "count": 4,
+            "denominator": 5,
+            "lower": 0.37553462976252533,
+            "rate": 0.8,
+            "status": "defined",
+            "upper": 0.9637758913675698
+          }
+        },
+        "sample_count": 5,
+        "slice_id": "shifted",
+        "witnesses": [
+          "model-a",
+          "model-b"
+        ]
+      },
+      "promotion": {
+        "decision": "abstain",
+        "reason": "pair ('model-a', 'model-b') joint-error Wilson upper 0.8823792257673521 exceeds policy bound 0.6",
+        "threshold": {
+          "max_false_verified_count": 0,
+          "min_support": 5,
+          "required_dependency_status": "ok",
+          "required_distribution": "matched"
+        }
+      },
+      "report_semantic_identity": "sha256:9c8f0723bc7054f748757e81b7d4721400fca118b8d6576109fb7e8b7d2ef197",
+      "runtime_ms": {
+        "baselines": 1.0032999998657033,
+        "calibration": 0.6050000010873191,
+        "pair": 0.0197000008483883,
+        "report": 2.865800001018215
+      },
+      "sample_count": 5,
+      "semantic_identity": "sha256:9c8f0723bc7054f748757e81b7d4721400fca118b8d6576109fb7e8b7d2ef197",
+      "slice_id": "shifted"
+    }
+  }
+}
