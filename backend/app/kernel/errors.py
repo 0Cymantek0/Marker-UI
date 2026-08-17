@@ -366,6 +366,25 @@ class InvalidClaimAssessmentError(KernelError):
         super().__init__(f"invalid claim assessment: {detail}")
 
 
+class VerificationRiskGateError(KernelError):
+    """A high-risk source-native assessment failed its PR75 risk gate.
+
+    This boundary error is intentionally separate from PR74 structural proof
+    errors.  The commit service runs PR74 first, then this gate, so malformed
+    proof topology keeps its original typed error and risk failures remain
+    distinguishable from structural failures.
+    """
+
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(f"verification risk gate rejected assessment: {detail}")
+
+
+# Short compatibility spelling for callers that refer to this boundary as a
+# verification-risk error rather than a gate error.
+VerificationRiskError = VerificationRiskGateError
+
+
 class ClaimPreconditionUnmetError(KernelError):
     """A patch's claim/assessment precondition is not satisfied by
     current authoritative state (missing, wrong assertion, policy or

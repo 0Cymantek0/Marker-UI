@@ -55,6 +55,7 @@ from app.kernel.commit import (
     default_commit_service,
 )
 from app.kernel.errors import KernelError
+from app.kernel.errors import VerificationRiskError, VerificationRiskGateError
 from app.kernel.fencing import (
     AcceptOutcome,
     ClaimedWork,
@@ -92,6 +93,7 @@ from app.kernel.proofs import (
     check_batch_proof_integrity,
     evaluate_claim_requirements,
 )
+from app.kernel.verification_risk import check_batch_verification_risk
 from app.kernel.reconcile import (
     PayloadAvailabilityResult,
     ReconcileReport,
@@ -144,12 +146,15 @@ __all__ = [
     "RetentionHoldView",
     "StagedBlob",
     "VerificationResult",
+    "VerificationRiskGateError",
+    "VerificationRiskError",
     "WorkLease",
     "accept",
     "acquire",
     "acquire_reader_pin",
     "active_reader_pins",
     "check_batch_proof_integrity",
+    "check_batch_verification_risk",
     "claim_next",
     "collect",
     "complete_work",

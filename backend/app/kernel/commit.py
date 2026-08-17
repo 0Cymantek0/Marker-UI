@@ -16,7 +16,8 @@ commits. The SQLite portion of the V3.2 commit protocol:
    then (PR74) validate claim/proof integrity — proof topology,
    input provenance, and assessment semantics — against committed
    state overlaid with the batch, so an invalid proof rolls the whole
-   commit back before anything becomes visible;
+   commit back before anything becomes visible; then (PR75) apply the
+   narrow high-risk source-native verification-risk gate;
 4. insert all logical records and dependency edges for the batch;
 5. register durably published payload objects (PR64): registry rows are
    inserted in the same transaction, so a visible reference always
@@ -109,6 +110,7 @@ from app.kernel.patches import (
 from app.kernel.payloads import LOCAL_STORE_PROFILE, LocalPayloadStore
 from app.kernel.proofs import ProofBatchRecord, check_batch_proof_integrity
 from app.kernel.records import KernelEdge, KernelRecord as RecordInput
+from app.kernel.verification_risk import check_batch_verification_risk
 from app.utils.canonical import (
     CANONICALIZATION_PROFILE,
     CanonicalValueError,
@@ -132,6 +134,7 @@ __all__ = [
     "PHASE_PAYLOADS_REGISTERED",
     "PHASE_PRE_COMMIT",
     "PHASE_PROOF_CHECKED",
+    "PHASE_RISK_CHECKED",
     "PHASE_RECORDS_INSERTED",
     "PHASE_VIEW_ADVANCED",
     "PHASE_VIEW_CHECKED",
@@ -143,6 +146,7 @@ PHASE_BEGIN = "begin"
 PHASE_HEAD_READ = "head-read"
 PHASE_VIEW_CHECKED = "view-checked"
 PHASE_PROOF_CHECKED = "proof-checked"
+PHASE_RISK_CHECKED = "risk-checked"
 PHASE_RECORDS_INSERTED = "records-inserted"
 PHASE_PAYLOADS_REGISTERED = "payloads-registered"
 PHASE_EDGES_INSERTED = "edges-inserted"
@@ -158,6 +162,7 @@ FAULT_PHASES = frozenset(
         PHASE_HEAD_READ,
         PHASE_VIEW_CHECKED,
         PHASE_PROOF_CHECKED,
+        PHASE_RISK_CHECKED,
         PHASE_RECORDS_INSERTED,
         PHASE_PAYLOADS_REGISTERED,
         PHASE_EDGES_INSERTED,
@@ -629,6 +634,25 @@ class KernelCommitService:
                     current_head=current_head,
                 )
                 maybe_inject(PHASE_PROOF_CHECKED)
+
+                # 2.9. PR75 narrow verification-risk gate.  Structural
+                # PR74 validation above always runs first; this gate only
+                # activates for the explicitly recognized high-risk
+                # source-native workflow and remains inside this transaction.
+                await check_batch_verification_risk(
+                    session,
+                    workspace_id=workspace_id,
+                    batch_records={
+                        p.record_id: ProofBatchRecord(
+                            record_id=p.record_id,
+                            record_class=p.record_class,
+                            payload_json=p.payload_json,
+                        )
+                        for p in prepared
+                    },
+                    current_head=current_head,
+                )
+                maybe_inject(PHASE_RISK_CHECKED)
 
                 # 3. Insert logical records.
                 session.add_all(
