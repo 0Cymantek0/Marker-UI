@@ -93,6 +93,16 @@ REASON_MODEL_ONLY_HIGH_RISK = "model_only_high_risk_consensus"
 REASON_CLAIM_AUTHORITY = "claim_authority_class_mismatch"
 REASON_SCOPE = "evaluation_scope_mismatch"
 
+# These fields are minimum provenance anchors needed before two complete
+# disclosures can be called independent-looking. Empty optional dependency
+# fields can mean no declared shared dependency; missing model/training
+# lineage cannot establish that claim.
+_MATERIAL_LINEAGE_FIELDS = (
+    "architecture_family",
+    "base_model_family",
+    "training_sources",
+)
+
 def _number(value: Any, *, field_name: str, probability: bool = False) -> Any:
     if value is None:
         return None
@@ -189,7 +199,7 @@ def classify_dependency_status(
 ) -> str:
     """Classify known dependence conservatively; never prove independence."""
     refs = tuple(witness_refs)
-    if not refs or len(refs) != len(set(refs)):
+    if len(refs) < 2 or len(refs) != len(set(refs)):
         return DEPENDENCY_UNKNOWN
     by_ref = {item.witness_ref: item for item in disclosures}
     if len(by_ref) != len(disclosures) or any(ref not in by_ref for ref in refs):
@@ -197,9 +207,18 @@ def classify_dependency_status(
     if any(item.disclosure_quality != DISCLOSURE_COMPLETE for item in by_ref.values()):
         return DEPENDENCY_UNKNOWN
     profiles = [by_ref[ref] for ref in refs]
+    if any(
+        not all(bool(getattr(profile, field)) for field in _MATERIAL_LINEAGE_FIELDS)
+        for profile in profiles
+    ):
+        return DEPENDENCY_UNKNOWN
     for left_index, left in enumerate(profiles):
         for right in profiles[left_index + 1 :]:
             if left.shared_dependency_refs and right.shared_dependency_refs and set(left.shared_dependency_refs) & set(right.shared_dependency_refs):
+                return DEPENDENCY_CORRELATED
+            if left.architecture_family and left.architecture_family == right.architecture_family:
+                return DEPENDENCY_CORRELATED
+            if left.training_sources and right.training_sources and set(left.training_sources) & set(right.training_sources):
                 return DEPENDENCY_CORRELATED
             if left.base_model_family and left.base_model_family == right.base_model_family:
                 return DEPENDENCY_CORRELATED
@@ -310,7 +329,9 @@ def evaluate_verification_risk_policy(
             ),
         )
     dependency_status = evidence.dependency_status
-    if evidence.evidence_kind == EVIDENCE_MODEL and disclosures:
+    if evidence.evidence_kind == EVIDENCE_MODEL and (
+        disclosures or policy.require_independent_witnesses
+    ):
         dependency_status = classify_dependency_status(disclosures, evidence.witness_refs)
     if policy.require_independent_witnesses and evidence.evidence_kind == EVIDENCE_MODEL and dependency_status != DEPENDENCY_INDEPENDENT:
         return _decision(evidence=evidence, policy=policy, outcome=OUTCOME_ABSTAINED if policy.high_risk else OUTCOME_ACCEPTED_WITH_WARNING, reason_code=REASON_UNKNOWN_OR_CORRELATED, reason="witness lineage is unknown or correlated; witness count is not independence", dependency_status=dependency_status)

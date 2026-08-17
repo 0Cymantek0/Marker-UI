@@ -27,6 +27,7 @@ from app.kernel.verification_risk import (
     REASON_RISK_BOUND,
     REASON_SCOPE,
     REASON_SHIFT,
+    REASON_UNKNOWN_OR_CORRELATED,
     SHIFT_MATCHED,
     SHIFT_SHIFTED,
     DependencyDisclosureRecord,
@@ -136,7 +137,12 @@ def test_dependency_classification_is_conservative_and_detects_shared_causes():
         classify_dependency_status((left, right), ("model-a", "model-b"))
         == DEPENDENCY_CORRELATED
     )
-    independent = disclosure("disc-c", "model-b")
+    independent = disclosure(
+        "disc-c",
+        "model-b",
+        architecture_family="independent-architecture",
+        training_sources=("dataset-independent",),
+    )
     assert (
         classify_dependency_status((left, independent), ("model-a", "model-b"))
         == DEPENDENCY_INDEPENDENT
@@ -149,6 +155,91 @@ def test_dependency_classification_is_conservative_and_detects_shared_causes():
         == DEPENDENCY_UNKNOWN
     )
     assert classify_dependency_status((left,), ("model-a", "alias-a")) == DEPENDENCY_UNKNOWN
+
+
+def test_complete_disclosure_with_empty_lineage_is_unknown():
+    empty = disclosure(
+        "disc-empty",
+        "model-empty",
+        architecture_family=None,
+        base_model_family=None,
+        training_sources=(),
+        teacher_lineage=(),
+        shared_dependency_refs=(),
+    )
+    known = disclosure(
+        "disc-known",
+        "model-known",
+        architecture_family="independent-architecture",
+        training_sources=("dataset-independent",),
+    )
+    assert (
+        classify_dependency_status((empty, known), ("model-empty", "model-known"))
+        == DEPENDENCY_UNKNOWN
+    )
+
+
+def test_shared_architecture_family_is_correlated():
+    left = disclosure(
+        "disc-arch-a",
+        "model-arch-a",
+        architecture_family="shared-architecture",
+        training_sources=("dataset-a",),
+    )
+    right = disclosure(
+        "disc-arch-b",
+        "model-arch-b",
+        architecture_family="shared-architecture",
+        training_sources=("dataset-b",),
+    )
+    assert (
+        classify_dependency_status((left, right), ("model-arch-a", "model-arch-b"))
+        == DEPENDENCY_CORRELATED
+    )
+
+
+def test_overlapping_training_sources_are_correlated():
+    left = disclosure(
+        "disc-training-a",
+        "model-training-a",
+        architecture_family="architecture-a",
+        training_sources=("dataset-shared", "dataset-a"),
+    )
+    right = disclosure(
+        "disc-training-b",
+        "model-training-b",
+        architecture_family="architecture-b",
+        training_sources=("dataset-shared", "dataset-b"),
+    )
+    assert (
+        classify_dependency_status(
+            (left, right), ("model-training-a", "model-training-b")
+        )
+        == DEPENDENCY_CORRELATED
+    )
+
+
+def test_complete_disclosure_with_incomplete_lineage_is_unknown():
+    incomplete = disclosure(
+        "disc-incomplete",
+        "model-incomplete",
+        architecture_family="architecture-incomplete",
+        base_model_family=None,
+        training_sources=("dataset-incomplete",),
+        teacher_lineage=(),
+    )
+    known = disclosure(
+        "disc-known",
+        "model-known",
+        architecture_family="independent-architecture",
+        training_sources=("dataset-independent",),
+    )
+    assert (
+        classify_dependency_status(
+            (incomplete, known), ("model-incomplete", "model-known")
+        )
+        == DEPENDENCY_UNKNOWN
+    )
 
 
 def test_risk_evidence_identity_binds_policy_and_reloads_without_float_metrics():
@@ -195,6 +286,24 @@ def test_model_consensus_alone_never_verifies_high_risk_claim():
     assert not decision.authority_granted
 
 
+def test_require_independent_witnesses_fails_closed_without_disclosures():
+    evidence = risk_evidence(
+        evidence_kind=EVIDENCE_MODEL,
+        model_only=False,
+        consensus=False,
+        witness_refs=("model-a", "model-b"),
+        disclosure_refs=("disc-a", "disc-b"),
+        dependency_status=DEPENDENCY_INDEPENDENT,
+    )
+    decision = evaluate_verification_risk_policy(
+        evidence, policy(), as_of="2026-08-15"
+    )
+    assert decision.outcome == OUTCOME_ABSTAINED
+    assert decision.reason_code == REASON_UNKNOWN_OR_CORRELATED
+    assert decision.dependency_status == DEPENDENCY_UNKNOWN
+    assert not decision.authority_granted
+
+
 @pytest.mark.parametrize(
     ("evidence_changes", "policy_changes", "as_of", "outcome", "reason"),
     [
@@ -226,4 +335,3 @@ def test_timestamp_validation_and_policy_history_are_versioned():
     )
     assert decision.reason_code == REASON_SCOPE
     assert historical.policy_revision == "rev-1"
-
