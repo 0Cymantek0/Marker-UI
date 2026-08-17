@@ -103,7 +103,11 @@ class LexicalSearchOp(_StrictModel):
     @classmethod
     def _validate_text(cls, value: str) -> str:
         normalized = unicodedata.normalize("NFC", value)
-        if not normalized.strip():
+        # Collapse whitespace: leading/trailing/repeated whitespace is
+        # not semantic lexical intent, and the canonical form must make
+        # "  needle  " and "needle" the same query for packet identity.
+        normalized = " ".join(normalized.split())
+        if not normalized:
             raise ValueError("lexical text must contain non-whitespace characters")
         if len(normalized) > MAX_LEXICAL_TEXT_CHARS:
             raise ValueError(
