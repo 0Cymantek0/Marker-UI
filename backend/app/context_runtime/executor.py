@@ -1,15 +1,23 @@
-"""Publication-pinned bounded query execution (PR77).
+"""Authorization-first, publication-pinned query execution (PR77/PR78).
 
-One ``execute_query`` call resolves and pins exactly one PublicationSet
-and produces one :class:`EvidencePacket`. Every retrieval — lexical or
-exact — is served through that pinned reader, so a concurrent
-publication-head switch can never mix generations inside one packet.
+One ``execute_query`` call resolves trusted effective authorization,
+resolves and pins exactly one PublicationSet, and produces one
+:class:`EvidencePacket`. Every retrieval — lexical or exact — is served
+through that pinned reader, so a concurrent publication-head switch can
+never mix generations inside one packet; and every candidate is checked
+against the *current* authorization before it can compete for the
+caller's attention, so revoked or forbidden material cannot surface
+merely because the pinned generation still contains it.
+
+Authorization is re-resolved before each operation: content stays
+pinned, policy does not. A deny committed mid-query linearizes before
+the next operation, and the packet identity reflects the freshest
+authorization state that shaped delivery.
+
 Kernel integrity errors (tampered index/locator, malformed query
 state) propagate unchanged: this layer never falls back or retries
-against different state.
-
-The publication pin is released in ``finally`` on success, budget
-termination, validation failure, and cancellation.
+against different state. The publication pin is released in ``finally``
+on success, budget termination, validation failure, and cancellation.
 """
 
 from __future__ import annotations
@@ -18,12 +26,17 @@ from typing import Any, Callable, Mapping
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.context_runtime.authorization import (
+    ASSURANCE_HIGH,
+    EffectiveAuthorization,
+    resolve_effective_authorization,
+)
 from app.context_runtime.contract import (
     QueryRequest,
     compile_lexical_match,
     normalized_query,
 )
-from app.context_runtime.errors import QueryBudgetError
+from app.context_runtime.errors import QueryAuthorizationError, QueryBudgetError
 from app.context_runtime.packets import (
     CandidateUnit,
     EvidenceLocator,
@@ -31,11 +44,25 @@ from app.context_runtime.packets import (
     OmittedEvidence,
     assemble_packet,
 )
-from app.kernel.publications import PublicationReader, open_published_reader
+from app.kernel.publications import (
+    LexicalHit,
+    PublicationReader,
+    PublishedRecord,
+    open_published_reader,
+)
 from app.kernel.retention import DEFAULT_PIN_LEASE_SECONDS
 from app.utils.canonical import payload_byte_hash
 
 __all__ = ["execute_query"]
+
+#: Authorized-universe traversal bounds for lexical candidate
+#: selection. The window pages through the deterministic rank order;
+#: the cap bounds worst-case work on a shared corpus dominated by
+#: unauthorized matches. Reaching the cap reports an explicit
+#: candidate-budget omission ("more matches may exist") — never a
+#: silently truncated page presented as exhaustive.
+_LEXICAL_TRAVERSAL_WINDOW = 128
+_LEXICAL_TRAVERSAL_MAX_ROWS = 2000
 
 
 async def execute_query(
@@ -45,13 +72,15 @@ async def execute_query(
     _after_operation: Callable[[int], Any] | None = None,
 ) -> EvidencePacket:
     """Execute one validated typed request against one pinned
-    PublicationSet and return a bounded :class:`EvidencePacket`.
+    PublicationSet under trusted effective authorization, and return a
+    bounded :class:`EvidencePacket`.
 
     ``_after_operation`` is a deterministic test hook (mirroring the
     PR76 fault-phase convention): called with the operation index after
     each operation completes, it lets tests switch the publication head
-    mid-execution and prove the in-flight packet stays attributable to
-    the original pinned set.
+    or commit a live deny mid-execution and prove the in-flight packet
+    stays attributable to exactly the original pinned set while no
+    newly forbidden evidence is delivered.
     """
     if len(request.operations) > request.budget.max_operations:
         raise QueryBudgetError(
@@ -59,24 +88,48 @@ async def execute_query(
             f"allows {request.budget.max_operations}"
         )
 
-    reader = await open_published_reader(
-        session_factory,
-        request.workspace_id,
-        profile=request.profile,
-        pin_lease_seconds=DEFAULT_PIN_LEASE_SECONDS,
+    auth = await resolve_effective_authorization(
+        session_factory, request.workspace_id, assurance=request.assurance
     )
-    if reader is None:
-        return await _unpublished_packet(request)
+    if request.assurance == ASSURANCE_HIGH:
+        # High assurance reads only the security-domain partition
+        # derived from trusted state. A partition that was never
+        # published fails closed — there is deliberately no fallback to
+        # the shared index.
+        reader = await open_published_reader(
+            session_factory,
+            request.workspace_id,
+            profile=auth.partition_profile(),
+            pin_lease_seconds=DEFAULT_PIN_LEASE_SECONDS,
+        )
+        if reader is None:
+            raise QueryAuthorizationError(
+                "the high-assurance partition for this workspace is not "
+                "published; refusing to fall back to a shared index"
+            )
+    else:
+        reader = await open_published_reader(
+            session_factory,
+            request.workspace_id,
+            profile=request.profile,
+            pin_lease_seconds=DEFAULT_PIN_LEASE_SECONDS,
+        )
+        if reader is None:
+            return await _unpublished_packet(request, auth)
 
     try:
-        return await _execute_pinned(reader, request, _after_operation)
+        return await _execute_pinned(
+            session_factory, reader, request, auth, _after_operation
+        )
     finally:
         # V19: pin released on success, error, cancellation, and budget
         # termination alike — never leaked past the call.
         await reader.close()
 
 
-async def _unpublished_packet(request: QueryRequest) -> EvidencePacket:
+async def _unpublished_packet(
+    request: QueryRequest, auth: EffectiveAuthorization
+) -> EvidencePacket:
     """Honest empty response for a workspace that never published."""
     normalized = normalized_query(request)
     omissions = tuple(
@@ -99,6 +152,7 @@ async def _unpublished_packet(request: QueryRequest) -> EvidencePacket:
         include_text=request.output.include_text,
         operations_executed=0,
         candidates_considered=0,
+        authorization=auth.identity_view(),
     )
 
 
@@ -107,8 +161,10 @@ def _op_name(op: Any) -> str:
 
 
 async def _execute_pinned(
+    session_factory: async_sessionmaker,
     reader: PublicationReader,
     request: QueryRequest,
+    initial_auth: EffectiveAuthorization,
     _after_operation: Callable[[int], Any] | None,
 ) -> EvidencePacket:
     normalized = normalized_query(request)
@@ -116,13 +172,25 @@ async def _execute_pinned(
     attribution = reader.explain()
     include_text = request.output.include_text
 
+    # record_id -> resolved source_ref (content lineage is immutable
+    # inside the pinned generation, so it caches across operations; the
+    # *policy* over that lineage is re-derived per operation).
+    lineage_cache: dict[str, str | None] = {}
+
     candidates: list[CandidateUnit] = []
     omissions: list[OmittedEvidence] = []
     candidates_considered = 0
     operations_executed = 0
+    auth = initial_auth
 
     for index, op in enumerate(request.operations):
         name = _op_name(op)
+        # Live authorization: a deny/epoch/policy change committed after
+        # the query started linearizes before this operation.
+        if index > 0:
+            auth = await resolve_effective_authorization(
+                session_factory, request.workspace_id, assurance=request.assurance
+            )
         if name == "lexical_search":
             remaining = budget.max_candidates - candidates_considered
             if remaining <= 0:
@@ -138,24 +206,29 @@ async def _execute_pinned(
                         ),
                     )
                 )
+                if _after_operation is not None:
+                    await _after_operation(index)
                 continue
-            # Probe one row beyond the requested limit (within the
-            # candidate budget) so "more matches exist" is reported
-            # instead of silently presenting a truncated page as
-            # exhaustive.
+            # Probe one authorized row beyond the requested limit
+            # (within the candidate budget) so "more matches exist" is
+            # reported over the authorized universe instead of silently
+            # presenting a truncated page as exhaustive.
             probe_limit = min(op.limit + 1, remaining)
-            hits = await reader.search(
+            authorized, traversal_capped = await _authorized_lexical_hits(
+                reader,
+                auth,
+                lineage_cache,
                 compile_lexical_match(op.text, op.mode),
-                limit=probe_limit,
+                probe_limit,
             )
             operations_executed += 1
-            more_exist = len(hits) > op.limit
+            more_exist = len(authorized) > op.limit
             budget_capped = (
                 not more_exist
                 and probe_limit < op.limit + 1
-                and len(hits) == probe_limit
+                and len(authorized) == probe_limit
             )
-            hits = hits[: min(op.limit, len(hits))]
+            hits = authorized[: min(op.limit, len(authorized))]
             candidates_considered += len(hits)
             if not hits:
                 omissions.append(
@@ -166,18 +239,25 @@ async def _execute_pinned(
                         detail="lexical search matched no published content",
                     )
                 )
-            elif more_exist or budget_capped:
+            elif more_exist or budget_capped or traversal_capped:
                 if more_exist:
                     detail = (
                         f"more matches exist beyond the requested limit="
                         f"{op.limit}; at least one additional match was "
                         "withheld"
                     )
-                else:
+                elif budget_capped:
                     detail = (
                         f"candidate budget max_candidates={budget.max_candidates} "
                         f"capped retrieval at {probe_limit} of requested "
                         f"{op.limit}; more matches may exist"
+                    )
+                else:
+                    detail = (
+                        f"authorized-candidate traversal reached its bound of "
+                        f"{_LEXICAL_TRAVERSAL_MAX_ROWS} ranked rows before the "
+                        f"requested limit={op.limit} was filled; more matches "
+                        "may exist"
                     )
                 omissions.append(
                     OmittedEvidence(
@@ -212,7 +292,15 @@ async def _execute_pinned(
         elif name == "record_get":
             record = await reader.get_record(op.record_id)
             operations_executed += 1
-            if record is None:
+            source_ref = await _resolve_source_ref(reader, record, lineage_cache)
+            if record is None or not auth.allows(
+                record.record_id,
+                source_ref=source_ref,
+                domain_key=auth.domain_of(source_ref),
+            ):
+                # Unauthorized and nonexistent are deliberately the
+                # same caller-visible outcome: an exact response must
+                # not disclose that hidden material exists.
                 omissions.append(
                     OmittedEvidence(
                         operation_index=index,
@@ -258,7 +346,90 @@ async def _execute_pinned(
         include_text=include_text,
         operations_executed=operations_executed,
         candidates_considered=candidates_considered,
+        authorization=auth.identity_view(),
     )
+
+
+async def _authorized_lexical_hits(
+    reader: PublicationReader,
+    auth: EffectiveAuthorization,
+    lineage_cache: dict[str, str | None],
+    match: str,
+    target: int,
+) -> tuple[list[LexicalHit], bool]:
+    """Walk the pinned generation's deterministic rank order and keep
+    only candidates the current authorization allows, until ``target``
+    authorized hits are found or the corpus is exhausted.
+
+    Returns the authorized hits plus whether the traversal bound was
+    reached first (an honest "more matches may exist" signal — the
+    alternative, a fixed over-fetch, silently loses authorized recall
+    when unauthorized matches crowd the top of a shared index).
+    """
+    authorized: list[LexicalHit] = []
+    offset = 0
+    while len(authorized) < target and offset < _LEXICAL_TRAVERSAL_MAX_ROWS:
+        fetch = min(_LEXICAL_TRAVERSAL_WINDOW, _LEXICAL_TRAVERSAL_MAX_ROWS - offset)
+        hits = await reader.search(match, limit=fetch, offset=offset)
+        if not hits:
+            return authorized, False
+        for hit in hits:
+            source_ref = await _resolve_source_ref_for_id(
+                reader, hit.record_id, lineage_cache
+            )
+            if auth.allows(
+                hit.record_id,
+                source_ref=source_ref,
+                domain_key=auth.domain_of(source_ref),
+            ):
+                authorized.append(hit)
+                if len(authorized) >= target:
+                    break
+        if len(hits) < fetch:
+            return authorized, False
+        offset += len(hits)
+    return authorized, offset >= _LEXICAL_TRAVERSAL_MAX_ROWS and len(authorized) < target
+
+
+async def _resolve_source_ref(
+    reader: PublicationReader,
+    record: PublishedRecord | None,
+    lineage_cache: dict[str, str | None],
+) -> str | None:
+    """Trusted source lineage of one published record, through verified
+    reads of the pinned generation only (tampered payloads fail closed
+    inside :meth:`PublicationReader.get_record` before they can steer
+    an authorization decision)."""
+    if record is None:
+        return None
+    return await _resolve_source_ref_for_id(reader, record.record_id, lineage_cache)
+
+
+async def _resolve_source_ref_for_id(
+    reader: PublicationReader, record_id: str, lineage_cache: dict[str, str | None]
+) -> str | None:
+    if record_id in lineage_cache:
+        return lineage_cache[record_id]
+    record = await reader.get_record(record_id)
+    if record is None:
+        lineage_cache[record_id] = None
+        return None
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    source_ref: str | None = None
+    if record.record_class == "view_document":
+        revision_ref = payload.get("content_revision_ref")
+        if isinstance(revision_ref, str) and revision_ref:
+            revision = await reader.get_record(revision_ref)
+            if revision is not None and isinstance(revision.payload, Mapping):
+                candidate = revision.payload.get("source_ref")
+                if isinstance(candidate, str) and candidate:
+                    source_ref = candidate
+    elif record.record_class == "content_revision":
+        candidate = payload.get("source_ref")
+        if isinstance(candidate, str) and candidate:
+            source_ref = candidate
+    lineage_cache[record_id] = source_ref
+    return source_ref
 
 
 def _record_candidate(

@@ -1,4 +1,4 @@
-"""EvidencePacket representation, structural budgets, and identity (PR77).
+"""EvidencePacket representation, structural budgets, and identity (PR77/PR78).
 
 An EvidencePacket is retrieval/context evidence with explicit
 provenance — never an answer-correctness or entailment claim. Assembly
@@ -8,10 +8,12 @@ the middle of a unit while being presented as valid.
 
 Packet identity is deterministic over semantic dimensions only
 (normalized query, publication/generation attribution, evidence
-locators and content hashes, omissions, budget profile, and the
-security/verifier/redaction/serialization context). Runtime-only
-values never enter identity, so identical state plus identical inputs
-reproduce the identical packet.
+locators and content hashes, omissions, budget profile, the
+security/verifier/redaction/serialization context, and — since PR78 —
+the trusted effective-authorization identity). Runtime-only values
+never enter identity, so identical state plus identical inputs
+reproduce the identical packet, and any authorization change that can
+change what evidence is legally visible invalidates reuse.
 """
 
 from __future__ import annotations
@@ -168,7 +170,12 @@ class EvidencePacket:
     """A bounded, attributable evidence response over one pinned
     PublicationSet (or an explicit empty response for an unpublished
     workspace). Contains no timestamps or runtime-only values: the
-    packet is a pure function of request plus published state."""
+    packet is a pure function of request plus published state plus
+    effective authorization state. ``authorization`` is the
+    caller-safe identity view of the trusted authorization that shaped
+    delivery (profile, assurance, epoch, deny revision, policy digest)
+    — enough to invalidate reuse, never enough to reveal the domain or
+    denial topology behind the digest."""
 
     schema_version: str
     status: str  # "complete" | "partial"
@@ -179,6 +186,7 @@ class EvidencePacket:
     omitted: tuple[OmittedEvidence, ...]
     budget: BudgetReport
     context: dict[str, Any]
+    authorization: dict[str, Any] | None
     identity_dimensions: dict[str, Any]
     identity_id: str
 
@@ -224,6 +232,7 @@ def assemble_packet(
     include_text: bool,
     operations_executed: int,
     candidates_considered: int,
+    authorization: Mapping[str, Any] | None = None,
 ) -> EvidencePacket:
     """Turn retrieval candidates into a structurally bounded packet.
 
@@ -335,6 +344,7 @@ def assemble_packet(
         omitted=omitted,
         budget_view=budget_view,
         context=context,
+        authorization=authorization,
     )
     identity_id = record_identity_hash(
         record_type=_PACKET_RECORD_TYPE,
@@ -351,6 +361,7 @@ def assemble_packet(
         omitted=tuple(omitted),
         budget=report,
         context=dict(context),
+        authorization=dict(authorization) if authorization is not None else None,
         identity_dimensions=identity_dimensions,
         identity_id=identity_id,
     )
@@ -378,6 +389,7 @@ def packet_identity_dimensions(
     omitted: Sequence[OmittedEvidence],
     budget_view: Mapping[str, int],
     context: Mapping[str, Any],
+    authorization: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The deterministic semantic dimensions of a packet.
 
@@ -385,9 +397,13 @@ def packet_identity_dimensions(
     publication/member generation identity (including the set's content
     digest), selected evidence locators + content hashes and their
     order, explicit omissions, the budget profile that shaped the
-    selection, and the caller-supplied security / verifier / redaction
-    / serialization identities. Any relevant change must change the
-    identity — reuse across a changed dimension is a bug.
+    selection, the caller-supplied security / verifier / redaction
+    / serialization identities, and the trusted effective-authorization
+    identity (profile, assurance, epoch, deny revision, policy digest).
+    Any relevant change must change the identity — reuse across a
+    changed dimension is a bug. Authorization changes therefore
+    invalidate stale cached packets even when content and request are
+    byte-identical.
     """
     publication_view = None
     if publication is not None:
@@ -412,6 +428,7 @@ def packet_identity_dimensions(
             "max_output_chars": int(budget_view["max_output_chars"]),
         },
         "context": dict(context),
+        "authorization": dict(authorization) if authorization is not None else None,
     }
 
 
@@ -427,5 +444,6 @@ def to_json(packet: EvidencePacket) -> dict[str, Any]:
         "omitted": [o.view() for o in packet.omitted],
         "budget": packet.budget.view(),
         "context": packet.context,
+        "authorization": packet.authorization,
         "identity_id": packet.identity_id,
     }
