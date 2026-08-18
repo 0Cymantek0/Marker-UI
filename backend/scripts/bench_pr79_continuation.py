@@ -766,6 +766,14 @@ async def _scenario_cursor_abuse(
     ):
         _require(outcome.status == expected, f"cursor abuse outcome expected {expected}, got {outcome.status}")
         _require(outcome.packet is None, "cursor abuse returned packet on terminal outcome")
+    capability_class = {
+        (outcome.status, outcome.reason, outcome.error_code)
+        for outcome in (tampered_outcome, wrong_workspace, wrong_key, replay)
+    }
+    _require(
+        len(capability_class) == 1,
+        "cursor capability failures did not collapse to one caller-visible class",
+    )
     _require("abuse" not in _outcome_serialized(tampered_outcome), "tamper outcome leaked workspace")
     _require(old_key_verifies and retired_rejected, "key rotation verification behavior drifted")
     return {
@@ -775,6 +783,9 @@ async def _scenario_cursor_abuse(
         "wrong_key_status": wrong_key.status,
         "expired_status": expired.status,
         "replay_status": replay.status,
+        "capability_failure_class": sorted(
+            item for item in next(iter(capability_class))
+        ),
         "cursor_token_opaque": "abuse" not in token and "needle" not in token,
         "key_rotation": {
             "retained_old_key_verifies": old_key_verifies,
@@ -786,6 +797,7 @@ async def _scenario_cursor_abuse(
             "wrong_security_binding_fails_closed": wrong_workspace.status == "invalidated",
             "wrong_binding_does_not_consume_cursor": valid_after_wrong_binding.status in {"partial", "complete"},
             "replay_fails_closed": replay.status == "invalidated",
+            "capability_failures_share_one_class": len(capability_class) == 1,
             "token_is_opaque": "abuse" not in token and "needle" not in token,
             "key_rotation_retains_old_window": old_key_verifies,
             "retired_key_fails_closed": retired_rejected,

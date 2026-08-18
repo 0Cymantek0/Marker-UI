@@ -22,7 +22,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import MappingProxyType
-from typing import Callable, Mapping
+from typing import Mapping
 
 from app.utils.canonical import canonical_json_bytes
 
@@ -268,7 +268,6 @@ class CursorCodec:
         verification_keys: Mapping[
             str, bytes | bytearray | memoryview | str
         ] | None = None,
-        clock: Callable[[], datetime] | None = None,
     ) -> None:
         if keyring is not None and any(
             value is not None
@@ -280,7 +279,6 @@ class CursorCodec:
             current_key=current_key,
             verification_keys=verification_keys,
         )
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     @staticmethod
     def _payload(*, key_id: str, handle: str, nonce: str) -> bytes:
@@ -374,14 +372,12 @@ class CursorCodec:
             nonce=nonce,
         )
 
-    def decode(
-        self,
-        token: str,
-        *,
-        expires_at: datetime | None = None,
-        now: datetime | None = None,
-    ) -> CursorEnvelope:
-        """Verify token integrity, key rotation, and optional row expiry."""
+    def decode(self, token: str) -> CursorEnvelope:
+        """Verify token shape, protocol version, key, and signature.
+
+        Expiry is deliberately not a token concern: cursors expire through
+        their durable server-side row state (``validate_cursor_expiry``).
+        """
 
         raw = self._decode_base64(token)
         payload, signature = raw[:-CURSOR_SIGNATURE_BYTES], raw[-CURSOR_SIGNATURE_BYTES:]
@@ -390,11 +386,6 @@ class CursorCodec:
         expected = hmac.new(key, payload, digestmod="sha256").digest()
         if not hmac.compare_digest(signature, expected):
             raise CursorIntegrityError("cursor token signature mismatch")
-        if expires_at is not None:
-            validate_cursor_expiry(
-                expires_at,
-                now=now if now is not None else self._clock(),
-            )
         return claims
 
     verify = decode

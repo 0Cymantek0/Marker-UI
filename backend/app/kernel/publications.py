@@ -2964,6 +2964,7 @@ async def open_pinned_publication(
     publication_set_id: str,
     *,
     lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS,
+    pin_id: str | None = None,
 ) -> PublicationReader:
     """Open one named publication set under a durable pin.
 
@@ -2971,6 +2972,11 @@ async def open_pinned_publication(
     current (a superseded set being read across a later publication):
     the pin protects the named set and every member until released or
     lapsed, independent of what the head currently names.
+
+    ``pin_id`` reuses one already-held durable pin instead of acquiring a
+    second one; the caller keeps ownership of that pin's lease and its
+    release (``reader.close()`` releases it as usual).  ``lease_seconds``
+    applies only when a new pin is acquired.
     """
     async with session_factory() as session:
         row = await session.get(KernelPublicationSet, publication_set_id)
@@ -2986,14 +2992,16 @@ async def open_pinned_publication(
             f"publication set={publication_set_id}: lexical member "
             f"{row.lexical_generation_id!r} is missing"
         )
-    pin = await acquire_publication_pin(
-        session_factory, publication_set_id, lease_seconds=lease_seconds
-    )
+    if pin_id is None:
+        pin = await acquire_publication_pin(
+            session_factory, publication_set_id, lease_seconds=lease_seconds
+        )
+        pin_id = pin.pin_id
     return PublicationReader(
         session_factory,
         _set_ref(row),
         _lexical_ref(lexical_row),
-        pin_id=pin.pin_id,
+        pin_id=pin_id,
     )
 
 

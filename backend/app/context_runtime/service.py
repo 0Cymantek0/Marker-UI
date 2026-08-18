@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, Callable, Mapping
@@ -50,16 +51,17 @@ from app.context_runtime.executor import unpublished_packet
 from app.context_runtime.packets import EvidencePacket
 from app.context_runtime.continuation_store import CursorStore
 from app.kernel.publications import (
-    PublicationReader,
     acquire_publication_pin,
     active_publication_pins,
     open_pinned_publication,
-    open_published_reader,
     release_publication_pin,
+    resolve_published_set,
 )
 from app.kernel.errors import PublicationIntegrityError, UnknownPublicationSetError
 
 __all__ = ["ContinuationService"]
+
+logger = logging.getLogger(__name__)
 
 CONTINUATION_DEFAULT_TTL_SECONDS = 60.0
 CONTINUATION_DEFAULT_PIN_LEASE_SECONDS = 120.0
@@ -178,7 +180,6 @@ class ContinuationService:
         parsed = coerce_request(request)
         size = _page_size(page_size)
         await self._sweep()
-        reader: PublicationReader | None = None
         cursor_pin_id: str | None = None
         cursor_persisted = False
         try:
@@ -192,13 +193,10 @@ class ContinuationService:
                 if parsed.assurance == ASSURANCE_HIGH
                 else parsed.profile
             )
-            reader = await open_published_reader(
-                self.session_factory,
-                parsed.workspace_id,
-                profile=profile,
-                pin_lease_seconds=self.pin_lease_seconds,
+            resolved = await resolve_published_set(
+                self.session_factory, parsed.workspace_id, profile=profile
             )
-            if reader is None:
+            if resolved is None:
                 if parsed.assurance == ASSURANCE_HIGH:
                     raise QueryAuthorizationError("high-assurance partition unavailable")
                 budget = initial_budget()
@@ -208,6 +206,22 @@ class ContinuationService:
                     packet=await unpublished_packet(parsed, auth),
                     budget=budget,
                 )
+            # One pin per fresh query: it protects the read and, when the
+            # page stays partial, becomes the durable cursor pin unchanged.
+            # Its lease is clamped to the candidate cursor lifetime up front.
+            expires_at = utc(self.clock()) + timedelta(seconds=self.ttl_seconds)
+            cursor_pin = await acquire_publication_pin(
+                self.session_factory,
+                resolved.publication_set_id,
+                lease_seconds=self.pin_lease_seconds,
+                expires_at=expires_at,
+            )
+            cursor_pin_id = cursor_pin.pin_id
+            reader = await open_pinned_publication(
+                self.session_factory,
+                resolved.publication_set_id,
+                pin_id=cursor_pin_id,
+            )
             run = await self.pager.run_async(
                 reader,
                 parsed,
@@ -253,14 +267,6 @@ class ContinuationService:
                     reason="continuation chain limit reached",
                     error_code="loop_limit",
                 )
-            expires_at = utc(self.clock()) + timedelta(seconds=self.ttl_seconds)
-            cursor_pin = await acquire_publication_pin(
-                self.session_factory,
-                reader.publication_set_id,
-                lease_seconds=self.pin_lease_seconds,
-                expires_at=expires_at,
-            )
-            cursor_pin_id = cursor_pin.pin_id
             handle, nonce = await self.store.insert(
                 request=parsed,
                 publication=reader.explain(),
@@ -292,8 +298,9 @@ class ContinuationService:
                 error_code=_EXECUTION,
             )
         finally:
-            if reader is not None:
-                await reader.close()
+            # The reader shares the cursor pin, so release is centralized
+            # here: pins of non-persisted (terminal) pages go away now, and
+            # persisted pins stay owned by the durable cursor row.
             if cursor_pin_id is not None and not cursor_persisted:
                 await self._release_pin(cursor_pin_id)
 
@@ -309,9 +316,11 @@ class ContinuationService:
         size = _page_size(page_size)
         try:
             envelope = self.cursor_codec.decode(token)
-        except CursorExpiredError:
-            return _outcome(OUTCOME_STALE, reason=_EXPIRED, error_code=_EXPIRED)
-        except CursorCodecError:
+        except CursorCodecError as exc:
+            # Malformed, tampered, unsupported-version, and unknown-key
+            # tokens share one caller-visible rejection class; the cause
+            # stays in server logs only.
+            logger.info("cursor token rejected: %s", exc)
             return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
 
         row = await self.store.load(envelope.handle)
@@ -321,13 +330,22 @@ class ContinuationService:
             return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
         if row.status != CURSOR_STATUS_ACTIVE:
             await self._cleanup_terminal(row)
-            return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code="cursor_replayed")
+            logger.info(
+                "cursor %s rejected: nonce presented against %s row",
+                envelope.handle,
+                row.status,
+            )
+            return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
         if row.replay_state != CURSOR_REPLAY_FRESH:
             # Another request owns this nonce. Never revoke its in-flight
             # claim: doing so would let a replay race invalidate legitimate
             # progress. A crashed claim remains bounded by cursor/pin expiry.
             await self._sweep()
-            return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code="cursor_replayed")
+            logger.info(
+                "cursor %s rejected: nonce replay against in-flight claim",
+                envelope.handle,
+            )
+            return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
         if utc(row.expires_at) <= utc(self.clock()):
             await self._finish_unclaimed(row, CURSOR_STATUS_EXPIRED)
             return _outcome(OUTCOME_STALE, reason=_EXPIRED, error_code=_EXPIRED)
@@ -360,9 +378,10 @@ class ContinuationService:
         except CursorExpiredError:
             await self._finish_unclaimed(row, CURSOR_STATUS_EXPIRED)
             return _outcome(OUTCOME_STALE, reason=_EXPIRED, error_code=_EXPIRED)
-        except Exception:
+        except Exception as exc:
             await self._finish_unclaimed(row, CURSOR_STATUS_REVOKED)
-            return _outcome(OUTCOME_STALE, reason=_PIN_UNAVAILABLE, error_code="cursor_state_invalid")
+            logger.info("cursor %s rejected: row state unusable: %s", envelope.handle, exc)
+            return _outcome(OUTCOME_STALE, reason=_PIN_UNAVAILABLE, error_code=_PIN_UNAVAILABLE)
 
         try:
             auth = await resolve_effective_authorization(
@@ -391,20 +410,21 @@ class ContinuationService:
             await self._finish_unclaimed(row, CURSOR_STATUS_REVOKED)
             return _outcome(OUTCOME_STALE, reason=_PIN_UNAVAILABLE, error_code=_PIN_UNAVAILABLE)
         if not await self.store.claim(row.handle, envelope.nonce):
-            return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code="cursor_replayed")
+            logger.info(
+                "cursor %s rejected: nonce claim lost to a concurrent consumer",
+                envelope.handle,
+            )
+            return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
 
-        reader: PublicationReader | None = None
         try:
+            # The cursor row's own durable pin covers this read. It was
+            # leased to exactly the cursor lifetime at issuance and page
+            # rotation never extends it, so no second transient pin is
+            # acquired; every terminal path below releases it with the row.
             reader = await open_pinned_publication(
                 self.session_factory,
                 publication["publication_set_id"],
-                lease_seconds=min(
-                    self.pin_lease_seconds,
-                    max(
-                        0.001,
-                        (utc(row.expires_at) - utc(self.clock())).total_seconds(),
-                    ),
-                ),
+                pin_id=row.pin_id,
             )
             if not publication_matches(publication, reader.explain()):
                 await self._finish_claimed(row, CURSOR_STATUS_REVOKED)
@@ -455,7 +475,11 @@ class ContinuationService:
             )
             if new_nonce is None:
                 await self._finish_claimed(row, CURSOR_STATUS_REVOKED)
-                return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code="cursor_state_changed")
+                logger.info(
+                    "cursor %s rejected: state rotation lost a nonce race",
+                    envelope.handle,
+                )
+                return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
             return _outcome(
                 OUTCOME_PARTIAL,
                 packet=run.packet,
@@ -477,9 +501,6 @@ class ContinuationService:
                 reason=_EXECUTION,
                 error_code=_EXECUTION,
             )
-        finally:
-            if reader is not None:
-                await reader.close()
 
     @staticmethod
     def _required_object(value: str | None) -> dict[str, Any]:

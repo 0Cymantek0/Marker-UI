@@ -10,6 +10,8 @@ from sqlalchemy import select, update
 
 import app.context_runtime.continuation_paging as continuation_paging
 
+import app.context_runtime.service as continuation_service_module
+
 from app.context_runtime import QUERY_SCHEMA_VERSION, ContinuationService, CursorCodec, CursorKeyring, parse_query_request
 from app.kernel.generations import GenerationService
 from app.kernel.commit import KernelCommitBatch
@@ -19,6 +21,7 @@ from app.kernel.publications import (
     PublicationService,
     acquire_publication_pin,
     active_publication_pins,
+    release_publication_pin,
 )
 from app.kernel.snapshots import resolve_snapshot
 from app.services.query_policy import QueryPolicyService
@@ -615,3 +618,171 @@ async def test_publication_pin_absolute_expiry_cannot_exceed_declared_lease(
             lease_seconds=1,
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=1),
         )
+
+
+async def test_capability_failures_share_one_caller_visible_invalid_class(
+    payload_env,
+    monkeypatch,
+):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-collapse")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+    first = await service.fresh_query(_request("ws-collapse"), page_size=1)
+    assert first.next_cursor
+    token = first.next_cursor
+
+    tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+    tampered_outcome = await service.continue_query(tampered, workspace_id="ws-collapse")
+    wrong_workspace = await service.continue_query(token, workspace_id="ws-other")
+    garbage = await service.continue_query("garbage", workspace_id="ws-collapse")
+    advance = await service.continue_query(
+        token, workspace_id="ws-collapse", page_size=1
+    )
+    assert advance.next_cursor
+    replay = await service.continue_query(token, workspace_id="ws-collapse")
+
+    invalid_class = {
+        (outcome.status, outcome.reason, outcome.error_code)
+        for outcome in (tampered_outcome, wrong_workspace, garbage, replay)
+    }
+    assert invalid_class == {("invalidated", "cursor_invalid", "cursor_invalid")}
+    assert all(outcome.packet is None for outcome in (tampered_outcome, wrong_workspace, garbage, replay))
+
+    async def lose_rotation(**kwargs):
+        return None
+
+    monkeypatch.setattr(service.store, "rotate", lose_rotation)
+    raced = await service.continue_query(
+        advance.next_cursor, workspace_id="ws-collapse", page_size=1
+    )
+    assert (raced.status, raced.reason, raced.error_code) == (
+        "invalidated",
+        "cursor_invalid",
+        "cursor_invalid",
+    )
+    assert raced.packet is None
+
+
+async def test_stale_capability_failures_share_one_caller_visible_class(payload_env):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-stale-class")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+    corrupted = await service.fresh_query(_request("ws-stale-class"), page_size=1)
+    unpinned = await service.fresh_query(_request("ws-stale-class"), page_size=1)
+    assert corrupted.next_cursor and unpinned.next_cursor
+    corrupted_envelope = service.cursor_codec.decode(corrupted.next_cursor)
+    unpinned_envelope = service.cursor_codec.decode(unpinned.next_cursor)
+
+    async with factory() as session:
+        async with session.begin():
+            await session.execute(
+                update(KernelQueryCursor)
+                .where(KernelQueryCursor.handle == corrupted_envelope.handle)
+                .values(keyset_json='{"schema_version":"marker.continuation.keyset.v1"}')
+            )
+    unpinned_row = await service.store.load(unpinned_envelope.handle)
+    assert unpinned_row is not None and unpinned_row.pin_id is not None
+    await release_publication_pin(factory, unpinned_row.pin_id)
+
+    corrupted_outcome = await service.continue_query(
+        corrupted.next_cursor, workspace_id="ws-stale-class"
+    )
+    unpinned_outcome = await service.continue_query(
+        unpinned.next_cursor, workspace_id="ws-stale-class"
+    )
+    stale_class = {
+        (outcome.status, outcome.reason, outcome.error_code)
+        for outcome in (corrupted_outcome, unpinned_outcome)
+    }
+    assert stale_class == {("stale", "pinned_state_unavailable", "pinned_state_unavailable")}
+    assert all(outcome.packet is None for outcome in (corrupted_outcome, unpinned_outcome))
+
+
+async def test_high_assurance_partition_denied_midchain_fails_closed(payload_env):
+    factory, _store, commit_service = payload_env
+    await seed_domain_doc(
+        commit_service,
+        "ws-ha-mid",
+        tag="alpha",
+        domain="dom-alpha",
+        texts={f"n{index}": "needle alpha" for index in range(1, 4)},
+    )
+    await seed_domain_doc(
+        commit_service,
+        "ws-ha-mid",
+        tag="beta",
+        domain="dom-beta",
+        texts={f"n{index}": "needle beta" for index in range(1, 4)},
+    )
+    generation = await GenerationService(factory).build_and_activate(
+        await resolve_snapshot(factory, "ws-ha-mid")
+    )
+    pubs = PublicationService(factory)
+    await pubs.publish(materialized_generation_id=generation.generation_id)
+    await pubs.publish_high_assurance(
+        materialized_generation_id=generation.generation_id,
+        partition_domains=frozenset({"dom-alpha", "dom-beta"}),
+    )
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+    request = parse_query_request(
+        {
+            "schema_version": QUERY_SCHEMA_VERSION,
+            "workspace_id": "ws-ha-mid",
+            "assurance": "high",
+            "operations": [{"op": "lexical_search", "text": "needle"}],
+        }
+    )
+    first = await service.fresh_query(request, page_size=2)
+    assert first.status == "partial"
+    assert first.next_cursor
+    envelope = service.cursor_codec.decode(first.next_cursor)
+
+    policy = QueryPolicyService(factory, commit_service, workspace_id="ws-ha-mid")
+    await policy.deny_domain("dom-beta")
+    denied = await service.continue_query(
+        first.next_cursor, workspace_id="ws-ha-mid", page_size=2
+    )
+
+    assert denied.status == "invalidated"
+    assert denied.error_code == "authorization_changed"
+    assert denied.packet is None
+    assert "dom-beta" not in denied.model_dump_json()
+    row = await service.store.load(envelope.handle)
+    assert row is not None
+    assert row.status == "revoked"
+    assert row.pin_id is None
+
+
+async def test_fresh_and_continuation_share_one_durable_pin(payload_env, monkeypatch):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-onepin")
+    acquisitions = []
+    real_acquire = continuation_service_module.acquire_publication_pin
+
+    async def counting_acquire(*args, **kwargs):
+        acquisitions.append(args)
+        return await real_acquire(*args, **kwargs)
+
+    monkeypatch.setattr(
+        continuation_service_module, "acquire_publication_pin", counting_acquire
+    )
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    first = await service.fresh_query(_request("ws-onepin"), page_size=1)
+    assert first.status == "partial"
+    assert first.next_cursor
+    assert len(acquisitions) == 1
+    envelope = service.cursor_codec.decode(first.next_cursor)
+    row = await service.store.load(envelope.handle)
+    assert row is not None and row.pin_id is not None
+    pins = await active_publication_pins(factory)
+    assert [pin.pin_id for pin in pins] == [row.pin_id]
+
+    second = await service.continue_query(
+        first.next_cursor, workspace_id="ws-onepin", page_size=1
+    )
+    assert second.status == "partial"
+    assert second.next_cursor
+    assert len(acquisitions) == 1
+    pins = await active_publication_pins(factory)
+    assert [pin.pin_id for pin in pins] == [row.pin_id]

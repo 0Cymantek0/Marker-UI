@@ -104,11 +104,15 @@ releases any returned pin ids.
    before another cursor is issued. The benchmark reaches an explicit unit
    budget terminal and a separately configured low traversal-work terminal.
 
-7. **How are retention pins extended and released?** Fresh queries acquire a
-   durable publication pin when more work remains. Continuations reuse that
-   pin and clamp its lease to remaining cursor lifetime. Completion,
-   invalidation, policy failure, expiry, and reclaim clear/release the pin;
-   release is also attempted during cleanup failure paths.
+7. **How are retention pins extended and released?** A fresh query
+   acquires exactly one durable publication pin up front, leased to the
+   candidate cursor lifetime; it protects the first-page read and, when
+   the page stays partial, becomes the cursor row's pin unchanged. Every
+   continuation opens the pinned set through that same pin — no second
+   transient pin is acquired per page, and page rotation never extends the
+   lease beyond the original cursor expiry. Completion, invalidation,
+   policy failure, expiry, and reclaim clear/release the pin; release is
+   also attempted during cleanup failure paths.
 
 8. **What is replay/loop defense?** A one-time durable nonce claim and nonce
    rotation stop token replay, including concurrent reuse. A maximum chain-page
@@ -124,13 +128,17 @@ releases any returned pin ids.
    Caller context hints never grant access.
 
 10. **Which invalidation reasons are collapsed?** Malformed, unsupported,
-    tampered, unknown-key, missing-row, wrong-workspace, query-mismatch, and
-    replay cases return the broad `cursor_invalid` category. Domain, source,
-    record, policy-revision, and epoch changes return the broad
+    tampered, unknown-key, missing-row, wrong-workspace, query-mismatch,
+    replay, nonce-race, and rotation-race cases return the broad
+    `cursor_invalid` category — the structured outcome's `error_code`
+    matches that category exactly, so a caller cannot distinguish replay
+    from tamper from internal state races. Domain, source, record,
+    policy-revision, and epoch changes return the broad
     `authorization_changed` category. They do not name the hidden target.
-    Missing/expired pinned state is `pinned_state_unavailable`/stale, and a
-    missing high-assurance partition is policy-fail-closed. Server logs may
-    retain richer diagnostics; caller outcomes stay bounded.
+    Missing/expired pinned state and unusable row state are collapsed the
+    same way into `pinned_state_unavailable`/stale, and a missing
+    high-assurance partition is policy-fail-closed. Server logs retain the
+    finer internal cause at info level; caller outcomes stay bounded.
 
 11. **What happens after key rotation or restart?** During key overlap, old
     tokens verify and new tokens use the new key. After retirement, old tokens

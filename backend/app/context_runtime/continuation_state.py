@@ -20,6 +20,14 @@ from app.utils.canonical import canonical_json_str, payload_byte_hash, to_json_r
 KEYSET_SCHEMA_VERSION = "marker.continuation.keyset.v1"
 BUDGET_SCHEMA_VERSION = "marker.continuation.budget.v1"
 
+# Continuation identity dimensions compared between the durable cursor row
+# and the reader opened for the next page. Head-switch safety does NOT rest
+# on this comparison: continuation always opens the stored
+# publication_set_id (publication sets are immutable, so content cannot
+# drift under a fixed id). These keys are the defense-in-depth consistency
+# check that the opened set still matches every recorded binding dimension;
+# content_digest is intentionally excluded because set identity already
+# pins content immutably.
 PUBLICATION_BINDING_KEYS = (
     "publication_set_id",
     "workspace_id",

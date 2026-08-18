@@ -44,7 +44,6 @@ __all__ = [
     "OUTCOME_STALE",
     "CURSOR_REPLAY_CONSUMED",
     "CURSOR_REPLAY_FRESH",
-    "CURSOR_REPLAY_ROTATED",
     "CURSOR_STATUS_ACTIVE",
     "CURSOR_STATUS_EXHAUSTED",
     "CURSOR_STATUS_EXPIRED",
@@ -99,19 +98,16 @@ CURSOR_STATUSES = frozenset(
 )
 
 CURSOR_REPLAY_FRESH = "fresh"
-CURSOR_REPLAY_ROTATED = "rotated"
 CURSOR_REPLAY_CONSUMED = "consumed"
 CURSOR_REPLAY_STATES = frozenset(
     {
         CURSOR_REPLAY_FRESH,
-        CURSOR_REPLAY_ROTATED,
         CURSOR_REPLAY_CONSUMED,
     }
 )
 
 CursorReplayState = Literal[
     "fresh",
-    "rotated",
     "consumed",
 ]
 
