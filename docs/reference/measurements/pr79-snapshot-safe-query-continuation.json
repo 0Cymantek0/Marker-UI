@@ -11,6 +11,7 @@
     "budget_and_loop.implemented": true,
     "budget_and_loop.loop_limit_enforced": true,
     "budget_and_loop.work_budget_enforced": true,
+    "cursor_abuse.capability_failures_share_one_class": true,
     "cursor_abuse.expiry_is_stale": true,
     "cursor_abuse.implemented": true,
     "cursor_abuse.key_rotation_retains_old_window": true,
@@ -50,8 +51,8 @@
   "benchmark": "pr79a-snapshot-safe-query-continuation",
   "blockers": [],
   "counts": {
-    "acceptance_check_count": 46,
-    "acceptance_pass_count": 46,
+    "acceptance_check_count": 47,
+    "acceptance_pass_count": 47,
     "blocker_count": 0,
     "implemented_scenario_count": 8,
     "scenario_count": 8
@@ -61,7 +62,7 @@
     "path_reported": false,
     "temporary": true
   },
-  "git_sha": "3f1b64ed3355d317fb9945246550443e69b4beba",
+  "git_sha": "8414564dd7fea9b7c6c0b6387dc7c73dc245b2bc",
   "method": "fixed-corpus real-kernel conformance over temporary migrated SQLite; structural booleans/counts are acceptance evidence; timing is characterization only",
   "repeats_for_timing": 3,
   "runtime": {
@@ -209,6 +210,7 @@
     },
     "cursor_abuse": {
       "acceptance": {
+        "capability_failures_share_one_class": true,
         "expiry_is_stale": true,
         "key_rotation_retains_old_window": true,
         "replay_fails_closed": true,
@@ -218,6 +220,11 @@
         "wrong_binding_does_not_consume_cursor": true,
         "wrong_security_binding_fails_closed": true
       },
+      "capability_failure_class": [
+        "cursor_invalid",
+        "cursor_invalid",
+        "invalidated"
+      ],
       "cursor_token_opaque": true,
       "expired_status": "stale",
       "implemented": true,
@@ -496,7 +503,7 @@
       "active_pin_count_after_reclaim": 0,
       "active_pin_count_after_terminal": 0,
       "active_pin_count_during_valid_cursor": 1,
-      "cursor_pin_id": "07fde7c9-c202-4e62-8c51-df17d24b6ebc",
+      "cursor_pin_id": "c235ff0e-7565-476a-a8e5-dfe7200cb9c7",
       "implemented": true,
       "page_count_to_terminal": 2,
       "publication_set_id": "sha256:728e6c3ccca9468ae802f781ea7f0d674b1ac7a15caec821457e817a2bd62ffd",
@@ -532,10 +539,10 @@
   },
   "timing_characterization": {
     "fresh_complete_query_ms": {
-      "mean": 50.085,
-      "p50": 50.522,
-      "p95": 50.781,
-      "p99": 50.781
+      "mean": 76.132,
+      "p50": 71.149,
+      "p95": 95.37,
+      "p99": 95.37
     },
     "implemented": true,
     "note": "wall-clock characterization only; no constant-time or isolation claim",
