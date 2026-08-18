@@ -112,8 +112,10 @@ every packet, while these caller fields still grant nothing.
   internal application-service callable; a future agent/MCP transport
   wraps it (PR78's authorization-first layer is now in place beneath
   it).
-- No signed/portable cursors or cross-client continuation (PR79). A
-  `partial` packet is the whole continuation story in this slice.
+- Snapshot-safe signed continuation is implemented in PR79A; see
+  [`snapshot-safe-query-continuation.md`](snapshot-safe-query-continuation.md).
+  This PR77 layer remains transport-agnostic: MCP/client cursor delivery is
+  deferred to PR79B.
 - No vector/visual retrieval (the PR76 vector slot stays an explicit
   absent until PR81); no natural-language/model query planning — the
   typed server contract comes first, a later model can draft typed

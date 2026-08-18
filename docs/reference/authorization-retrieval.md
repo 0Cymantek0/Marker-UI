@@ -159,8 +159,9 @@ await pubs.publish_high_assurance(
   profiles).
 - Team/group/connector ACL richness, per-principal grants, and IdP
   integration (the resolver's base grant is workspace-wide).
-- PR79: signed cursors must carry the authorization identity
-  (`policy_digest`, `deny_revision`, epoch) and invalidate on change.
+- PR79A: signed continuation stores the authorization identity
+  (`policy_digest`, `deny_revision`, epoch) server-side and invalidates on
+  change. See [`snapshot-safe-query-continuation.md`](snapshot-safe-query-continuation.md).
 - Vector/visual retrieval partitioning (PR81+) must adopt the same
   domain-partition discipline before those operators ship.
 
