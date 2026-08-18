@@ -61,7 +61,7 @@
     "path_reported": false,
     "temporary": true
   },
-  "git_sha": "168ef294568f5ae7e3551fca0e6f7fee942aac50",
+  "git_sha": "3f1b64ed3355d317fb9945246550443e69b4beba",
   "method": "fixed-corpus real-kernel conformance over temporary migrated SQLite; structural booleans/counts are acceptance evidence; timing is characterization only",
   "repeats_for_timing": 3,
   "runtime": {
@@ -160,7 +160,7 @@
             "evidence_units": 3,
             "operations_executed": 1,
             "output_chars": 957,
-            "pages": 2,
+            "pages": 3,
             "schema_version": "marker.continuation.budget.v1",
             "work_units": 3
           },
@@ -188,7 +188,7 @@
         "evidence_units": 3,
         "operations_executed": 1,
         "output_chars": 957,
-        "pages": 2,
+        "pages": 3,
         "schema_version": "marker.continuation.budget.v1",
         "work_units": 3
       },
@@ -200,7 +200,7 @@
         "evidence_units": 0,
         "operations_executed": 1,
         "output_chars": 0,
-        "pages": 0,
+        "pages": 1,
         "schema_version": "marker.continuation.budget.v1",
         "work_units": 2
       },
@@ -455,7 +455,7 @@
             "evidence_units": 8,
             "operations_executed": 1,
             "output_chars": 2480,
-            "pages": 3,
+            "pages": 4,
             "schema_version": "marker.continuation.budget.v1",
             "work_units": 8
           },
@@ -496,7 +496,7 @@
       "active_pin_count_after_reclaim": 0,
       "active_pin_count_after_terminal": 0,
       "active_pin_count_during_valid_cursor": 1,
-      "cursor_pin_id": "7dacb0c9-44d3-4745-89bc-28db73f1d17a",
+      "cursor_pin_id": "07fde7c9-c202-4e62-8c51-df17d24b6ebc",
       "implemented": true,
       "page_count_to_terminal": 2,
       "publication_set_id": "sha256:728e6c3ccca9468ae802f781ea7f0d674b1ac7a15caec821457e817a2bd62ffd",
@@ -532,10 +532,10 @@
   },
   "timing_characterization": {
     "fresh_complete_query_ms": {
-      "mean": 51.529,
-      "p50": 50.949,
-      "p95": 52.96,
-      "p99": 52.96
+      "mean": 50.085,
+      "p50": 50.522,
+      "p95": 50.781,
+      "p99": 50.781
     },
     "implemented": true,
     "note": "wall-clock characterization only; no constant-time or isolation claim",
