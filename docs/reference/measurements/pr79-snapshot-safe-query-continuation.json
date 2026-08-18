@@ -1,0 +1,544 @@
+{
+  "acceptance": {
+    "authorization_invalidation.domain_deny_invalidates": true,
+    "authorization_invalidation.implemented": true,
+    "authorization_invalidation.no_packet_after_deny": true,
+    "authorization_invalidation.nondisclosure": true,
+    "authorization_invalidation.pin_released_after_invalidation": true,
+    "authorization_invalidation.record_deny_invalidates": true,
+    "budget_and_loop.cumulative_budget_monotonic": true,
+    "budget_and_loop.cumulative_evidence_budget_enforced": true,
+    "budget_and_loop.implemented": true,
+    "budget_and_loop.loop_limit_enforced": true,
+    "budget_and_loop.work_budget_enforced": true,
+    "cursor_abuse.expiry_is_stale": true,
+    "cursor_abuse.implemented": true,
+    "cursor_abuse.key_rotation_retains_old_window": true,
+    "cursor_abuse.replay_fails_closed": true,
+    "cursor_abuse.retired_key_fails_closed": true,
+    "cursor_abuse.tamper_fails_closed": true,
+    "cursor_abuse.token_is_opaque": true,
+    "cursor_abuse.wrong_binding_does_not_consume_cursor": true,
+    "cursor_abuse.wrong_security_binding_fails_closed": true,
+    "head_switch.continuation_stayed_on_original_publication": true,
+    "head_switch.continuation_stayed_on_original_snapshot": true,
+    "head_switch.head_switch_observed": true,
+    "head_switch.implemented": true,
+    "head_switch.new_head_record_not_visible": true,
+    "high_assurance.high_assurance_change_invalidates": true,
+    "high_assurance.implemented": true,
+    "high_assurance.missing_partition_fails_closed": true,
+    "high_assurance.no_shared_fallback": true,
+    "high_assurance.partition_differs_from_shared": true,
+    "multi_page_order.all_pages_same_publication": true,
+    "multi_page_order.exact_ordered_digest": true,
+    "multi_page_order.implemented": true,
+    "multi_page_order.multi_page": true,
+    "multi_page_order.no_duplicates": true,
+    "multi_page_order.no_skips": true,
+    "pin_lifecycle.expiry_reclaim_removes_row": true,
+    "pin_lifecycle.implemented": true,
+    "pin_lifecycle.reclaim_releases_pin": true,
+    "pin_lifecycle.terminal_releases_pin": true,
+    "pin_lifecycle.valid_cursor_retains_pin": true,
+    "policy_epoch_invalidation.access_policy_revision_invalidates": true,
+    "policy_epoch_invalidation.authorization_epoch_invalidates": true,
+    "policy_epoch_invalidation.implemented": true,
+    "policy_epoch_invalidation.same_safe_invalidation_category": true,
+    "timing_characterization.implemented": true
+  },
+  "benchmark": "pr79a-snapshot-safe-query-continuation",
+  "blockers": [],
+  "counts": {
+    "acceptance_check_count": 46,
+    "acceptance_pass_count": 46,
+    "blocker_count": 0,
+    "implemented_scenario_count": 8,
+    "scenario_count": 8
+  },
+  "database": {
+    "engine": "sqlite+aiosqlite",
+    "path_reported": false,
+    "temporary": true
+  },
+  "git_sha": "168ef294568f5ae7e3551fca0e6f7fee942aac50",
+  "method": "fixed-corpus real-kernel conformance over temporary migrated SQLite; structural booleans/counts are acceptance evidence; timing is characterization only",
+  "repeats_for_timing": 3,
+  "runtime": {
+    "machine": "AMD64",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel",
+    "python": "3.11.9"
+  },
+  "scenarios": {
+    "authorization_invalidation": {
+      "acceptance": {
+        "domain_deny_invalidates": true,
+        "no_packet_after_deny": true,
+        "nondisclosure": true,
+        "pin_released_after_invalidation": true,
+        "record_deny_invalidates": true
+      },
+      "domain_outcome": {
+        "error_code": "authorization_changed",
+        "status": "invalidated"
+      },
+      "hidden_record_id": "view.authhidden",
+      "implemented": true,
+      "publication_set_id": "sha256:854c165729ed1a5b2b25ffb60cef53b3fdabe829eb9f8ad1ab28c89c67a47ebb",
+      "record_outcome": {
+        "error_code": "authorization_changed",
+        "status": "invalidated"
+      },
+      "serialized_nondisclosure_checked": true,
+      "workspace": "ws79-auth"
+    },
+    "budget_and_loop": {
+      "acceptance": {
+        "cumulative_budget_monotonic": true,
+        "cumulative_evidence_budget_enforced": true,
+        "loop_limit_enforced": true,
+        "work_budget_enforced": true
+      },
+      "budget_page_count": 3,
+      "budget_pages": [
+        {
+          "cumulative_budget": {
+            "candidates_considered": 1,
+            "evidence_units": 1,
+            "operations_executed": 1,
+            "output_chars": 319,
+            "pages": 1,
+            "schema_version": "marker.continuation.budget.v1",
+            "work_units": 1
+          },
+          "error_code": "continuation_available",
+          "lexical_generation_id": "sha256:3873385f99a6e1340cb10121eb852d2d38f0fff0f8deb05f0d3bd2c37209cf0a",
+          "locators": [
+            {
+              "node_id": "n1",
+              "rank": -1e-06,
+              "record_id": "view.budget",
+              "row_index": 0
+            }
+          ],
+          "materialized_generation_id": "sha256:388a41c03915f7b44198e1671f7788f8b669fbc67f697a115dccf35828b1ce21",
+          "page": 1,
+          "publication_set_id": "sha256:193a1d1dd493a0c25867be07059b0d677c1845abc45d6fad2ecd69ec6191ebd0",
+          "snapshot_id": "sha256:d5673519bce662d149335130e616ce055ecb756066c0d3a0d54d4ef99a0bd665",
+          "status": "partial"
+        },
+        {
+          "cumulative_budget": {
+            "candidates_considered": 2,
+            "evidence_units": 2,
+            "operations_executed": 1,
+            "output_chars": 638,
+            "pages": 2,
+            "schema_version": "marker.continuation.budget.v1",
+            "work_units": 2
+          },
+          "error_code": "continuation_available",
+          "lexical_generation_id": "sha256:3873385f99a6e1340cb10121eb852d2d38f0fff0f8deb05f0d3bd2c37209cf0a",
+          "locators": [
+            {
+              "node_id": "n2",
+              "rank": -1e-06,
+              "record_id": "view.budget",
+              "row_index": 1
+            }
+          ],
+          "materialized_generation_id": "sha256:388a41c03915f7b44198e1671f7788f8b669fbc67f697a115dccf35828b1ce21",
+          "page": 2,
+          "publication_set_id": "sha256:193a1d1dd493a0c25867be07059b0d677c1845abc45d6fad2ecd69ec6191ebd0",
+          "snapshot_id": "sha256:d5673519bce662d149335130e616ce055ecb756066c0d3a0d54d4ef99a0bd665",
+          "status": "partial"
+        },
+        {
+          "cumulative_budget": {
+            "candidates_considered": 3,
+            "evidence_units": 3,
+            "operations_executed": 1,
+            "output_chars": 957,
+            "pages": 2,
+            "schema_version": "marker.continuation.budget.v1",
+            "work_units": 3
+          },
+          "error_code": "unit_budget",
+          "lexical_generation_id": "sha256:3873385f99a6e1340cb10121eb852d2d38f0fff0f8deb05f0d3bd2c37209cf0a",
+          "locators": [
+            {
+              "node_id": "n3",
+              "rank": -1e-06,
+              "record_id": "view.budget",
+              "row_index": 2
+            }
+          ],
+          "materialized_generation_id": "sha256:388a41c03915f7b44198e1671f7788f8b669fbc67f697a115dccf35828b1ce21",
+          "page": 3,
+          "publication_set_id": "sha256:193a1d1dd493a0c25867be07059b0d677c1845abc45d6fad2ecd69ec6191ebd0",
+          "snapshot_id": "sha256:d5673519bce662d149335130e616ce055ecb756066c0d3a0d54d4ef99a0bd665",
+          "status": "complete"
+        }
+      ],
+      "budget_workspace": "ws79-budget",
+      "default_work_cap_rows_per_operation": 2000,
+      "final_budget": {
+        "candidates_considered": 3,
+        "evidence_units": 3,
+        "operations_executed": 1,
+        "output_chars": 957,
+        "pages": 2,
+        "schema_version": "marker.continuation.budget.v1",
+        "work_units": 3
+      },
+      "implemented": true,
+      "loop_second_status": "loop_limit",
+      "loop_workspace": "ws79-loop",
+      "work_budget": {
+        "candidates_considered": 0,
+        "evidence_units": 0,
+        "operations_executed": 1,
+        "output_chars": 0,
+        "pages": 0,
+        "schema_version": "marker.continuation.budget.v1",
+        "work_units": 2
+      },
+      "work_cap_rows_per_operation": 2,
+      "work_workspace": "ws79-work"
+    },
+    "cursor_abuse": {
+      "acceptance": {
+        "expiry_is_stale": true,
+        "key_rotation_retains_old_window": true,
+        "replay_fails_closed": true,
+        "retired_key_fails_closed": true,
+        "tamper_fails_closed": true,
+        "token_is_opaque": true,
+        "wrong_binding_does_not_consume_cursor": true,
+        "wrong_security_binding_fails_closed": true
+      },
+      "cursor_token_opaque": true,
+      "expired_status": "stale",
+      "implemented": true,
+      "key_rotation": {
+        "retained_old_key_verifies": true,
+        "retired_key_rejected": true
+      },
+      "replay_status": "invalidated",
+      "tampered_status": "invalidated",
+      "workspace": "ws79-abuse",
+      "wrong_key_status": "invalidated",
+      "wrong_workspace_status": "invalidated"
+    },
+    "head_switch": {
+      "acceptance": {
+        "continuation_stayed_on_original_publication": true,
+        "continuation_stayed_on_original_snapshot": true,
+        "head_switch_observed": true,
+        "new_head_record_not_visible": true
+      },
+      "continued_publication_set_ids": [
+        "sha256:62ccd3db491b4818950a52df852f3f534964a8824c7c2a35e00ad988de757da9"
+      ],
+      "continued_record_count": 5,
+      "continued_snapshot_id": "sha256:cf28e184b07353e80a0530209c7013831823102effc98b424b69d9af6678e066",
+      "first_publication_set_id": "sha256:62ccd3db491b4818950a52df852f3f534964a8824c7c2a35e00ad988de757da9",
+      "first_snapshot_id": "sha256:cf28e184b07353e80a0530209c7013831823102effc98b424b69d9af6678e066",
+      "implemented": true,
+      "new_head_publication_set_id": "sha256:875fe18eb336d4d7d408bbec61a32327294a63ecb5e3e60c8371f34036c74416",
+      "new_record_id": "view.headnew",
+      "workspace": "ws79-head"
+    },
+    "high_assurance": {
+      "acceptance": {
+        "high_assurance_change_invalidates": true,
+        "missing_partition_fails_closed": true,
+        "no_shared_fallback": true,
+        "partition_differs_from_shared": true
+      },
+      "implemented": true,
+      "invalidated_status": "invalidated",
+      "missing_partition_status": "policy_fail_closed",
+      "missing_partition_workspace": "ws79-hamiss",
+      "partition_publication_set_id": "sha256:ecff8f94e6b241b854e36ab455d9dc6806bac12f35a2086084ff1301f6cb5434",
+      "shared_publication_set_id": "sha256:bbe07d876beb0c8097314b7e3965e63762f0fba99fb342889f29223f884e9607",
+      "workspace": "ws79-ha"
+    },
+    "multi_page_order": {
+      "acceptance": {
+        "all_pages_same_publication": true,
+        "exact_ordered_digest": true,
+        "multi_page": true,
+        "no_duplicates": true,
+        "no_skips": true
+      },
+      "distinct_rank_count": 1,
+      "duplicate_count": 0,
+      "expected_order": [
+        [
+          "view.pages",
+          "n1"
+        ],
+        [
+          "view.pages",
+          "n2"
+        ],
+        [
+          "view.pages",
+          "n3"
+        ],
+        [
+          "view.pages",
+          "n4"
+        ],
+        [
+          "view.pages",
+          "n5"
+        ],
+        [
+          "view.pages",
+          "n6"
+        ],
+        [
+          "view.pages",
+          "n7"
+        ],
+        [
+          "view.pages",
+          "n8"
+        ]
+      ],
+      "expected_ordered_locator_digest": "sha256:1ce810207d5cf2f88ab301cb7186d6f0e99aadc83f9325bfb1c6a9a9dddfbec2",
+      "expected_unit_count": 8,
+      "implemented": true,
+      "materialized_generation_id": "sha256:a4aa4c4cd3fd5fb98c1d4352e0fc84cf8d078e485c49c5b28c5a95c7b33a6c2b",
+      "missing_count": 0,
+      "observed_order": [
+        [
+          "view.pages",
+          "n1"
+        ],
+        [
+          "view.pages",
+          "n2"
+        ],
+        [
+          "view.pages",
+          "n3"
+        ],
+        [
+          "view.pages",
+          "n4"
+        ],
+        [
+          "view.pages",
+          "n5"
+        ],
+        [
+          "view.pages",
+          "n6"
+        ],
+        [
+          "view.pages",
+          "n7"
+        ],
+        [
+          "view.pages",
+          "n8"
+        ]
+      ],
+      "observed_unit_count": 8,
+      "ordered_locator_digest": "sha256:1ce810207d5cf2f88ab301cb7186d6f0e99aadc83f9325bfb1c6a9a9dddfbec2",
+      "page_count": 4,
+      "page_size": 2,
+      "pages": [
+        {
+          "cumulative_budget": {
+            "candidates_considered": 2,
+            "evidence_units": 2,
+            "operations_executed": 1,
+            "output_chars": 620,
+            "pages": 1,
+            "schema_version": "marker.continuation.budget.v1",
+            "work_units": 2
+          },
+          "error_code": "continuation_available",
+          "lexical_generation_id": "sha256:bba627e4f3c0b3ec2713268b78c7efb8cedccc50f6a5c1029f0f6352c28402fc",
+          "locators": [
+            {
+              "node_id": "n1",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 0
+            },
+            {
+              "node_id": "n2",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 1
+            }
+          ],
+          "materialized_generation_id": "sha256:a4aa4c4cd3fd5fb98c1d4352e0fc84cf8d078e485c49c5b28c5a95c7b33a6c2b",
+          "page": 1,
+          "publication_set_id": "sha256:d82bbab44bc9a0fb693550b58b5fe18c23eabfde3f26cbe9c1458909a4d65109",
+          "snapshot_id": "sha256:c5bd9bc78849f85d7548efb9be69c6ddc93b8ccdb2fce6334f7c3a6482f77f36",
+          "status": "partial"
+        },
+        {
+          "cumulative_budget": {
+            "candidates_considered": 4,
+            "evidence_units": 4,
+            "operations_executed": 1,
+            "output_chars": 1240,
+            "pages": 2,
+            "schema_version": "marker.continuation.budget.v1",
+            "work_units": 4
+          },
+          "error_code": "continuation_available",
+          "lexical_generation_id": "sha256:bba627e4f3c0b3ec2713268b78c7efb8cedccc50f6a5c1029f0f6352c28402fc",
+          "locators": [
+            {
+              "node_id": "n3",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 2
+            },
+            {
+              "node_id": "n4",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 3
+            }
+          ],
+          "materialized_generation_id": "sha256:a4aa4c4cd3fd5fb98c1d4352e0fc84cf8d078e485c49c5b28c5a95c7b33a6c2b",
+          "page": 2,
+          "publication_set_id": "sha256:d82bbab44bc9a0fb693550b58b5fe18c23eabfde3f26cbe9c1458909a4d65109",
+          "snapshot_id": "sha256:c5bd9bc78849f85d7548efb9be69c6ddc93b8ccdb2fce6334f7c3a6482f77f36",
+          "status": "partial"
+        },
+        {
+          "cumulative_budget": {
+            "candidates_considered": 6,
+            "evidence_units": 6,
+            "operations_executed": 1,
+            "output_chars": 1860,
+            "pages": 3,
+            "schema_version": "marker.continuation.budget.v1",
+            "work_units": 6
+          },
+          "error_code": "continuation_available",
+          "lexical_generation_id": "sha256:bba627e4f3c0b3ec2713268b78c7efb8cedccc50f6a5c1029f0f6352c28402fc",
+          "locators": [
+            {
+              "node_id": "n5",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 4
+            },
+            {
+              "node_id": "n6",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 5
+            }
+          ],
+          "materialized_generation_id": "sha256:a4aa4c4cd3fd5fb98c1d4352e0fc84cf8d078e485c49c5b28c5a95c7b33a6c2b",
+          "page": 3,
+          "publication_set_id": "sha256:d82bbab44bc9a0fb693550b58b5fe18c23eabfde3f26cbe9c1458909a4d65109",
+          "snapshot_id": "sha256:c5bd9bc78849f85d7548efb9be69c6ddc93b8ccdb2fce6334f7c3a6482f77f36",
+          "status": "partial"
+        },
+        {
+          "cumulative_budget": {
+            "candidates_considered": 8,
+            "evidence_units": 8,
+            "operations_executed": 1,
+            "output_chars": 2480,
+            "pages": 3,
+            "schema_version": "marker.continuation.budget.v1",
+            "work_units": 8
+          },
+          "error_code": null,
+          "lexical_generation_id": "sha256:bba627e4f3c0b3ec2713268b78c7efb8cedccc50f6a5c1029f0f6352c28402fc",
+          "locators": [
+            {
+              "node_id": "n7",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 6
+            },
+            {
+              "node_id": "n8",
+              "rank": -1e-06,
+              "record_id": "view.pages",
+              "row_index": 7
+            }
+          ],
+          "materialized_generation_id": "sha256:a4aa4c4cd3fd5fb98c1d4352e0fc84cf8d078e485c49c5b28c5a95c7b33a6c2b",
+          "page": 4,
+          "publication_set_id": "sha256:d82bbab44bc9a0fb693550b58b5fe18c23eabfde3f26cbe9c1458909a4d65109",
+          "snapshot_id": "sha256:c5bd9bc78849f85d7548efb9be69c6ddc93b8ccdb2fce6334f7c3a6482f77f36",
+          "status": "complete"
+        }
+      ],
+      "publication_set_id": "sha256:d82bbab44bc9a0fb693550b58b5fe18c23eabfde3f26cbe9c1458909a4d65109",
+      "record_id": "view.pages",
+      "workspace": "ws79-pages"
+    },
+    "pin_lifecycle": {
+      "acceptance": {
+        "expiry_reclaim_removes_row": true,
+        "reclaim_releases_pin": true,
+        "terminal_releases_pin": true,
+        "valid_cursor_retains_pin": true
+      },
+      "active_pin_count_after_reclaim": 0,
+      "active_pin_count_after_terminal": 0,
+      "active_pin_count_during_valid_cursor": 1,
+      "cursor_pin_id": "7dacb0c9-44d3-4745-89bc-28db73f1d17a",
+      "implemented": true,
+      "page_count_to_terminal": 2,
+      "publication_set_id": "sha256:728e6c3ccca9468ae802f781ea7f0d674b1ac7a15caec821457e817a2bd62ffd",
+      "reclaimed_cursor_count": 2,
+      "workspace": "ws79-pins"
+    },
+    "policy_epoch_invalidation": {
+      "acceptance": {
+        "access_policy_revision_invalidates": true,
+        "authorization_epoch_invalidates": true,
+        "same_safe_invalidation_category": true
+      },
+      "epoch_outcome": {
+        "error_code": "authorization_changed",
+        "status": "invalidated"
+      },
+      "implemented": true,
+      "policy_outcome": {
+        "error_code": "authorization_changed",
+        "status": "invalidated"
+      },
+      "workspace": "ws79-identity"
+    }
+  },
+  "schema_version": "marker.pr79a_continuation_measurements.v1",
+  "schema_versions": {
+    "budget": "marker.continuation.budget.v1",
+    "continuation_outcome": "marker.continuation.v1",
+    "cursor_token": 1,
+    "evidence_packet": "marker.evidence_packet.v1",
+    "keyset": "marker.continuation.keyset.v1",
+    "query": "marker.query.v1"
+  },
+  "timing_characterization": {
+    "fresh_complete_query_ms": {
+      "mean": 51.529,
+      "p50": 50.949,
+      "p95": 52.96,
+      "p99": 52.96
+    },
+    "implemented": true,
+    "note": "wall-clock characterization only; no constant-time or isolation claim",
+    "repeats": 3
+  }
+}
