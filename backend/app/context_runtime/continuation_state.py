@@ -6,7 +6,12 @@ import math
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from app.context_runtime.contract import LexicalSearchOp, QueryRequest, parse_query_request
+from app.context_runtime.contract import (
+    LexicalSearchOp,
+    QueryRequest,
+    parse_query_request,
+    validate_request_budget,
+)
 from app.context_runtime.errors import QueryContractError
 from app.context_runtime.packets import CandidateUnit
 from app.kernel.publications import LexicalSearchAfter
@@ -41,6 +46,7 @@ def canonical(value: Any) -> str:
 
 def coerce_request(value: QueryRequest | Mapping[str, Any]) -> QueryRequest:
     if isinstance(value, QueryRequest):
+        validate_request_budget(value)
         return value
     if not isinstance(value, Mapping):
         raise QueryContractError("query request must be a mapping")
@@ -222,8 +228,19 @@ def validate_keyset(value: Mapping[str, Any], request: QueryRequest) -> dict[str
 
 
 def locator_key(candidate: CandidateUnit) -> str:
+    locator = candidate.locator
+    # ``row_index`` identifies one lexical representation and its ranking
+    # position, not the evidence unit. Exact reads have no row index, so it
+    # must stay outside chain-wide semantic dedupe identity.
+    semantic_locator = {
+        "publication_set_id": locator.publication_set_id,
+        "materialized_generation_id": locator.materialized_generation_id,
+        "lexical_generation_id": locator.lexical_generation_id,
+        **locator.identity_view(),
+    }
+    semantic_locator.pop("row_index")
     return payload_byte_hash(
-        canonical(candidate.locator.identity_view()).encode("utf-8")
+        canonical(semantic_locator).encode("utf-8")
     )
 
 

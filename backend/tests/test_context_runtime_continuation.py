@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
+from app.context_runtime.authorization import EffectiveAuthorization
 from app.context_runtime.continuation import (
     CONTINUATION_SCHEMA_VERSION,
     CURSOR_REPLAY_FRESH,
@@ -33,6 +34,22 @@ from app.context_runtime.cursor import (
     new_cursor_nonce,
     validate_cursor_expiry,
 )
+from app.context_runtime.continuation_paging import ContinuationPager
+from app.context_runtime.continuation_state import (
+    coerce_request,
+    initial_budget,
+    initial_keyset,
+)
+from app.context_runtime.contract import (
+    QUERY_SCHEMA_VERSION,
+    LexicalSearchOp,
+    QueryBudget,
+    QueryRequest,
+    RecordGetOp,
+)
+from app.context_runtime.errors import QueryBudgetError
+from app.kernel.publications import LexicalHit, LexicalSearchPage, PublishedRecord
+from app.utils.canonical import payload_byte_hash
 
 
 def _codec(*, current: str = "k1", old: bool = False) -> CursorCodec:
@@ -222,3 +239,135 @@ def test_cursor_state_expiry_uses_row_state_not_token_claims() -> None:
     validate_cursor_state_expiry(state, now=now)
     with pytest.raises(CursorExpiredError):
         validate_cursor_state_expiry(state, now=now + timedelta(seconds=1))
+
+
+def test_coerce_request_revalidates_direct_query_budget() -> None:
+    request = QueryRequest(
+        schema_version=QUERY_SCHEMA_VERSION,
+        workspace_id="ws-budget",
+        operations=[
+            RecordGetOp(op="record_get", record_id="record-1"),
+            RecordGetOp(op="record_get", record_id="record-2"),
+        ],
+        budget=QueryBudget(max_operations=1),
+    )
+
+    with pytest.raises(QueryBudgetError, match="2 operations"):
+        coerce_request(request)
+
+
+class _DedupeReader:
+    def __init__(self, hit: LexicalHit, record: PublishedRecord) -> None:
+        self._hit = hit
+        self._record = record
+
+    def explain(self) -> dict[str, object]:
+        return {
+            "publication_set_id": "publication-1",
+            "workspace_id": "ws-dedupe",
+            "profile": "default",
+            "kernel_commit_id": 1,
+            "snapshot_id": "snapshot-1",
+            "materialized_generation_id": "materialized-1",
+            "lexical_generation_id": "lexical-1",
+            "tokenizer": "unicode-v1",
+            "vector_generation_id": None,
+            "lexical_row_count": 1,
+        }
+
+    async def get_record(self, record_id: str) -> PublishedRecord | None:
+        return self._record if record_id == self._record.record_id else None
+
+    async def search_after(
+        self,
+        query: str,
+        *,
+        limit: int,
+        after: object | None = None,
+    ) -> LexicalSearchPage:
+        if after is None:
+            return LexicalSearchPage(
+                hits=(self._hit,),
+                next_after=None,
+                has_more=False,
+            )
+        return LexicalSearchPage(hits=(), next_after=None, has_more=False)
+
+
+@pytest.mark.asyncio
+async def test_continuation_dedupes_lexical_and_record_get_across_pages() -> None:
+    text_hash = payload_byte_hash(b"needle")
+    record = PublishedRecord(
+        record_id="view-1",
+        workspace_id="ws-dedupe",
+        kernel_commit_id=1,
+        record_class="view_document",
+        record_type="view",
+        schema_version="view.v1",
+        identity_hash="sha256:record-1",
+        payload={"view_id": "view-1", "texts": {"n1": "needle"}},
+        payload_byte_hash="sha256:payload-1",
+    )
+    hit = LexicalHit(
+        publication_set_id="publication-1",
+        lexical_generation_id="lexical-1",
+        row_index=7,
+        record_id="view-1",
+        view_id="view-1",
+        node_id="n1",
+        revision_ref=record.identity_hash,
+        text_hash=text_hash,
+        rank=-1.0,
+        text="needle",
+    )
+    request = QueryRequest(
+        schema_version=QUERY_SCHEMA_VERSION,
+        workspace_id="ws-dedupe",
+        operations=[
+            LexicalSearchOp(op="lexical_search", text="needle", limit=1),
+            RecordGetOp(op="record_get", record_id="view-1", node_id="n1"),
+        ],
+        budget=QueryBudget(
+            max_operations=2,
+            max_candidates=4,
+            max_evidence_units=4,
+            max_output_chars=10_000,
+        ),
+    )
+    auth = EffectiveAuthorization(
+        profile="local_v1",
+        assurance="standard",
+        workspace_id="ws-dedupe",
+        epoch_number=0,
+        epoch_fingerprint=None,
+        policy_digest="sha256:policy",
+    )
+    reader = _DedupeReader(hit, record)
+    pager = ContinuationPager()
+
+    first = await pager.run_async(
+        reader,
+        request,
+        auth,
+        initial_keyset(request),
+        initial_budget(),
+        page_size=1,
+    )
+    assert [(unit.locator.record_id, unit.locator.node_id) for unit in first.packet.evidence] == [
+        ("view-1", "n1")
+    ]
+    assert first.packet.evidence[0].locator.row_index == 7
+    assert first.more_work
+
+    second = await pager.run_async(
+        reader,
+        request,
+        auth,
+        first.keyset,
+        first.cumulative_budget,
+        page_size=1,
+    )
+    assert second.packet.evidence == ()
+    assert [omission.reason for omission in second.packet.omitted] == ["duplicate"]
+    assert second.cumulative_budget["evidence_units"] == 1
+    assert not second.more_work
