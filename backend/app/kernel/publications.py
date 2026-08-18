@@ -64,6 +64,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import uuid
 from dataclasses import dataclass
@@ -123,6 +124,8 @@ __all__ = [
     "LEXICAL_TOKENIZER",
     "LexicalGenerationRef",
     "LexicalHit",
+    "LexicalSearchAfter",
+    "LexicalSearchPage",
     "LexicalRowRef",
     "LexicalVerification",
     "PHASE_PUB_LEXICAL_BEGIN",
@@ -582,6 +585,72 @@ class LexicalHit:
     text_hash: str
     rank: float
     text: str
+
+@dataclass(frozen=True)
+class LexicalSearchAfter:
+    """Immutable keyset continuation for one lexical query page.
+
+    Ordering is the canonical lexical order ``(bm25 rank, row_index)``.
+    ``offset`` is intentionally absent: continuation resumes strictly after
+    this key in the immutable, generation-pinned index. The publication and
+    lexical generation ids prevent a continuation from crossing a pinned
+    reader boundary. ``query_hash`` binds page continuations to the exact
+    query text that produced them.
+    """
+
+    publication_set_id: str
+    lexical_generation_id: str
+    rank: float
+    row_index: int
+    query_hash: str
+
+    def as_dict(self) -> dict[str, Any]:
+        """Serialize continuation fields without mutable paging state."""
+        return {
+            "publication_set_id": self.publication_set_id,
+            "lexical_generation_id": self.lexical_generation_id,
+            "rank": self.rank,
+            "row_index": self.row_index,
+            "query_hash": self.query_hash,
+        }
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> "LexicalSearchAfter":
+        """Build continuation from a wire mapping.
+
+        Validation of generation/query membership happens at reader use so
+        malformed or cross-reader state fails closed at the trust boundary.
+        """
+        if not isinstance(value, Mapping):
+            raise TypeError("lexical continuation must be a mapping")
+        expected = {
+            "publication_set_id",
+            "lexical_generation_id",
+            "rank",
+            "row_index",
+            "query_hash",
+        }
+        if set(value) != expected:
+            raise ValueError(
+                "lexical continuation fields must be exactly "
+                f"{sorted(expected)!r}"
+            )
+        return cls(
+            publication_set_id=value["publication_set_id"],
+            lexical_generation_id=value["lexical_generation_id"],
+            rank=value["rank"],
+            row_index=value["row_index"],
+            query_hash=value["query_hash"],
+        )
+
+
+@dataclass(frozen=True)
+class LexicalSearchPage:
+    """One keyset search page and its optional next continuation."""
+
+    hits: tuple[LexicalHit, ...]
+    next_after: LexicalSearchAfter | None
+    has_more: bool
 
 
 @dataclass(frozen=True)
@@ -2606,6 +2675,232 @@ class PublicationReader:
                 )
             )
         return tuple(hits)
+
+    async def search_after(
+        self,
+        query: str,
+        *,
+        limit: int = 100,
+        after: LexicalSearchAfter | None = None,
+    ) -> LexicalSearchPage:
+        """Read one deterministic keyset page from the pinned index.
+
+        ``after`` is an immutable continuation key, never an offset. The
+        canonical order is ``(bm25 rank ASC, row_index ASC)``; the SQL
+        predicate therefore resumes with ``rank > last_rank`` or the equal
+        rank tie-break ``row_index > last_row_index``. Continuations carry
+        both pinned member identities and an exact query digest. Any
+        cross-generation, malformed, stale, or tampered continuation fails
+        closed with :class:`PublicationIntegrityError`.
+
+        The returned page fetches one look-ahead row, exposing ``has_more``
+        and ``next_after`` without putting mutable paging state in the
+        continuation itself. Existing :meth:`search` offset paging remains
+        unchanged for compatibility callers.
+        """
+        if not isinstance(query, str) or not query.strip():
+            raise LexicalQueryError("lexical query must be a non-empty string")
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+            raise KernelError("limit must be positive")
+
+        query_hash = payload_byte_hash(query.encode("utf-8"))
+        continuation: LexicalSearchAfter | None
+        if after is None:
+            continuation = None
+        elif isinstance(after, LexicalSearchAfter):
+            continuation = after
+        else:
+            raise PublicationIntegrityError(
+                "lexical continuation has unsupported type; refusing to serve"
+            )
+
+        if continuation is not None:
+            if (
+                continuation.publication_set_id != self._set.publication_set_id
+                or continuation.lexical_generation_id
+                != self._lexical.lexical_generation_id
+            ):
+                raise PublicationIntegrityError(
+                    "lexical continuation is not bound to this pinned "
+                    "publication and lexical generation"
+                )
+            if continuation.query_hash != query_hash:
+                raise PublicationIntegrityError(
+                    "lexical continuation query binding mismatch; refusing "
+                    "to serve a cross-query page"
+                )
+            if (
+                isinstance(continuation.rank, bool)
+                or not isinstance(continuation.rank, (int, float))
+                or not math.isfinite(float(continuation.rank))
+                or isinstance(continuation.row_index, bool)
+                or not isinstance(continuation.row_index, int)
+                or continuation.row_index < 0
+            ):
+                raise PublicationIntegrityError(
+                    "lexical continuation key is malformed; refusing to serve"
+                )
+
+        fts = self._lexical.fts_table
+        query_params: dict[str, Any] = {
+            "query": query,
+            "limit": limit + 1,
+        }
+        try:
+            async with self._session_factory() as session:
+                anchor: Mapping[str, Any] | None = None
+                if continuation is not None:
+                    anchor = (
+                        (
+                            await session.execute(
+                                text(
+                                    f'SELECT rowid, record_id, view_id, node_id, '
+                                    f'text, bm25("{fts}") AS bm25_rank '
+                                    f'FROM "{fts}" WHERE "{fts}" MATCH :query '
+                                    "AND rowid = :after_row_index LIMIT 1"
+                                ),
+                                {
+                                    "query": query,
+                                    "after_row_index": continuation.row_index,
+                                },
+                            )
+                        )
+                        .mappings()
+                        .first()
+                    )
+                    if anchor is None:
+                        raise PublicationIntegrityError(
+                            "lexical continuation anchor is absent from the "
+                            "pinned query generation; refusing to serve"
+                        )
+                    anchor_rank = float(anchor["bm25_rank"])
+                    if anchor_rank != float(continuation.rank):
+                        raise PublicationIntegrityError(
+                            "lexical continuation anchor rank diverges from "
+                            "the pinned generation; refusing to serve"
+                        )
+
+                where = f'WHERE "{fts}" MATCH :query'
+                if continuation is not None:
+                    where += (
+                        f' AND (bm25("{fts}") > :after_rank OR '
+                        f'(bm25("{fts}") = :after_rank AND rowid > '
+                        ":after_row_index))"
+                    )
+                    query_params.update(
+                        {
+                            "after_rank": float(continuation.rank),
+                            "after_row_index": continuation.row_index,
+                        }
+                    )
+                fts_rows = (
+                    (
+                        await session.execute(
+                            text(
+                                f'SELECT rowid, record_id, view_id, node_id, text, '
+                                f'bm25("{fts}") AS bm25_rank FROM "{fts}" '
+                                f"{where} ORDER BY bm25_rank ASC, rowid ASC "
+                                "LIMIT :limit"
+                            ),
+                            query_params,
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                locator_ids = [int(row["rowid"]) for row in fts_rows]
+                if anchor is not None:
+                    locator_ids.append(int(anchor["rowid"]))
+                if locator_ids:
+                    locators = {
+                        row.row_index: row
+                        for row in (
+                            (
+                                await session.execute(
+                                    select(KernelLexicalRow).where(
+                                        KernelLexicalRow.lexical_generation_id
+                                        == self._lexical.lexical_generation_id,
+                                        KernelLexicalRow.row_index.in_(locator_ids),
+                                    )
+                                )
+                            )
+                            .scalars()
+                            .all()
+                        )
+                    }
+                else:
+                    locators = {}
+        except OperationalError as exc:
+            if not _is_busy(exc):
+                raise LexicalQueryError(f"lexical query rejected: {exc}") from exc
+            raise
+
+        def checked_hit(fts_row: Mapping[str, Any]) -> LexicalHit:
+            row_index = int(fts_row["rowid"])
+            node_text = fts_row["text"] or ""
+            text_hash = payload_byte_hash(node_text.encode("utf-8"))
+            locator = locators.get(row_index)
+            if locator is None:
+                raise PublicationIntegrityError(
+                    f"lexical hit row {row_index} has no locator in generation "
+                    f"{self._lexical.lexical_generation_id}; refusing to serve "
+                    "an orphan hit"
+                )
+            if (
+                locator.record_id != fts_row["record_id"]
+                or locator.view_id != fts_row["view_id"]
+                or locator.node_id != fts_row["node_id"]
+            ):
+                raise PublicationIntegrityError(
+                    f"lexical hit row {row_index} locator mismatch between "
+                    "index and stored rows"
+                )
+            if text_hash != locator.text_hash or len(node_text) != locator.text_chars:
+                raise PublicationIntegrityError(
+                    f"lexical hit row {row_index} text hash mismatch "
+                    f"(stored {locator.text_hash}, indexed {text_hash}); the "
+                    "pinned lexical generation was tampered with"
+                )
+            return LexicalHit(
+                publication_set_id=self._set.publication_set_id,
+                lexical_generation_id=self._lexical.lexical_generation_id,
+                row_index=row_index,
+                record_id=locator.record_id,
+                view_id=locator.view_id,
+                node_id=locator.node_id,
+                revision_ref=locator.revision_ref,
+                text_hash=locator.text_hash,
+                rank=float(fts_row["bm25_rank"]),
+                text=node_text,
+            )
+
+        if anchor is not None:
+            # Validate anchor locator/index bytes too. Otherwise an index row
+            # could be altered between pages and silently steer the keyset.
+            checked_hit(anchor)
+
+        has_more = len(fts_rows) > limit
+        page_rows = fts_rows[:limit]
+        hits = tuple(checked_hit(row) for row in page_rows)
+        next_after = None
+        if has_more and hits:
+            last = hits[-1]
+            next_after = LexicalSearchAfter(
+                publication_set_id=last.publication_set_id,
+                lexical_generation_id=last.lexical_generation_id,
+                rank=last.rank,
+                row_index=last.row_index,
+                query_hash=query_hash,
+            )
+        return LexicalSearchPage(
+            hits=hits,
+            next_after=next_after,
+            has_more=has_more,
+        )
+
+    # Explicit alias makes keyset intent discoverable without changing the
+    # stable ``search`` offset API.
+    search_keyset = search_after
 
 
 async def open_published_reader(
