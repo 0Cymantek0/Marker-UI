@@ -90,6 +90,7 @@ from app.kernel.publications import (
     PublicationSetRef,
     resolve_published_set,
 )
+from app.kernel.models import KernelCursor, KernelQueryCursor
 from app.kernel.outbox import OutboxIntent, OutboxView
 from app.kernel.payloads import LocalPayloadStore, StagedBlob
 from app.kernel.proofs import (
@@ -137,8 +138,10 @@ __all__ = [
     "KernelCommitBatch",
     "KernelCommitReceipt",
     "KernelCommitService",
+    "KernelCursor",
     "KernelError",
     "KernelSnapshot",
+    "KernelQueryCursor",
     "LocalPayloadStore",
     "OutboxIntent",
     "OutboxView",

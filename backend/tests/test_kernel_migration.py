@@ -104,7 +104,8 @@ PR73_TABLES = {"kernel_view_heads"}
 
 PR73_HEAD = "20260817_0010"
 PR76_HEAD = "20260817_0011"
-CURRENT_HEAD = PR76_HEAD
+PR79A_HEAD = "20260818_0012"
+CURRENT_HEAD = PR79A_HEAD
 
 PR76_TABLES = {
     "kernel_lexical_generations",
@@ -113,6 +114,8 @@ PR76_TABLES = {
     "kernel_publication_heads",
     "kernel_publication_pins",
 }
+
+PR79A_TABLES = {"kernel_query_cursors"}
 
 
 def _db_url(path: Path) -> str:

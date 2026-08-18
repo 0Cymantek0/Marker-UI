@@ -69,6 +69,7 @@ from app.kernel.models import (  # noqa: F401 - register kernel spine tables
     KernelCommitManifest,
     KernelRecord,
     KernelRecordEdge,
+    KernelQueryCursor,
 )
 from app.models.audit import AuditEvent  # noqa: F401 - register tables on Base.metadata
 from app.models.job import ConversionJob  # noqa: F401

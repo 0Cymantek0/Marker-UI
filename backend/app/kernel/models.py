@@ -201,6 +201,11 @@ MAX_TOKENIZER_LENGTH = 64
 MAX_FTS_TABLE_NAME_LENGTH = 96
 MAX_NODE_ID_LENGTH = 128
 MAX_PUBLICATION_STATE_LENGTH = 16
+MAX_CURSOR_HANDLE_LENGTH = 128
+MAX_CURSOR_NONCE_LENGTH = 128
+MAX_CURSOR_STATUS_LENGTH = 16
+MAX_CURSOR_REPLAY_STATE_LENGTH = 16
+MAX_CURSOR_PIN_ID_LENGTH = 128
 
 
 class KernelCommitHead(Base):
@@ -1183,3 +1188,73 @@ class KernelPublicationPin(Base):
             f"<KernelPublicationPin(id={self.pin_id!r}, "
             f"set={self.publication_set_id!r})>"
         )
+
+
+class KernelQueryCursor(Base):
+    """Durable state for one opaque server-side query continuation (PR79A).
+
+    ``handle`` is the random primary key referenced by a signed cursor token.
+    Sensitive request and security dimensions are canonical JSON in local DB
+    columns and never serialized into that token. ``replay_state`` is durable
+    so a later continuation service can rotate/consume nonce state across
+    process restarts rather than relying on process memory.
+    """
+
+    __tablename__ = "kernel_query_cursors"
+
+    handle: Mapped[str] = mapped_column(
+        String(MAX_CURSOR_HANDLE_LENGTH), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    query_json: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publication_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authorization_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    keyset_json: Mapped[str] = mapped_column(Text, nullable=False)
+    cumulative_budget_json: Mapped[str] = mapped_column(Text, nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(), index=True, nullable=False
+    )
+    pin_id: Mapped[str | None] = mapped_column(
+        String(MAX_CURSOR_PIN_ID_LENGTH), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(MAX_CURSOR_STATUS_LENGTH), index=True, nullable=False
+    )
+    nonce: Mapped[str] = mapped_column(
+        String(MAX_CURSOR_NONCE_LENGTH), nullable=False
+    )
+    replay_state: Mapped[str] = mapped_column(
+        String(MAX_CURSOR_REPLAY_STATE_LENGTH), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_kernel_query_cursors_workspace_status",
+            "workspace_id",
+            "status",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelQueryCursor(handle={self.handle!r}, "
+            f"workspace={self.workspace_id!r}, status={self.status!r}, "
+            f"page={self.page_count})>"
+        )
+
+
+# Short alias keeps generic kernel callers ergonomic while the canonical class
+# name distinguishes query continuation rows from future event cursors.
+KernelCursor = KernelQueryCursor

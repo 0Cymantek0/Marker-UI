@@ -21,6 +21,7 @@ from app.kernel.models import (  # noqa: F401
     KernelCommitManifest,
     KernelRecord,
     KernelRecordEdge,
+    KernelQueryCursor,
 )
 
 config = context.config
