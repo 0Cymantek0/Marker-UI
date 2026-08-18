@@ -201,10 +201,12 @@ class ContinuationService:
             if reader is None:
                 if parsed.assurance == ASSURANCE_HIGH:
                     raise QueryAuthorizationError("high-assurance partition unavailable")
+                budget = initial_budget()
+                budget["pages"] = 1
                 return _outcome(
                     OUTCOME_COMPLETE,
                     packet=await unpublished_packet(parsed, auth),
-                    budget=initial_budget(),
+                    budget=budget,
                 )
             run = await self.pager.run_async(
                 reader,
@@ -214,6 +216,7 @@ class ContinuationService:
                 initial_budget(),
                 size,
             )
+            run.cumulative_budget["pages"] += 1
             latest = await resolve_effective_authorization(
                 self.session_factory,
                 parsed.workspace_id,
@@ -242,7 +245,7 @@ class ContinuationService:
                     reason="continuation budget exhausted",
                     error_code=budget_stop,
                 )
-            if run.cumulative_budget["pages"] + 1 >= self.max_chain_pages:
+            if run.cumulative_budget["pages"] >= self.max_chain_pages:
                 return _outcome(
                     OUTCOME_LOOP_LIMIT,
                     packet=run.packet,
@@ -250,7 +253,6 @@ class ContinuationService:
                     reason="continuation chain limit reached",
                     error_code="loop_limit",
                 )
-            run.cumulative_budget["pages"] += 1
             expires_at = utc(self.clock()) + timedelta(seconds=self.ttl_seconds)
             cursor_pin = await acquire_publication_pin(
                 self.session_factory,
@@ -410,6 +412,7 @@ class ContinuationService:
             run = await self.pager.run_async(
                 reader, query, auth, keyset, budget, size
             )
+            run.cumulative_budget["pages"] += 1
             latest = await resolve_effective_authorization(
                 self.session_factory,
                 workspace_id,
@@ -433,7 +436,7 @@ class ContinuationService:
                     reason="continuation budget exhausted",
                     error_code=budget_stop,
                 )
-            if run.cumulative_budget["pages"] + 1 >= self.max_chain_pages:
+            if run.cumulative_budget["pages"] >= self.max_chain_pages:
                 await self._finish_claimed(row, CURSOR_STATUS_REVOKED)
                 return _outcome(
                     OUTCOME_LOOP_LIMIT,
@@ -442,7 +445,6 @@ class ContinuationService:
                     reason="continuation chain limit reached",
                     error_code="loop_limit",
                 )
-            run.cumulative_budget["pages"] += 1
             new_nonce = await self.store.rotate(
                 handle=row.handle,
                 old_nonce=envelope.nonce,

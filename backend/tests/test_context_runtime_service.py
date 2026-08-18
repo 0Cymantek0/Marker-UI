@@ -82,6 +82,8 @@ async def test_continuation_reconstructs_three_pages_and_rotates_nonce(payload_e
 
     assert first.status == "partial"
     assert first.next_cursor
+    assert first.result["cumulative_budget"]["pages"] == 1
+    page_counts = [first.result["cumulative_budget"]["pages"]]
     locators = [
         (unit.locator.record_id, unit.locator.node_id)
         for unit in first.packet.evidence
@@ -89,6 +91,7 @@ async def test_continuation_reconstructs_three_pages_and_rotates_nonce(payload_e
     cursor = first.next_cursor
     while cursor:
         page = await service.continue_query(cursor, workspace_id="ws-cont", page_size=2)
+        page_counts.append(page.result["cumulative_budget"]["pages"])
         locators.extend(
             (unit.locator.record_id, unit.locator.node_id)
             for unit in (page.packet.evidence if page.packet else ())
@@ -100,11 +103,25 @@ async def test_continuation_reconstructs_three_pages_and_rotates_nonce(payload_e
 
     assert len(locators) == 6
     assert len(set(locators)) == 6
+    assert page_counts == [1, 2, 3, 4]
     assert first.packet.publication["publication_set_id"] == publication.publication_set_id
     assert all(
         unit.locator.publication_set_id == publication.publication_set_id
         for unit in first.packet.evidence
     )
+
+
+async def test_terminal_page_counts_as_delivered_page(payload_env):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-terminal")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    outcome = await service.fresh_query(_request("ws-terminal"), page_size=10)
+
+    assert outcome.status == "complete"
+    assert outcome.packet is not None
+    assert len(outcome.packet.evidence) == 6
+    assert outcome.result["cumulative_budget"]["pages"] == 1
 
 
 async def test_continuation_stays_on_old_publication_after_head_switch(payload_env):
@@ -283,9 +300,11 @@ async def test_cumulative_budgets_and_hard_chain_limit_stop_pagination(payload_e
     first = await service.fresh_query(request, page_size=1)
     assert first.status == "partial"
     assert first.next_cursor
+    assert first.result["cumulative_budget"]["pages"] == 1
     second = await service.continue_query(first.next_cursor, workspace_id="ws-budget", page_size=1)
     assert second.status == "loop_limit"
     assert second.next_cursor is None
+    assert second.result["cumulative_budget"]["pages"] == 2
     assert second.result["cumulative_budget"]["evidence_units"] <= 3
 
     candidate_limited = parse_query_request(
