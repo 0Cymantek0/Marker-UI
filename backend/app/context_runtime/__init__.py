@@ -97,6 +97,7 @@ from app.context_runtime.errors import (
     UnsupportedOperatorError,
 )
 from app.context_runtime.executor import execute_query
+from app.context_runtime.service import ContinuationService
 from app.context_runtime.packets import (
     EVIDENCE_PACKET_SCHEMA_VERSION,
     BudgetReport,
@@ -140,6 +141,7 @@ __all__ = [
     "BudgetReport",
     "CandidateUnit",
     "ContinuationContractError",
+    "ContinuationService",
     "ContinuationOutcome",
     "ContinuationResult",
     "CursorCodec",

@@ -53,7 +53,13 @@ from app.kernel.publications import (
 from app.kernel.retention import DEFAULT_PIN_LEASE_SECONDS
 from app.utils.canonical import payload_byte_hash
 
-__all__ = ["execute_query"]
+__all__ = [
+    "build_record_candidate",
+    "execute_query",
+    "resolve_source_ref",
+    "resolve_source_ref_for_id",
+    "unpublished_packet",
+]
 
 #: Authorized-universe traversal bounds for lexical candidate
 #: selection. The window pages through the deterministic rank order;
@@ -154,6 +160,14 @@ async def _unpublished_packet(
         candidates_considered=0,
         authorization=auth.identity_view(),
     )
+
+
+async def unpublished_packet(
+    request: QueryRequest, auth: EffectiveAuthorization
+) -> EvidencePacket:
+    """Public continuation-service helper for honest unpublished results."""
+
+    return await _unpublished_packet(request, auth)
 
 
 def _op_name(op: Any) -> str:
@@ -405,6 +419,26 @@ async def _resolve_source_ref(
     return await _resolve_source_ref_for_id(reader, record.record_id, lineage_cache)
 
 
+async def resolve_source_ref(
+    reader: PublicationReader,
+    record: PublishedRecord | None,
+    lineage_cache: dict[str, str | None],
+) -> str | None:
+    """Resolve trusted lineage for continuation paging."""
+
+    return await _resolve_source_ref(reader, record, lineage_cache)
+
+
+async def resolve_source_ref_for_id(
+    reader: PublicationReader,
+    record_id: str,
+    lineage_cache: dict[str, str | None],
+) -> str | None:
+    """Resolve trusted lineage by record id for lexical candidates."""
+
+    return await _resolve_source_ref_for_id(reader, record_id, lineage_cache)
+
+
 async def _resolve_source_ref_for_id(
     reader: PublicationReader, record_id: str, lineage_cache: dict[str, str | None]
 ) -> str | None:
@@ -491,3 +525,14 @@ def _record_candidate(
         text=None,
         rank=None,
     )
+
+
+def build_record_candidate(
+    index: int,
+    attribution: Mapping[str, Any],
+    record: Any,
+    node_id: str | None,
+) -> CandidateUnit | None:
+    """Build one exact-read candidate for continuation paging."""
+
+    return _record_candidate(index, attribution, record, node_id)

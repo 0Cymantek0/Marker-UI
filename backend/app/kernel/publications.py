@@ -2305,6 +2305,7 @@ async def acquire_publication_pin(
     publication_set_id: str,
     *,
     lease_seconds: float = DEFAULT_PIN_LEASE_SECONDS,
+    expires_at: datetime | None = None,
 ) -> PublicationPinView:
     """Acquire a durable read lease over one publication set.
 
@@ -2316,7 +2317,18 @@ async def acquire_publication_pin(
     if lease_seconds <= 0:
         raise RetentionContractError("lease_seconds must be positive")
     now = _utcnow()
-    expires = now + timedelta(seconds=lease_seconds)
+    lease_deadline = now + timedelta(seconds=lease_seconds)
+    expires = (
+        lease_deadline
+        if expires_at is None
+        else _as_utc(expires_at)
+    )
+    if expires is None or expires <= now:
+        raise RetentionContractError("expires_at must be in the future")
+    if expires > lease_deadline:
+        raise RetentionContractError(
+            "expires_at cannot extend beyond the declared lease_seconds"
+        )
     async with session_factory() as session:
         async with session.begin():
             row = await session.get(KernelPublicationSet, publication_set_id)

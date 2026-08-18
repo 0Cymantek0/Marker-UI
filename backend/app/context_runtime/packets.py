@@ -34,6 +34,7 @@ __all__ = [
     "EvidencePacket",
     "EvidenceUnit",
     "CandidateUnit",
+    "candidate_unit_cost",
     "OmittedEvidence",
     "assemble_packet",
     "packet_identity_dimensions",
@@ -131,7 +132,13 @@ class OmittedEvidence:
 
 #: Omission reasons that mark a budget-limited (partial) execution.
 _BUDGET_REASONS = frozenset(
-    {"candidate_budget", "output_budget", "unit_budget", "unit_too_large"}
+    {
+        "candidate_budget",
+        "output_budget",
+        "unit_budget",
+        "unit_too_large",
+        "work_budget",
+    }
 )
 
 
@@ -195,7 +202,7 @@ class EvidencePacket:
         return self.status == "partial"
 
 
-def _unit_cost(candidate: CandidateUnit, include_text: bool) -> int:
+def candidate_unit_cost(candidate: CandidateUnit, include_text: bool) -> int:
     """Serialized size of one candidate unit under canonical JSON — the
     indivisible structural cost used for output budgeting. The bm25
     ``rank`` float is excluded: the canonical identity contract rejects
@@ -267,7 +274,7 @@ def assemble_packet(
                 )
             )
             continue
-        cost = _unit_cost(candidate, include_text)
+        cost = candidate_unit_cost(candidate, include_text)
         if len(included) >= max_units:
             omitted.append(
                 OmittedEvidence(
