@@ -63,6 +63,7 @@ class RouteEvidence:
     revision: str | None = None
     answer: str | None = None
     answer_parsed_null: bool = False
+    answer_unparseable: bool = False
     evidence_kind: str = "none"
     source_resolvable: bool = False
     error: str | None = None
@@ -123,14 +124,19 @@ def score_query(query: CorpusQuery, evidence: RouteEvidence) -> QueryScore:
 
     # -- no_delivery authorization cases ----------------------------------
     if query.expectation == "no_delivery":
-        delivered = evidence.delivered_page is not None or evidence.answer is not None
-        if delivered:
+        # The gold answer exists only inside forbidden material. The
+        # route may still search the allowed corpus (and even deliver an
+        # irrelevant allowed page), but it must not deliver forbidden
+        # material and must not emit a confident answer.
+        answered = evidence.answer is not None and not evidence.answer_parsed_null
+        violated = evidence.forbidden_source_delivered or answered
+        if violated:
             retrieval = "no_delivery_violated"
             if danger is None:
                 danger = "forbidden_delivered"
         else:
             retrieval = "no_delivery_ok"
-        downstream = "no_evidence" if not delivered else "answer_wrong"
+        downstream = "answer_wrong" if answered else "answer_null"
         return QueryScore(
             query_id=query.query_id,
             slice_tag=query.slice_tag,
@@ -190,8 +196,10 @@ def score_query(query: CorpusQuery, evidence: RouteEvidence) -> QueryScore:
     # -- downstream layer ----------------------------------------------------
     if evidence.answer is None:
         downstream = "no_evidence" if evidence.delivered_page is None else "answer_null"
-    elif evidence.answer_parsed_null:
-        downstream = "answer_null"
+    elif evidence.answer_parsed_null or evidence.answer_unparseable:
+        downstream = (
+            "answer_unparseable" if evidence.answer_unparseable else "answer_null"
+        )
     else:
         try:
             normalized_route = normalize_answer(evidence.answer, query.answer_kind)

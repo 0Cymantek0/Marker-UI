@@ -227,6 +227,22 @@ class TestNoDelivery:
         assert score.danger == "forbidden_delivered"
         assert score.task_success is False
 
+    def test_allowed_page_with_null_answer_is_honest_abstention(self):
+        query = _query(expectation="no_delivery", answer="", normalized_answer="", profile="denied")
+        score = score_query(
+            query,
+            RouteEvidence(
+                system_id="route",
+                delivered_page=("doc-ops-01", 1),
+                answer=None,
+                answer_parsed_null=True,
+                evidence_kind="image_page",
+                source_resolvable=True,
+            ),
+        )
+        assert score.retrieval == "no_delivery_ok"
+        assert score.task_success is True
+
 
 class TestAggregation:
     def _scores(self):

@@ -23,6 +23,9 @@ _LAZY: dict[str, str] = {
     "embeddings": "app.eval.pr81a.embeddings",
     "visual_index": "app.eval.pr81a.visual_index",
     "vlm": "app.eval.pr81a.vlm",
+    "kernel_seed": "app.eval.pr81a.kernel_seed",
+    "lanes": "app.eval.pr81a.lanes",
+    "scoring": "app.eval.pr81a.scoring",
 }
 
 __all__ = list(_LAZY)
