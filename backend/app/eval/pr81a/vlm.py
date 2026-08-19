@@ -141,7 +141,44 @@ def _decode_chat_body(body: str) -> dict | None:
     try:
         return json.loads(body)
     except json.JSONDecodeError:
-        return None
+        pass
+    # some gateways answer non-streamed requests with an SSE chunk
+    # stream anyway (observed on this gateway's kr/* routes): accumulate
+    # content deltas into one synthetic completion
+    if body.startswith("data:"):
+        content_parts: list[str] = []
+        model: str | None = None
+        usage: dict = {}
+        for line in body.splitlines():
+            line = line.strip()
+            if not line.startswith("data:"):
+                continue
+            data = line[len("data:"):].strip()
+            if not data or data == "[DONE]":
+                continue
+            try:
+                chunk = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            model = model or chunk.get("model")
+            if chunk.get("usage"):
+                usage = chunk["usage"]
+            for choice in chunk.get("choices") or []:
+                delta = choice.get("delta") or {}
+                if delta.get("content"):
+                    content_parts.append(delta["content"])
+                message = choice.get("message") or {}
+                if message.get("content"):
+                    content_parts.append(message["content"])
+        if content_parts:
+            return {
+                "model": model,
+                "choices": [
+                    {"message": {"role": "assistant", "content": "".join(content_parts)}}
+                ],
+                "usage": usage,
+            }
+    return None
 
 
 class VlmClient:

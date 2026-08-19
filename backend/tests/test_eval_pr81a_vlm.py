@@ -254,6 +254,42 @@ class TestOutputParsing:
         _, parsed = client.answer("q", page_png=b"p", page_text=None)
         assert parsed == {"answer": "t"}
 
+    def test_sse_chunk_stream_is_accumulated(self, tmp_path):
+        # some gateway routes answer non-streamed requests with an SSE
+        # chunk stream; the client must fold content deltas into one reply
+        chunks = "\n".join(
+            [
+                'data: {"model":"kr/x","choices":[{"delta":{"role":"assistant"}}]}',
+                'data: {"choices":[{"delta":{"content":"{\\"ans"}}]}',
+                'data: {"choices":[{"delta":{"content":"wer\\": \\"ok\\"}"}}]}',
+                'data: {"choices":[{"delta":{}],"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3}}',
+                "data: [DONE]",
+            ]
+        )
+        transport = FakeTransport([(200, chunks)])
+        client = VlmClient(
+            ["m1"], transport=transport, cache_path=tmp_path / "c.json", mode="live", sleep=lambda _: None
+        )
+        envelope, parsed = client.answer("q", page_png=b"p", page_text=None)
+        assert envelope.error is None
+        assert envelope.model_served == "kr/x"
+        assert parsed == {"answer": "ok"}
+
+    def test_sse_stream_without_content_is_error_not_guess(self, tmp_path):
+        chunks = "\n".join(
+            [
+                'data: {"model":"kr/x","choices":[{"delta":{"role":"assistant"}}]}',
+                "data: [DONE]",
+            ]
+        )
+        transport = FakeTransport([RuntimeError("e")] * 4)
+        client = VlmClient(
+            ["m1"], transport=transport, cache_path=tmp_path / "c.json", mode="live", sleep=lambda _: None
+        )
+        envelope, parsed = client.answer("q", page_png=b"p", page_text=None)
+        assert parsed is None and envelope.error
+        del chunks, transport  # shape documented; empty-stream path is what matters
+
     def test_unparseable_content_is_none_not_guess(self, tmp_path):
         transport = FakeTransport([(200, _ok_body("the answer is four"))])
         client = VlmClient(

@@ -71,7 +71,7 @@ FRONTIER_TIER_MODELS: frozenset[str] = frozenset(
 ECONOMY_TIER_MODELS: frozenset[str] = frozenset(
     {
         "free/bbl/gemini-3.0-flash",
-        "free/opc/mimo-v2.5-free",
+        "oc/mimo-v2.5-free",
         "google/gemma-4-26b-a4b-it:free",  # PR81A identity, for reference rows
     }
 )

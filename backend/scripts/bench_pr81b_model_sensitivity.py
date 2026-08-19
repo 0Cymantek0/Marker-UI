@@ -44,9 +44,10 @@ MATRIX_SCHEMA = "marker.pr81b_model_sensitivity.v1"
 MEASUREMENTS = BACKEND.parent / "docs" / "reference" / "measurements"
 CORPUS_ROOT = BACKEND / "eval_data" / "pr81a"
 PR81A_RUNNER = BACKEND / "scripts" / "bench_pr81a_visual_retrieval.py"
-#: model id -> artifact/cache tag; short, filesystem-safe, stable
+#: model id -> artifact/cache tag; short, filesystem-safe, stable.
+#: Model ids are the user-declared exact gateway ids — never rewritten.
 MODEL_TAGS: dict[str, str] = {
-    "free/opc/mimo-v2.5-free": "mimo",
+    "oc/mimo-v2.5-free": "mimo",
     "kr/claude-sonnet-4.5": "sonnet",
     "kr/claude-haiku-4.5": "haiku",
     "cx/gpt-5.6-luna": "gptluna",

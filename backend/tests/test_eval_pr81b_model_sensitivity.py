@@ -527,7 +527,7 @@ class TestEvaluateConfirmation:
         per_model = {
             "kr/claude-sonnet-4.5": _artifact(),
             "free/bbl/gemini-3.0-flash": _artifact(),
-            "free/opc/mimo-v2.5-free": _artifact(hybrid_hard=0.70),  # no gain
+            "oc/mimo-v2.5-free": _artifact(hybrid_hard=0.70),  # no gain
         }
         result = evaluate_confirmation(per_model)
         assert result["outcome"] == "model_gated_experimental"
@@ -537,7 +537,7 @@ class TestEvaluateConfirmation:
     def test_frontier_depth_required(self):
         per_model = {
             m: _artifact()
-            for m in ("free/bbl/gemini-3.0-flash", "free/opc/mimo-v2.5-free")
+            for m in ("free/bbl/gemini-3.0-flash", "oc/mimo-v2.5-free")
         }
         result = evaluate_confirmation(per_model)
         assert result["outcome"] == "model_gated_experimental"
