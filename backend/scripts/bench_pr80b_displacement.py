@@ -34,9 +34,13 @@ if str(BACKEND) not in sys.path:
 
 from app.eval.pr80b.corpus import load_corpus
 from app.eval.pr80b.invoice2data_adapter import SYSTEM_ID as I2D_ID, Invoice2DataAdapter
-from app.eval.pr80b.llm import OpenRouterClient, envelope_to_output
+from app.eval.pr80b.llm import DEFAULT_MODEL_CHAIN, OpenRouterClient, envelope_to_output
 from app.eval.pr80b.pr80a_lane import SYSTEM_ID as PR80A_ID, run_pr80a_lane
 from app.eval.pr80b.scoring import aggregate_metrics, score_document
+
+#: Replay uses the model chain recorded in the cache header; live runs
+#: without a cache fall back to the default OpenRouter free-tier chain.
+DEFAULT_MODEL_CHAIN_PLACEHOLDER = DEFAULT_MODEL_CHAIN
 
 BENCHMARK_SCHEMA_VERSION = "marker.pr80b_displacement_evidence.v1"
 CORPUS_ROOT = BACKEND / "eval_data" / "pr80b"
@@ -49,27 +53,77 @@ DEFAULT_LLM_CACHE = MEASUREMENTS / "pr80b-llm-cache.json"
 DECISION = {
     "outcome": "hybrid_routing_condition",
     "summary": (
-        "PR80A retains the authoritative slice: it is the only route with "
-        "evidence lineage, conflict honesty, and invariant surfacing, and it "
-        "never fabricates. The hosted LLM wins raw field coverage on layout "
-        "variants and normalization breadth but emits unverifiable values "
-        "with no conflict/invariant machinery.invoice2data wins nothing "
-        "outright and fails whole documents when required regexes miss."
+        "Neither displacement nor blind retention: PR80A remains the only "
+        "acceptable authority (0 fabricated, 0 confident conflicts, 0 silent "
+        "contradictions, 100% evidence coverage, 454/454 emitted values "
+        "cited, invariant machinery reports on every document), while the "
+        "hosted LLM clearly wins raw field coverage (99.0% vs 91.3% scalar "
+        "accuracy, 20 vs 17 exact documents) on normalization and layout-"
+        "variant slices. invoice2data wins no axis (12 exact, 4 whole-"
+        "document failures, 8 silent contradictions) and does not justify "
+        "promotion. The LLM's advantages are real but unusable as authority: "
+        "412 emitted values carry zero verifiable lineage, it fabricated a "
+        "derived unit_price on the broken-row document, emitted duplicate "
+        "rows twice, confidently resolved one document-internal conflict, "
+        "and left 3 total/row contradictions silent."
     ),
-    "strongest_failure_mode": (
-        "specialist routes can silently accept document-internal "
-        "contradictions (total mismatch) and cannot explain where any value "
-        "came from; PR80A's strongest failure mode is missing values on "
-        "non-canonical label/number formats, which is review-visible"
-    ),
+    "strongest_failure_mode": {
+        "llm": (
+            "plausible fabricated value: on inv-013's structurally broken row "
+            "the model delivered a derived unit_price (89.97/3=29.99) the "
+            "document never states, shifted amount to null, and raised no "
+            "flag - exactly the failure class evidence-backed routing exists "
+            "to prevent"
+        ),
+        "marker_pr80a": (
+            "normalization blindness: strict typed parsing rejects US dates, "
+            "symbol currencies, and comma/EU decimals (9 missing_flagged "
+            "escalations across 4 documents) and misses semantic label "
+            "variants entirely (inv-018) - all review-visible, never wrong"
+        ),
+        "invoice2data": (
+            "whole-document failure when one required regex misses "
+            "(inv-003/004/017/018 return nothing at all)"
+        ),
+    },
     "routing_condition": (
-        "keep PR80A as the only truth authority; a future router may feed "
-        "specialist outputs through reconciliation as NON-authoritative "
-        "candidates for layout-variant documents, never as accepted claims"
+        "keep PR80A as the only truth authority on this slice; a later "
+        "routing phase may run the LLM as a NON-authoritative candidate "
+        "generator for layout-variant or normalization-heavy documents, "
+        "feeding its outputs through existing reconciliation and proof "
+        "machinery (synthetic specialist witness with honest provenance, "
+        "never accepted without independent corroboration). invoice2data "
+        "should not be integrated on this evidence."
     ),
+    "evidence_supporting": {
+        "doc_exact": {"marker-pr80a": 17, "invoice2data": 12, "llm": 20},
+        "scalar_accuracy_on_present": {
+            "marker-pr80a": 0.9126, "invoice2data": 0.8252, "llm": 0.9903,
+        },
+        "danger_counts": {
+            "marker-pr80a": {},
+            "invoice2data": {
+                "fabricated": 1, "confident_on_conflict": 3,
+                "silent_contradictions": 8, "duplicate_rows": 6,
+            },
+            "llm": {
+                "fabricated": 1, "confident_on_conflict": 2,
+                "silent_contradictions": 3, "duplicate_rows": 2,
+            },
+        },
+        "evidence_coverage": {"marker-pr80a": 1.0, "invoice2data": 0.0, "llm": 0.0},
+        "review_proxy": {
+            "marker-pr80a": "61 self-flagged outcomes, 0 unverified emissions",
+            "llm": "2 self-flagged outcomes, 412 unverified emissions",
+            "invoice2data": "0 self-flagged outcomes, 359 unverified emissions",
+        },
+    },
     "claim_scope": (
-        "24 synthetic invoice documents on the demo.invoice@1.0.0 slice; "
-        "no claim beyond this schema, corpus, or task"
+        "24 synthetic invoice documents on the demo.invoice@1.0.0 slice, one "
+        "free-tier hosted model (poolside/laguna-s-2.1:free via a local "
+        "OpenAI-compatible gateway), invoice2data 1.0.1 with canonical per-"
+        "vendor templates; no claim beyond this schema, corpus, task, or "
+        "these system versions"
     ),
 }
 
@@ -166,7 +220,16 @@ def run(live: bool, artifact_path: Path, cache_path: Path, write: bool) -> int:
     i2d_outputs = _run_invoice2data(corpus, workdir)
 
     cache_mode = "live" if live else "replay"
-    llm_client = OpenRouterClient(cache_path=cache_path, mode=cache_mode)
+    cached_chain: tuple[str, ...] = ()
+    gateway_origin = "OpenRouter"
+    if cache_path.is_file():
+        cache_header = json.loads(cache_path.read_text(encoding="utf-8"))
+        cached_chain = tuple(cache_header.get("model_chain", ()))
+        gateway_origin = cache_header.get("gateway_origin", "OpenRouter")
+    replay_models = cached_chain or DEFAULT_MODEL_CHAIN_PLACEHOLDER
+    llm_client = OpenRouterClient(
+        models=replay_models, cache_path=cache_path, mode=cache_mode
+    )
     llm_outputs = _run_llm(corpus, llm_client)
 
     outputs_by_system = {
@@ -237,7 +300,7 @@ def run(live: bool, artifact_path: Path, cache_path: Path, write: bool) -> int:
             },
             (llm_outputs[0].system_id if llm_outputs else "llm-openrouter:none"): {
                 "kind": "hosted LLM direct specialist",
-                "identity": f"OpenRouter {llm_client.model_served or 'chain'} (free tier), structured-output extraction prompt, temperature 0",
+                "identity": f"{gateway_origin}: {llm_client.model_served or replay_models} via structured-output extraction prompt, temperature 0",
                 "input": "same document text as the user message; system prompt declares the task normalization rules",
                 "selection_rationale": (
                     "an LLM with a structured invoice-extraction prompt is the "

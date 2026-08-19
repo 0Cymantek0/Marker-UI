@@ -1,0 +1,753 @@
+{
+  "cache_schema_version": "marker.pr80b_llm_cache.v1",
+  "gateway_origin": "local OpenAI-compatible gateway (http://localhost:20128/v1)",
+  "model_chain": [
+    "kc/poolside/laguna-s-2.1:free"
+  ],
+  "responses": {
+    "0f6b73c8c3de8cda7d0c1ef11ccf27f96825415d38e0ea1ad66da128b800866c": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-001\",\n  \"invoice_date\": \"2026-03-01\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-4481\",\n  \"total_due\": \"155.00\",\n  \"items\": [\n    {\"sku\": \"SKU-1001\", \"description\": \"Steel bracket\", \"quantity\": \"4\", \"unit_price\": \"12.50\", \"amount\": \"50.00\"},\n    {\"sku\": \"SKU-1002\", \"description\": \"Aluminum plate\", \"quantity\": \"2\", \"unit_price\": \"45.00\", \"amount\": \"90.00\"},\n    {\"sku\": \"SKU-1003\", \"description\": \"Rivet pack\", \"quantity\": \"20\", \"unit_price\": \"0.75\", \"amount\": \"15.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 235,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1036,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1271
+      }
+    },
+    "1fda0a30ae75a706cd0fad557ef794f48304d98d5b23f742ae7131b2c10f0038": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-99023\",\n  \"invoice_date\": \"2026-06-30\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-7-771\",\n  \"total_due\": \"210.00\",\n  \"items\": [\n    {\"sku\": \"SKU-1130\", \"description\": \"Sensor probe\", \"quantity\": \"3\", \"unit_price\": \"30.00\", \"amount\": \"90.00\"},\n    {\"sku\": \"SKU-1131\", \"description\": \"Cable gland\", \"quantity\": \"4\", \"unit_price\": \"30.00\", \"amount\": \"120.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 595,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 409
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 985,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1580
+      }
+    },
+    "2639b5b32f0b500dec0c84c71bf146f8e77e8e2389f1842daa533e282e4d51a9": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-011\",\n  \"invoice_date\": \"2026-03-22\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"95.00\",\n  \"items\": [\n    {\"sku\": \"SKU-5001\", \"description\": \"Pressure gauge\", \"quantity\": \"2\", \"unit_price\": \"35.00\", \"amount\": \"70.00\"},\n    {\"sku\": \"SKU-5001\", \"description\": \"Pressure gauge\", \"quantity\": \"2\", \"unit_price\": \"35.00\", \"amount\": \"70.00\"},\n    {\"sku\": \"SKU-5002\", \"description\": \"Hose adapter\", \"quantity\": \"1\", \"unit_price\": \"25.00\", \"amount\": \"25.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 750,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 523
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1006,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1756
+      }
+    },
+    "265edadcb851ebaac47744952f3a897d4cc63b66bab79990a91525598671cca5": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-88121\",\n  \"invoice_date\": \"2026-04-02\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-2210\",\n  \"total_due\": \"312.40\",\n  \"items\": [\n    {\"sku\": \"SKU-1210\", \"description\": \"Brass fitting\", \"quantity\": \"8\", \"unit_price\": \"3.20\", \"amount\": \"25.60\"},\n    {\"sku\": \"SKU-1211\", \"description\": \"Copper pipe 1m\", \"quantity\": \"12\", \"unit_price\": \"6.40\", \"amount\": \"76.80\"},\n    {\"sku\": \"SKU-1212\", \"description\": \"Solder roll\", \"quantity\": \"2\", \"unit_price\": \"105.00\", \"amount\": \"210.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 663,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 426
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1030,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1693
+      }
+    },
+    "2fc322d9e7a7e1196ad46a3bd6e603ee8d2c6c8a59d1c5f5cbdc879edcbe01a5": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-008\",\n  \"invoice_date\": \"2026-03-15\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"3,750.00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-2001\",\n      \"description\": \"Machined housing\",\n      \"quantity\": \"2\",\n      \"unit_price\": \"1,250.00\",\n      \"amount\": \"2,500.00\"\n    },\n    {\n      \"sku\": \"SKU-2002\",\n      \"description\": \"Gasket set\",\n      \"quantity\": \"5\",\n      \"unit_price\": \"250.00\",\n      \"amount\": \"1,250.00\"\n    }\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 222,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 990,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1212
+      }
+    },
+    "39a686fd105e5083eb2c9b0fe2ec88f600531f21f731d99f7d27cf3b7b5c9e02": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-024\",\n  \"invoice_date\": \"2026-07-15\",\n  \"currency\": \"EUR\",\n  \"po_number\": \"PO-77120\",\n  \"total_due\": \"866.20\",\n  \"items\": [\n    {\"sku\": \"SKU-101\", \"description\": \"HC flame sensor\", \"quantity\": \"2\", \"unit_price\": \"34.50\", \"amount\": \"69.00\"},\n    {\"sku\": \"SKU-102\", \"description\": \"Ignition electrode\", \"quantity\": \"2\", \"unit_price\": \"28.25\", \"amount\": \"56.50\"},\n    {\"sku\": \"SKU-103\", \"description\": \"Gasket kit\", \"quantity\": \"4\", \"unit_price\": \"11.00\", \"amount\": \"44.00\"},\n    {\"sku\": \"SKU-104\", \"description\": \"Circulation pump\", \"quantity\": \"1\", \"unit_price\": \"189.00\", \"amount\": \"189.00\"},\n    {\"sku\": \"SKU-105\", \"description\": \"Expansion vessel\", \"quantity\": \"1\", \"unit_price\": \"96.50\", \"amount\": \"96.50\"},\n    {\"sku\": \"SKU-106\", \"description\": \"Flame rectifier\", \"quantity\": \"3\", \"unit_price\": \"15.75\", \"amount\": \"47.25\"},\n    {\"sku\": \"SKU-107\", \"description\": \"Pressure valve\", \"quantity\": \"2\", \"unit_price\": \"22.00\", \"amount\": \"44.00\"},\n    {\"sku\": \"SKU-108\", \"description\": \"Thermostat\", \"quantity\": \"1\", \"unit_price\": \"65.00\", \"amount\": \"65.00\"},\n    {\"sku\": \"SKU-109\", \"description\": \"Condensate trap\", \"quantity\": \"2\", \"unit_price\": \"18.30\", \"amount\": \"36.60\"},\n    {\"sku\": \"SKU-110\", \"description\": \"Fan assembly\", \"quantity\": \"1\", \"unit_price\": \"154.20\", \"amount\": \"154.20\"},\n    {\"sku\": \"SKU-111\", \"description\": \"Seal ring set\", \"quantity\": \"10\", \"unit_price\": \"2.10\", \"amount\": \"21.00\"},\n    {\"sku\": \"SKU-112\", \"description\": \"Bypass pipe\", \"quantity\": \"1\", \"unit_price\": \"43.15\", \"amount\": \"43.15\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 659,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1328,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1987
+      }
+    },
+    "3f3d4240878af189f85ce79568b534cc318cc2a5e8395e285c879abc474744eb": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-014\",\n  \"invoice_date\": \"2026-03-26\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"175.00\",\n  \"items\": [\n    {\"sku\": \"SKU-7201\", \"description\": \"Drive belt\", \"quantity\": \"3\", \"unit_price\": \"15.00\", \"amount\": \"45.00\"},\n    {\"sku\": \"SKU-7202\", \"description\": \"Bearing set\", \"quantity\": \"4\", \"unit_price\": \"25.00\", \"amount\": \"100.00\"},\n    {\"sku\": \"SKU-7203\", \"description\": \"Tensioner arm\", \"quantity\": \"1\", \"unit_price\": \"30.00\", \"amount\": \"30.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 231,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1015,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1246
+      }
+    },
+    "497564ce19a550f8bba06b98ef854fef688668f21815814aec8e9766fe43af5a": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-022\",\n  \"invoice_date\": \"2026-04-08\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"100.00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-8099\",\n      \"description\": \"Damper assembly\",\n      \"quantity\": \"1\",\n      \"unit_price\": \"145.00\",\n      \"amount\": \"145.00\"\n    },\n    {\n      \"sku\": \"SKU-8100\",\n      \"description\": \"Returned damper (credit)\",\n      \"quantity\": \"-1\",\n      \"unit_price\": \"45.00\",\n      \"amount\": \"-45.00\"\n    }\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 214,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 983,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1197
+      }
+    },
+    "505b0730d71a87f5ec25db3d05babb8f3c69ccfee347d77579e2ebbc9db8a630": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-010\",\n  \"invoice_date\": \"2026-03-20\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-4501\",\n  \"total_due\": \"178.91\",\n  \"items\": [\n    {\"sku\": \"SKU-4101\", \"description\": \"Cable tie 100mm\", \"quantity\": \"100\", \"unit_price\": \"0.10\", \"amount\": \"10.00\"},\n    {\"sku\": \"SKU-4102\", \"description\": \"Cable tie 200mm\", \"quantity\": \"100\", \"unit_price\": \"0.15\", \"amount\": \"15.00\"},\n    {\"sku\": \"SKU-4103\", \"description\": \"Connector kit\", \"quantity\": \"4\", \"unit_price\": \"9.99\", \"amount\": \"39.96\"},\n    {\"sku\": \"SKU-4104\", \"description\": \"Spare fuse\", \"quantity\": \"25\", \"unit_price\": \"0.40\", \"amount\": \"10.00\"},\n    {\"sku\": \"SKU-4105\", \"description\": \"Mount rail\", \"quantity\": \"2\", \"unit_price\": \"22.50\", \"amount\": \"45.00\"},\n    {\"sku\": \"SKU-4106\", \"description\": \"Label roll\", \"quantity\": \"1\", \"unit_price\": \"18.75\", \"amount\": \"18.75\"},\n    {\"sku\": \"SKU-4107\", \"description\": \"Terminal block\", \"quantity\": \"6\", \"unit_price\": \"4.20\", \"amount\": \"25.20\"},\n    {\"sku\": \"SKU-4108\", \"description\": \"Wire ferrule\", \"quantity\": \"50\", \"unit_price\": \"0.30\", \"amount\": \"15.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 481,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1190,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1671
+      }
+    },
+    "601d9840bd84ff4c2d2a2125f1d1a204b5f2882b4ff642fc8ffe13054f6b4da7": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-006\",\n  \"invoice_date\": \"2026-03-15\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"35.00\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-1010\",\n      \"description\": \"Valve seat\",\n      \"quantity\": \"2\",\n      \"unit_price\": \"12.50\",\n      \"amount\": \"25.00\"\n    },\n    {\n      \"sku\": \"SKU-1011\",\n      \"description\": \"Spring kit\",\n      \"quantity\": \"1\",\n      \"unit_price\": \"10.00\",\n      \"amount\": \"10.00\"\n    }\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 207,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 975,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1182
+      }
+    },
+    "6243855ee26527f3c208c6af9efacd319978160e9f9ef91cffc6e401642fc603": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-015\",\n  \"invoice_date\": \"2026-03-27\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"172.50\",\n  \"items\": [\n    {\"sku\": \"SKU-7501\", \"description\": \"Control board\", \"quantity\": \"1\", \"unit_price\": \"120.00\", \"amount\": \"120.00\"},\n    {\"sku\": \"SKU-7502\", \"description\": \"Wiring harness\", \"quantity\": \"2\", \"unit_price\": \"17.50\", \"amount\": null},\n    {\"sku\": \"SKU-7503\", \"description\": \"Mounting plate\", \"quantity\": \"1\", \"unit_price\": \"17.50\", \"amount\": \"17.50\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 225,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1004,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1229
+      }
+    },
+    "7a58451d2e5489266de61c342d86b97cf8b214b7f25a7ab89f0de43a4ccdb17b": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-020\",\n  \"invoice_date\": \"2026-04-03\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-3301\",\n  \"total_due\": \"155.00\",\n  \"items\": [\n    {\"sku\": \"SKU-3100\", \"description\": \"Motor mount\", \"quantity\": \"2\", \"unit_price\": \"30.00\", \"amount\": \"60.00\"},\n    {\"sku\": \"SKU-3101\", \"description\": \"Coupling sleeve\", \"quantity\": \"1\", \"unit_price\": \"95.00\", \"amount\": \"95.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 584,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 397
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1114,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1698
+      }
+    },
+    "831747bfb5287f880a4adb8976be3666dbc4de39a6067fa96dbae40d2ed6fc8c": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": null,\n  \"invoice_date\": \"2026-03-08\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-4483\",\n  \"total_due\": \"155.00\",\n  \"items\": [\n    {\"sku\": \"SKU-1001\", \"description\": \"Steel bracket\", \"quantity\": \"4\", \"unit_price\": \"12.50\", \"amount\": \"50.00\"},\n    {\"sku\": \"SKU-1002\", \"description\": \"Aluminum plate\", \"quantity\": \"2\", \"unit_price\": \"45.00\", \"amount\": \"90.00\"},\n    {\"sku\": \"SKU-1003\", \"description\": \"Rivet pack\", \"quantity\": \"20\", \"unit_price\": \"0.75\", \"amount\": \"15.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 225,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1003,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 864,
+          "video_tokens": 0
+        },
+        "total_tokens": 1228
+      }
+    },
+    "95fe51dcaea5fa651b62d355225d0bc102677b02fd716582385504370eee1a5f": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-002\",\n  \"invoice_date\": \"2026-03-03\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"155.00\",\n  \"items\": [\n    {\"sku\": \"SKU-1001\", \"description\": \"Steel bracket\", \"quantity\": \"4\", \"unit_price\": \"12.50\", \"amount\": \"50.00\"},\n    {\"sku\": \"SKU-1002\", \"description\": \"Aluminum plate\", \"quantity\": \"2\", \"unit_price\": \"45.00\", \"amount\": \"90.00\"},\n    {\"sku\": \"SKU-1003\", \"description\": \"Rivet pack\", \"quantity\": \"20\", \"unit_price\": \"0.75\", \"amount\": \"15.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 229,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1018,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1247
+      }
+    },
+    "b144a963d90ba35046c071e85fdea8ccebc1c6793802d1d861ee288edc8d4fe5": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-016\",\n  \"invoice_date\": \"2026-03-28\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"160.00\",\n  \"items\": [\n    {\"sku\": \"SKU-1001\", \"description\": \"Steel bracket\", \"quantity\": \"4\", \"unit_price\": \"12.50\", \"amount\": \"50.00\"},\n    {\"sku\": \"SKU-1002\", \"description\": \"Aluminum plate\", \"quantity\": \"2\", \"unit_price\": \"45.00\", \"amount\": \"90.00\"},\n    {\"sku\": \"SKU-1003\", \"description\": \"Rivet pack\", \"quantity\": \"20\", \"unit_price\": \"0.75\", \"amount\": \"15.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 229,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1018,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1247
+      }
+    },
+    "b85da6676c65e5365a6890bc2e2d4ca222163823eb2601c0a579191693978541": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-007\",\n  \"invoice_date\": \"2026-03-12\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"47.00\",\n  \"items\": [\n    {\"sku\": \"SKU-1110\", \"description\": \"Filter element\", \"quantity\": \"4\", \"unit_price\": \"8.75\", \"amount\": \"35.00\"},\n    {\"sku\": \"SKU-1111\", \"description\": \"Housing o-ring\", \"quantity\": \"10\", \"unit_price\": \"1.20\", \"amount\": \"12.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 547,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 367
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 975,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1522
+      }
+    },
+    "cad76f8547dbe822091bcacac26db27b43d37bf97c962ace205081b5b950be3b": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-021\",\n  \"invoice_date\": \"2026-04-05\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-3302\",\n  \"total_due\": null,\n  \"items\": [\n    {\"sku\": \"SKU-3100\", \"description\": \"Motor mount\", \"quantity\": \"2\", \"unit_price\": \"30.00\", \"amount\": \"60.00\"},\n    {\"sku\": \"SKU-3101\", \"description\": \"Coupling sleeve\", \"quantity\": \"1\", \"unit_price\": \"95.00\", \"amount\": \"95.00\"}\n  ],\n  \"flags\": [\"total_due_conflict\"]\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 596,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 409
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1105,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1701
+      }
+    },
+    "cc140d577e73716c4ed0cc46b9053836670b82ff97e1b03e1ee02aa2fa6eee8a": {
+      "attempts": 1,
+      "content_raw": "{\"invoice_number\": \"INV-2026-017\", \"invoice_date\": \"2026-03-30\", \"currency\": \"USD\", \"po_number\": \"PO-4490\", \"total_due\": null, \"items\": [{\"sku\": \"SKU-1001\", \"description\": \"Steel bracket\", \"quantity\": \"4\", \"unit_price\": \"12.50\", \"amount\": \"50.00\"}, {\"sku\": \"SKU-1002\", \"description\": \"Aluminum plate\", \"quantity\": \"2\", \"unit_price\": \"45.00\", \"amount\": \"90.00\"}, {\"sku\": \"SKU-1003\", \"description\": \"Rivet pack\", \"quantity\": \"20\", \"unit_price\": \"0.75\", \"amount\": \"15.00\"}], \"flags\": []}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 203,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1017,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1220
+      }
+    },
+    "d3a945787939d1c32fa977e8ed613de582924d65a332a3887aece9b375b7c5b0": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-013\",\n  \"invoice_date\": \"2026-03-25\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"150.00\",\n  \"items\": [\n    {\"sku\": \"SKU-7001\", \"description\": \"Pre-filter\", \"quantity\": \"2\", \"unit_price\": \"20.00\", \"amount\": \"40.00\"},\n    {\"sku\": \"SKU-7002\", \"description\": \"Filter cartridge\", \"quantity\": \"3\", \"unit_price\": \"89.97\", \"amount\": null},\n    {\"sku\": \"SKU-7003\", \"description\": \"Clamp ring\", \"quantity\": \"1\", \"unit_price\": \"20.03\", \"amount\": \"20.03\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 222,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1000,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1222
+      }
+    },
+    "e12aef2bace04b46d1d40b4a9a1ad727de4c68d19aceef290a14ce2f1e10c3cd": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-019\",\n  \"invoice_date\": \"2026-04-01\",\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-4520\",\n  \"total_due\": null,\n  \"items\": [\n    {\"sku\": \"SKU-1310\", \"description\": \"Control relay\", \"quantity\": \"4\", \"unit_price\": \"12.50\", \"amount\": \"50.00\"},\n    {\"sku\": \"SKU-1311\", \"description\": \"Contactor\", \"quantity\": \"2\", \"unit_price\": \"45.00\", \"amount\": \"90.00\"}\n  ],\n  \"flags\": [\"total_due_conflict\"]\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 564,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 379
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1086,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 864,
+          "video_tokens": 0
+        },
+        "total_tokens": 1650
+      }
+    },
+    "f3cb758a5ed513891b6a88c1110136054113484ca3b105ac5d6e4cc529f4dcdc": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-012\",\n  \"invoice_date\": \"2026-03-24\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"50.00\",\n  \"items\": [\n    {\"sku\": \"SKU-6001\", \"description\": \"Impeller\", \"quantity\": \"2\", \"unit_price\": \"10.00\", \"amount\": \"20.00\"},\n    {\"sku\": \"SKU-6001\", \"description\": \"Impeller\", \"quantity\": \"3\", \"unit_price\": \"10.00\", \"amount\": \"30.00\"},\n    {\"sku\": \"SKU-6002\", \"description\": \"Shaft seal\", \"quantity\": \"1\", \"unit_price\": \"15.00\", \"amount\": \"15.00\"}\n  ],\n  \"flags\": [\"items_SKU-6001_conflict\"]\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 238,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1006,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 864,
+          "video_tokens": 0
+        },
+        "total_tokens": 1244
+      }
+    },
+    "f3e87e4ff9d7505321f6272e85cc457a5c65f6694aba802d664461e2f29ff248": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-009\",\n  \"invoice_date\": \"2026-05-12\",\n  \"currency\": \"EUR\",\n  \"po_number\": null,\n  \"total_due\": \"2.045,00\",\n  \"items\": [\n    {\"sku\": \"SKU-3001\", \"description\": \"Grundplatte\", \"quantity\": \"2\", \"unit_price\": \"195,00\", \"amount\": \"390,00\"},\n    {\"sku\": \"SKU-3002\", \"description\": \"Schraubenset\", \"quantity\": \"10\", \"unit_price\": \"11,50\", \"amount\": \"115,00\"},\n    {\"sku\": \"SKU-3003\", \"description\": \"Gehaeuse\", \"quantity\": \"1\", \"unit_price\": \"1.540,00\", \"amount\": \"1.540,00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 246,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1027,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 832,
+          "video_tokens": 0
+        },
+        "total_tokens": 1273
+      }
+    },
+    "f85eb344a7ef8e5988cbc7ca619b2890030e0391918b21d40fafebad44880b28": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-003\",\n  \"invoice_date\": null,\n  \"currency\": \"USD\",\n  \"po_number\": \"PO-4482\",\n  \"total_due\": \"155.00\",\n  \"items\": [\n    {\"sku\": \"SKU-1001\", \"description\": \"Steel bracket\", \"quantity\": \"4\", \"unit_price\": \"12.50\", \"amount\": \"50.00\"},\n    {\"sku\": \"SKU-1002\", \"description\": \"Aluminum plate\", \"quantity\": \"2\", \"unit_price\": \"45.00\", \"amount\": \"90.00\"},\n    {\"sku\": \"SKU-1003\", \"description\": \"Rivet pack\", \"quantity\": \"20\", \"unit_price\": \"0.75\", \"amount\": \"15.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 225,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1002,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1227
+      }
+    },
+    "fbc019e46eb51eda59a4168df558537d2d2a709d19cd01d89415cd4c39797017": {
+      "attempts": 1,
+      "content_raw": "{\n  \"invoice_number\": \"INV-2026-005\",\n  \"invoice_date\": \"2026-03-10\",\n  \"currency\": \"USD\",\n  \"po_number\": null,\n  \"total_due\": \"100.00\",\n  \"items\": [\n    {\"sku\": \"SKU-9001\", \"description\": \"Promotional sample\", \"quantity\": \"0\", \"unit_price\": \"0.00\", \"amount\": \"0.00\"},\n    {\"sku\": \"SKU-9002\", \"description\": \"Standard widget\", \"quantity\": \"3\", \"unit_price\": \"20.00\", \"amount\": \"60.00\"},\n    {\"sku\": \"SKU-9003\", \"description\": \"Extended warranty\", \"quantity\": \"1\", \"unit_price\": \"40.00\", \"amount\": \"40.00\"}\n  ],\n  \"flags\": []\n}",
+      "error": null,
+      "from_cache": false,
+      "model_requested": "kc/poolside/laguna-s-2.1:free",
+      "model_served": "poolside/laguna-s-2.1:free",
+      "usage": {
+        "completion_tokens": 226,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0,
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0
+        },
+        "is_byok": true,
+        "prompt_tokens": 1005,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 1231
+      }
+    }
+  }
+}

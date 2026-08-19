@@ -130,9 +130,11 @@ class CacheMissError(KeyError):
     """Raised in replay mode when no recorded envelope exists."""
 
 
-def _urllib_transport(payload: dict[str, Any], *, api_key: str, timeout: float) -> tuple[int, str]:
+def _urllib_transport(
+    payload: dict[str, Any], *, api_key: str, timeout: float, base_url: str = API_URL
+) -> tuple[int, str]:
     request = urllib.request.Request(
-        API_URL,
+        base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -147,6 +149,25 @@ def _urllib_transport(payload: dict[str, Any], *, api_key: str, timeout: float) 
         return exc.code, exc.read().decode("utf-8", errors="replace")
 
 
+def _decode_chat_body(body: str) -> dict[str, Any] | None:
+    """Decode a chat-completion body, tolerating SSE tails some gateways add.
+
+    Certain OpenAI-compatible gateways append ``data: [DONE]`` fragments
+    after the JSON object; parse the first complete JSON value and accept
+    only whitespace or SSE terminator junk after it.
+    """
+    try:
+        decoded, end = json.JSONDecoder().raw_decode(body)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    trailing = body[end:].strip()
+    if trailing and trailing != "data: [DONE]":
+        return None
+    return decoded
+
+
 def resolve_api_key() -> str | None:
     """Find the OpenRouter key without assuming env-var casing."""
     for name in ("OPENROUTER_API_KEY", "openrouter_api_key", "Openrouter_Api_Key"):
@@ -157,7 +178,7 @@ def resolve_api_key() -> str | None:
     return lowered.get("openrouter_api_key")
 
 
-def _cache_key(model: str, user_text: str) -> str:
+def cache_key(model: str, user_text: str) -> str:
     digest = hashlib.sha256()
     digest.update(model.encode("utf-8"))
     digest.update(b"\0")
@@ -184,6 +205,7 @@ class OpenRouterClient:
         models: tuple[str, ...] = DEFAULT_MODEL_CHAIN,
         *,
         api_key: str | None = None,
+        base_url: str = API_URL,
         cache_path: Path | None = None,
         mode: str = "auto",
         transport: Transport | None = None,
@@ -196,6 +218,7 @@ class OpenRouterClient:
             raise ValueError(f"unknown cache mode {mode!r}")
         self.models = tuple(models)
         self.mode = mode
+        self.base_url = base_url
         self.cache_path = Path(cache_path) if cache_path is not None else None
         self.timeout = timeout
         self.max_retries = max_retries
@@ -228,11 +251,14 @@ class OpenRouterClient:
     # -- transport -------------------------------------------------------
     def _default_transport(self, payload: dict[str, Any]) -> tuple[int, str]:
         if self._api_key is None:
-            return 0, "no OpenRouter API key configured"
+            return 0, f"no API key configured for {self.base_url}"
 
         def transport(request_payload: dict[str, Any]) -> tuple[int, str]:
             return _urllib_transport(
-                request_payload, api_key=self._api_key, timeout=self.timeout
+                request_payload,
+                api_key=self._api_key,
+                timeout=self.timeout,
+                base_url=self.base_url,
             )
 
         return transport(payload)
@@ -266,9 +292,8 @@ class OpenRouterClient:
                 self._sleep(self.retry_backoff * attempts)
                 continue
             if status == 200:
-                try:
-                    decoded = json.loads(body)
-                except json.JSONDecodeError:
+                decoded = _decode_chat_body(body)
+                if decoded is None:
                     last_error = "HTTP 200 with non-JSON body"
                     self._sleep(self.retry_backoff * attempts)
                     continue
@@ -310,7 +335,7 @@ class OpenRouterClient:
         """
         chain = (self.model_served,) if self.model_served else self.models
         for index, model in enumerate(chain):
-            key = _cache_key(model, doc_text)
+            key = cache_key(model, doc_text)
             if self.mode != "live" and key in self._cache:
                 envelope = dict(self._cache[key])
                 envelope["from_cache"] = True

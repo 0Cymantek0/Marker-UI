@@ -1,13 +1,19 @@
 """One-shot refill driver for the PR80B LLM cache (not part of the suite).
 
-Paces one live call per corpus document against a single free-tier
-model with generous backoff, because the shared upstream pool 429s
-under burst traffic. Wipes and rebuilds the cache so every document
-is answered by the same model in one run.
+Environment overrides so no endpoint or key is ever committed:
+    LLM_BASE_URL   OpenAI-compatible chat-completions base URL
+                   (default: the OpenRouter gateway)
+    LLM_API_KEY    API key for that gateway
+    LLM_MODELS     comma-separated model chain (default: OpenRouter chain)
+
+Paces one live call per corpus document with generous backoff, because
+shared free-tier pools 429 under burst traffic. Wipes and rebuilds the
+cache so every document is answered by the same model in one run.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -17,32 +23,58 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from app.eval.pr80b.corpus import load_corpus
-from app.eval.pr80b.llm import CACHE_SCHEMA_VERSION, OpenRouterClient
+from app.eval.pr80b.llm import (
+    API_URL,
+    CACHE_SCHEMA_VERSION,
+    DEFAULT_MODEL_CHAIN,
+    OpenRouterClient,
+    cache_key,
+)
 
-MODEL_CHAIN = ("nvidia/nemotron-3-super-120b-a12b:free",)
 CACHE = BACKEND.parent / "docs" / "reference" / "measurements" / "pr80b-llm-cache.json"
-INTER_DOC_PAUSE_S = 12.0
+INTER_DOC_PAUSE_S = 8.0
 
 
 def main() -> int:
     import json
 
+    base_url = os.environ.get("LLM_BASE_URL", API_URL)
+    api_key = os.environ.get("LLM_API_KEY")
+    models = tuple(
+        m.strip()
+        for m in os.environ.get("LLM_MODELS", ",".join(DEFAULT_MODEL_CHAIN)).split(",")
+        if m.strip()
+    )
+    print(f"gateway: {base_url} models: {models}")
     CACHE.parent.mkdir(parents=True, exist_ok=True)
     CACHE.write_text(
-        json.dumps({"cache_schema_version": CACHE_SCHEMA_VERSION, "responses": {}}),
+        json.dumps(
+            {
+                "cache_schema_version": CACHE_SCHEMA_VERSION,
+                "model_chain": list(models),
+                "gateway_origin": base_url,
+                "responses": {},
+            }
+        ),
         encoding="utf-8",
     )
     corpus = load_corpus(BACKEND / "eval_data" / "pr80b")
     failures = 0
     for index, doc in enumerate(corpus.docs, start=1):
         client = OpenRouterClient(
-            MODEL_CHAIN,
-            cache_path=CACHE,
+            models,
+            api_key=api_key,
+            base_url=base_url,
+            cache_path=None,
             mode="live",
             max_retries=5,
-            retry_backoff=15.0,
+            retry_backoff=10.0,
         )
         envelope = client.extract(doc.full_text)
+        envelope["from_cache"] = False
+        cache_lock = json.loads(CACHE.read_text(encoding="utf-8"))
+        cache_lock["responses"][cache_key(models[0], doc.full_text)] = envelope
+        CACHE.write_text(json.dumps(cache_lock, indent=2, sort_keys=True), encoding="utf-8")
         status = "ok" if envelope["error"] is None else f"ERROR: {envelope['error'][:80]}"
         if envelope["error"] is not None:
             failures += 1

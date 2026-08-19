@@ -169,8 +169,6 @@ python -m pytest <files 16-29> tests/test_kernel_source_ingress.py -q
 
 ## Non-claims
 
-- No claim that this beats trained specialists; the displacement
-  benchmark is PR80B and was not run.
 - One schema family (`demo.invoice`), not a general extraction DSL;
   the full Document Program language does not exist.
 - Review-required rates on real corpora are unmeasured.
@@ -178,13 +176,20 @@ python -m pytest <files 16-29> tests/test_kernel_source_ingress.py -q
   evidence-grounded under the declared policy, not universally true.
 - No new authorization profile: extraction inherits the existing
   workspace/authorization model, no enterprise per-user ACLs added.
-- No model dependency was added; the deterministic route is the only
-  extraction route in this slice.
+- No model dependency was added to production; the deterministic route
+  remains the only extraction route in this slice. The PR80B
+  displacement measurement (see
+  `pr80b-direct-specialist-displacement.md` and its committed
+  artifact) found the hosted-LLM specialist better at raw normalized
+  field coverage (99.0% vs 91.3%) but unsafe as an authority
+  (fabrication on broken rows, silent contradictions, zero evidence
+  lineage); the recorded decision is a hybrid routing condition with
+  PR80A kept authoritative, not a specialist promotion.
 
-## Deferred (PR80B and later)
+## Deferred (post-PR80B)
 
-- Direct-specialist displacement measurement and workflow-cost
-  comparison.
+- Non-authoritative specialist candidate generation feeding the same
+  reconciliation/proof machinery (the PR80B routing recommendation).
 - Additional extraction routes (constrained model generation) behind
   the same contract; schema registry persistence and versioned
   migration; agent-facing (MCP) extraction surface; review queue/UI;
