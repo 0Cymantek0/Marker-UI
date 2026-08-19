@@ -19,6 +19,9 @@ _LAZY: dict[str, str] = {
     "corpus_gen": "app.eval.pr81a.corpus_gen",
     "normalize": "app.eval.pr81a.normalize",
     "corpus": "app.eval.pr81a.corpus",
+    "visual_store": "app.eval.pr81a.visual_store",
+    "embeddings": "app.eval.pr81a.embeddings",
+    "visual_index": "app.eval.pr81a.visual_index",
 }
 
 __all__ = list(_LAZY)
