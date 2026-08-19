@@ -8,7 +8,7 @@
     "normalization_rules": {
       "invoice_date": "Normalize to ISO YYYY-MM-DD. Accepted inputs: ISO date, US M/D/YYYY (US-first for ambiguous slash dates), English 'Month D, YYYY'.",
       "currency": "Map to one of USD/EUR/GBP. Accepted inputs: the enum token itself, symbols ($ -> USD, EUR symbol, pound sign -> GBP), or currency words ('US Dollars' -> USD, 'Euros' -> EUR, 'Pounds Sterling' -> GBP).",
-      "decimals": "Numeric comparison via Decimal. Strip US thousands commas when the token matches ^(\\+|-)?\\d{1,3}(,\\d{3})+(\\.\\d+)?$. Interpret EU convention (dot thousands, comma decimal) when the token matches ^(\\+|-)?\\d{1,3}(\\.\\d{3})+,\\d{2}$.",
+      "decimals": "Numeric comparison via Decimal. Strip US thousands commas when the token matches ^(\\+|-)?\\d{1,3}(,\\d{3})+(\\.\\d+)?$. Interpret EU convention when the token matches ^(\\+|-)?\\d{1,3}(\\.\\d{3})+,\\d{2}$ (dot thousands, comma decimal) or ^(\\+|-)?\\d+,\\d{2}$ (plain comma decimal).",
       "integers": "Base-10 integer after optional US thousands-comma stripping; negatives allowed.",
       "strings": "Exact match after whitespace stripping; case-sensitive.",
       "absence": "A field the document does not state must be reported absent/null - never invented. 'N/A' or a structurally missing column means absent.",
