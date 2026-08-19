@@ -176,21 +176,22 @@ def event_loop():
 
 
 @pytest.fixture(autouse=True)
-def ensure_current_event_loop():
-    """Keep pytest-asyncio runnable after tests that temporarily swap loops."""
+def ensure_current_event_loop(event_loop):
+    """Keep the session event loop current for every test.
 
-    created_loop = None
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError
-    except RuntimeError:
-        created_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(created_loop)
+    pytest-asyncio 0.24 executes async TESTS on the *current* event
+    loop while async FIXTURES run on the session-scoped ``event_loop``
+    fixture. Anything that calls ``asyncio.run`` in the main thread
+    (Alembic's sync migration entry does — see ``alembic/env.py``)
+    leaves the current loop unset when it finishes. Repairing that by
+    minting a *new* loop splits fixtures and tests onto different
+    loops: coordinators and background tasks created by fixtures sit
+    parked on the session loop while the test body runs elsewhere, and
+    suite-order-dependent stalls follow (the source-ingress timeouts).
+    The only correct repair is to rebind the session loop as current.
+    """
+    asyncio.set_event_loop(event_loop)
     yield
-    if created_loop is not None and not created_loop.is_closed():
-        created_loop.close()
-        asyncio.set_event_loop(None)
 
 
 @pytest_asyncio.fixture(autouse=True)
