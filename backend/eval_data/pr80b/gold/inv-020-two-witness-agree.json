@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-020-two-witness-agree",
+  "slices": ["witness.corroboration"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-020"},
+    "invoice_date": {"status": "present", "value": "2026-04-03"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "present", "value": "PO-3301"},
+    "total_due": {"status": "present", "value": "155.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-3100", "fields": {"description": {"status": "present", "value": "Motor mount"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "30.00"}, "amount": {"status": "present", "value": "60.00"}}},
+      {"sku": "SKU-3101", "fields": {"description": {"status": "present", "value": "Coupling sleeve"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "95.00"}, "amount": {"status": "present", "value": "95.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Same invoice ingested as TWO view documents (parts a and b) with identical values in different order; corroboration must collapse to one truth, not duplicate rows."
+}

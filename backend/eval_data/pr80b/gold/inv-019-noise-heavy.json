@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-019-noise-heavy",
+  "slices": ["layout.noise", "ambiguity.decoy_anchor"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-019"},
+    "invoice_date": {"status": "present", "value": "2026-04-01"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "present", "value": "PO-4520"},
+    "total_due": {"status": "present", "value": "152.32"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-1310", "fields": {"description": {"status": "present", "value": "Control relay"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "12.50"}, "amount": {"status": "present", "value": "50.00"}}},
+      {"sku": "SKU-1311", "fields": {"description": {"status": "present", "value": "Contactor"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "45.00"}, "amount": {"status": "present", "value": "90.00"}}}
+    ]
+  },
+  "invariant": {"expected": "violated"},
+  "notes": "Decoy line 'Estimated Total Due: 999.99' substring-matches the Total Due anchor; real total is 152.32 (140.00 rows + 12.32 tax). Under strict sum_equality semantics rows (140.00) do not sum to the total, so the printed document is inconsistent - the tax line explains why. Order Number SO-9931 and VAT ID are decoys, not invoice_number."
+}

@@ -1,0 +1,10 @@
+Rheinmetall Technik GmbH
+Invoice Number: INV-2026-009
+Invoice Date: 2026-05-12
+Currency: EUR
+
+LINEITEM | SKU-3001 | Grundplatte | 2 | 195,00 | 390,00
+LINEITEM | SKU-3002 | Schraubenset | 10 | 11,50 | 115,00
+LINEITEM | SKU-3003 | Gehaeuse | 1 | 1.540,00 | 1.540,00
+
+Total Due: 2.045,00

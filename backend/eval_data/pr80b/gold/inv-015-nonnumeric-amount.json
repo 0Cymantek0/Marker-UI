@@ -1,0 +1,21 @@
+{
+  "doc_id": "inv-015-nonnumeric-amount",
+  "slices": ["edge.invalid_value"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-015"},
+    "invoice_date": {"status": "present", "value": "2026-03-27"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "172.50"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-7501", "fields": {"description": {"status": "present", "value": "Control board"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "120.00"}, "amount": {"status": "present", "value": "120.00"}}},
+      {"sku": "SKU-7502", "fields": {"description": {"status": "present", "value": "Wiring harness"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "17.50"}, "amount": {"status": "absent", "raw": "N/A"}}},
+      {"sku": "SKU-7503", "fields": {"description": {"status": "present", "value": "Mounting plate"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "17.50"}, "amount": {"status": "present", "value": "17.50"}}}
+    ]
+  },
+  "invariant": {"expected": "not_evaluable"},
+  "notes": "SKU-7502 amount prints 'N/A' = not available in the document. Computing 2x17.50=35.00 is an inference; the document does not state the amount. The invariant cannot be verified from document truth alone."
+}

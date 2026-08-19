@@ -1,0 +1,10 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-012
+Invoice Date: 2026-03-24
+Currency: USD
+
+LINEITEM | SKU-6001 | Impeller | 2 | 10.00 | 20.00
+LINEITEM | SKU-6001 | Impeller | 3 | 10.00 | 30.00
+LINEITEM | SKU-6002 | Shaft seal | 1 | 15.00 | 15.00
+
+Total Due: 50.00

@@ -1,0 +1,10 @@
+Kantai Electronics
+Invoice Number：INV-99023
+Invoice Date： 2026-06-30
+Currency： USD
+PO Number： PO-7-771
+
+LINEITEM | SKU-1130 | Sensor probe | 3 | 30.00 | 90.00
+LINEITEM | SKU-1131 | Cable gland | 4 | 30.00 | 120.00
+
+Total Due： 210.00

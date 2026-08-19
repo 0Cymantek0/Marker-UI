@@ -1,0 +1,21 @@
+{
+  "doc_id": "inv-014-broken-row-long",
+  "slices": ["structure.broken_row_long"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-014"},
+    "invoice_date": {"status": "present", "value": "2026-03-26"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "175.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-7201", "fields": {"description": {"status": "present", "value": "Drive belt"}, "quantity": {"status": "present", "value": 3}, "unit_price": {"status": "present", "value": "15.00"}, "amount": {"status": "present", "value": "45.00"}}},
+      {"sku": "SKU-7202", "fields": {"description": {"status": "present", "value": "Bearing set"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "25.00"}, "amount": {"status": "present", "value": "100.00"}}},
+      {"sku": "SKU-7203", "fields": {"description": {"status": "present", "value": "Tensioner arm"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "30.00"}, "amount": {"status": "present", "value": "30.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "SKU-7202 row carries an extra 6th column (shipping annotation 'oversize-shipping'); the five meaningful columns are the row's values. 45+100+30=175 confirms total consistency."
+}

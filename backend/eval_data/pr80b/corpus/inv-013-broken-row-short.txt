@@ -1,0 +1,10 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-013
+Invoice Date: 2026-03-25
+Currency: USD
+
+LINEITEM | SKU-7001 | Pre-filter | 2 | 20.00 | 40.00
+LINEITEM | SKU-7002 | Filter cartridge | 3 | 89.97
+LINEITEM | SKU-7003 | Clamp ring | 1 | 20.03 | 20.03
+
+Total Due: 150.00

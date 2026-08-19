@@ -1,0 +1,27 @@
+HeatTech Service GmbH
+Invoice Number: INV-2026-024
+Invoice Date: 2026-07-15
+Currency: EUR
+PO Number: PO-77120
+
+LINEITEM | SKU-101 | HC flame sensor | 2 | 34.50 | 69.00
+LINEITEM | SKU-102 | Ignition electrode | 2 | 28.25 | 56.50
+LINEITEM | SKU-103 | Gasket kit | 4 | 11.00 | 44.00
+LINEITEM | SKU-104 | Circulation pump | 1 | 189.00 | 189.00
+LINEITEM | SKU-105 | Expansion vessel | 1 | 96.50 | 96.50
+LINEITEM | SKU-106 | Flame rectifier | 3 | 15.75 | 47.25
+
+--- Page 2 ---
+
+HeatTech Service GmbH
+Invoice Number: INV-2026-024
+Invoice Date: 2026-07-15
+
+LINEITEM | SKU-107 | Pressure valve | 2 | 22.00 | 44.00
+LINEITEM | SKU-108 | Thermostat | 1 | 65.00 | 65.00
+LINEITEM | SKU-109 | Condensate trap | 2 | 18.30 | 36.60
+LINEITEM | SKU-110 | Fan assembly | 1 | 154.20 | 154.20
+LINEITEM | SKU-111 | Seal ring set | 10 | 2.10 | 21.00
+LINEITEM | SKU-112 | Bypass pipe | 1 | 43.15 | 43.15
+
+Total Due: 866.20

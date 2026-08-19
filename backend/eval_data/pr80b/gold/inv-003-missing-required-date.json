@@ -1,0 +1,21 @@
+{
+  "doc_id": "inv-003-missing-required-date",
+  "slices": ["missing.required"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-003"},
+    "invoice_date": {"status": "absent"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "present", "value": "PO-4482"},
+    "total_due": {"status": "present", "value": "155.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-1001", "fields": {"description": {"status": "present", "value": "Steel bracket"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "12.50"}, "amount": {"status": "present", "value": "50.00"}}},
+      {"sku": "SKU-1002", "fields": {"description": {"status": "present", "value": "Aluminum plate"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "45.00"}, "amount": {"status": "present", "value": "90.00"}}},
+      {"sku": "SKU-1003", "fields": {"description": {"status": "present", "value": "Rivet pack"}, "quantity": {"status": "present", "value": 20}, "unit_price": {"status": "present", "value": "0.75"}, "amount": {"status": "present", "value": "15.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Required invoice_date absent; honest routes must not invent a date."
+}

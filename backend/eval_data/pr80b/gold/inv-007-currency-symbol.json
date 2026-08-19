@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-007-currency-symbol",
+  "slices": ["normalization.currency"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-007"},
+    "invoice_date": {"status": "present", "value": "2026-03-12"},
+    "currency": {"status": "present", "value": "USD", "raw": "$"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "47.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-1110", "fields": {"description": {"status": "present", "value": "Filter element"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "8.75"}, "amount": {"status": "present", "value": "35.00"}}},
+      {"sku": "SKU-1111", "fields": {"description": {"status": "present", "value": "Housing o-ring"}, "quantity": {"status": "present", "value": 10}, "unit_price": {"status": "present", "value": "1.20"}, "amount": {"status": "present", "value": "12.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Currency written as symbol $; must normalize to USD."
+}

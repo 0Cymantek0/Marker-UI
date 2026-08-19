@@ -1,0 +1,9 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-022
+Invoice Date: 2026-04-08
+Currency: USD
+
+LINEITEM | SKU-8099 | Damper assembly | 1 | 145.00 | 145.00
+LINEITEM | SKU-8100 | Returned damper (credit) | -1 | 45.00 | -45.00
+
+Total Due: 100.00

@@ -1,0 +1,10 @@
+Vertex Fabrication Ltd
+Invoice Number: INV-2026-021
+Invoice Date: 2026-04-05
+Currency: USD
+PO Number: PO-3302
+
+LINEITEM | SKU-3100 | Motor mount | 2 | 30.00 | 60.00
+LINEITEM | SKU-3101 | Coupling sleeve | 1 | 95.00 | 95.00
+
+Total Due: 159.97

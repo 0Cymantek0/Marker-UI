@@ -1,0 +1,21 @@
+{
+  "doc_id": "inv-013-broken-row-short",
+  "slices": ["structure.broken_row_short", "integrity.row_loss"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-013"},
+    "invoice_date": {"status": "present", "value": "2026-03-25"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "150.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-7001", "fields": {"description": {"status": "present", "value": "Pre-filter"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "20.00"}, "amount": {"status": "present", "value": "40.00"}}},
+      {"sku": "SKU-7002", "fields": {"description": {"status": "present", "value": "Filter cartridge"}, "quantity": {"status": "present", "value": 3}, "unit_price": {"status": "absent"}, "amount": {"status": "present", "value": "89.97"}}},
+      {"sku": "SKU-7003", "fields": {"description": {"status": "present", "value": "Clamp ring"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "20.03"}, "amount": {"status": "present", "value": "20.03"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "SKU-7002 row omits the unit_price column (4 of 5 columns). Unit price is genuinely absent; emitting a derived 29.99 is an inference not stated by the document. Rows sum (40+89.97+20.03) equals the printed total, so a route that DROPS the broken row will see a row-sum mismatch - that mismatch is the honest signal that a row was lost."
+}

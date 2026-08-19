@@ -1,0 +1,10 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-011
+Invoice Date: 2026-03-22
+Currency: USD
+
+LINEITEM | SKU-5001 | Pressure gauge | 2 | 35.00 | 70.00
+LINEITEM | SKU-5001 | Pressure gauge | 2 | 35.00 | 70.00
+LINEITEM | SKU-5002 | Hose adapter | 1 | 25.00 | 25.00
+
+Total Due: 95.00

@@ -1,0 +1,30 @@
+{
+  "doc_id": "inv-024-multipage",
+  "slices": ["layout.pagination", "structure.many_rows"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-024"},
+    "invoice_date": {"status": "present", "value": "2026-07-15"},
+    "currency": {"status": "present", "value": "EUR"},
+    "po_number": {"status": "present", "value": "PO-77120"},
+    "total_due": {"status": "present", "value": "866.20"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-101", "fields": {"description": {"status": "present", "value": "HC flame sensor"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "34.50"}, "amount": {"status": "present", "value": "69.00"}}},
+      {"sku": "SKU-102", "fields": {"description": {"status": "present", "value": "Ignition electrode"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "28.25"}, "amount": {"status": "present", "value": "56.50"}}},
+      {"sku": "SKU-103", "fields": {"description": {"status": "present", "value": "Gasket kit"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "11.00"}, "amount": {"status": "present", "value": "44.00"}}},
+      {"sku": "SKU-104", "fields": {"description": {"status": "present", "value": "Circulation pump"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "189.00"}, "amount": {"status": "present", "value": "189.00"}}},
+      {"sku": "SKU-105", "fields": {"description": {"status": "present", "value": "Expansion vessel"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "96.50"}, "amount": {"status": "present", "value": "96.50"}}},
+      {"sku": "SKU-106", "fields": {"description": {"status": "present", "value": "Flame rectifier"}, "quantity": {"status": "present", "value": 3}, "unit_price": {"status": "present", "value": "15.75"}, "amount": {"status": "present", "value": "47.25"}}},
+      {"sku": "SKU-107", "fields": {"description": {"status": "present", "value": "Pressure valve"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "22.00"}, "amount": {"status": "present", "value": "44.00"}}},
+      {"sku": "SKU-108", "fields": {"description": {"status": "present", "value": "Thermostat"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "65.00"}, "amount": {"status": "present", "value": "65.00"}}},
+      {"sku": "SKU-109", "fields": {"description": {"status": "present", "value": "Condensate trap"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "18.30"}, "amount": {"status": "present", "value": "36.60"}}},
+      {"sku": "SKU-110", "fields": {"description": {"status": "present", "value": "Fan assembly"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "154.20"}, "amount": {"status": "present", "value": "154.20"}}},
+      {"sku": "SKU-111", "fields": {"description": {"status": "present", "value": "Seal ring set"}, "quantity": {"status": "present", "value": 10}, "unit_price": {"status": "present", "value": "2.10"}, "amount": {"status": "present", "value": "21.00"}}},
+      {"sku": "SKU-112", "fields": {"description": {"status": "present", "value": "Bypass pipe"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "43.15"}, "amount": {"status": "present", "value": "43.15"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Two-page invoice: page 2 repeats the vendor block and invoice number/date (repetition, not corroboration); 12 rows total."
+}

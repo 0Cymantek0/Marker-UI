@@ -1,0 +1,10 @@
+Acme Industrial Supply
+Invoice Date: 2026-03-08
+Currency: USD
+PO Number: PO-4483
+
+LINEITEM | SKU-1001 | Steel bracket | 4 | 12.50 | 50.00
+LINEITEM | SKU-1002 | Aluminum plate | 2 | 45.00 | 90.00
+LINEITEM | SKU-1003 | Rivet pack | 20 | 0.75 | 15.00
+
+Total Due: 155.00

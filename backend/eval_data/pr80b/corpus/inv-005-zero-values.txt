@@ -1,0 +1,10 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-005
+Invoice Date: 2026-03-10
+Currency: USD
+
+LINEITEM | SKU-9001 | Promotional sample | 0 | 0.00 | 0.00
+LINEITEM | SKU-9002 | Standard widget | 3 | 20.00 | 60.00
+LINEITEM | SKU-9003 | Extended warranty | 1 | 40.00 | 40.00
+
+Total Due: 100.00

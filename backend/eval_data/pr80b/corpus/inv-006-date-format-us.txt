@@ -1,0 +1,9 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-006
+Invoice Date: 03/15/2026
+Currency: USD
+
+LINEITEM | SKU-1010 | Valve seat | 2 | 12.50 | 25.00
+LINEITEM | SKU-1011 | Spring kit | 1 | 10.00 | 10.00
+
+Total Due: 35.00

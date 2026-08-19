@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-008-decimal-commas",
+  "slices": ["normalization.decimal"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-008"},
+    "invoice_date": {"status": "present", "value": "2026-03-15"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "3750.00", "raw": "3,750.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-2001", "fields": {"description": {"status": "present", "value": "Machined housing"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "1250.00", "raw": "1,250.00"}, "amount": {"status": "present", "value": "2500.00", "raw": "2,500.00"}}},
+      {"sku": "SKU-2002", "fields": {"description": {"status": "present", "value": "Gasket set"}, "quantity": {"status": "present", "value": 5}, "unit_price": {"status": "present", "value": "250.00"}, "amount": {"status": "present", "value": "1250.00", "raw": "1,250.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "US thousands-separator commas must be stripped for numeric comparison."
+}

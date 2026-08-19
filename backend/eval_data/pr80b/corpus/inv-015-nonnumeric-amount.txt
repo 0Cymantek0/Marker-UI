@@ -1,0 +1,10 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-015
+Invoice Date: 2026-03-27
+Currency: USD
+
+LINEITEM | SKU-7501 | Control board | 1 | 120.00 | 120.00
+LINEITEM | SKU-7502 | Wiring harness | 2 | 17.50 | N/A
+LINEITEM | SKU-7503 | Mounting plate | 1 | 17.50 | 17.50
+
+Total Due: 172.50

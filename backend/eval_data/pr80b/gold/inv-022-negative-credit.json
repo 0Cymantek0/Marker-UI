@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-022-negative-credit",
+  "slices": ["edge.negative"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-022"},
+    "invoice_date": {"status": "present", "value": "2026-04-08"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "100.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-8099", "fields": {"description": {"status": "present", "value": "Damper assembly"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "145.00"}, "amount": {"status": "present", "value": "145.00"}}},
+      {"sku": "SKU-8100", "fields": {"description": {"status": "present", "value": "Returned damper (credit)"}, "quantity": {"status": "present", "value": -1}, "unit_price": {"status": "present", "value": "45.00"}, "amount": {"status": "present", "value": "-45.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Credit-memo row with negative quantity and amount; 145.00 + (-45.00) = 100.00. Negative is not invalid."
+}

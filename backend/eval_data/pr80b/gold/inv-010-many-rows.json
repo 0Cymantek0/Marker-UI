@@ -1,0 +1,26 @@
+{
+  "doc_id": "inv-010-many-rows",
+  "slices": ["structure.many_rows", "structure.near_duplicate_desc"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-010"},
+    "invoice_date": {"status": "present", "value": "2026-03-20"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "present", "value": "PO-4501"},
+    "total_due": {"status": "present", "value": "178.91"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-4101", "fields": {"description": {"status": "present", "value": "Cable tie 100mm"}, "quantity": {"status": "present", "value": 100}, "unit_price": {"status": "present", "value": "0.10"}, "amount": {"status": "present", "value": "10.00"}}},
+      {"sku": "SKU-4102", "fields": {"description": {"status": "present", "value": "Cable tie 200mm"}, "quantity": {"status": "present", "value": 100}, "unit_price": {"status": "present", "value": "0.15"}, "amount": {"status": "present", "value": "15.00"}}},
+      {"sku": "SKU-4103", "fields": {"description": {"status": "present", "value": "Connector kit"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "9.99"}, "amount": {"status": "present", "value": "39.96"}}},
+      {"sku": "SKU-4104", "fields": {"description": {"status": "present", "value": "Spare fuse"}, "quantity": {"status": "present", "value": 25}, "unit_price": {"status": "present", "value": "0.40"}, "amount": {"status": "present", "value": "10.00"}}},
+      {"sku": "SKU-4105", "fields": {"description": {"status": "present", "value": "Mount rail"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "22.50"}, "amount": {"status": "present", "value": "45.00"}}},
+      {"sku": "SKU-4106", "fields": {"description": {"status": "present", "value": "Label roll"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "18.75"}, "amount": {"status": "present", "value": "18.75"}}},
+      {"sku": "SKU-4107", "fields": {"description": {"status": "present", "value": "Terminal block"}, "quantity": {"status": "present", "value": 6}, "unit_price": {"status": "present", "value": "4.20"}, "amount": {"status": "present", "value": "25.20"}}},
+      {"sku": "SKU-4108", "fields": {"description": {"status": "present", "value": "Wire ferrule"}, "quantity": {"status": "present", "value": 50}, "unit_price": {"status": "present", "value": "0.30"}, "amount": {"status": "present", "value": "15.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Eight rows with near-duplicate descriptions; row identity is SKU, not description."
+}

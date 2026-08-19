@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-012-duplicate-sku-conflicting",
+  "slices": ["structure.duplicate_conflict", "ambiguity.row"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-012"},
+    "invoice_date": {"status": "present", "value": "2026-03-24"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "50.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-6001", "expected_conflict": true, "fields": {"description": {"status": "present", "value": "Impeller"}, "quantity": {"status": "conflicting", "values": [2, 3]}, "unit_price": {"status": "present", "value": "10.00"}, "amount": {"status": "conflicting", "values": ["20.00", "30.00"]}}},
+      {"sku": "SKU-6002", "fields": {"description": {"status": "present", "value": "Shaft seal"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "15.00"}, "amount": {"status": "present", "value": "15.00"}}}
+    ]
+  },
+  "invariant": {"expected": "not_evaluable"},
+  "notes": "Document contradicts itself on SKU-6001 (2x/20.00 vs 3x/30.00). Honest routes flag or abstain on that row; confidently picking either variant without a flag is a dangerous resolution."
+}

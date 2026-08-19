@@ -1,0 +1,19 @@
+Acme Industrial Supply
+77 Industrial Parkway, Building C
+Invoice Number: INV-2026-019
+Order Number: SO-9931
+VAT ID: DE811907980
+Invoice Date: 2026-04-01
+Currency: USD
+PO Number: PO-4520
+
+LINEITEM | SKU-1310 | Control relay | 4 | 12.50 | 50.00
+LINEITEM | SKU-1311 | Contactor | 2 | 45.00 | 90.00
+
+Subtotal: 140.00
+Tax (8.875%): 12.32
+Estimated Total Due: 999.99
+Total Due: 152.32
+
+Make checks payable to Acme Industrial Supply.
+Payment terms: Net 30. Late fee 1.5% per month.

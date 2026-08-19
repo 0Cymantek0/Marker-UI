@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-023-fullwidth-punctuation",
+  "slices": ["encoding.fullwidth"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-99023"},
+    "invoice_date": {"status": "present", "value": "2026-06-30"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "present", "value": "PO-7-771"},
+    "total_due": {"status": "present", "value": "210.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-1130", "fields": {"description": {"status": "present", "value": "Sensor probe"}, "quantity": {"status": "present", "value": 3}, "unit_price": {"status": "present", "value": "30.00"}, "amount": {"status": "present", "value": "90.00"}}},
+      {"sku": "SKU-1131", "fields": {"description": {"status": "present", "value": "Cable gland"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "30.00"}, "amount": {"status": "present", "value": "120.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Labels use fullwidth colon (U+FF1A) and extra spaces; Unicode-aware label matching required."
+}

@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-011-duplicate-sku-identical",
+  "slices": ["structure.duplicate_identical"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-011"},
+    "invoice_date": {"status": "present", "value": "2026-03-22"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "95.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-5001", "fields": {"description": {"status": "present", "value": "Pressure gauge"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "35.00"}, "amount": {"status": "present", "value": "70.00"}}},
+      {"sku": "SKU-5002", "fields": {"description": {"status": "present", "value": "Hose adapter"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "25.00"}, "amount": {"status": "present", "value": "25.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "SKU-5001 line printed twice identically; document truth is ONE logical row (total confirms: 70+25=95). Repeating the row in output is a duplicate-row error."
+}

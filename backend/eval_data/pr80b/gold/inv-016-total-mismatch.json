@@ -1,0 +1,21 @@
+{
+  "doc_id": "inv-016-total-mismatch",
+  "slices": ["integrity.total_mismatch"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-016"},
+    "invoice_date": {"status": "present", "value": "2026-03-28"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "160.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-1001", "fields": {"description": {"status": "present", "value": "Steel bracket"}, "quantity": {"status": "present", "value": 4}, "unit_price": {"status": "present", "value": "12.50"}, "amount": {"status": "present", "value": "50.00"}}},
+      {"sku": "SKU-1002", "fields": {"description": {"status": "present", "value": "Aluminum plate"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "45.00"}, "amount": {"status": "present", "value": "90.00"}}},
+      {"sku": "SKU-1003", "fields": {"description": {"status": "present", "value": "Rivet pack"}, "quantity": {"status": "present", "value": 20}, "unit_price": {"status": "present", "value": "0.75"}, "amount": {"status": "present", "value": "15.00"}}}
+    ]
+  },
+  "invariant": {"expected": "violated"},
+  "notes": "Rows sum to 155.00 but Total Due prints 160.00; the document is internally inconsistent. Field values are as printed; the contradiction itself is the finding a route must surface."
+}

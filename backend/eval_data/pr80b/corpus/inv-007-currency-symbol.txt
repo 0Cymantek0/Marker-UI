@@ -1,0 +1,9 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-007
+Invoice Date: 2026-03-12
+Currency: $
+
+LINEITEM | SKU-1110 | Filter element | 4 | 8.75 | 35.00
+LINEITEM | SKU-1111 | Housing o-ring | 10 | 1.20 | 12.00
+
+Total Due: 47.00

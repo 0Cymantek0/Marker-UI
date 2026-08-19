@@ -1,0 +1,20 @@
+{
+  "doc_id": "inv-021-two-witness-conflict",
+  "slices": ["witness.conflict", "ambiguity.scalar"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-021"},
+    "invoice_date": {"status": "present", "value": "2026-04-05"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "present", "value": "PO-3302"},
+    "total_due": {"status": "conflicting", "values": ["155.00", "159.97"]}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-3100", "fields": {"description": {"status": "present", "value": "Motor mount"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "30.00"}, "amount": {"status": "present", "value": "60.00"}}},
+      {"sku": "SKU-3101", "fields": {"description": {"status": "present", "value": "Coupling sleeve"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "95.00"}, "amount": {"status": "present", "value": "95.00"}}}
+    ]
+  },
+  "invariant": {"expected": "not_evaluable"},
+  "notes": "Two view documents disagree ONLY on total_due (155.00 vs 159.97). Honest routes flag the conflict or abstain; confidently emitting either value without a flag is dangerous."
+}

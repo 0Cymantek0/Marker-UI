@@ -1,0 +1,10 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-014
+Invoice Date: 2026-03-26
+Currency: USD
+
+LINEITEM | SKU-7201 | Drive belt | 3 | 15.00 | 45.00
+LINEITEM | SKU-7202 | Bearing set | 4 | 25.00 | 100.00 | oversize-shipping
+LINEITEM | SKU-7203 | Tensioner arm | 1 | 30.00 | 30.00
+
+Total Due: 175.00

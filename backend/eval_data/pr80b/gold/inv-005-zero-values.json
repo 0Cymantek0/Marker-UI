@@ -1,0 +1,21 @@
+{
+  "doc_id": "inv-005-zero-values",
+  "slices": ["edge.zero"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-005"},
+    "invoice_date": {"status": "present", "value": "2026-03-10"},
+    "currency": {"status": "present", "value": "USD"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "100.00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-9001", "fields": {"description": {"status": "present", "value": "Promotional sample"}, "quantity": {"status": "present", "value": 0}, "unit_price": {"status": "present", "value": "0.00"}, "amount": {"status": "present", "value": "0.00"}}},
+      {"sku": "SKU-9002", "fields": {"description": {"status": "present", "value": "Standard widget"}, "quantity": {"status": "present", "value": 3}, "unit_price": {"status": "present", "value": "20.00"}, "amount": {"status": "present", "value": "60.00"}}},
+      {"sku": "SKU-9003", "fields": {"description": {"status": "present", "value": "Extended warranty"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "40.00"}, "amount": {"status": "present", "value": "40.00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "Zero quantity/price/amount are PRESENT zeros, not missing values; scorer must distinguish 0 from absent."
+}

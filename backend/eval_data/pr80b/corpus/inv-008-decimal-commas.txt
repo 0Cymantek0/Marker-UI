@@ -1,0 +1,9 @@
+Acme Industrial Supply
+Invoice Number: INV-2026-008
+Invoice Date: 2026-03-15
+Currency: USD
+
+LINEITEM | SKU-2001 | Machined housing | 2 | 1,250.00 | 2,500.00
+LINEITEM | SKU-2002 | Gasket set | 5 | 250.00 | 1,250.00
+
+Total Due: 3,750.00

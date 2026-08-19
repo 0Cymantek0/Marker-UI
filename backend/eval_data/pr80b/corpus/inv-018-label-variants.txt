@@ -1,0 +1,12 @@
+Northwind Trading Co.
+412 Harbor Lane, Springfield
+Invoice No.: INV-88121
+Date of Issue: April 2, 2026
+Currency: US Dollars
+Customer PO: PO-2210
+
+LINEITEM | SKU-1210 | Brass fitting | 8 | 3.20 | 25.60
+LINEITEM | SKU-1211 | Copper pipe 1m | 12 | 6.40 | 76.80
+LINEITEM | SKU-1212 | Solder roll | 2 | 105.00 | 210.00
+
+Grand Total: 312.40

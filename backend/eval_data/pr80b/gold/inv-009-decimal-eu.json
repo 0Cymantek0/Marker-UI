@@ -1,0 +1,21 @@
+{
+  "doc_id": "inv-009-decimal-eu",
+  "slices": ["normalization.decimal_eu"],
+  "fields": {
+    "invoice_number": {"status": "present", "value": "INV-2026-009"},
+    "invoice_date": {"status": "present", "value": "2026-05-12"},
+    "currency": {"status": "present", "value": "EUR"},
+    "po_number": {"status": "absent"},
+    "total_due": {"status": "present", "value": "2045.00", "raw": "2.045,00"}
+  },
+  "items": {
+    "status": "rows",
+    "rows": [
+      {"sku": "SKU-3001", "fields": {"description": {"status": "present", "value": "Grundplatte"}, "quantity": {"status": "present", "value": 2}, "unit_price": {"status": "present", "value": "195.00", "raw": "195,00"}, "amount": {"status": "present", "value": "390.00", "raw": "390,00"}}},
+      {"sku": "SKU-3002", "fields": {"description": {"status": "present", "value": "Schraubenset"}, "quantity": {"status": "present", "value": 10}, "unit_price": {"status": "present", "value": "11.50", "raw": "11,50"}, "amount": {"status": "present", "value": "115.00", "raw": "115,00"}}},
+      {"sku": "SKU-3003", "fields": {"description": {"status": "present", "value": "Gehaeuse"}, "quantity": {"status": "present", "value": 1}, "unit_price": {"status": "present", "value": "1540.00", "raw": "1.540,00"}, "amount": {"status": "present", "value": "1540.00", "raw": "1.540,00"}}}
+    ]
+  },
+  "invariant": {"expected": "satisfied"},
+  "notes": "EU decimal convention (comma decimal, dot thousands) must be interpreted when the token matches the unambiguous EU pattern."
+}
