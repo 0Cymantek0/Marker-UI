@@ -50,7 +50,7 @@ DANGER_CLASSES = frozenset(
         "decoy_confusion",
     }
 )
-EVIDENCE_KINDS = frozenset({"text_page", "image_page", "none"})
+EVIDENCE_KINDS = frozenset({"text_page", "image_page", "image_text_page", "none"})
 
 
 @dataclass(frozen=True)

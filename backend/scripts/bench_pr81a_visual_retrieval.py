@@ -50,7 +50,10 @@ from app.eval.pr81a.kernel_seed import (  # noqa: E402
 from app.eval.pr81a.lanes import (  # noqa: E402
     B1_SYSTEM,
     B2_SYSTEM,
+    V2_JOINT_SYSTEM,
     V2_SYSTEM,
+    V2_TEXT_SYSTEM,
+    V2_UNION_SYSTEM,
     LaneContext,
     build_visual_index,
     resolve_phase_authorization,
@@ -88,6 +91,13 @@ def main() -> int:
     parser.add_argument("--vlm-cache", type=Path, default=MEASUREMENTS / "pr81a-vlm-cache.json")
     parser.add_argument("--index-dir", type=Path, default=MEASUREMENTS)
     parser.add_argument("--skip-siglip", action="store_true")
+    parser.add_argument(
+        "--ablations",
+        action="store_true",
+        help="also run the PR81B hybrid ablation lanes (text/joint answer, "
+        "union-only) and the hybrid lane under high assurance; the default "
+        "lane set and the committed PR81A evidence stay byte-identical",
+    )
     args = parser.parse_args()
 
     started = time.perf_counter()
@@ -129,6 +139,7 @@ def main() -> int:
                     dense_specs=dense_specs,
                     index_dir=args.index_dir,
                     live=args.live,
+                    ablations=args.ablations,
                 )
             finally:
                 await engine.dispose()
@@ -193,7 +204,8 @@ def main() -> int:
 
 
 async def _run_benchmark(
-    *, factory, service, corpus, tmp_path, vlm, dense_specs, index_dir, live: bool
+    *, factory, service, corpus, tmp_path, vlm, dense_specs, index_dir, live: bool,
+    ablations: bool = False,
 ) -> dict:
     ws = await seed_workspace(
         factory=factory,
@@ -258,6 +270,15 @@ async def _run_benchmark(
         *[(f"visual-dense:{embedders[n].identity}", embedders[n]) for n, _ in dense_specs],
         (V2_SYSTEM, embedders[dense_specs[0][0]]),
     ]
+    ablation_systems = []
+    if ablations:
+        primary = embedders[dense_specs[0][0]]
+        ablation_systems = [
+            (V2_TEXT_SYSTEM, primary),
+            (V2_JOINT_SYSTEM, primary),
+            (V2_UNION_SYSTEM, primary),
+        ]
+    systems_a = systems_a + ablation_systems
     await phase(systems_a, ctx, phase_a_queries)
 
     # -- phase B: denied + high assurance ----------------------------------
@@ -291,6 +312,10 @@ async def _run_benchmark(
         (B1_SYSTEM, None),
         (f"visual-dense:{embedders[dense_specs[0][0]].identity}", embedders[dense_specs[0][0]]),
     ]
+    if ablations:
+        # the promoted route itself, under the partitioned publication
+        # and the partitioned visual generation
+        ha_systems.append((V2_SYSTEM, embedders[dense_specs[0][0]]))
     await phase(ha_systems, ctx_ha, denied_queries + no_delivery_queries, suffix=":ha")
     del ha_publication
 
@@ -420,8 +445,8 @@ async def _run_benchmark(
     }
 
     expected_pairs = (
-        len(corpus.queries) * (3 + len(dense_specs))  # B1, B2, V2 + one lane per dense model
-        + (len(denied_queries) + len(no_delivery_queries)) * 2  # HA lanes
+        len(corpus.queries) * (3 + len(dense_specs) + len(ablation_systems))  # B1, B2, V2 + dense + ablations
+        + (len(denied_queries) + len(no_delivery_queries)) * len(ha_systems)  # HA lanes
     )
     actual_pairs = len(scores)
     pinned_ok = all(
@@ -479,6 +504,24 @@ async def _run_benchmark(
                     "reranker": "hosted VLM contact sheet",
                     "evidence": "rerank-selected page render",
                 },
+                **(
+                    {
+                        V2_TEXT_SYSTEM: {
+                            "kind": "hybrid rerank ablation",
+                            "evidence": "rerank-selected page oracle text (answer-modality ablation)",
+                        },
+                        V2_JOINT_SYSTEM: {
+                            "kind": "hybrid rerank ablation",
+                            "evidence": "rerank-selected page render + oracle text",
+                        },
+                        V2_UNION_SYSTEM: {
+                            "kind": "hybrid ablation",
+                            "evidence": "lexical-ordered candidate union, no rerank (rerank ablation)",
+                        },
+                    }
+                    if ablations
+                    else {}
+                ),
             },
         },
         "metrics": metrics,

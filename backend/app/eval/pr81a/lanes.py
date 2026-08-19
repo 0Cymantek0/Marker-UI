@@ -16,6 +16,13 @@ selection*, not from different answerers:
 * ``visual-hybrid-rerank`` (V2): lexical and visual candidate pages are
   merged onto one contact sheet; a VLM reranker picks the evidence page
   before the same answerer runs.
+* ``visual-hybrid-rerank-text`` / ``-joint`` (PR81B ablations): the
+  same selection and rerank as V2, but the answerer receives the page
+  transcript / transcript + render — isolating the answer step's
+  modality from selection quality.
+* ``visual-hybrid-union-only`` (PR81B ablation): the same candidate
+  union in lexical order, no VLM rerank — isolating what reranking adds
+  over union recall.
 
 Authorization is enforced before evidence selection everywhere: lexical
 lanes run through the production executor (PR78 filtering), visual
@@ -49,11 +56,25 @@ from app.eval.pr81a.vlm import CacheMissError, VlmClient
 B1_SYSTEM = "lexical-text"
 B2_SYSTEM = "lexical-render"
 V2_SYSTEM = "visual-hybrid-rerank"
+#: PR81B ablation lanes: the hybrid route decomposed at its two
+#: VLM touchpoints so the model-sensitivity matrix can attribute the
+#: gain. ``*-text`` keeps the visual rerank but answers from the page
+#: transcript; ``*-joint`` answers from transcript + render; ``union-only``
+#: keeps the lexical ∪ visual candidate union but skips the VLM rerank
+#: entirely (lexical order wins), isolating what reranking adds over
+#: recall alone.
+V2_TEXT_SYSTEM = "visual-hybrid-rerank-text"
+V2_JOINT_SYSTEM = "visual-hybrid-rerank-joint"
+V2_UNION_SYSTEM = "visual-hybrid-union-only"
 V_SYSTEM_PREFIX = "visual-dense"
 
 LEXICAL_RANK_K = 8
 VISUAL_RANK_K = 8
 RERANK_CANDIDATES_PER_ROUTE = 3
+
+#: evidence modality handed to the answerer; the ablation lanes exist
+#: precisely to vary this independently of evidence selection
+ANSWER_MODES = frozenset({"image", "text", "both"})
 
 
 @dataclass
@@ -315,18 +336,33 @@ def _resolve_revision_doc(
     return None
 
 
+_EVIDENCE_KIND_BY_MODE = {
+    "image": "image_page",
+    "text": "text_page",
+    "both": "image_text_page",
+}
+
+
 def _page_evidence(
     ctx: LaneContext,
     doc: SeededDoc,
     page_number: int,
     *,
-    use_image: bool,
+    answer_mode: str,
     question: str,
 ) -> RouteEvidence:
-    """Deliver one page of evidence (image or transcript) to the answerer."""
+    """Deliver one page of evidence to the answerer.
+
+    ``answer_mode`` picks the modality handed to the VLM: ``image``
+    (page render), ``text`` (oracle transcript), or ``both``. The
+    ablation lanes vary exactly this knob while holding selection fixed.
+    """
+    if answer_mode not in ANSWER_MODES:
+        raise ValueError(f"unknown answer mode: {answer_mode!r}")
+    evidence_kind = _EVIDENCE_KIND_BY_MODE[answer_mode]
     png_bytes: bytes | None = None
     text: str | None = None
-    if use_image:
+    if answer_mode in {"image", "both"}:
         rendered = ctx.render_store.render(
             doc.blob_key,
             page_number - 1,
@@ -334,7 +370,7 @@ def _page_evidence(
             admitted=True,
         )
         png_bytes = rendered.path.read_bytes()
-    else:
+    if answer_mode in {"text", "both"}:
         text = doc.page_text(page_number)
     try:
         envelope, parsed = ctx.vlm.answer(question, page_png=png_bytes, page_text=text)
@@ -344,13 +380,13 @@ def _page_evidence(
             error="vlm: no cached response (replay miss)",
             delivered_page=(doc.doc_id, page_number),
             revision=doc.revision,
-            evidence_kind="image_page" if use_image else "text_page",
+            evidence_kind=evidence_kind,
             source_resolvable=True,
         )
     base = {
         "delivered_page": (doc.doc_id, page_number),
         "revision": doc.revision,
-        "evidence_kind": "image_page" if use_image else "text_page",
+        "evidence_kind": evidence_kind,
         "source_resolvable": True,
     }
     if envelope.error:
@@ -420,7 +456,7 @@ async def run_lexical_text(ctx: LaneContext, query: CorpusQuery) -> RouteEvidenc
     if doc is None:
         return RouteEvidence(system_id=B1_SYSTEM, error=f"unknown doc {ranked[0][0]}")
     evidence = _page_evidence(
-        ctx, doc, ranked[0][1], use_image=False, question=query.text
+        ctx, doc, ranked[0][1], answer_mode="text", question=query.text
     )
     return _forbidden_check(
         ctx, replace(evidence, system_id=B1_SYSTEM, ranked_pages=tuple(ranked))
@@ -436,7 +472,7 @@ async def run_lexical_render(ctx: LaneContext, query: CorpusQuery) -> RouteEvide
     doc = ctx.resolve_doc(ranked[0][0])
     if doc is None:
         return RouteEvidence(system_id=B2_SYSTEM, error=f"unknown doc {ranked[0][0]}")
-    evidence = _page_evidence(ctx, doc, ranked[0][1], use_image=True, question=query.text)
+    evidence = _page_evidence(ctx, doc, ranked[0][1], answer_mode="image", question=query.text)
     return _forbidden_check(
         ctx, replace(evidence, system_id=B2_SYSTEM, ranked_pages=tuple(ranked))
     )
@@ -463,7 +499,7 @@ async def run_visual_dense(ctx: LaneContext, query: CorpusQuery, embedder) -> Ro
         ctx,
         doc,
         hit.page_number,
-        use_image=True,
+        answer_mode="image",
         question=query.text,
     )
     return _forbidden_check(
@@ -519,11 +555,17 @@ def _score_from_rerank(parsed: dict, label: str) -> float:
         return 0.0
 
 
-async def run_visual_hybrid(ctx: LaneContext, query: CorpusQuery, embedder) -> RouteEvidence:
-    """Lexical + visual candidate union, VLM reranked onto one page."""
+async def _hybrid_candidates(
+    ctx: LaneContext, query: CorpusQuery, embedder
+) -> tuple[list[tuple[str, int]], str | None]:
+    """Lexical top-K ∪ visual top-K candidate pages, deduped in order.
+
+    Authorization filters both sides before the union; candidates a
+    lane cannot resolve to a doc snapshot are dropped, never guessed.
+    """
     ranked_lexical, error = await lexical_ranked_pages(ctx, query)
     if error:
-        return RouteEvidence(system_id=V2_SYSTEM, error=error)
+        return [], error
     visual_ranked: list[tuple[str, int]] = []
     if ctx.visual_index is not None:
         result = ctx.visual_index.search(
@@ -536,30 +578,92 @@ async def run_visual_hybrid(ctx: LaneContext, query: CorpusQuery, embedder) -> R
     for key in ranked_lexical[:RERANK_CANDIDATES_PER_ROUTE] + visual_ranked:
         if key not in candidates and ctx.resolve_doc(key[0]) is not None:
             candidates.append(key)
+    return candidates, None
+
+
+async def _run_hybrid_variant(
+    ctx: LaneContext,
+    query: CorpusQuery,
+    embedder,
+    *,
+    system_id: str,
+    answer_mode: str,
+    use_rerank: bool,
+) -> RouteEvidence:
+    """One hybrid-family lane: union candidates, optional rerank, deliver.
+
+    ``use_rerank`` and ``answer_mode`` are the two ablation knobs; the
+    promoted hybrid is ``use_rerank=True, answer_mode="image"``.
+    """
+    candidates, error = await _hybrid_candidates(ctx, query, embedder)
+    if error:
+        return RouteEvidence(system_id=system_id, error=error)
     if not candidates:
-        return RouteEvidence(system_id=V2_SYSTEM)
-    montage, labels = _contact_sheet(ctx, candidates)
-    try:
-        envelope, parsed = ctx.vlm.rerank(query.text, montage, labels)
-    except CacheMissError:
-        return RouteEvidence(system_id=V2_SYSTEM, error="vlm: no cached rerank (replay miss)")
-    if envelope.error or parsed is None or "scores" not in parsed:
-        # reranker failed: fall back to lexical order honestly; the
-        # evidence still reports what was actually used
-        ordered = list(candidates)
-    else:
-        order = sorted(
-            range(len(candidates)),
-            key=lambda i: (-_score_from_rerank(parsed, labels[i]), i),
-        )
-        ordered = [candidates[i] for i in order]
+        return RouteEvidence(system_id=system_id)
+    ordered = list(candidates)
+    if use_rerank:
+        montage, labels = _contact_sheet(ctx, candidates)
+        try:
+            envelope, parsed = ctx.vlm.rerank(query.text, montage, labels)
+        except CacheMissError:
+            return RouteEvidence(
+                system_id=system_id, error="vlm: no cached rerank (replay miss)"
+            )
+        if envelope.error or parsed is None or "scores" not in parsed:
+            # reranker failed: fall back to lexical order honestly; the
+            # evidence still reports what was actually used
+            pass
+        else:
+            order = sorted(
+                range(len(candidates)),
+                key=lambda i: (-_score_from_rerank(parsed, labels[i]), i),
+            )
+            ordered = [candidates[i] for i in order]
     doc_id, page = ordered[0]
     doc = ctx.resolve_doc(doc_id)
     if doc is None:
-        return RouteEvidence(system_id=V2_SYSTEM, error=f"unknown doc {doc_id}")
-    evidence = _page_evidence(ctx, doc, page, use_image=True, question=query.text)
+        return RouteEvidence(system_id=system_id, error=f"unknown doc {doc_id}")
+    evidence = _page_evidence(ctx, doc, page, answer_mode=answer_mode, question=query.text)
     return _forbidden_check(
-        ctx, replace(evidence, system_id=V2_SYSTEM, ranked_pages=tuple(ordered))
+        ctx, replace(evidence, system_id=system_id, ranked_pages=tuple(ordered))
+    )
+
+
+async def run_visual_hybrid(ctx: LaneContext, query: CorpusQuery, embedder) -> RouteEvidence:
+    """Lexical + visual candidate union, VLM reranked onto one page."""
+    return await _run_hybrid_variant(
+        ctx, query, embedder, system_id=V2_SYSTEM, answer_mode="image", use_rerank=True
+    )
+
+
+async def run_visual_hybrid_text(ctx: LaneContext, query: CorpusQuery, embedder) -> RouteEvidence:
+    """Ablation: identical selection and rerank as the hybrid, transcript answer.
+
+    Isolates the answer step's modality: if this lane matches the hybrid
+    on visual-hard slices, pixels in the *answer* prompt contribute
+    nothing for that model and the gain belongs to retrieval/rerank.
+    """
+    return await _run_hybrid_variant(
+        ctx, query, embedder, system_id=V2_TEXT_SYSTEM, answer_mode="text", use_rerank=True
+    )
+
+
+async def run_visual_hybrid_joint(ctx: LaneContext, query: CorpusQuery, embedder) -> RouteEvidence:
+    """Ablation: hybrid selection/rerank, answer from render + transcript."""
+    return await _run_hybrid_variant(
+        ctx, query, embedder, system_id=V2_JOINT_SYSTEM, answer_mode="both", use_rerank=True
+    )
+
+
+async def run_visual_union_only(ctx: LaneContext, query: CorpusQuery, embedder) -> RouteEvidence:
+    """Ablation: candidate union with lexical ordering, no VLM rerank.
+
+    Isolates what reranking adds over union recall alone: same
+    candidates as the hybrid, but the delivered order is exactly the
+    lexical-first candidate order — zero VLM calls before the answer.
+    """
+    return await _run_hybrid_variant(
+        ctx, query, embedder, system_id=V2_UNION_SYSTEM, answer_mode="image", use_rerank=False
     )
 
 
@@ -573,6 +677,12 @@ async def run_lane(
         return await run_lexical_render(ctx, query)
     if system_id == V2_SYSTEM:
         return await run_visual_hybrid(ctx, query, embedder)
+    if system_id == V2_TEXT_SYSTEM:
+        return await run_visual_hybrid_text(ctx, query, embedder)
+    if system_id == V2_JOINT_SYSTEM:
+        return await run_visual_hybrid_joint(ctx, query, embedder)
+    if system_id == V2_UNION_SYSTEM:
+        return await run_visual_union_only(ctx, query, embedder)
     if system_id.startswith(f"{V_SYSTEM_PREFIX}:"):
         expected = f"{V_SYSTEM_PREFIX}:{embedder.identity}"
         if system_id != expected:
