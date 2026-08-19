@@ -153,7 +153,22 @@ fabricated value with confident delivery and no lineage (inv-013).
 - PR80A timings are runtime observations on the implementer's Windows
   machine; they are not latency promises.
 
-## 9. Reproduction
+## 9. Verification
+
+- Focused PR80B tests (`test_eval_pr80b_*`): 217 passed across the
+  normalization, corpus, scoring, LLM-adapter, invoice2data, and PR80A-lane
+  matrices - all offline, no credentials.
+- Full backend + conformance suite (`python -m pytest tests conformance -q`
+  from `backend/`): first run this session returned 2717 passed / 2 failed /
+  3 skipped; both failures were `ImportError: streamable_http_client` in
+  `test_pr79b_transport_conformance.py` caused by a stale local `mcp`
+  1.13.0 (the alias exists in newer 1.x releases that CI resolves).
+  Upgrading the environment to `mcp>=1.29.0,<2.0.0` - already within the
+  repo's pin - made the file pass 4/4 in isolation, and the clean full-suite
+  rerun returned **2719 passed / 0 failed / 3 skipped**. No PR80B change
+  was involved in either the failure or the fix.
+
+## 10. Reproduction
 
 ```bash
 # full offline measurement from committed fixtures + cache (no network)
