@@ -326,3 +326,34 @@ def test_outcome_envelope_represents_every_backend_status():
         assert isinstance(envelope["result"], dict) == (
             status in {"complete", "partial", "loop_limit"}
         )
+
+
+async def test_caller_context_cannot_impersonate_transport_principal(query_runtime):
+    factory, commit_service = query_runtime
+    await _publish(factory, commit_service, "ws-agent")
+
+    request = _raw_request()
+    request["context"] = {"security_context_id": "principal-a"}
+    issued = await run_agent_query(
+        query=request, page_size=2, principal_id="principal-b"
+    )
+    assert issued["status"] == "partial"
+
+    # The context hint names principal-a, but the cursor is bound to the
+    # authenticated caller principal-b; principal-a cannot resume it even
+    # though the packet context claims that identity.
+    hijack = await run_agent_query(
+        continuation=issued["next_cursor"],
+        workspace_id="ws-agent",
+        principal_id="principal-a",
+    )
+    assert hijack["status"] == "invalidated"
+    assert hijack["error_code"] == "cursor_invalid"
+
+    owner = await run_agent_query(
+        continuation=issued["next_cursor"],
+        workspace_id="ws-agent",
+        page_size=2,
+        principal_id="principal-b",
+    )
+    assert owner["status"] == "partial"
