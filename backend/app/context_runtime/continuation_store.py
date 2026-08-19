@@ -75,6 +75,7 @@ class CursorStore:
         cumulative_budget: Mapping[str, Any],
         expires_at: datetime,
         pin_id: str,
+        principal_id: str | None = None,
     ) -> tuple[str, str]:
         handle = new_cursor_handle()
         nonce = new_cursor_nonce()
@@ -98,6 +99,7 @@ class CursorStore:
             page_count=int(cumulative_budget["pages"]),
             expires_at=expires_at,
             pin_id=pin_id,
+            principal_id=principal_id,
             status=CURSOR_STATUS_ACTIVE,
             nonce=nonce,
             replay_state=CURSOR_REPLAY_FRESH,

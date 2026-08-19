@@ -69,6 +69,7 @@ CONTINUATION_DEFAULT_PAGE_SIZE = 10
 CONTINUATION_MAX_PAGE_SIZE = 100
 CONTINUATION_DEFAULT_MAX_PAGES = 32
 CONTINUATION_DEFAULT_CLAIM_TIMEOUT_SECONDS = 60.0
+CONTINUATION_MAX_PRINCIPAL_ID_LENGTH = 128
 
 _INVALID = "cursor_invalid"
 _EXPIRED = "cursor_expired"
@@ -90,6 +91,20 @@ def _page_size(value: int | None) -> int:
             f"page_size must be an integer from 1 to {CONTINUATION_MAX_PAGE_SIZE}"
         )
     return selected
+
+
+def _principal_id(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= CONTINUATION_MAX_PRINCIPAL_ID_LENGTH
+        or any(ord(char) < 0x21 or ord(char) > 0x7E for char in value)
+    ):
+        raise QueryContractError(
+            "principal_id must be 1-128 printable ASCII characters or null"
+        )
+    return value
 
 
 def _outcome(
@@ -176,9 +191,11 @@ class ContinuationService:
         request: QueryRequest | Mapping[str, Any],
         *,
         page_size: int | None = None,
+        principal_id: str | None = None,
     ) -> ContinuationOutcome:
         parsed = coerce_request(request)
         size = _page_size(page_size)
+        caller = _principal_id(principal_id)
         await self._sweep()
         cursor_pin_id: str | None = None
         cursor_persisted = False
@@ -275,6 +292,7 @@ class ContinuationService:
                 cumulative_budget=run.cumulative_budget,
                 expires_at=expires_at,
                 pin_id=cursor_pin_id,
+                principal_id=caller,
             )
             cursor_persisted = True
             return _outcome(
@@ -312,8 +330,10 @@ class ContinuationService:
         workspace_id: str,
         request: QueryRequest | Mapping[str, Any] | None = None,
         page_size: int | None = None,
+        principal_id: str | None = None,
     ) -> ContinuationOutcome:
         size = _page_size(page_size)
+        caller = _principal_id(principal_id)
         try:
             envelope = self.cursor_codec.decode(token)
         except CursorCodecError as exc:
@@ -327,6 +347,15 @@ class ContinuationService:
         if row is None:
             return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
         if row.workspace_id != workspace_id:
+            return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
+        if row.principal_id is not None and row.principal_id != caller:
+            # A cursor bound to an authenticated caller cannot be resumed by
+            # a different principal. The rejection shares the coarse
+            # capability-failure class; the owning principal loses nothing.
+            logger.info(
+                "cursor %s rejected: caller principal does not own the binding",
+                envelope.handle,
+            )
             return _outcome(OUTCOME_INVALIDATED, reason=_INVALID, error_code=_INVALID)
         if row.status != CURSOR_STATUS_ACTIVE:
             await self._cleanup_terminal(row)

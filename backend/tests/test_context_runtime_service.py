@@ -786,3 +786,103 @@ async def test_fresh_and_continuation_share_one_durable_pin(payload_env, monkeyp
     assert len(acquisitions) == 1
     pins = await active_publication_pins(factory)
     assert [pin.pin_id for pin in pins] == [row.pin_id]
+
+
+async def test_bound_cursor_rejects_other_principal(payload_env):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-principal")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    first = await service.fresh_query(
+        _request("ws-principal"), page_size=2, principal_id="principal-a"
+    )
+    assert first.status == "partial"
+    assert first.next_cursor
+
+    rejected = await service.continue_query(
+        first.next_cursor,
+        workspace_id="ws-principal",
+        page_size=2,
+        principal_id="principal-b",
+    )
+    assert rejected.status == "invalidated"
+    assert rejected.error_code == "cursor_invalid"
+    assert rejected.packet is None
+    assert rejected.next_cursor is None
+
+    unauthenticated = await service.continue_query(
+        first.next_cursor, workspace_id="ws-principal", page_size=2
+    )
+    assert unauthenticated.status == "invalidated"
+    assert unauthenticated.error_code == "cursor_invalid"
+    assert unauthenticated.packet is None
+
+    owner = await service.continue_query(
+        first.next_cursor,
+        workspace_id="ws-principal",
+        page_size=2,
+        principal_id="principal-a",
+    )
+    assert owner.status == "partial"
+    assert owner.next_cursor
+    assert owner.packet is not None
+
+
+async def test_principal_binding_is_persisted_on_cursor_row(payload_env):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-principal-row")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    outcome = await service.fresh_query(
+        _request("ws-principal-row"), page_size=2, principal_id="principal-a"
+    )
+    assert outcome.status == "partial"
+
+    envelope = service.cursor_codec.decode(outcome.next_cursor)
+    row = await service.store.load(envelope.handle)
+    assert row is not None
+    assert row.principal_id == "principal-a"
+
+
+async def test_unbound_cursor_remains_caller_agnostic(payload_env):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-unbound")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    first = await service.fresh_query(_request("ws-unbound"), page_size=2)
+    assert first.status == "partial"
+
+    continued = await service.continue_query(
+        first.next_cursor,
+        workspace_id="ws-unbound",
+        page_size=2,
+        principal_id="principal-b",
+    )
+    assert continued.status == "partial"
+    assert continued.next_cursor
+
+
+@pytest.mark.parametrize(
+    "bad_principal",
+    ["", " ", "x" * 129, "line\nbreak", "tab\tchar"],
+)
+async def test_invalid_principal_id_is_contract_error(payload_env, bad_principal):
+    factory, _store, commit_service = payload_env
+    await _publish(factory, commit_service, "ws-principal-bad")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    from app.context_runtime.errors import QueryContractError
+
+    with pytest.raises(QueryContractError):
+        await service.fresh_query(
+            _request("ws-principal-bad"), page_size=2, principal_id=bad_principal
+        )
+    outcome = await service.fresh_query(_request("ws-principal-bad"), page_size=2)
+    assert outcome.status == "partial"
+    with pytest.raises(QueryContractError):
+        await service.continue_query(
+            outcome.next_cursor,
+            workspace_id="ws-principal-bad",
+            page_size=2,
+            principal_id=bad_principal,
+        )

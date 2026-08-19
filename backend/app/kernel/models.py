@@ -206,6 +206,7 @@ MAX_CURSOR_NONCE_LENGTH = 128
 MAX_CURSOR_STATUS_LENGTH = 16
 MAX_CURSOR_REPLAY_STATE_LENGTH = 16
 MAX_CURSOR_PIN_ID_LENGTH = 128
+MAX_CURSOR_PRINCIPAL_ID_LENGTH = 128
 
 
 class KernelCommitHead(Base):
@@ -1220,6 +1221,9 @@ class KernelQueryCursor(Base):
     )
     pin_id: Mapped[str | None] = mapped_column(
         String(MAX_CURSOR_PIN_ID_LENGTH), nullable=True
+    )
+    principal_id: Mapped[str | None] = mapped_column(
+        String(MAX_CURSOR_PRINCIPAL_ID_LENGTH), nullable=True
     )
     status: Mapped[str] = mapped_column(
         String(MAX_CURSOR_STATUS_LENGTH), index=True, nullable=False

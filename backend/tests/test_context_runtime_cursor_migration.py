@@ -27,6 +27,7 @@ from app.db_migration import DatabaseState, inspect_database, upgrade_database
 
 PR76_HEAD = "20260817_0011"
 PR79A_HEAD = "20260818_0012"
+PR79B_HEAD = "20260819_0013"
 CURSOR_TABLE = "kernel_query_cursors"
 CURSOR_COLUMNS = {
     "handle",
@@ -40,6 +41,7 @@ CURSOR_COLUMNS = {
     "page_count",
     "expires_at",
     "pin_id",
+    "principal_id",
     "status",
     "nonce",
     "replay_state",
@@ -72,7 +74,7 @@ async def test_pr79a_upgrade_adds_empty_cursor_state_table(tmp_path: Path) -> No
         }
         row_count = conn.execute(f"SELECT COUNT(*) FROM {CURSOR_TABLE}").fetchone()[0]
 
-    assert version == PR79A_HEAD
+    assert version == PR79B_HEAD
     assert CURSOR_TABLE in tables
     assert columns == CURSOR_COLUMNS
     assert row_count == 0
@@ -128,7 +130,7 @@ async def test_pr79a_downgrade_discards_cursor_state_and_reupgrade_converges(
         assert conn.execute(
             "SELECT COUNT(*) FROM kernel_query_cursors"
         ).fetchone()[0] == 0
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == PR79A_HEAD
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == PR79B_HEAD
 
 
 @pytest.mark.asyncio
@@ -186,6 +188,7 @@ async def test_pr79a_cursor_store_round_trips_through_migrated_schema(
             cumulative_budget=budget,
             expires_at=expires_at,
             pin_id="pin-rt",
+            principal_id="principal-rt",
         )
 
         row = await store.load(handle)
@@ -194,6 +197,7 @@ async def test_pr79a_cursor_store_round_trips_through_migrated_schema(
         assert row.status == "active"
         assert row.replay_state == "fresh"
         assert row.page_count == 1
+        assert row.principal_id == "principal-rt"
         assert row.query_json == canonical(normalized_query(request))
         assert parse_cursor_state_json(row.publication_json) == publication
         assert parse_cursor_state_json(row.snapshot_json) == {

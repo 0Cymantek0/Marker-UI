@@ -7,6 +7,8 @@ SCOPE_CAPABILITIES_READ = "capabilities:read"
 SCOPE_JOBS_READ = "jobs:read"
 SCOPE_JOBS_WRITE = "jobs:write"
 SCOPE_OUTPUTS_READ = "outputs:read"
+SCOPE_QUERIES_READ = "queries:read"
+SCOPE_EVENTS_READ = "events:read"
 SCOPE_SETTINGS_READ = "settings:read"
 SCOPE_SETTINGS_WRITE = "settings:write"
 
@@ -16,6 +18,8 @@ ALL_SCOPES = {
     SCOPE_JOBS_READ,
     SCOPE_JOBS_WRITE,
     SCOPE_OUTPUTS_READ,
+    SCOPE_QUERIES_READ,
+    SCOPE_EVENTS_READ,
     SCOPE_SETTINGS_READ,
     SCOPE_SETTINGS_WRITE,
 }
