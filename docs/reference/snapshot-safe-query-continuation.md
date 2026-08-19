@@ -148,11 +148,15 @@ releases any returned pin ids.
     not resume the chain; it fails closed. PR79A does not provide a distributed
     key service or an in-memory-only continuation mode.
 
-12. **What remains deferred to PR79B?** No `marker_query` MCP registration,
-    agent contract, authenticated transport-edge principal binding, or MCP
-    structured-result adapter is included. No durable event reconnect/client
-    conformance transport is included. PR79B consumes this backend outcome and
-    cursor core for MCP/client transport and reconnect semantics.
+12. **What was deferred to PR79B — now landed.** The `marker_query` MCP
+    registration, agent query contract, authenticated transport-edge
+    principal binding (`kernel_query_cursors.principal_id`), structured
+    `marker.query_result.v1` adapter, and durable event reconnect/client
+    conformance are implemented in PR79B; see
+    `docs/reference/agent-query-transport.md` and
+    `docs/reference/measurements/pr79b-agent-query-transport.json`. This
+    document remains the authority for the continuation backend semantics
+    underneath that transport.
 
 ## High assurance and nondisclosure
 

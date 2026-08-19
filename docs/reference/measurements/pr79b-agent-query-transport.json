@@ -1,0 +1,113 @@
+{
+  "schema_version": "marker.pr79b_transport_evidence.v1",
+  "git_sha": "6a3ac1d",
+  "git_sha_note": "Code and tests complete at this head; this artifact and the PR79B reference note are the metadata-only follow-up commit.",
+  "method": "Deterministic pytest scenarios over the real context runtime, real kernel event log, real FastMCP tools, and real spawned MCP server processes driven by the official MCP Python SDK client (stdio and streamable HTTP) against seeded file-backed SQLite databases migrated to the 20260819_0013 head. No retrieval path, auth path, or event path is mocked.",
+  "protocol": {
+    "mcp_python_sdk_version": "1.28.0",
+    "protocol_revision_exercised": "2025-06-18",
+    "server_mode": "stateless streamable HTTP with JSON responses plus stdio"
+  },
+  "schema_versions": {
+    "query_request": "marker.query.v1",
+    "query_result_envelope": "marker.query_result.v1",
+    "continuation": "marker.continuation.v1",
+    "evidence_packet": "marker.evidence_packet.v1",
+    "events_envelope": "marker.events.v1",
+    "cursor_row_migration": "20260819_0013"
+  },
+  "claimed_transports": ["stdio", "streamable-http"],
+  "tool_profiles": {
+    "marker_query": ["minimal", "full", "admin"],
+    "marker_events": ["minimal", "full", "admin"]
+  },
+  "tool_scopes": {
+    "marker_query": ["queries:read"],
+    "marker_events": ["events:read"]
+  },
+  "structured_outcome_status_matrix": {
+    "complete": {"envelope_representable": true, "integration_proven": true},
+    "partial": {"envelope_representable": true, "integration_proven": true},
+    "invalidated": {"envelope_representable": true, "integration_proven": true},
+    "stale": {"envelope_representable": true, "integration_proven": false, "integration_note": "backend behavior proven by PR79A suite; transport representation proven by envelope matrix"},
+    "loop_limit": {"envelope_representable": true, "integration_proven": false, "integration_note": "backend behavior proven by PR79A suite; transport representation proven by envelope matrix"},
+    "policy_fail_closed": {"envelope_representable": true, "integration_proven": true},
+    "execution_failure": {"envelope_representable": true, "integration_proven": false, "integration_note": "backend behavior proven by PR79A suite; transport representation proven by envelope matrix"}
+  },
+  "acceptance": {
+    "discovery.stdio_lists_query_and_events_tools": true,
+    "discovery.output_schema_is_object_with_status": true,
+    "discovery.registry_profiles_annotations_scopes_consistent": true,
+    "fresh_query.partial_with_packet_and_server_budget": true,
+    "fresh_query.contract_failures_are_explicit_usage_errors": true,
+    "fresh_query.unpublished_workspace_complete_unpublished_packet": true,
+    "continuation.chain_partial_to_terminal": true,
+    "continuation.page_counts_1_2_3_4": true,
+    "continuation.no_duplicate_no_skipped_evidence": true,
+    "continuation.publication_identity_stable_across_chain": true,
+    "continuation.head_switch_stays_on_original_publication": true,
+    "continuation.terminal_carries_no_cursor": true,
+    "cursor_abuse.tampered_token_cursor_invalid": true,
+    "cursor_abuse.replayed_consumed_nonce_cursor_invalid": true,
+    "cursor_abuse.wrong_workspace_cursor_invalid": true,
+    "cursor_abuse.no_replacement_cursor_or_data_on_failure": true,
+    "cursor_abuse.key_rotation_rejects_old_tokens": true,
+    "auth_binding.http_cross_principal_reuse_rejected": true,
+    "auth_binding.owner_continues_after_rejection": true,
+    "auth_binding.unauthenticated_caller_rejected_for_bound_cursor": true,
+    "auth_binding.caller_context_hint_is_not_authentication": true,
+    "auth_binding.stdio_explicitly_unbound": true,
+    "auth_binding.unknown_bearer_rejected_by_transport": true,
+    "auth_binding.token_map_alone_enables_bearer_auth": true,
+    "policy.epoch_change_invalidates_mid_chain": true,
+    "policy.high_assurance_missing_partition_fails_closed": true,
+    "events.ordered_page_with_server_resume_cursor": true,
+    "events.deterministic_reread_at_same_position": true,
+    "events.disconnect_missed_tail_recovered_in_order": true,
+    "events.cross_workspace_and_cross_stream_isolated": true,
+    "events.work_lands_with_no_consumer_connected": true,
+    "events.restart_resume_from_durable_authority": true,
+    "restart.shared_key_continues_chain_across_service_rebuild": true,
+    "migration.principal_column_round_trips": true,
+    "migration.old_rows_stay_unbound": true
+  },
+  "counts": {
+    "acceptance_check_count": 35,
+    "acceptance_pass_count": 35,
+    "blocker_count": 0
+  },
+  "regression": {
+    "command": "python -m pytest tests conformance -q (working directory: backend)",
+    "pr79b_head": {
+      "git_sha": "6a3ac1d",
+      "passed": 2520,
+      "failed": 8,
+      "skipped": 4
+    },
+    "base_head_for_comparison": {
+      "git_sha": "33ef838",
+      "passed": 2473,
+      "failed": 9,
+      "skipped": 5
+    },
+    "failure_attribution": "The 8 failures at the PR79B head are the same tests that fail at the reviewed PR79A base on this workstation (kernel source-ingress job-status waits and the migration-lock PID diagnostic test), plus flaky variance in one kernel-runtime retry test. Every one of them passes in isolation on both heads. No failure is attributable to the PR79B changes; the PR79B run adds 47 passing tests and removes one base-head flake."
+  },
+  "blockers": [],
+  "deliberate_non_claims": [
+    "No protocol-level SSE Last-Event-ID replay of JSON-RPC message streams: the supported server configuration is stateless streamable HTTP with JSON responses, where the SDK event-store seam is not wired. Durable resume is exposed as the typed marker_events surface backed by the kernel semantic sequence.",
+    "No exactly-once network delivery claim; resume is at-least-once with stable semantic_sequence identity for deterministic de-duplication.",
+    "No OIDC verifier, group membership, enterprise document ACL, or per-principal workspace ACL. principal_id is a transport caller binding inside the existing local_v1 authorization model.",
+    "stdio and loopback no-auth transports have no server-validated identity; cursors there are explicitly unbound local capabilities.",
+    "Without stable key material (MARKER_QUERY_CURSOR_KEY or ENCRYPTION_KEY), cursor keys are ephemeral per process and chains die with the process; this is logged.",
+    "Pre-PR79B cursor rows (NULL principal_id) remain caller-agnostic by design.",
+    "PR80 extraction/review statuses, PR81 visual/vector retrieval, and PR83 PostgreSQL/object-store work remain deferred."
+  ],
+  "reproduce": {
+    "focused": [
+      "python -m pytest tests/test_agent_surface_query_tools.py tests/test_mcp_query_tools.py tests/test_agent_query_adapter.py tests/test_agent_events_adapter.py -q",
+      "python -m pytest tests/test_pr79b_transport_conformance.py -q",
+      "python -m pytest tests/test_context_runtime_service.py tests/test_context_runtime_cursor_migration.py tests/test_kernel_migration.py -q"
+    ],
+    "full": "python -m pytest tests conformance -q"
+  }
+}
