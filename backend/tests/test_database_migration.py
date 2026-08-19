@@ -766,7 +766,7 @@ def test_live_migration_lock_is_never_stolen_by_age(tmp_path: Path) -> None:
             "from pathlib import Path\n"
             "lock = _MigrationLock(Path(r'%s'), timeout=5)\n"
             "lock.acquire()\n"
-            "print('HELD', flush=True)\n"
+            "import os; print('HELD', os.getpid(), flush=True)\n"
             "import time; time.sleep(30)\n"
             "lock.release()\n"
             % (str(BACKEND_DIR), str(db_path)),
@@ -776,12 +776,16 @@ def test_live_migration_lock_is_never_stolen_by_age(tmp_path: Path) -> None:
     )
     try:
         assert holder.stdout is not None
-        assert holder.stdout.readline().strip() == "HELD"
+        # The holder reports its OWN pid: under Windows venvs the
+        # launcher process (Popen.pid) is not the locking interpreter.
+        line = holder.stdout.readline().split()
+        assert line[0] == "HELD"
+        holder_pid = line[1]
         # Holder is alive and (were this the old protocol) far past any
         # stale threshold: the lock must NOT be stealable.
         with pytest.raises(MigrationLockTimeoutError) as err:
             _MigrationLock(db_path, timeout=0.5).acquire()
-        assert str(holder.pid) in str(err.value)
+        assert holder_pid in str(err.value)
     finally:
         holder.kill()
         holder.wait(timeout=30)
