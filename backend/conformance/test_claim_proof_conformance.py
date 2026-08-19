@@ -75,7 +75,7 @@ def test_corpus_has_no_duplicate_case_ids():
 
 @pytest.mark.parametrize(
     "case_id",
-    [case["id"] for case in json.loads(FIXTURE_PATH.read_text())["identity_cases"]],
+    [case["id"] for case in json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["identity_cases"]],
 )
 def test_identity_case_is_drift_free(case_id: str):
     case = next(
@@ -97,7 +97,7 @@ def test_identity_case_is_drift_free(case_id: str):
 
 @pytest.mark.parametrize(
     "case_id",
-    [case["id"] for case in json.loads(FIXTURE_PATH.read_text())["topology_cases"]],
+    [case["id"] for case in json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["topology_cases"]],
 )
 def test_topology_case_deterministic(case_id: str):
     case = next(c for c in load_corpus()["topology_cases"] if c["id"] == case_id)
@@ -116,7 +116,7 @@ def test_topology_case_deterministic(case_id: str):
 
 @pytest.mark.parametrize(
     "case_id",
-    [case["id"] for case in json.loads(FIXTURE_PATH.read_text())["grounding_cases"]],
+    [case["id"] for case in json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["grounding_cases"]],
 )
 def test_grounding_case_deterministic(case_id: str):
     case = next(c for c in load_corpus()["grounding_cases"] if c["id"] == case_id)
