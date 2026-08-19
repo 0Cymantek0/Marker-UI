@@ -280,3 +280,49 @@ async def test_encryption_key_fallback_derives_cursor_key(payload_env, monkeypat
         assert second["status"] == "complete"
     finally:
         reset_query_runtime()
+
+
+async def test_high_assurance_without_partition_fails_closed(query_runtime):
+    request = _raw_request()
+    request["assurance"] = "high"
+
+    envelope = await run_agent_query(query=request, page_size=10)
+
+    assert envelope["status"] == "policy_fail_closed"
+    assert envelope["error_code"] == "policy_fail_closed"
+    assert envelope["result"] is None
+    assert envelope["next_cursor"] is None
+
+
+def test_outcome_envelope_represents_every_backend_status():
+    from app.agent_query import _outcome_envelope
+    from app.context_runtime.continuation import ContinuationOutcome
+
+    statuses = [
+        "complete",
+        "partial",
+        "invalidated",
+        "stale",
+        "loop_limit",
+        "policy_fail_closed",
+        "execution_failure",
+    ]
+    for status in statuses:
+        outcome = ContinuationOutcome(
+            status=status,
+            result=(
+                {"cumulative_budget": {"pages": 1}}
+                if status in {"complete", "partial", "loop_limit"}
+                else None
+            ),
+            next_cursor="cursor-token" if status == "partial" else None,
+            reason="reason" if status != "complete" else None,
+            error_code="code" if status != "complete" else None,
+        )
+        envelope = _outcome_envelope(outcome)
+        assert envelope["schema_version"] == QUERY_RESULT_SCHEMA_VERSION
+        assert envelope["status"] == status
+        assert (envelope["next_cursor"] is not None) == (status == "partial")
+        assert isinstance(envelope["result"], dict) == (
+            status in {"complete", "partial", "loop_limit"}
+        )
