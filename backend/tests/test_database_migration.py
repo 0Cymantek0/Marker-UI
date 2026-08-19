@@ -47,8 +47,9 @@ from app.db_migration import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
-EXPECTED_HEAD = "20260818_0012"
+EXPECTED_HEAD = "20260819_0013"
 EXPECTED_REVISION_CHAIN = [
+    "20260819_0013",
     "20260818_0012",
     "20260817_0011",
     "20260817_0010",
