@@ -22,6 +22,7 @@ _LAZY: dict[str, str] = {
     "visual_store": "app.eval.pr81a.visual_store",
     "embeddings": "app.eval.pr81a.embeddings",
     "visual_index": "app.eval.pr81a.visual_index",
+    "vlm": "app.eval.pr81a.vlm",
 }
 
 __all__ = list(_LAZY)
