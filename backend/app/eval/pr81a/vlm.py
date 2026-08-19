@@ -31,14 +31,15 @@ from urllib.parse import urlparse
 
 SYSTEM_ID_PREFIX = "vlm-openrouter"
 CACHE_SCHEMA_VERSION = "marker.pr81a_vlm_cache.v1"
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
+#: base (not endpoint) URL: the transport appends ``/chat/completions``
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 #: free-tier multimodal chain, tried in order; first success is pinned
+#: (ids verified against the live OpenRouter catalog at benchmark time)
 DEFAULT_MODEL_CHAIN: tuple[str, ...] = (
-    "qwen/qwen2.5-vl-72b-instruct:free",
-    "google/gemini-2.0-flash-exp:free",
-    "meta-llama/llama-3.2-11b-vision-instruct:free",
-    "qwen/qwen2-vl-7b-instruct:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "dots-studio/dots-3-note-preview:free",
+    "google/gemma-4-31b-it:free",
 )
 
 ANSWER_SYSTEM_PROMPT = (
@@ -151,7 +152,7 @@ class VlmClient:
         models: Sequence[str] = DEFAULT_MODEL_CHAIN,
         *,
         api_key: str | None = None,
-        base_url: str = API_URL,
+        base_url: str = OPENROUTER_BASE_URL,
         cache_path: Path | None = None,
         mode: str = "auto",
         transport: Transport | None = None,
@@ -159,6 +160,7 @@ class VlmClient:
         max_retries: int = 4,
         retry_backoff: float = 4.0,
         sleep: Callable[[float], None] = time.sleep,
+        inter_call_delay: float = 1.5,
     ) -> None:
         if mode not in {"auto", "live", "replay"}:
             raise ValueError(f"invalid mode: {mode!r}")
@@ -174,6 +176,7 @@ class VlmClient:
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
         self._sleep = sleep
+        self.inter_call_delay = inter_call_delay
         self.model_served: str | None = None
         # the chain model that first succeeded; later requests keep using
         # it so cache keys stay stable while ``model_served`` records the
@@ -265,6 +268,18 @@ class VlmClient:
                 last_error = f"status {status}"
                 self._sleep(self.retry_backoff * attempt)
                 continue
+            if status == 404:
+                # free-tier providers surface "Not Found" when routing
+                # fails; return immediately so the chain falls through
+                # to the next model without burning retries
+                return VlmEnvelope(
+                    content_raw=None,
+                    error=f"status 404 (model routing unavailable): {body[:120]}",
+                    model_requested=payload["model"],
+                    model_served=None,
+                    attempts=attempts,
+                    usage={},
+                )
             # other 4xx: fail fast, retrying will not help
             return VlmEnvelope(
                 content_raw=None,
@@ -339,6 +354,9 @@ class VlmClient:
                 cache["model_chain"] = list(self.models)
                 cache["gateway_origin"] = self._origin_description()
                 self._write_cache(cache)
+                # free-tier pacing: keep the provider side of the chain
+                # healthy without the caller knowing the schedule
+                self._sleep(self.inter_call_delay)
                 return envelope, _parse_json(envelope.content_raw)
         if last_envelope is not None:
             return last_envelope, None

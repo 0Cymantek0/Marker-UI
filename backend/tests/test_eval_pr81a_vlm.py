@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from app.eval.pr81a.vlm import (
-    API_URL,
     CacheMissError,
+    OPENROUTER_BASE_URL,
     VlmClient,
     VlmError,
     _image_part,
@@ -120,6 +120,21 @@ class TestLivePath:
         )
         envelope, parsed = client.answer("q", page_png=b"p", page_text=None)
         assert parsed == {"answer": "z"}
+        assert envelope.model_requested == "m2"
+
+    def test_404_routing_falls_through_to_next_model(self, tmp_path):
+        transport = FakeTransport(
+            [(404, '{"error":{"message":"Not Found","code":404}}'), (200, _ok_body('{"answer": "r"}'))]
+        )
+        client = VlmClient(
+            ["m1", "m2"],
+            transport=transport,
+            cache_path=tmp_path / "c.json",
+            mode="live",
+            sleep=lambda _: None,
+        )
+        envelope, parsed = client.answer("q", page_png=b"p", page_text=None)
+        assert parsed == {"answer": "r"}
         assert envelope.model_requested == "m2"
 
     def test_transport_exception_retries_then_exhausts(self, tmp_path):
@@ -268,7 +283,8 @@ class TestKeyAndParts:
         assert a != cache_key("m1", "sys", [{"type": "text", "text": "q"}, _image_part(b"xx")])
 
     def test_default_base_url_is_openrouter(self):
-        assert API_URL == "https://openrouter.ai/api/v1/chat/completions"
+        # base URL, not endpoint: the transport appends /chat/completions
+        assert OPENROUTER_BASE_URL == "https://openrouter.ai/api/v1"
 
     def test_invalid_mode_rejected(self):
         with pytest.raises(ValueError):

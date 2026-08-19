@@ -303,6 +303,25 @@ class TestVisualIndex:
         result = partition.search(embedder.embed_text("png-b1"))
         assert all(h.doc_id != "doc-b" for h in result.hits)
 
+    def test_partition_from_saved_index_matches_scratch_build(self, tmp_path):
+        embedder = HashEmbedder()
+        pages = [
+            (_entry("doc-a", 1), b"png-a1"),
+            (_entry("doc-c", 2), b"png-c2"),
+            (_entry("doc-b", 1, domain="restricted"), b"png-b1"),
+        ]
+        shared = VisualIndex.build(workspace_id="ws", embedder=embedder, pages=pages)
+        scratch = VisualIndex.build_high_assurance(
+            workspace_id="ws", embedder=embedder, pages=pages, allowed_domains=["general"]
+        )
+        path = tmp_path / "full.npz"
+        shared.save(path)
+        replayed = VisualIndex.load(path)
+        derived = VisualIndex.partition_from(replayed, ["general"])
+        assert derived.generation_id == scratch.generation_id
+        assert np.array_equal(derived.matrix, scratch.matrix)
+        assert [e.doc_id for e in derived.entries] == [e.doc_id for e in scratch.entries]
+
     def test_forbidden_cannot_influence_rank_in_partition(self):
         embedder = HashEmbedder()
         allowed_pages = [(_entry("doc-a", 1), b"png-a1"), (_entry("doc-c", 1), b"png-c1")]

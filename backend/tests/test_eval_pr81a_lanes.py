@@ -301,6 +301,44 @@ async def test_revision_lifecycle_and_stale_detection(payload_env, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_pinned_cut_serves_superseded_revision(payload_env, tmp_path):
+    """After v4 is current, a pinned context must still deliver v3 coherently."""
+    transport = ScriptedTransport(answers=['{"answer": "3"}'])
+    ctx = await _make_ctx(payload_env, tmp_path, _client(tmp_path, transport))
+    g1 = build_visual_index(ctx.workspace, ctx.render_store, HashEmbedder())
+
+    class TargetedEmbedder(HashEmbedder):
+        def __init__(self, target_png: bytes) -> None:
+            super().__init__()
+            self._target = self.embed_image(target_png)
+
+        def embed_text(self, text: str):
+            return self._target
+
+    rev_doc = ctx.workspace.doc("doc-rev-01")
+    v3_png = ctx.render_store.peek(rev_doc.blob_key, 0).path.read_bytes()
+    await revise_document(ctx.workspace, "doc-rev-01", "v4")
+    ctx.authorization = None
+    await resolve_phase_authorization(ctx)
+
+    old_publication = ctx.workspace.pinned_publication
+    ctx.pinned = True
+    ctx.pinned_publication_id = old_publication.publication_set_id
+    ctx.visual_index = g1
+    ctx.expected_revisions = {"doc-rev-01": "v3"}
+
+    q32 = ctx.workspace.corpus.query("q32")
+    embedder = TargetedEmbedder(v3_png)
+    for system_id in (B1_SYSTEM, B2_SYSTEM, f"visual-dense:{embedder.identity}"):
+        evidence = await run_lane(system_id, ctx, q32, embedder=embedder)
+        assert evidence.delivered_page == ("doc-rev-01", 1), system_id
+        assert evidence.revision == "v3", system_id
+        assert evidence.stale_revision_delivered is False
+        score = score_query(q32, evidence)
+        assert score.danger is None, system_id
+
+
+@pytest.mark.asyncio
 async def test_vlm_failure_is_honest_error(payload_env, tmp_path):
     transport = ScriptedTransport(answers=[])
     def failing(payload):

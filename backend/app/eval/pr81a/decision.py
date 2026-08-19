@@ -135,14 +135,18 @@ def evaluate_decision(
         if best_dense is None or result["gain_vs_baseline"] > best_dense["gain_vs_baseline"]:
             best_dense_id, best_dense = system_id, result
 
-    control_ok = True
-    if base_easy is not None:
-        for system_id, result in dense_results.items():
-            easy = result["text_easy_rate"]
-            if easy is not None and round(base_easy - easy, 4) > CONTROL_TOLERANCE:
-                control_ok = False
-        if v2_easy is not None and round(base_easy - v2_easy, 4) > CONTROL_TOLERANCE:
-            control_ok = False
+    def _control_ok(route_easy: float | None) -> bool:
+        # the tolerance protects the route being considered: an unrelated
+        # route's regression (e.g. admission-limited dense lanes that
+        # cannot serve plain-text documents by design) must not block a
+        # different route's promotion
+        if base_easy is None or route_easy is None:
+            return True
+        return round(base_easy - route_easy, 4) <= CONTROL_TOLERANCE
+
+    for system_id, result in dense_results.items():
+        result["text_easy_control_ok"] = _control_ok(result["text_easy_rate"])
+    v2_control_ok = _control_ok(v2_easy)
 
     rule_results = {
         "baseline_visual_hard_rate": base_hard_rate,
@@ -150,9 +154,9 @@ def evaluate_decision(
         "dense_routes": dense_results,
         "hybrid_gain_vs_baseline": v2_gain,
         "hybrid_text_easy_rate": v2_easy,
+        "hybrid_text_easy_control_ok": v2_control_ok,
         "security_blockers": security_blockers,
         "cost_blockers": cost_blockers,
-        "text_easy_control_ok": control_ok,
         "thresholds": {
             "promotion_margin": PROMOTION_MARGIN,
             "control_tolerance": CONTROL_TOLERANCE,
@@ -170,7 +174,7 @@ def evaluate_decision(
     elif (
         best_dense is not None
         and best_dense["gain_vs_baseline"] >= PROMOTION_MARGIN
-        and control_ok
+        and best_dense.get("text_easy_control_ok", False)
     ):
         outcome = "promote_narrow"
         summary = (
@@ -179,7 +183,7 @@ def evaluate_decision(
             f"visual-hard slices ({best_dense['visual_hard_rate']:.3f} vs "
             f"{base_hard_rate:.3f}) with the text-easy control held."
         )
-    elif v2_gain is not None and v2_gain >= RERANK_MARGIN and control_ok:
+    elif v2_gain is not None and v2_gain >= RERANK_MARGIN and v2_control_ok:
         outcome = "narrow_rerank_only"
         summary = (
             f"Dense visual routes do not pay, but {V2_SYSTEM} beats "
@@ -187,12 +191,15 @@ def evaluate_decision(
             f"({v2_hard_rate:.3f} vs {base_hard_rate:.3f})."
         )
     else:
-        best_gain = max(
-            [r["gain_vs_baseline"] for r in dense_results.values() if r["gain_vs_baseline"] is not None]
-            + ([v2_gain] if v2_gain is not None else []),
-            default=None,
-        )
-        if best_gain is not None and best_gain >= EXPERIMENTAL_FLOOR and control_ok:
+        candidates = [
+            (r["gain_vs_baseline"], r.get("text_easy_control_ok", False))
+            for r in dense_results.values()
+            if r["gain_vs_baseline"] is not None
+        ]
+        if v2_gain is not None:
+            candidates.append((v2_gain, v2_control_ok))
+        best_gain, best_control = max(candidates, default=(None, False))
+        if best_gain is not None and best_gain >= EXPERIMENTAL_FLOOR and best_control:
             outcome = "experimental"
             summary = (
                 f"Best visual gain over the targeted-rendering baseline is "
@@ -205,7 +212,7 @@ def evaluate_decision(
             summary = (
                 "No visual route produced a material downstream gain over "
                 "text/structure plus targeted page rendering."
-                + ("" if control_ok else " The text-easy control also regressed.")
+                + ("" if best_control else " The text-easy control also regressed.")
             )
 
     return {

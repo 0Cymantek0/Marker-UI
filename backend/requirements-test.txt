@@ -7,3 +7,5 @@ reportlab>=4.0.0
 xlwt>=1.3.0
 # PR80B displacement benchmark: deterministic invoice specialist comparator
 invoice2data==1.0.1
+# PR81A visual retrieval benchmark: SigLIP tokenizer runtime
+sentencepiece>=0.2.0

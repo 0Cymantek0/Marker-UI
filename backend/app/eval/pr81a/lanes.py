@@ -44,7 +44,7 @@ from app.eval.pr81a.kernel_seed import SeededDoc, SeededWorkspace
 from app.eval.pr81a.scoring import RouteEvidence
 from app.eval.pr81a.visual_index import VisualIndex, VisualPageEntry, VisualQueryBudget
 from app.eval.pr81a.visual_store import PageRenderStore
-from app.eval.pr81a.vlm import VlmClient
+from app.eval.pr81a.vlm import CacheMissError, VlmClient
 
 B1_SYSTEM = "lexical-text"
 B2_SYSTEM = "lexical-render"
@@ -77,10 +77,18 @@ class LaneContext:
     #: valid publication instead of mixing generations
     pinned: bool = False
     pinned_publication_id: str | None = None
-    #: visual generation for the live cut; replaced after a revision
+    #: visual generation for the live cut; replaced after a revision.
+    #: The hybrid lane and single-index probes use this primary index.
     visual_index: VisualIndex | None = None
+    #: per-embedder visual generations so every dense lane searches the
+    #: matrix that matches its own query-vector dimension
+    visual_indexes: dict[str, VisualIndex] | None = None
     #: revision each doc must be attributed to for this phase
     expected_revisions: dict[str, str] | None = None
+
+    def index_for(self, embedder) -> VisualIndex | None:
+        by_identity = self.visual_indexes or {}
+        return by_identity.get(embedder.identity, self.visual_index)
 
     def resolve_doc(self, doc_id: str) -> SeededDoc | None:
         if self.pinned and doc_id in self.workspace.superseded:
@@ -328,7 +336,17 @@ def _page_evidence(
         png_bytes = rendered.path.read_bytes()
     else:
         text = doc.page_text(page_number)
-    envelope, parsed = ctx.vlm.answer(question, page_png=png_bytes, page_text=text)
+    try:
+        envelope, parsed = ctx.vlm.answer(question, page_png=png_bytes, page_text=text)
+    except CacheMissError:
+        return RouteEvidence(
+            system_id="",
+            error="vlm: no cached response (replay miss)",
+            delivered_page=(doc.doc_id, page_number),
+            revision=doc.revision,
+            evidence_kind="image_page" if use_image else "text_page",
+            source_resolvable=True,
+        )
     base = {
         "delivered_page": (doc.doc_id, page_number),
         "revision": doc.revision,
@@ -426,7 +444,7 @@ async def run_lexical_render(ctx: LaneContext, query: CorpusQuery) -> RouteEvide
 
 async def run_visual_dense(ctx: LaneContext, query: CorpusQuery, embedder) -> RouteEvidence:
     system_id = f"{V_SYSTEM_PREFIX}:{embedder.identity}"
-    index = ctx.visual_index
+    index = ctx.index_for(embedder)
     if index is None:
         return RouteEvidence(system_id=system_id, error="visual generation absent")
     result = index.search(
@@ -521,7 +539,10 @@ async def run_visual_hybrid(ctx: LaneContext, query: CorpusQuery, embedder) -> R
     if not candidates:
         return RouteEvidence(system_id=V2_SYSTEM)
     montage, labels = _contact_sheet(ctx, candidates)
-    envelope, parsed = ctx.vlm.rerank(query.text, montage, labels)
+    try:
+        envelope, parsed = ctx.vlm.rerank(query.text, montage, labels)
+    except CacheMissError:
+        return RouteEvidence(system_id=V2_SYSTEM, error="vlm: no cached rerank (replay miss)")
     if envelope.error or parsed is None or "scores" not in parsed:
         # reranker failed: fall back to lexical order honestly; the
         # evidence still reports what was actually used

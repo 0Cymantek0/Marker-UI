@@ -141,16 +141,26 @@ class TestBlockers:
         assert decision["outcome"] == "do_not_promote"
         assert decision["rule_results"]["cost_blockers"]
 
-    def test_text_easy_regression_blocks_promotion(self):
+    def test_text_easy_regression_blocks_dense_promotion(self):
         metrics = _merge(
             _metrics("lexical-render", hard=0.4, easy=0.9),
             _metrics("visual-dense:x", hard=0.9, easy=0.5),
         )
-        decision = evaluate_decision(
-            metrics, danger_totals={}, economics=_econ()
-        )
+        decision = evaluate_decision(metrics, danger_totals={}, economics=_econ())
         assert decision["outcome"] != "promote_narrow"
-        assert decision["rule_results"]["text_easy_control_ok"] is False
+        assert decision["rule_results"]["dense_routes"]["visual-dense:x"]["text_easy_control_ok"] is False
+
+    def test_dense_control_failure_does_not_block_hybrid_narrowing(self):
+        # dense lanes are admission-limited: 0.0 on text-easy is their
+        # measured selectivity tradeoff, not a blocker for the hybrid
+        metrics = _merge(
+            _metrics("lexical-render", hard=0.4, easy=0.83),
+            _metrics("visual-dense:x", hard=0.45, easy=0.0),
+            _metrics("visual-hybrid-rerank", hard=0.8, easy=1.0),
+        )
+        decision = evaluate_decision(metrics, danger_totals={}, economics=_econ())
+        assert decision["outcome"] == "narrow_rerank_only"
+        assert decision["rule_results"]["hybrid_text_easy_control_ok"] is True
 
 
 class TestRuleShape:

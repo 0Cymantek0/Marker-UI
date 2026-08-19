@@ -59,7 +59,7 @@ from app.eval.pr81a.lanes import (  # noqa: E402
 from app.eval.pr81a.scoring import aggregate_metrics, score_query  # noqa: E402
 from app.eval.pr81a.visual_index import VisualIndex  # noqa: E402
 from app.eval.pr81a.visual_store import PageRenderStore  # noqa: E402
-from app.eval.pr81a.vlm import VlmClient  # noqa: E402
+from app.eval.pr81a.vlm import OPENROUTER_BASE_URL, VlmClient  # noqa: E402
 from app.kernel.commit import KernelCommitService  # noqa: E402
 from app.kernel.payloads import LocalPayloadStore  # noqa: E402
 from app.services.query_policy import QueryPolicyService  # noqa: E402
@@ -98,14 +98,18 @@ def main() -> int:
     if not args.skip_siglip:
         dense_specs.append(("siglip", SiglipEmbedder()))
 
-    vlm_models = None
-    if not args.live and args.vlm_cache.is_file():
-        header = json.loads(args.vlm_cache.read_text(encoding="utf-8"))
-        vlm_models = header.get("model_chain")
-    if vlm_models:
-        vlm = VlmClient(models=vlm_models, cache_path=args.vlm_cache, mode="replay")
+    base_url = os.environ.get("PR81A_VLM_BASE_URL", OPENROUTER_BASE_URL)
+    env_models = os.environ.get("PR81A_VLM_MODELS")
+    if args.live:
+        # auto = cache first, network on miss: reruns resume and only
+        # refill calls that previously failed, so transient outages heal
+        models = [m.strip() for m in env_models.split(",") if m.strip()] if env_models else None
+        vlm = VlmClient(models=models, base_url=base_url, cache_path=args.vlm_cache, mode="auto")
     else:
-        vlm = VlmClient(cache_path=args.vlm_cache, mode="live" if args.live else "replay")
+        header_models = None
+        if args.vlm_cache.is_file():
+            header_models = json.loads(args.vlm_cache.read_text(encoding="utf-8")).get("model_chain")
+        vlm = VlmClient(models=header_models, base_url=base_url, cache_path=args.vlm_cache, mode="replay")
 
     async def run() -> dict:
         with tempfile.TemporaryDirectory(prefix="pr81a-bench-") as tmp:
@@ -241,6 +245,7 @@ async def _run_benchmark(
         render_store=render_store,
         vlm=vlm,
         visual_index=v3_indexes[dense_specs[0][0]],
+        visual_indexes={embedders[n].identity: v3_indexes[n] for n, _ in dense_specs},
         expected_revisions={"doc-rev-01": "v3"},
     )
     await resolve_phase_authorization(ctx)
@@ -272,14 +277,14 @@ async def _run_benchmark(
     await phase(systems_a, ctx, no_delivery_queries)
 
     # high assurance probes on the same authz slice
+    ha_index = VisualIndex.partition_from(v3_indexes[dense_specs[0][0]], ["general"])
     ctx_ha = LaneContext(
         workspace=ws,
         render_store=render_store,
         vlm=vlm,
         assurance="high",
-        visual_index=VisualIndex.partition_from(
-            v3_indexes[dense_specs[0][0]], ["general"]
-        ),
+        visual_index=ha_index,
+        visual_indexes={embedders[dense_specs[0][0]].identity: ha_index},
     )
     await resolve_phase_authorization(ctx_ha)
     ha_systems = [
@@ -310,6 +315,7 @@ async def _run_benchmark(
 
     # -- phase C: post-revision on the new cut -----------------------------
     ctx.visual_index = v4_indexes[dense_specs[0][0]]
+    ctx.visual_indexes = {embedders[n].identity: v4_indexes[n] for n, _ in dense_specs}
     ctx.expected_revisions = {"doc-rev-01": "v4"}
     await resolve_phase_authorization(ctx)
     post_queries = _phase_queries(corpus, phases=("post_revision",))
@@ -323,6 +329,7 @@ async def _run_benchmark(
         pinned=True,
         pinned_publication_id=ws.pinned_publication.publication_set_id,
         visual_index=v3_indexes[dense_specs[0][0]],
+        visual_indexes={embedders[n].identity: v3_indexes[n] for n, _ in dense_specs},
         expected_revisions={"doc-rev-01": "v3"},
     )
     await resolve_phase_authorization(ctx_pinned)
