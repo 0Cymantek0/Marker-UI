@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -125,12 +127,12 @@ def evaluate_calibration(
     ]
     # Type narrowing for confidence after filtering above.
     confidence_numbers = [float(value) for value in confidence_values if value is not None]
-    brier = sum(
+    brier = math.fsum(
         (confidence - correct) ** 2
         for confidence, correct in zip(confidence_numbers, correct_values, strict=True)
     ) / support
     bins: list[dict[str, Any]] = []
-    weighted_gap = 0.0
+    weighted_gaps: list[float] = []
     max_gap = 0.0
     for index in range(bin_count):
         lower = index / bin_count
@@ -142,10 +144,10 @@ def evaluate_calibration(
         ]
         if not members:
             continue
-        mean_confidence = sum(confidence_numbers[position] for position in members) / len(members)
+        mean_confidence = math.fsum(confidence_numbers[position] for position in members) / len(members)
         empirical_accuracy = sum(correct_values[position] for position in members) / len(members)
         gap = abs(mean_confidence - empirical_accuracy)
-        weighted_gap += len(members) / support * gap
+        weighted_gaps.append(len(members) / support * gap)
         max_gap = max(max_gap, gap)
         bins.append(
             {
@@ -173,7 +175,7 @@ def evaluate_calibration(
         support_sufficient=support_sufficient,
         status="ok" if support_sufficient else "insufficient_support",
         brier_score=brier,
-        expected_calibration_error=weighted_gap,
+        expected_calibration_error=math.fsum(weighted_gaps),
         maximum_calibration_error=max_gap,
         accuracy=_rate(sum(correct_values), support),
         bins=tuple(bins),

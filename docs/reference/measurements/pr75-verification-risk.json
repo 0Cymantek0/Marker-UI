@@ -404,10 +404,10 @@
       },
       "report_semantic_identity": "sha256:88d5545e480aa16f0b6a901b4931b55af30ac129ccf15a4ee65aca4f0afac023",
       "runtime_ms": {
-        "baselines": 0.8449000015389174,
-        "calibration": 0.5793999989691656,
-        "pair": 0.017399997886968777,
-        "report": 2.7673000004142523
+        "baselines": 0.8602000002611021,
+        "calibration": 0.5793000000267057,
+        "pair": 0.01790000032997341,
+        "report": 2.797499999815045
       },
       "sample_count": 2,
       "semantic_identity": "sha256:88d5545e480aa16f0b6a901b4931b55af30ac129ccf15a4ee65aca4f0afac023",
@@ -804,10 +804,10 @@
       },
       "report_semantic_identity": "sha256:5c1e1368959b067c31f485868491ce3ce105df05267c842c7ef155365b8cd122",
       "runtime_ms": {
-        "baselines": 0.8288999997603241,
-        "calibration": 0.6203000011737458,
-        "pair": 0.01790000169421546,
-        "report": 2.722400000493508
+        "baselines": 0.8104999997158302,
+        "calibration": 0.6251999998312385,
+        "pair": 0.017800000023271423,
+        "report": 2.7060000002165907
       },
       "sample_count": 2,
       "semantic_identity": "sha256:5c1e1368959b067c31f485868491ce3ce105df05267c842c7ef155365b8cd122",
@@ -865,7 +865,7 @@
           "selected_witnesses": [
             "model-a"
           ],
-          "semantic_identity": "sha256:dabeab430d0c9b60fd37ecdbdb71624305ecb650b8bea5632dfa7738eb028e39",
+          "semantic_identity": "sha256:954ddb19f6af5b4ef7a48acdf5c3a4289ba22e96feb1ce8af4d28b7d9dec0c17",
           "status": "ok"
         },
         "correlation_blind_ensemble": {
@@ -982,7 +982,7 @@
             "model-b",
             "source-native"
           ],
-          "semantic_identity": "sha256:0e253c636c0ef4ce8241511c787824526feec663cb62b7799b66d17d35700ccc",
+          "semantic_identity": "sha256:89784ac59080a9f7a38a3e8d8c135f72b79ec171095ab7ad632112587befd3b8",
           "status": "ok"
         },
         "deterministic_source_native_only": {
@@ -1097,7 +1097,7 @@
             "teacher-child-b",
             "unknown-model"
           ],
-          "semantic_identity": "sha256:fecab2251977bdce52a6f8d80d7e2e4b7faba15c204a7fd99788206c21350f65",
+          "semantic_identity": "sha256:8c859eb28aeb9aef8779cafedb5264f6f8fc6af91da2b84f01a54d5dba59fa9f",
           "status": "ok"
         }
       },
@@ -1110,9 +1110,9 @@
           "status": "defined",
           "upper": 0.9433178485456247
         },
-        "brier_score": 0.16000000000000006,
+        "brier_score": 0.16,
         "distribution": null,
-        "expected_calibration_error": 1.1102230246251565e-16,
+        "expected_calibration_error": 0.0,
         "method_id": "equal_width_ece_and_brier",
         "method_version": "marker.calibration.ece_brier.v1",
         "sample_count": 10,
@@ -1205,15 +1205,15 @@
           "required_distribution": "matched"
         }
       },
-      "report_semantic_identity": "sha256:cff96115130f7f1661a88f44d75114323ea95be2e062b93e3884e75e89cfb3df",
+      "report_semantic_identity": "sha256:886b5ec86fb522de9b63ab440e9dfe4be4c1fa8aaef3564367d56620bfe7dfd1",
       "runtime_ms": {
-        "baselines": 1.4857999995001592,
-        "calibration": 0.6102000006649178,
-        "pair": 0.021100000594742596,
-        "report": 3.4172999985457864
+        "baselines": 1.5579999999317806,
+        "calibration": 0.6298000002971094,
+        "pair": 0.021599999854515772,
+        "report": 3.479699999843433
       },
       "sample_count": 10,
-      "semantic_identity": "sha256:cff96115130f7f1661a88f44d75114323ea95be2e062b93e3884e75e89cfb3df",
+      "semantic_identity": "sha256:886b5ec86fb522de9b63ab440e9dfe4be4c1fa8aaef3564367d56620bfe7dfd1",
       "slice_id": "matched"
     },
     "shifted": {
@@ -1607,10 +1607,10 @@
       },
       "report_semantic_identity": "sha256:9c8f0723bc7054f748757e81b7d4721400fca118b8d6576109fb7e8b7d2ef197",
       "runtime_ms": {
-        "baselines": 1.0032999998657033,
-        "calibration": 0.6050000010873191,
-        "pair": 0.0197000008483883,
-        "report": 2.865800001018215
+        "baselines": 0.9546000001137145,
+        "calibration": 0.6296999999904074,
+        "pair": 0.020599999970727367,
+        "report": 3.0249000001276727
       },
       "sample_count": 5,
       "semantic_identity": "sha256:9c8f0723bc7054f748757e81b7d4721400fca118b8d6576109fb7e8b7d2ef197",

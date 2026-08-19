@@ -193,9 +193,9 @@ def _baseline_result(
             ]
             if confidences:
                 brier_values.append(
-                    (sum(confidences) / len(confidences) - int(vote == sample.label)) ** 2
+                    (math.fsum(confidences) / len(confidences) - int(vote == sample.label)) ** 2
                 )
-    brier = sum(brier_values) / len(brier_values) if brier_values else None
+    brier = math.fsum(brier_values) / len(brier_values) if brier_values else None
     return BaselineResult(
         name=name,
         slice_id=None,

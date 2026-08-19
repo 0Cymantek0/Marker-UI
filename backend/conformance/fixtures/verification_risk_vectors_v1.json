@@ -204,7 +204,7 @@
           "selected_witnesses": [
             "model-a"
           ],
-          "semantic_identity": "sha256:dabeab430d0c9b60fd37ecdbdb71624305ecb650b8bea5632dfa7738eb028e39",
+          "semantic_identity": "sha256:954ddb19f6af5b4ef7a48acdf5c3a4289ba22e96feb1ce8af4d28b7d9dec0c17",
           "status": "ok"
         },
         "correlation_blind_ensemble": {
@@ -239,7 +239,7 @@
             "model-b",
             "source-native"
           ],
-          "semantic_identity": "sha256:0e253c636c0ef4ce8241511c787824526feec663cb62b7799b66d17d35700ccc",
+          "semantic_identity": "sha256:89784ac59080a9f7a38a3e8d8c135f72b79ec171095ab7ad632112587befd3b8",
           "status": "ok"
         },
         "deterministic_source_native_only": {
@@ -272,7 +272,7 @@
             "teacher-child-b",
             "unknown-model"
           ],
-          "semantic_identity": "sha256:fecab2251977bdce52a6f8d80d7e2e4b7faba15c204a7fd99788206c21350f65",
+          "semantic_identity": "sha256:8c859eb28aeb9aef8779cafedb5264f6f8fc6af91da2b84f01a54d5dba59fa9f",
           "status": "ok"
         }
       },
@@ -283,9 +283,9 @@
           "rate": 0.8,
           "status": "defined"
         },
-        "brier_score": 0.16000000000000006,
+        "brier_score": 0.16,
         "distribution": null,
-        "expected_calibration_error": 1.1102230246251565e-16,
+        "expected_calibration_error": 0.0,
         "method_id": "equal_width_ece_and_brier",
         "method_version": "marker.calibration.ece_brier.v1",
         "sample_count": 10,
@@ -362,7 +362,7 @@
         }
       },
       "sample_count": 10,
-      "semantic_identity": "sha256:cff96115130f7f1661a88f44d75114323ea95be2e062b93e3884e75e89cfb3df",
+      "semantic_identity": "sha256:886b5ec86fb522de9b63ab440e9dfe4be4c1fa8aaef3564367d56620bfe7dfd1",
       "slice_id": "matched"
     },
     {
