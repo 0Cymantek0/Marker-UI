@@ -1,0 +1,42 @@
+{
+  "doc_id": "doc-ops-01",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "HeatTech Facility Inspection Form HT-07",
+        "Form HT-07-C",
+        "Proposed",
+        "Approved",
+        "Maintenance budget (USD)",
+        "120000",
+        "95000",
+        "Inspection cycle (days)",
+        "30",
+        "45",
+        "Contractor",
+        "Ace Mechanical",
+        "Ace Mechanical",
+        "Next outage window",
+        "Jun-10",
+        "Jun-24"
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "HeatTech Facility Inspection Form HT-07",
+        "Checklist and sign-off",
+        "Pressure vessels inspected within rating",
+        "Emergency stop chain tested",
+        "Thermal sensors calibrated",
+        "Ventilation scrubber media replaced",
+        "Technician signature",
+        "Mar-12",
+        "Reviewer signature",
+        "Mar-15"
+      ]
+    }
+  ]
+}

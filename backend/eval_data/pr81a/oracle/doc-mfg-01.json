@@ -1,0 +1,21 @@
+{
+  "doc_id": "doc-mfg-01",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Assembly Line 4 Status Dashboard",
+        "Shift 2, live indicators",
+        "Throughput",
+        "412 units/hr",
+        "Defect rate",
+        "1.8%",
+        "OEE",
+        "87.4%",
+        "Line load 72%",
+        "Throughput sparkline (6h)"
+      ]
+    }
+  ]
+}

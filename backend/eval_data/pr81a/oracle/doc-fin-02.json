@@ -1,0 +1,58 @@
+{
+  "doc_id": "doc-fin-02",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Vertex Manufacturing Cost Analysis",
+        "Prepared by Plant Controlling",
+        "Cost per Unit by Line (USD)",
+        "Line",
+        "Material",
+        "Labor",
+        "Overhead",
+        "Unit Cost",
+        "L1",
+        "4.20",
+        "3.10",
+        "1.55",
+        "8.85",
+        "L2",
+        "5.75",
+        "2.40",
+        "1.30",
+        "9.45",
+        "L3",
+        "3.60",
+        "2.95",
+        "1.75",
+        "8.30",
+        "L4",
+        "6.10",
+        "3.55",
+        "1.90",
+        "11.55",
+        "Overhead is allocated by machine hours. Unit costs exclude packaging and freight."
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Vertex Manufacturing Cost Analysis",
+        "Trend",
+        "Unit Cost Trend 2024",
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "8.10",
+        "L1",
+        "11.55",
+        "L4"
+      ]
+    }
+  ]
+}

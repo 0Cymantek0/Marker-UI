@@ -1,0 +1,325 @@
+[
+  {
+    "query_id": "q01",
+    "text": "What is the document reference code of the regional sales report for 2024?",
+    "slice_tag": "text.easy_control",
+    "doc_id": "doc-fin-01",
+    "page_number": 1,
+    "answer": "ZETA-9",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q02",
+    "text": "Which policy code governs remote work in the employee handbook?",
+    "slice_tag": "text.easy_control",
+    "doc_id": "doc-hr-01",
+    "page_number": 2,
+    "answer": "RW-2",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q03",
+    "text": "How many unused annual leave days may carry over to the next year?",
+    "slice_tag": "text.easy_control",
+    "doc_id": "doc-hr-01",
+    "page_number": 1,
+    "answer": "15",
+    "answer_kind": "count"
+  },
+  {
+    "query_id": "q04",
+    "text": "What is the monthly rent in the Elm Street lease agreement?",
+    "slice_tag": "text.easy_control",
+    "doc_id": "doc-leg-01",
+    "page_number": 1,
+    "answer": "2450",
+    "answer_kind": "decimal"
+  },
+  {
+    "query_id": "q05",
+    "text": "What is the current OEE shown on the Line 4 status dashboard?",
+    "slice_tag": "text.easy_control",
+    "doc_id": "doc-mfg-01",
+    "page_number": 1,
+    "answer": "87.4%",
+    "answer_kind": "percent"
+  },
+  {
+    "query_id": "q06",
+    "text": "Which clause code governs early termination of the Elm Street lease?",
+    "slice_tag": "text.easy_control",
+    "doc_id": "doc-leg-01",
+    "page_number": 2,
+    "answer": "CLAUSE-9",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q07",
+    "text": "Find the page that draws groups of vertical bars comparing revenue across territories by quarter. What value does the tallest bar show?",
+    "slice_tag": "chart.appearance",
+    "doc_id": "doc-fin-01",
+    "page_number": 2,
+    "answer": "4.0",
+    "answer_kind": "decimal"
+  },
+  {
+    "query_id": "q08",
+    "text": "Find the page with a circular chart divided into wedges showing issue share for the Beta product. Which category is the largest wedge?",
+    "slice_tag": "chart.appearance",
+    "doc_id": "doc-rd-01",
+    "page_number": 1,
+    "answer": "Firmware",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q09",
+    "text": "Find the diagram of connected boxes showing reporting lines in the operations division. Who is the Quality director?",
+    "slice_tag": "chart.appearance",
+    "doc_id": "doc-hr-02",
+    "page_number": 1,
+    "answer": "Omar Haddad",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q10",
+    "text": "Find the chart drawn with connected line segments showing cost change over months. What is the final month unit cost of line L1?",
+    "slice_tag": "chart.appearance",
+    "doc_id": "doc-fin-02",
+    "page_number": 2,
+    "answer": "8.10",
+    "answer_kind": "decimal"
+  },
+  {
+    "query_id": "q11",
+    "text": "Find the status panel with big number tiles and a semicircular dial. What load percentage does the dial show?",
+    "slice_tag": "chart.appearance",
+    "doc_id": "doc-mfg-01",
+    "page_number": 1,
+    "answer": "72%",
+    "answer_kind": "percent"
+  },
+  {
+    "query_id": "q12",
+    "text": "Which region label sits on the tallest bar of the quarterly revenue chart in the 2024 sales report?",
+    "slice_tag": "chart.value_read",
+    "doc_id": "doc-fin-01",
+    "page_number": 2,
+    "answer": "West",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q13",
+    "text": "In the Beta issue distribution chart, which category owns the largest share?",
+    "slice_tag": "chart.value_read",
+    "doc_id": "doc-rd-01",
+    "page_number": 1,
+    "answer": "Firmware",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q14",
+    "text": "In the operations org chart, who holds the Quality director seat?",
+    "slice_tag": "chart.value_read",
+    "doc_id": "doc-hr-02",
+    "page_number": 1,
+    "answer": "Omar Haddad",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q15",
+    "text": "What are the 2024 sales units for SKU WT-300 in the West region?",
+    "slice_tag": "table.cell_grid",
+    "doc_id": "doc-fin-01",
+    "page_number": 3,
+    "answer": "18.5",
+    "answer_kind": "decimal"
+  },
+  {
+    "query_id": "q16",
+    "text": "What is the labor cost for production line L3?",
+    "slice_tag": "table.cell_grid",
+    "doc_id": "doc-fin-02",
+    "page_number": 1,
+    "answer": "2.95",
+    "answer_kind": "decimal"
+  },
+  {
+    "query_id": "q17",
+    "text": "What is the total number of defects recorded for build B-102 in the Beta test results?",
+    "slice_tag": "table.cell_grid",
+    "doc_id": "doc-rd-01",
+    "page_number": 2,
+    "answer": "47",
+    "answer_kind": "count"
+  },
+  {
+    "query_id": "q18",
+    "text": "Which production line has the lowest unit cost?",
+    "slice_tag": "table.cell_grid",
+    "doc_id": "doc-fin-02",
+    "page_number": 1,
+    "answer": "L3",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q19",
+    "text": "What is the APPROVED maintenance budget on the HeatTech inspection form (not the proposed one)?",
+    "slice_tag": "form.label_placement",
+    "doc_id": "doc-ops-01",
+    "page_number": 1,
+    "answer": "95000",
+    "answer_kind": "decimal"
+  },
+  {
+    "query_id": "q20",
+    "text": "What is the APPROVED next outage window on the HeatTech inspection form?",
+    "slice_tag": "form.label_placement",
+    "doc_id": "doc-ops-01",
+    "page_number": 1,
+    "answer": "Jun-24",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q21",
+    "text": "On which date did the REVIEWER (not the technician) sign the inspection form?",
+    "slice_tag": "form.label_placement",
+    "doc_id": "doc-ops-01",
+    "page_number": 2,
+    "answer": "Mar-15",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q22",
+    "text": "What is the first stop of Route B in the logistics route plan?",
+    "slice_tag": "layout.column_bind",
+    "doc_id": "doc-ops-02",
+    "page_number": 1,
+    "answer": "Depot East",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q23",
+    "text": "What is the total drive time of Route A in the logistics route plan?",
+    "slice_tag": "layout.column_bind",
+    "doc_id": "doc-ops-02",
+    "page_number": 1,
+    "answer": "3h40m",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q24",
+    "text": "What is the final stop of Route B in the logistics route plan?",
+    "slice_tag": "layout.column_bind",
+    "doc_id": "doc-ops-02",
+    "page_number": 1,
+    "answer": "Harbor Terminal",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q25",
+    "text": "In the 2023 regional sales report, which region sits on the tallest bar of the quarterly revenue chart?",
+    "slice_tag": "near_duplicate.decoy",
+    "doc_id": "doc-fin-03",
+    "page_number": 2,
+    "answer": "East",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q26",
+    "text": "What are the 2023 sales units for SKU WT-300 in the West region?",
+    "slice_tag": "near_duplicate.decoy",
+    "doc_id": "doc-fin-03",
+    "page_number": 3,
+    "answer": "14.7",
+    "answer_kind": "decimal"
+  },
+  {
+    "query_id": "q27",
+    "text": "What is the total number of defects recorded for build B-102 in the GAMMA test results?",
+    "slice_tag": "near_duplicate.decoy",
+    "doc_id": "doc-rd-02",
+    "page_number": 2,
+    "answer": "39",
+    "answer_kind": "count"
+  },
+  {
+    "query_id": "q28",
+    "text": "In the BETA (not Gamma) issue distribution chart, which category owns the largest share?",
+    "slice_tag": "near_duplicate.decoy",
+    "doc_id": "doc-rd-01",
+    "page_number": 1,
+    "answer": "Firmware",
+    "answer_kind": "string"
+  },
+  {
+    "query_id": "q29",
+    "text": "How many open findings does the safety compliance checklist list?",
+    "slice_tag": "revision.change",
+    "doc_id": "doc-rev-01",
+    "page_number": 1,
+    "answer": "3",
+    "answer_kind": "count",
+    "phase": "pre_revision"
+  },
+  {
+    "query_id": "q30",
+    "text": "How many open findings does the safety compliance checklist list?",
+    "slice_tag": "revision.change",
+    "doc_id": "doc-rev-01",
+    "page_number": 1,
+    "answer": "1",
+    "answer_kind": "count",
+    "phase": "post_revision"
+  },
+  {
+    "query_id": "q31",
+    "text": "What is the date of the last external audit according to the current safety compliance checklist?",
+    "slice_tag": "revision.change",
+    "doc_id": "doc-rev-01",
+    "page_number": 1,
+    "answer": "2026-08-02",
+    "answer_kind": "date",
+    "phase": "post_revision"
+  },
+  {
+    "query_id": "q32",
+    "text": "How many open findings does the safety compliance checklist list?",
+    "slice_tag": "revision.change",
+    "doc_id": "doc-rev-01",
+    "page_number": 1,
+    "answer": "3",
+    "answer_kind": "count",
+    "phase": "pinned_pre_revision"
+  },
+  {
+    "query_id": "q33",
+    "text": "What is the severance budget provision in the restructuring memo?",
+    "slice_tag": "authz.revocation",
+    "doc_id": "doc-sec-01",
+    "page_number": 1,
+    "answer": "2.4M",
+    "answer_kind": "money_million",
+    "profile": "allowed"
+  },
+  {
+    "query_id": "q34",
+    "text": "What is the severance budget provision in the restructuring memo?",
+    "slice_tag": "authz.revocation",
+    "doc_id": "doc-sec-01",
+    "page_number": 1,
+    "answer": "",
+    "answer_kind": "money_million",
+    "profile": "denied",
+    "expectation": "no_delivery"
+  },
+  {
+    "query_id": "q35",
+    "text": "What is the payroll effective date?",
+    "slice_tag": "authz.revocation",
+    "doc_id": "doc-pub-03",
+    "page_number": 1,
+    "answer": "2026-09-15",
+    "answer_kind": "date",
+    "profile": "denied"
+  }
+]

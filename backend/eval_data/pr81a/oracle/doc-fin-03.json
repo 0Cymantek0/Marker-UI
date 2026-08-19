@@ -1,0 +1,79 @@
+{
+  "doc_id": "doc-fin-03",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Northwind Regional Sales Report 2023",
+        "Published 2023 - Advisory Finance Group",
+        "Consolidated revenue reached 41.6M USD in 2023, driven by demand across all four",
+        "operating regions.",
+        "Document reference code ZETA-7. This report is issued for internal distribution and",
+        "summarizes quarterly revenue by region and regional product sales in units of thousands.",
+        "Regional management should reconcile unit figures against warehouse shipment ledgers",
+        "before external publication."
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Northwind Regional Sales Report 2023",
+        "Quarterly revenue",
+        "Quarterly Revenue by Region (2023)",
+        "Q1",
+        "3.0",
+        "Q2",
+        "3.4",
+        "Q3",
+        "3.8",
+        "Q4",
+        "3.5",
+        "North",
+        "East",
+        "South",
+        "West"
+      ]
+    },
+    {
+      "page_number": 3,
+      "nodes": [
+        "Northwind Regional Sales Report 2023",
+        "Product sales",
+        "Regional Product Sales - 2023 Units (thousands)",
+        "Region",
+        "WT-100",
+        "WT-200",
+        "WT-300",
+        "WT-400",
+        "Total",
+        "North",
+        "12.5",
+        "8.3",
+        "15.2",
+        "6.1",
+        "42.1",
+        "East",
+        "14.2",
+        "9.0",
+        "16.8",
+        "5.4",
+        "45.4",
+        "South",
+        "11.8",
+        "7.6",
+        "13.9",
+        "4.9",
+        "38.2",
+        "West",
+        "16.0",
+        "10.2",
+        "14.7",
+        "7.3",
+        "47.0",
+        "Units are thousands of shipped items. Totals include returns processed in the final week of the",
+        "quarter."
+      ]
+    }
+  ]
+}

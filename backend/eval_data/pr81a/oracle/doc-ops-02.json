@@ -1,0 +1,34 @@
+{
+  "doc_id": "doc-ops-02",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Kantai Logistics Route Plan",
+        "Depot network, cycle 41",
+        "Route B",
+        "Stop 1: Depot East",
+        "Stop 2: Cold Storage 4",
+        "Stop 3: Retail Park KX",
+        "Stop 4: Harbor Terminal",
+        "Total drive time: 4h15m",
+        "Route A",
+        "Stop 1: Depot North",
+        "Stop 2: Bakery Row",
+        "Stop 3: Campus Dock 2",
+        "Stop 4: Return Depot North",
+        "Total drive time: 3h40m"
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Kantai Logistics Route Plan",
+        "Driver notes",
+        "Cyclone season contingency: Route B cold-chain stops require pre-cooled boxes when ambient",
+        "exceeds 30C. Route A campus dock closes at 15:30."
+      ]
+    }
+  ]
+}

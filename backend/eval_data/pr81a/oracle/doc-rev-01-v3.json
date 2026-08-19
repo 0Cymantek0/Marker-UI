@@ -1,0 +1,30 @@
+{
+  "doc_id": "doc-rev-01",
+  "revision": "v3",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Safety Compliance Checklist v3",
+        "Facility HT-04",
+        "Responsible officer",
+        "J. Alvarez",
+        "Last external audit",
+        "2026-02-11",
+        "Open findings",
+        "3",
+        "Fire drill due",
+        "2026-09-01"
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Safety Compliance Checklist v3",
+        "Register",
+        "The register lists every finding with owner and due date. Findings closed by the responsible officer",
+        "require evidence attachments before status change."
+      ]
+    }
+  ]
+}

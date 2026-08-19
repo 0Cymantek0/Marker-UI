@@ -1,0 +1,27 @@
+{
+  "doc_id": "doc-sec-02",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Confidential Payroll Schedule",
+        "People Operations",
+        "Payroll effective date: 2026-09-15. The schedule below lists compensation bands for restricted",
+        "distribution.",
+        "Band",
+        "Min (USD)",
+        "Max (USD)",
+        "P1",
+        "48000",
+        "62000",
+        "P2",
+        "63000",
+        "85000",
+        "P3",
+        "86000",
+        "118000"
+      ]
+    }
+  ]
+}

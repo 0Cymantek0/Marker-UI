@@ -1,0 +1,79 @@
+{
+  "doc_id": "doc-fin-01",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Northwind Regional Sales Report 2024",
+        "Published 2024 - Advisory Finance Group",
+        "Consolidated revenue reached 48.2M USD in 2024, driven by demand across all four",
+        "operating regions.",
+        "Document reference code ZETA-9. This report is issued for internal distribution and",
+        "summarizes quarterly revenue by region and regional product sales in units of thousands.",
+        "Regional management should reconcile unit figures against warehouse shipment ledgers",
+        "before external publication."
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Northwind Regional Sales Report 2024",
+        "Quarterly revenue",
+        "Quarterly Revenue by Region (2024)",
+        "Q1",
+        "3.0",
+        "Q2",
+        "3.4",
+        "Q3",
+        "4.0",
+        "Q4",
+        "3.9",
+        "North",
+        "East",
+        "South",
+        "West"
+      ]
+    },
+    {
+      "page_number": 3,
+      "nodes": [
+        "Northwind Regional Sales Report 2024",
+        "Product sales",
+        "Regional Product Sales - 2024 Units (thousands)",
+        "Region",
+        "WT-100",
+        "WT-200",
+        "WT-300",
+        "WT-400",
+        "Total",
+        "North",
+        "12.5",
+        "8.3",
+        "15.2",
+        "6.1",
+        "42.1",
+        "East",
+        "14.2",
+        "9.0",
+        "16.8",
+        "5.4",
+        "45.4",
+        "South",
+        "11.8",
+        "7.6",
+        "13.9",
+        "4.9",
+        "38.2",
+        "West",
+        "16.0",
+        "10.2",
+        "18.5",
+        "7.3",
+        "52.0",
+        "Units are thousands of shipped items. Totals include returns processed in the final week of the",
+        "quarter."
+      ]
+    }
+  ]
+}

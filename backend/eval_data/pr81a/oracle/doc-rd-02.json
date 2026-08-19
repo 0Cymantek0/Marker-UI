@@ -1,0 +1,63 @@
+{
+  "doc_id": "doc-rd-02",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Product Gamma Test Results",
+        "Quality Engineering",
+        "Issue Distribution by Category - Gamma",
+        "Display 31%",
+        "Firmware 26%",
+        "Battery 19%",
+        "Connectivity 13%",
+        "Mechanical 11%"
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Product Gamma Test Results",
+        "Defect ledger",
+        "Defect Counts by Build - Gamma",
+        "Build",
+        "Firmware",
+        "Display",
+        "Battery",
+        "Connectivity",
+        "Mechanical",
+        "Total",
+        "B-101",
+        "12",
+        "8",
+        "6",
+        "5",
+        "4",
+        "35",
+        "B-102",
+        "11",
+        "12",
+        "7",
+        "6",
+        "5",
+        "39",
+        "B-103",
+        "9",
+        "6",
+        "5",
+        "4",
+        "3",
+        "27",
+        "B-104",
+        "7",
+        "5",
+        "4",
+        "3",
+        "2",
+        "21",
+        "Counts are unique confirmed defects per build of the Gamma hardware revision."
+      ]
+    }
+  ]
+}

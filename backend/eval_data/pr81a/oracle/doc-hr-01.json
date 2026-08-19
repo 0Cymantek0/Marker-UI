@@ -1,0 +1,28 @@
+{
+  "doc_id": "doc-hr-01",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Employee Handbook Excerpt",
+        "Sections 7 and 12",
+        "Annual leave (LEAVE-7.3): full-time employees accrue 22 days per year. Up to 15 unused days may",
+        "carry over to the next calendar year; the remainder expires.",
+        "Sick leave: employees report absence before 09:00 through the attendance portal. Medical certificates",
+        "are required beyond two consecutive days."
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Employee Handbook Excerpt",
+        "Remote work",
+        "Remote work policy (RW-2): up to three remote days per week with manager approval. Fully remote",
+        "assignments require an HR exception record.",
+        "Equipment: home office stipend of 400 USD is granted once per employment and requires returning all",
+        "dock hardware on departure."
+      ]
+    }
+  ]
+}

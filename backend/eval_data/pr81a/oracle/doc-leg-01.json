@@ -1,0 +1,23 @@
+{
+  "doc_id": "doc-leg-01",
+  "revision": "v1",
+  "pages": [
+    {
+      "page_number": 1,
+      "nodes": [
+        "Lease Agreement - Elm Street Unit",
+        "Pages 1-2 of 6",
+        "Monthly rent is 2450 USD payable on the first business day. Lease term: 24 months commencing",
+        "2026-07-01."
+      ]
+    },
+    {
+      "page_number": 2,
+      "nodes": [
+        "Lease Agreement - Elm Street Unit",
+        "Termination",
+        "Early termination is governed by CLAUSE-9: notice period 60 days plus one month rent equivalent."
+      ]
+    }
+  ]
+}
