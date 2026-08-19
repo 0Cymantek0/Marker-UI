@@ -1,0 +1,30 @@
+# invoice2data per-vendor template for the PR80B benchmark corpus.
+# Uses the library's canonical required field names (issuer, invoice_number,
+# date, amount); the adapter maps them onto the benchmark field names.
+# Authored once per vendor for the canonical "Label: value" header and
+# "LINEITEM | a | b | c | d | e" row shape, mirroring real integrator use.
+template_name: pr80b_vertex
+keywords:
+  - Vertex Fabrication Ltd
+fields:
+  static_issuer: 'Vertex Fabrication Ltd'
+  invoice_number:
+    parser: regex
+    regex: 'Invoice Number[:：]\s*(?P<value>\S+)'
+  date:
+    parser: regex
+    regex: 'Invoice Date[:：]\s*(?P<value>\S+)'
+  currency:
+    parser: regex
+    regex: 'Currency[:：]\s*(?P<value>\S+)'
+  po_number:
+    parser: regex
+    regex: 'PO Number[:：]\s*(?P<value>\S+)'
+  amount:
+    parser: regex
+    regex: 'Total Due[:：]\s*(?P<value>[-\d.,]+)'
+  items:
+    parser: lines
+    start: '(?m)(?<=\n)(?=LINEITEM)'
+    end: '(?m)^(?!LINEITEM)'
+    line: '^LINEITEM\s*\|\s*(?P<sku>[^|]+?)\s*\|\s*(?P<description>[^|]+?)\s*\|\s*(?P<quantity>[^|]+?)\s*\|\s*(?P<unit_price>[^|]+?)\s*\|\s*(?P<amount>[^|]+?)\s*$'
