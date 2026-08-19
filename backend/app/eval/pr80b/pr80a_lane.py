@@ -48,13 +48,16 @@ def _part_record(doc_id: str, part_index: int, part_text: str):
     )
 
 
-def _field_outcome_to_emitted(outcome) -> EmittedField:
+def _field_outcome_to_emitted(outcome, *, review_flagged: bool = False) -> EmittedField:
     if outcome.status in _USABLE and outcome.value is not None:
         has_evidence = bool(outcome.candidates) and bool(outcome.candidates[0].evidence)
+        # A value inside a row the route flagged for review is delivered
+        # but marked: production semantics keep it out of final truth.
         return EmittedField(
             status=EMITTED,
             value=str(outcome.value),
             has_evidence=has_evidence,
+            self_flagged=review_flagged,
         )
     # Non-usable outcomes (missing/invalid/unresolved/review_required/
     # rejected) never deliver a production value: the route reports them
@@ -70,8 +73,9 @@ def _result_to_output(doc_id: str, result, timings: dict) -> SystemDocOutput:
     rows = []
     for item_name, outcomes in result.line_items.items():
         for row in outcomes:
+            row_review = row.status not in _USABLE
             row_fields = {
-                name: _field_outcome_to_emitted(outcome)
+                name: _field_outcome_to_emitted(outcome, review_flagged=row_review)
                 for name, outcome in row.fields.items()
             }
             sku = row.identity.get("sku")
@@ -79,8 +83,8 @@ def _result_to_output(doc_id: str, result, timings: dict) -> SystemDocOutput:
                 EmittedRow(
                     sku=str(sku) if sku is not None else None,
                     fields=row_fields,
-                    status=FLAGGED_CONFLICT if row.status not in _USABLE else EMITTED,
-                    self_flagged=row.status not in _USABLE,
+                    status=FLAGGED_CONFLICT if row_review else EMITTED,
+                    self_flagged=row_review,
                 )
             )
     invariant_findings = {

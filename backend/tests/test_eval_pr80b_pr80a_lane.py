@@ -102,6 +102,21 @@ async def test_documents_are_isolated_per_workspace(corpus, tmp_path):
     assert doc_a.raw["publication_set_id"] != doc_b.raw["publication_set_id"]
 
 
+async def test_flagged_row_values_carry_the_review_flag(corpus, tmp_path):
+    """Same-witness duplicate rows: PR80A keeps first-seen values but flags
+    the row unresolved; the lane must propagate that review flag so the
+    scorer sees a flagged candidate, not a confident one."""
+    doc = corpus.doc("inv-012-duplicate-sku-conflicting")
+    out = await run_pr80a_lane(doc, tmp_path)
+    conflict_row = next(r for r in out.rows if r.sku == "SKU-6001")
+    assert conflict_row.self_flagged is True
+    assert conflict_row.fields["quantity"].value == "2"
+    assert conflict_row.fields["quantity"].self_flagged is True
+    score = score_document(doc.gold, out)
+    row = next(r for r in score.rows if r.sku == "SKU-6001")
+    assert row.outcome == "conflict_honest"
+
+
 async def test_lane_output_scores_against_gold(corpus, tmp_path):
     """End-to-end sanity: lane output feeds the scorer and matches truth."""
     doc = corpus.doc("inv-001-straightforward")
