@@ -191,11 +191,21 @@ session cannot quietly re-add them without new measurements.
 - Focused PR81A suite: 135 tests across corpus, visual state, VLM
   client, scoring, decision, and lanes (real kernel workspaces, scripted
   VLM transport, hash embedder) — all passing.
-- Broad suite status recorded in the PR81A verification note appended
-  after this report (see repository history for the exact run).
+- Broad suite, clean end-to-end rerun at head:
+  `python -m pytest tests conformance -q` →
+  **2853 passed, 0 failed, 4 skipped** (planning baseline 2719/0/3;
+  +134 from PR81A suites). The skip-count delta 3→4 is a runtime
+  conditional skip, not a failure; naming it (via `pytest -rs`) is
+  recorded as an open follow-up for the model-sensitivity session.
 - Replay determinism: the final artifact was produced **offline**
   (214 cache hits, 0 live calls) and its metrics are byte-identical to
   the live run.
+- Known open evidence limitation: the promoted hybrid route and the
+  baselines were answered by one VLM identity
+  (`google/gemma-4-26b-a4b-it:free`). Model sensitivity across VLM
+  quality tiers — including whether stronger models erase the visual
+  gain by reasoning over the page text alone — is unmeasured and is
+  the declared next experiment.
 
 ## 10. Reproduction
 
