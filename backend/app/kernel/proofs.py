@@ -61,8 +61,6 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Mapping, Sequence
 
-from sqlalchemy import select
-
 from app.kernel.errors import (
     ClaimPreconditionUnmetError,
     InvalidClaimAssessmentError,
@@ -279,6 +277,8 @@ async def _load_committed_reliance(session, workspace_id: str) -> tuple[_Relianc
     committed support relations keyed by their record id (for
     precondition revalidation).
     """
+    from sqlalchemy import select
+
     from app.kernel.models import KernelRecord as KernelRecordRow
     from app.kernel.models import KernelRecordEdge
 
@@ -328,6 +328,8 @@ async def _resolve_record_classes(
         CrossWorkspaceReferenceError,
         UnknownRecordReferenceError,
     )
+    from sqlalchemy import select
+
     from app.kernel.models import KernelRecord as KernelRecordRow
 
     unknown = sorted(ref for ref in refs if ref not in batch_classes)
@@ -422,6 +424,8 @@ async def _check_grounding(
     committed_ids = [node for node in reachable if node not in batch_classes]
     classes = dict(batch_classes)
     if committed_ids:
+        from sqlalchemy import select
+
         from app.kernel.models import KernelRecord as KernelRecordRow
 
         rows = (
@@ -520,6 +524,8 @@ async def check_batch_proof_integrity(
         if ref not in batch_classes
     }
     if committed_evidence:
+        from sqlalchemy import select
+
         from app.kernel.models import KernelRecord as KernelRecordRow
 
         visibility_rows = (
@@ -812,6 +818,8 @@ async def evaluate_claim_requirements(
     """
     if not requirements:
         return
+    from sqlalchemy import select
+
     from app.kernel.models import KernelRecord as KernelRecordRow
 
     rows = (

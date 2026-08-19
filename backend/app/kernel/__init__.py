@@ -48,83 +48,95 @@ documented in ``docs/reference/truth-kernel.md``.
 
 from __future__ import annotations
 
-from app.kernel.commit import (
-    KernelCommitBatch,
-    KernelCommitReceipt,
-    KernelCommitService,
-    default_commit_service,
-)
-from app.kernel.errors import KernelError
-from app.kernel.errors import VerificationRiskError, VerificationRiskGateError
-from app.kernel.fencing import (
-    AcceptOutcome,
-    ClaimedWork,
-    Publication,
-    WorkLease,
-    accept,
-    acquire,
-    claim_next,
-    complete_work,
-    get_lease,
-    get_publication,
-    release,
-)
-from app.kernel.gc import (
-    CollectionPlan,
-    CollectionReport,
-    collect,
-    plan_collection,
-    reconcile_retirements,
-)
-from app.kernel.generations import (
-    GenerationReader,
-    GenerationRef,
-    GenerationService,
-    default_generation_service,
-    open_current_generation,
-    open_pinned_generation,
-    resolve_current_generation,
-)
-from app.kernel.publications import (
-    PublicationService,
-    PublicationSetRef,
-    resolve_published_set,
-)
-from app.kernel.models import KernelCursor, KernelQueryCursor
-from app.kernel.outbox import OutboxIntent, OutboxView
-from app.kernel.payloads import LocalPayloadStore, StagedBlob
-from app.kernel.proofs import (
-    ClaimRequirement,
-    ProofSupportRecord,
-    check_batch_proof_integrity,
-    evaluate_claim_requirements,
-)
-from app.kernel.verification_risk import check_batch_verification_risk
-from app.kernel.reconcile import (
-    PayloadAvailabilityResult,
-    ReconcileReport,
-    reconcile,
-    reconcile_after_restart,
-    verify_payload_availability,
-)
-from app.kernel.replay import (
-    ReplayResult,
-    VerificationResult,
-    read_head,
-    replay,
-    verify_history,
-)
-from app.kernel.retention import (
-    ReaderPinView,
-    RetentionHoldView,
-    acquire_reader_pin,
-    active_reader_pins,
-    declare_hold,
-    release_hold,
-    release_reader_pin,
-    renew_reader_pin,
-)
-from app.kernel.snapshots import KernelSnapshot, resolve_snapshot
+import importlib
+from typing import Any
+
+# Exports resolve lazily (PEP 562). Importing the package root must stay
+# dependency-light: the canonical conformance suite imports pure kernel
+# modules (proofs, records, verification_risk) in a stdlib-only
+# environment, and eager submodule imports here would drag the ORM and
+# the database stack into that import graph.
+
+_EXPORT_MODULES: dict[str, str] = {
+    "AcceptOutcome": "app.kernel.fencing",
+    "ClaimRequirement": "app.kernel.proofs",
+    "ClaimedWork": "app.kernel.fencing",
+    "CollectionPlan": "app.kernel.gc",
+    "CollectionReport": "app.kernel.gc",
+    "GenerationReader": "app.kernel.generations",
+    "GenerationRef": "app.kernel.generations",
+    "GenerationService": "app.kernel.generations",
+    "KernelCommitBatch": "app.kernel.commit",
+    "KernelCommitReceipt": "app.kernel.commit",
+    "KernelCommitService": "app.kernel.commit",
+    "KernelCursor": "app.kernel.models",
+    "KernelError": "app.kernel.errors",
+    "KernelQueryCursor": "app.kernel.models",
+    "KernelSnapshot": "app.kernel.snapshots",
+    "LocalPayloadStore": "app.kernel.payloads",
+    "OutboxIntent": "app.kernel.outbox",
+    "OutboxView": "app.kernel.outbox",
+    "PayloadAvailabilityResult": "app.kernel.reconcile",
+    "ProofSupportRecord": "app.kernel.proofs",
+    "Publication": "app.kernel.fencing",
+    "PublicationService": "app.kernel.publications",
+    "PublicationSetRef": "app.kernel.publications",
+    "ReaderPinView": "app.kernel.retention",
+    "ReconcileReport": "app.kernel.reconcile",
+    "ReplayResult": "app.kernel.replay",
+    "RetentionHoldView": "app.kernel.retention",
+    "StagedBlob": "app.kernel.payloads",
+    "VerificationResult": "app.kernel.replay",
+    "VerificationRiskError": "app.kernel.errors",
+    "VerificationRiskGateError": "app.kernel.errors",
+    "WorkLease": "app.kernel.fencing",
+    "accept": "app.kernel.fencing",
+    "acquire": "app.kernel.fencing",
+    "acquire_reader_pin": "app.kernel.retention",
+    "active_reader_pins": "app.kernel.retention",
+    "check_batch_proof_integrity": "app.kernel.proofs",
+    "check_batch_verification_risk": "app.kernel.verification_risk",
+    "claim_next": "app.kernel.fencing",
+    "collect": "app.kernel.gc",
+    "complete_work": "app.kernel.fencing",
+    "declare_hold": "app.kernel.retention",
+    "default_commit_service": "app.kernel.commit",
+    "default_generation_service": "app.kernel.generations",
+    "evaluate_claim_requirements": "app.kernel.proofs",
+    "get_lease": "app.kernel.fencing",
+    "get_publication": "app.kernel.fencing",
+    "open_current_generation": "app.kernel.generations",
+    "open_pinned_generation": "app.kernel.generations",
+    "plan_collection": "app.kernel.gc",
+    "read_head": "app.kernel.replay",
+    "reconcile": "app.kernel.reconcile",
+    "reconcile_after_restart": "app.kernel.reconcile",
+    "reconcile_retirements": "app.kernel.gc",
+    "release": "app.kernel.fencing",
+    "release_hold": "app.kernel.retention",
+    "release_reader_pin": "app.kernel.retention",
+    "renew_reader_pin": "app.kernel.retention",
+    "replay": "app.kernel.replay",
+    "resolve_current_generation": "app.kernel.generations",
+    "resolve_published_set": "app.kernel.publications",
+    "resolve_snapshot": "app.kernel.snapshots",
+    "verify_history": "app.kernel.replay",
+    "verify_payload_availability": "app.kernel.reconcile",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_path = _EXPORT_MODULES.get(name)
+    if module_path is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(importlib.import_module(module_path), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_EXPORT_MODULES))
+
 
 __all__ = [
     "AcceptOutcome",
