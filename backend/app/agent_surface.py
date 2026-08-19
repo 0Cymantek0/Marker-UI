@@ -11,9 +11,11 @@ from typing import Literal
 
 from app.security.scopes import (
     SCOPE_CAPABILITIES_READ,
+    SCOPE_EVENTS_READ,
     SCOPE_JOBS_READ,
     SCOPE_JOBS_WRITE,
     SCOPE_OUTPUTS_READ,
+    SCOPE_QUERIES_READ,
     SCOPE_SETTINGS_READ,
     SCOPE_SETTINGS_WRITE,
 )
@@ -52,6 +54,8 @@ MCP_V2_TOOL_NAMES: tuple[str, ...] = (
     "marker_cancel_job",
     "marker_read_output",
     "marker_output_manifest",
+    "marker_query",
+    "marker_events",
 )
 
 MCP_V1_TOOL_NAMES: tuple[str, ...] = (
@@ -108,6 +112,8 @@ _TOOL_TITLES: dict[str, str] = {
     "marker_submit": "Submit Marker Job",
     "marker_job_status": "Get Marker Job Status",
     "marker_output_manifest": "Get Marker Output Manifest",
+    "marker_query": "Query Marker Workspace",
+    "marker_events": "Read Marker Workspace Events",
     "marker_list_capabilities": "List Marker Capabilities",
     "marker_get_capabilities": "Get Marker Capabilities",
     "marker_self_test": "Self-Test Marker MCP",
@@ -144,6 +150,14 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
     "marker_submit": "Canonical v2 async job submission tool using one source object.",
     "marker_job_status": "Canonical v2 job status tool.",
     "marker_output_manifest": "Canonical v2 output manifest tool.",
+    "marker_query": (
+        "Run one bounded typed snapshot query (marker.query.v1) against a published "
+        "workspace and continue partial results with the server-issued cursor."
+    ),
+    "marker_events": (
+        "Read the durable per-workspace semantic event log for disconnect-safe "
+        "resume by authoritative sequence."
+    ),
     "marker_list_capabilities": "Return supported extensions, engines, output modes, and tool names.",
     "marker_get_capabilities": "Alias for marker_list_capabilities using v1 naming.",
     "marker_self_test": "Report expected tools and optionally verify a real deterministic conversion.",
@@ -232,6 +246,8 @@ _TOOL_ANNOTATIONS: dict[str, dict[str, bool]] = {
         "marker_get_job_status",
         "marker_list_settings",
         "marker_get_setting",
+        "marker_query",
+        "marker_events",
     )},
     **{name: dict(_OPEN_READ_ANNOTATIONS) for name in ("marker_plan", "marker_plan_url")},
     **{name: dict(_LOCAL_WRITE_ANNOTATIONS) for name in ("marker_convert_local_file", "marker_submit_local_job")},
@@ -329,6 +345,10 @@ def _tool_scopes(name: str) -> tuple[str, ...]:
         "marker_list_output_assets",
     }:
         return (SCOPE_OUTPUTS_READ,)
+    if name == "marker_query":
+        return (SCOPE_QUERIES_READ,)
+    if name == "marker_events":
+        return (SCOPE_EVENTS_READ,)
     if name in {"marker_list_jobs", "marker_get_job_status", "marker_job_status"}:
         return (SCOPE_JOBS_READ,)
     if name in {"marker_list_settings", "marker_get_setting"}:

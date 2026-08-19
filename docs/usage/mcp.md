@@ -142,6 +142,8 @@ most coding agents:
 - `marker_cancel_job`
 - `marker_read_output`
 - `marker_output_manifest`
+- `marker_query`
+- `marker_events`
 
 Use `--tool-profile full` for legacy/source-specific convenience tools such as
 `marker_convert_file`, `marker_convert_url`, and `marker_submit_local_job`.
@@ -173,6 +175,8 @@ Canonical v2 tools use one source object:
 | `marker_submit` | Canonical v2 async submission with a `{kind, path|url}` source object. |
 | `marker_job_status` | Canonical v2 job status. |
 | `marker_output_manifest` | Canonical v2 output manifest reader. |
+| `marker_query` | Bounded typed snapshot query (`marker.query.v1`) over a published workspace, with cursor-based continuation. |
+| `marker_events` | Read the durable per-workspace semantic event log for disconnect-safe resume. |
 | `marker_list_capabilities` / `marker_get_capabilities` | Supported formats, engines, tools, resources, prompts, and options. |
 | `marker_get_health` | Lightweight MCP health check. |
 | `marker_get_version` | Version and contract schema version. |

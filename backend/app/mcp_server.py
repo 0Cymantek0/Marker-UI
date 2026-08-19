@@ -4,17 +4,26 @@ Default transport is stdio for local coding agents. Streamable HTTP is also
 available for multi-client local/remote deployments.
 """
 
+import hashlib
 import ipaddress
 import os
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from urllib.parse import quote, unquote, urlparse
 
+from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent_contract import AUDIO_OUTPUT_MODES, CONTRACT_SCHEMA_VERSION, export_json_schemas
+from app.agent_events import (
+    DEFAULT_EVENT_PAGE_LIMIT,
+    EVENTS_RESULT_SCHEMA_VERSION,
+    MAX_EVENT_PAGE_LIMIT,
+    read_agent_events,
+)
+from app.agent_query import QUERY_RESULT_SCHEMA_VERSION, run_agent_query
 from app.agent_surface import (
     MCP_ALL_TOOL_NAMES as SURFACE_MCP_ALL_TOOL_NAMES,
     MCP_ADMIN_TOOL_NAMES as SURFACE_MCP_ADMIN_TOOL_NAMES,
@@ -57,9 +66,11 @@ from app.security.auth import ScopedStaticTokenVerifier, configured_static_token
 from app.security.scopes import (
     DEFAULT_MCP_SCOPES,
     SCOPE_CAPABILITIES_READ,
+    SCOPE_EVENTS_READ,
     SCOPE_JOBS_READ,
     SCOPE_JOBS_WRITE,
     SCOPE_OUTPUTS_READ,
+    SCOPE_QUERIES_READ,
     SCOPE_SETTINGS_READ,
     SCOPE_SETTINGS_WRITE,
 )
@@ -245,6 +256,72 @@ class SelfTestOutput(MarkerOutputModel):
     schemas_ok: bool | None = Field(default=None, description="JSON schema export check result.", examples=[True])
 
 
+class QueryOutput(MarkerOutputModel):
+    schema_version: str = Field(
+        description="Query result envelope schema version.",
+        examples=[QUERY_RESULT_SCHEMA_VERSION],
+    )
+    status: str = Field(
+        description=(
+            "Continuation status: complete, partial, invalidated, stale, "
+            "loop_limit, policy_fail_closed, or execution_failure."
+        ),
+        examples=["partial", "complete"],
+    )
+    result: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Machine-readable outcome payload: cumulative_budget plus the "
+            "serialized marker.evidence_packet.v1 packet when protected "
+            "output is released."
+        ),
+        examples=[{
+            "cumulative_budget": {"pages": 1},
+            "packet": {"schema_version": "marker.evidence_packet.v1"},
+        }],
+    )
+    next_cursor: str | None = Field(
+        default=None,
+        description="Opaque server-issued continuation token. Present exactly when status is partial.",
+        examples=[None],
+    )
+    reason: str | None = Field(
+        default=None,
+        description="Short machine-readable reason string when set.",
+        examples=["more authorized work remains"],
+    )
+    error_code: str | None = Field(
+        default=None,
+        description="Stable error/reason class: cursor_invalid, cursor_expired, authorization_changed, pinned_state_unavailable, policy_fail_closed, execution_failure, continuation_available, or a budget stop code.",
+        examples=["cursor_invalid"],
+    )
+
+
+class EventsOutput(MarkerOutputModel):
+    schema_version: str = Field(
+        description="Event page envelope schema version.",
+        examples=[EVENTS_RESULT_SCHEMA_VERSION],
+    )
+    workspace_id: str = Field(description="Workspace the events belong to.", examples=["local"])
+    stream: str = Field(description="Logical event stream name.", examples=["work"])
+    events: list[dict[str, Any]] = Field(
+        description="Ordered durable events with semantic_sequence, event_type, durability, payload, and created_at.",
+        examples=[[{"semantic_sequence": 1, "event_type": "work.accepted", "durability": "durable"}]],
+    )
+    latest_sequence: int = Field(
+        description="Server-side authoritative latest semantic_sequence for this stream.",
+        examples=[3],
+    )
+    next_after_sequence: int = Field(
+        description="Resume position: pass as after_sequence to receive everything after this page.",
+        examples=[3],
+    )
+    has_more: bool = Field(
+        description="True when the authoritative log extends beyond this page.",
+        examples=[False],
+    )
+
+
 class SourceInput(MarkerOutputModel):
     kind: Literal["local_path", "url"] = Field(
         description="Source kind: local_path for workspace files, url for safe public HTTP(S).",
@@ -316,6 +393,55 @@ ChunkModeParam = Annotated[
     Field(description="Chunk read mode. 'offset' (default) returns character-offset text paging; 'semantic' returns the Nth structure-aware chunk from a marker.chunks.v1 envelope.", examples=["offset"]),
 ]
 ChunkIndexParam = Annotated[int, Field(ge=0, description="Zero-based semantic chunk index (mode='semantic' only).", examples=[0])]
+QueryRequestParam = Annotated[
+    dict[str, Any] | None,
+    Field(
+        description=(
+            "Fresh marker.query.v1 request object: schema_version='marker.query.v1', "
+            "workspace_id, and 1-32 operations (lexical_search and/or record_get). "
+            "Mutually exclusive with 'continuation'."
+        ),
+        examples=[{
+            "schema_version": "marker.query.v1",
+            "workspace_id": "local",
+            "operations": [{"op": "lexical_search", "text": "revenue", "limit": 25}],
+        }],
+    ),
+]
+ContinuationParam = Annotated[
+    str | None,
+    Field(
+        description="Opaque cursor token from a partial marker_query result. Mutually exclusive with 'query'.",
+        examples=[None],
+    ),
+]
+QueryWorkspaceParam = Annotated[
+    str | None,
+    Field(
+        description="Workspace that owns the continuation cursor (continuation mode only; must match the issuing query).",
+        examples=["local"],
+    ),
+]
+QueryPageSizeParam = Annotated[
+    int,
+    Field(ge=1, le=100, description="Evidence units per page (server clamps chain and budget limits).", examples=[10]),
+]
+EventsWorkspaceParam = Annotated[
+    str,
+    Field(description="Workspace whose durable semantic event log is read.", examples=["local"]),
+]
+EventsStreamParam = Annotated[
+    str,
+    Field(description="Logical stream name, lowercase letters/digits/dots/dashes/underscores.", examples=["work"]),
+]
+AfterSequenceParam = Annotated[
+    int,
+    Field(ge=0, description="Resume position: return only events with semantic_sequence greater than this.", examples=[0]),
+]
+EventLimitParam = Annotated[
+    int,
+    Field(ge=1, le=MAX_EVENT_PAGE_LIMIT, description="Maximum events per page.", examples=[DEFAULT_EVENT_PAGE_LIMIT]),
+]
 
 
 INSTRUCTIONS = (
@@ -520,6 +646,86 @@ def marker_output_manifest(
     require_mcp_scopes(SCOPE_OUTPUTS_READ)
     manifest_path, manifest = manifest_for_output_path(Path(output_path))
     return {"manifest_path": str(manifest_path) if manifest_path else None, "manifest": manifest}
+
+
+def _mcp_caller_principal_id() -> str | None:
+    """Trusted caller identity for cursor binding.
+
+    Returns None on stdio/no-auth transports, where cursors stay explicitly
+    unbound local capabilities. On authenticated HTTP the binding derives
+    from the server-validated access token, never from caller query fields.
+    """
+
+    access_token = get_access_token()
+    if access_token is None:
+        return None
+    digest = hashlib.sha256(
+        str(access_token.token or "").encode("utf-8")
+    ).hexdigest()[:32]
+    client_id = str(getattr(access_token, "client_id", "") or "anonymous")
+    return f"{client_id}:{digest}"
+
+
+@mcp.tool(
+    name="marker_query",
+    title=tool_title("marker_query"),
+    annotations=tool_annotations("marker_query"),
+)
+async def marker_query(
+    query: QueryRequestParam = None,
+    continuation: ContinuationParam = None,
+    workspace_id: QueryWorkspaceParam = None,
+    page_size: QueryPageSizeParam = 10,
+) -> QueryOutput:
+    """Run one bounded typed snapshot query (marker.query.v1) against a published workspace and continue partial results with the server-issued cursor.
+
+    Fresh mode passes a marker.query.v1 request object; continuation mode
+    passes the opaque cursor from a partial result together with its
+    workspace_id. Outcomes are machine-readable: status distinguishes
+    complete, partial, invalidated, stale, loop_limit, policy_fail_closed,
+    and execution_failure; next_cursor is present exactly when status is
+    partial. On authenticated transports cursors are bound to the caller.
+    """
+
+    require_mcp_scopes(SCOPE_QUERIES_READ)
+    envelope = await run_agent_query(
+        query=query,
+        continuation=continuation,
+        workspace_id=workspace_id,
+        page_size=page_size,
+        principal_id=_mcp_caller_principal_id(),
+    )
+    return QueryOutput(**envelope)
+
+
+@mcp.tool(
+    name="marker_events",
+    title=tool_title("marker_events"),
+    annotations=tool_annotations("marker_events"),
+)
+async def marker_events(
+    workspace_id: EventsWorkspaceParam = "local",
+    stream: EventsStreamParam = "work",
+    after_sequence: AfterSequenceParam = 0,
+    limit: EventLimitParam = DEFAULT_EVENT_PAGE_LIMIT,
+) -> EventsOutput:
+    """Read the durable per-workspace semantic event log for disconnect-safe resume by authoritative sequence.
+
+    Events carry the authoritative per-(workspace, stream) semantic_sequence.
+    After a disconnect, call again with after_sequence set to the last
+    delivered sequence (next_after_sequence) to receive exactly the missing
+    tail. Redelivery is safely de-duplicable by semantic_sequence.
+    """
+
+    require_mcp_scopes(SCOPE_EVENTS_READ)
+    return EventsOutput(
+        **await read_agent_events(
+            workspace_id=workspace_id,
+            stream=stream,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
+    )
 
 
 @mcp.tool(
@@ -1529,16 +1735,20 @@ def run(
     configure_mcp_tool_profile(tool_profile)
     if transport == "streamable-http":
         token = auth_token or os.getenv("MARKER_MCP_AUTH_TOKEN", "").strip()
-        if not _is_loopback_host(host) and not token:
+        # The full static-token map counts as configuration: a deployment
+        # that minted scoped tokens must not silently fall back to no-auth
+        # just because no single MARKER_MCP_AUTH_TOKEN was set.
+        token_scopes = configured_static_tokens(surface="mcp")
+        if token:
+            token_scopes.setdefault(token, DEFAULT_MCP_SCOPES)
+        if not _is_loopback_host(host) and not token_scopes:
             raise ValueError(
                 "Refusing streamable HTTP on non-loopback host without "
                 "MARKER_MCP_AUTH_TOKEN. Bind to 127.0.0.1 or set a bearer token."
             )
         mcp.settings.host = host
         mcp.settings.port = port
-        if token:
-            token_scopes = configured_static_tokens(surface="mcp")
-            token_scopes.setdefault(token, DEFAULT_MCP_SCOPES)
+        if token_scopes:
             issuer_url = _auth_base_url(host, port)
             mcp.settings.auth = AuthSettings(
                 issuer_url=issuer_url,
