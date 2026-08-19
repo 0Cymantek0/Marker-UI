@@ -1,6 +1,10 @@
 # Evidence-Backed Structured Extraction (PR80A)
 
 **Status:** PR80A vertical slice merged on `markerui-v2`.
+**Final verification:** `python -m pytest tests conformance -q` →
+**2572 passed, 4 skipped, 0 failed** (Python 3.11.9, pytest 8.3.4,
+pytest-asyncio 0.24.0, Windows implementer environment; baseline at
+`b62c266` was 2519 passed / 7 failed with the ingress cluster).
 **Scope statement:** one versioned extraction program over published
 kernel evidence, with field-level lineage, deterministic validation,
 versioned reconciliation, honest missing/unresolved/review outcomes,
