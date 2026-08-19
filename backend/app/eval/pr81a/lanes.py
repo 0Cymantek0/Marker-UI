@@ -71,10 +71,21 @@ class LaneContext:
     vlm: VlmClient
     authorization: EffectiveAuthorization | None = None
     assurance: str = "standard"
+    #: when True, lexical reads and evidence pages resolve through the
+    #: superseded cut (pinned publication + superseded blobs), which is
+    #: how post-revision staleness probes keep serving the old, still-
+    #: valid publication instead of mixing generations
+    pinned: bool = False
+    pinned_publication_id: str | None = None
     #: visual generation for the live cut; replaced after a revision
     visual_index: VisualIndex | None = None
     #: revision each doc must be attributed to for this phase
     expected_revisions: dict[str, str] | None = None
+
+    def resolve_doc(self, doc_id: str) -> SeededDoc | None:
+        if self.pinned and doc_id in self.workspace.superseded:
+            return self.workspace.superseded[doc_id]
+        return self.workspace.docs.get(doc_id)
 
     def require_auth(self) -> EffectiveAuthorization:
         if self.authorization is None:
@@ -178,13 +189,47 @@ def build_visual_index_high_assurance(
 
 
 def _doc_for_view(ctx: LaneContext, view_id: str) -> SeededDoc | None:
-    for doc in ctx.workspace.docs.values():
-        if doc.view_id == view_id:
-            return doc
-    for doc in ctx.workspace.superseded.values():
-        if doc.view_id == view_id:
-            return doc
+    pools = (
+        (ctx.workspace.superseded, ctx.workspace.docs)
+        if ctx.pinned
+        else (ctx.workspace.docs, ctx.workspace.superseded)
+    )
+    for pool in pools:
+        for doc in pool.values():
+            if doc.view_id == view_id:
+                return doc
     return None
+
+
+async def _pinned_lexical_pages(
+    ctx: LaneContext, query: CorpusQuery, *, limit: int
+) -> tuple[list[tuple[str, int]], str | None]:
+    """Lexical page ranking against a pinned (superseded) publication."""
+    from app.context_runtime.contract import compile_lexical_match
+    from app.kernel.publications import open_pinned_publication
+
+    if ctx.pinned_publication_id is None:
+        return [], "pinned phase without a pinned publication id"
+    reader = await open_pinned_publication(
+        ctx.workspace.factory, ctx.pinned_publication_id
+    )
+    try:
+        match = compile_lexical_match(query.text, "any_term")
+        hits = await reader.search(match, limit=32)
+    finally:
+        await reader.close()
+    page_best: dict[tuple[str, int], float] = {}
+    for hit in hits:
+        doc = _doc_for_view(ctx, hit.view_id)
+        if doc is None or hit.node_id is None:
+            continue
+        if not ctx.allows_doc(doc):
+            continue
+        key = (doc.doc_id, doc.page_of_node(hit.node_id))
+        if key not in page_best or hit.rank < page_best[key]:
+            page_best[key] = hit.rank
+    ranked = [key for key, _ in sorted(page_best.items(), key=lambda item: item[1])]
+    return ranked[:limit], None
 
 
 async def lexical_ranked_pages(
@@ -196,6 +241,8 @@ async def lexical_ranked_pages(
     best (lowest) rank of any of its nodes in the lexical result.
     Returns ``(ranked_pages, error)``.
     """
+    if ctx.pinned:
+        return await _pinned_lexical_pages(ctx, query, limit=limit)
     request = parse_query_request(
         {
             "schema_version": QUERY_SCHEMA_VERSION,
@@ -238,19 +285,37 @@ async def lexical_ranked_pages(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_revision_doc(
+    ctx: LaneContext, doc_id: str, revision: str | None
+) -> SeededDoc | None:
+    """Resolve the exact doc snapshot for a claimed revision.
+
+    A visual hit carries the revision it was indexed under; rendering and
+    transcript must come from that same snapshot even when a newer
+    revision is current (mixed-generation evidence is forbidden).
+    """
+    pools = (ctx.workspace.docs, ctx.workspace.superseded)
+    if ctx.pinned:
+        pools = tuple(reversed(pools))
+    for pool in pools:
+        doc = pool.get(doc_id)
+        if doc is not None and (revision is None or doc.revision == revision):
+            return doc
+    for pool in pools:
+        if doc_id in pool:
+            return pool[doc_id]
+    return None
+
+
 def _page_evidence(
     ctx: LaneContext,
-    doc_id: str,
+    doc: SeededDoc,
     page_number: int,
     *,
     use_image: bool,
     question: str,
-    revision: str | None = None,
 ) -> RouteEvidence:
     """Deliver one page of evidence (image or transcript) to the answerer."""
-    doc = ctx.workspace.docs.get(doc_id)
-    if doc is None:
-        return RouteEvidence(system_id="", error=f"unknown doc {doc_id}")
     png_bytes: bytes | None = None
     text: str | None = None
     if use_image:
@@ -265,8 +330,8 @@ def _page_evidence(
         text = doc.page_text(page_number)
     envelope, parsed = ctx.vlm.answer(question, page_png=png_bytes, page_text=text)
     base = {
-        "delivered_page": (doc_id, page_number),
-        "revision": revision or doc.revision,
+        "delivered_page": (doc.doc_id, page_number),
+        "revision": doc.revision,
         "evidence_kind": "image_page" if use_image else "text_page",
         "source_resolvable": True,
     }
@@ -285,8 +350,8 @@ def _page_evidence(
             answer = str(value)
     else:
         answer_null = True
-    expected = ctx.expected_revision(doc_id)
-    stale = expected is not None and (revision or doc.revision) != expected
+    expected = ctx.expected_revision(doc.doc_id)
+    stale = expected is not None and doc.revision != expected
     return RouteEvidence(
         system_id="",
         answer=answer,
@@ -305,7 +370,7 @@ def _forbidden_check(ctx: LaneContext, evidence: RouteEvidence) -> RouteEvidence
     """
     if evidence.delivered_page is None:
         return evidence
-    doc = ctx.workspace.docs.get(evidence.delivered_page[0])
+    doc = ctx.resolve_doc(evidence.delivered_page[0])
     if doc is not None and not ctx.allows_doc(doc):
         return replace(evidence, forbidden_source_delivered=True)
     return evidence
@@ -333,8 +398,12 @@ async def run_lexical_text(ctx: LaneContext, query: CorpusQuery) -> RouteEvidenc
         return RouteEvidence(system_id=B1_SYSTEM, error=error)
     if not ranked:
         return RouteEvidence(system_id=B1_SYSTEM)
-    doc_id, page = ranked[0]
-    evidence = _page_evidence(ctx, doc_id, page, use_image=False, question=query.text)
+    doc = ctx.resolve_doc(ranked[0][0])
+    if doc is None:
+        return RouteEvidence(system_id=B1_SYSTEM, error=f"unknown doc {ranked[0][0]}")
+    evidence = _page_evidence(
+        ctx, doc, ranked[0][1], use_image=False, question=query.text
+    )
     return _forbidden_check(
         ctx, replace(evidence, system_id=B1_SYSTEM, ranked_pages=tuple(ranked))
     )
@@ -346,8 +415,10 @@ async def run_lexical_render(ctx: LaneContext, query: CorpusQuery) -> RouteEvide
         return RouteEvidence(system_id=B2_SYSTEM, error=error)
     if not ranked:
         return RouteEvidence(system_id=B2_SYSTEM)
-    doc_id, page = ranked[0]
-    evidence = _page_evidence(ctx, doc_id, page, use_image=True, question=query.text)
+    doc = ctx.resolve_doc(ranked[0][0])
+    if doc is None:
+        return RouteEvidence(system_id=B2_SYSTEM, error=f"unknown doc {ranked[0][0]}")
+    evidence = _page_evidence(ctx, doc, ranked[0][1], use_image=True, question=query.text)
     return _forbidden_check(
         ctx, replace(evidence, system_id=B2_SYSTEM, ranked_pages=tuple(ranked))
     )
@@ -367,15 +438,15 @@ async def run_visual_dense(ctx: LaneContext, query: CorpusQuery, embedder) -> Ro
     if not ranked:
         return RouteEvidence(system_id=system_id)
     hit = result.hits[0]
-    doc = ctx.workspace.docs.get(hit.doc_id)
-    revision = hit.revision if doc is not None else None
+    doc = _resolve_revision_doc(ctx, hit.doc_id, hit.revision)
+    if doc is None:
+        return RouteEvidence(system_id=system_id, error=f"unknown doc {hit.doc_id}")
     evidence = _page_evidence(
         ctx,
-        hit.doc_id,
+        doc,
         hit.page_number,
         use_image=True,
         question=query.text,
-        revision=revision,
     )
     return _forbidden_check(
         ctx, replace(evidence, system_id=system_id, ranked_pages=ranked)
@@ -390,7 +461,9 @@ def _contact_sheet(
 
     thumbs = []
     for doc_id, page in candidates:
-        doc = ctx.workspace.docs[doc_id]
+        doc = ctx.resolve_doc(doc_id)
+        if doc is None:
+            continue
         rendered = ctx.render_store.render(
             doc.blob_key,
             page - 1,
@@ -443,7 +516,7 @@ async def run_visual_hybrid(ctx: LaneContext, query: CorpusQuery, embedder) -> R
         visual_ranked = [(h.doc_id, h.page_number) for h in result.hits]
     candidates: list[tuple[str, int]] = []
     for key in ranked_lexical[:RERANK_CANDIDATES_PER_ROUTE] + visual_ranked:
-        if key not in candidates:
+        if key not in candidates and ctx.resolve_doc(key[0]) is not None:
             candidates.append(key)
     if not candidates:
         return RouteEvidence(system_id=V2_SYSTEM)
@@ -460,7 +533,10 @@ async def run_visual_hybrid(ctx: LaneContext, query: CorpusQuery, embedder) -> R
         )
         ordered = [candidates[i] for i in order]
     doc_id, page = ordered[0]
-    evidence = _page_evidence(ctx, doc_id, page, use_image=True, question=query.text)
+    doc = ctx.resolve_doc(doc_id)
+    if doc is None:
+        return RouteEvidence(system_id=V2_SYSTEM, error=f"unknown doc {doc_id}")
+    evidence = _page_evidence(ctx, doc, page, use_image=True, question=query.text)
     return _forbidden_check(
         ctx, replace(evidence, system_id=V2_SYSTEM, ranked_pages=tuple(ordered))
     )

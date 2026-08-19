@@ -26,6 +26,7 @@ _LAZY: dict[str, str] = {
     "kernel_seed": "app.eval.pr81a.kernel_seed",
     "lanes": "app.eval.pr81a.lanes",
     "scoring": "app.eval.pr81a.scoring",
+    "decision": "app.eval.pr81a.decision",
 }
 
 __all__ = list(_LAZY)

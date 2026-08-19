@@ -97,6 +97,12 @@ class VisualQueryBudget:
             raise VisualIndexError(f"max_pages_scored out of range: {self.max_pages_scored}")
 
 
+def _partition_key_for(allowed: frozenset[str]) -> str:
+    return hashlib.sha256(
+        json.dumps(sorted(allowed), separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def visual_generation_identity(
     *,
     workspace_id: str,
@@ -213,9 +219,29 @@ class VisualIndex:
             workspace_id=workspace_id,
             embedder=embedder,
             pages=admitted,
-            partition_key=hashlib.sha256(
-                json.dumps(sorted(allowed), separators=(",", ":")).encode("utf-8")
-            ).hexdigest(),
+            partition_key=_partition_key_for(allowed),
+        )
+
+    @classmethod
+    def partition_from(
+        cls, index: "VisualIndex", allowed_domains: Iterable[str]
+    ) -> "VisualIndex":
+        """Derive the high-assurance partition from a saved full index.
+
+        Row-subset construction is legitimate for replay because the
+        partition build embeds the *same* pages to the *same* vectors;
+        identity therefore matches a from-scratch partition build.
+        """
+        allowed = frozenset(allowed_domains)
+        keep = [i for i, entry in enumerate(index.entries) if entry.domain in allowed]
+        sub_entries = tuple(index.entries[i] for i in keep)
+        sub_matrix = index.matrix[keep].copy() if keep else np.zeros((0, index.matrix.shape[1] or 1), dtype=np.float32)
+        return cls(
+            workspace_id=index.workspace_id,
+            embedder_identity=index.embedder_identity,
+            entries=sub_entries,
+            matrix=sub_matrix,
+            partition_key=_partition_key_for(allowed),
         )
 
     # -- search -----------------------------------------------------------
