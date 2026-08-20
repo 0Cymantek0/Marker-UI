@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +22,25 @@ from .common import (
     _profile_value,
     _reject_unknown_fields,
     VerificationRiskError,
+)
+
+#: Every dependency dimension of a witness, in canonical order. This is
+#: the single source of truth for :attr:`WitnessProfile.dependency_key`:
+#: ``model_family`` is a dimension (shared families correlate exactly
+#: like shared renderers), and adding one is an identity-affecting
+#: change that must be declared here, not discovered downstream.
+_DEPENDENCY_DIMENSIONS: tuple[str, ...] = (
+    "alias_of",
+    "shared_dependency_group",
+    "base_lineage",
+    "teacher_lineage",
+    "model_family",
+    "renderer",
+    "cropper",
+    "detector",
+    "preprocessor",
+    "postprocessor",
+    "prompt_identity",
 )
 from .identity import _identity
 
@@ -149,18 +169,7 @@ class WitnessProfile:
     def dependency_key(self) -> tuple[str | None, ...]:
         """Key for conservative grouping; unknown fields stay unknown."""
 
-        return (
-            self.alias_of,
-            self.shared_dependency_group,
-            self.base_lineage,
-            self.teacher_lineage,
-            self.renderer,
-            self.cropper,
-            self.detector,
-            self.preprocessor,
-            self.postprocessor,
-            self.prompt_identity,
-        )
+        return tuple(getattr(self, name) for name in _DEPENDENCY_DIMENSIONS)
 
     def semantic_payload(self) -> dict[str, Any]:
         return {
@@ -235,6 +244,14 @@ class WitnessOutcome:
         else:
             raise VerificationRiskError(
                 f"outcome for witness {witness_id!r} missing prediction/value/correct"
+            )
+        # Non-finite numerics fail closed at the load boundary: a NaN
+        # prediction is truthy in Python and would silently count as a
+        # verifying vote inside majority baselines.
+        if isinstance(prediction, float) and not math.isfinite(prediction):
+            raise VerificationRiskError(
+                f"outcome for witness {witness_id!r}: non-finite prediction "
+                f"{prediction!r} cannot enter risk evidence"
             )
         confidence_value = data.get("confidence", data.get("score"))
         confidence = (

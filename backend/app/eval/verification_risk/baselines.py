@@ -10,7 +10,53 @@ from typing import Any
 from .common import VERIFICATION_RISK_REPORT_SCHEMA_VERSION, VerificationRiskError
 from .identity import _canonical_json, _identity
 from .metrics import RateEstimate, _rate, evaluate_pair
-from .models import LabeledSample, VerificationRiskCorpus, WitnessProfile
+from .models import (
+    _DEPENDENCY_DIMENSIONS,
+    LabeledSample,
+    VerificationRiskCorpus,
+    WitnessProfile,
+)
+
+
+def _witness_group_keys(witness: WitnessProfile) -> tuple[tuple[Any, ...], ...]:
+    """Every dependency dimension a witness occupies.
+
+    Two witnesses correlate when their key sets INTERSECT. Sharing a
+    renderer, cropper, detector or model family must dedupe exactly
+    like sharing a teacher — a differing base lineage can no longer
+    mask a shared pipeline stage (on the PR75 corpus this masked
+    model-b/model-c sharing renderer/cropper/detector).
+    """
+    keys: list[tuple[Any, ...]] = []
+    if witness.shared_dependency_group:
+        keys.append(("shared", witness.shared_dependency_group))
+    if witness.teacher_lineage:
+        keys.append(("teacher", witness.teacher_lineage))
+    if witness.base_lineage:
+        keys.append(("lineage", witness.base_lineage))
+    for name in _DEPENDENCY_DIMENSIONS:
+        value = getattr(witness, name)
+        if value is not None:
+            keys.append(("dim", name, value))
+    return tuple(keys)
+
+
+def _dependency_aware_ids(corpus: VerificationRiskCorpus) -> tuple[str, ...]:
+    selected: list[WitnessProfile] = []
+    seen_groups: set[tuple[Any, ...]] = set()
+    for witness in sorted(corpus.witnesses, key=lambda item: item.witness_id):
+        if witness.disclosure != "complete" or witness.alias_of:
+            continue
+        if not witness.has_known_lineage:
+            continue
+        # Unknown dependency key cannot prove diversity; retain only when all
+        # known fields establish a distinct complete lineage.
+        keys = _witness_group_keys(witness)
+        if any(key in seen_groups for key in keys):
+            continue
+        seen_groups.update(keys)
+        selected.append(witness)
+    return tuple(witness.witness_id for witness in selected)
 
 @dataclass(frozen=True)
 class BaselineResult:
@@ -227,31 +273,6 @@ def _source_native_ids(corpus: VerificationRiskCorpus) -> tuple[str, ...]:
             if witness.source_native or witness.kind in {"source_native", "deterministic"}
         )
     )
-
-
-def _dependency_aware_ids(corpus: VerificationRiskCorpus) -> tuple[str, ...]:
-    selected: list[WitnessProfile] = []
-    seen_groups: set[tuple[Any, ...]] = set()
-    for witness in sorted(corpus.witnesses, key=lambda item: item.witness_id):
-        if witness.disclosure != "complete" or witness.alias_of:
-            continue
-        if not witness.has_known_lineage:
-            continue
-        if witness.shared_dependency_group:
-            group: tuple[Any, ...] = ("shared", witness.shared_dependency_group)
-        elif witness.teacher_lineage:
-            group = ("teacher", witness.teacher_lineage)
-        elif witness.base_lineage:
-            group = ("lineage", witness.base_lineage)
-        else:
-            group = ("profile", *witness.dependency_key)
-        # Unknown dependency key cannot prove diversity; retain only when all
-        # known fields establish a distinct complete lineage.
-        if group in seen_groups:
-            continue
-        seen_groups.add(group)
-        selected.append(witness)
-    return tuple(witness.witness_id for witness in selected)
 
 
 def _dependency_aware_decisions(
