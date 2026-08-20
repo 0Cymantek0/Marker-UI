@@ -9,3 +9,8 @@ python-docx==1.2.0
 # Synthetic PDF generation for tests and benchmark corpus tooling
 # (deferred imports in app code, module-level in tests).
 reportlab==5.0.0
+# PR80B displacement suite imports the specialist comparator at module
+# level (tests/test_eval_pr80b_invoice2data.py); without it CI collection
+# fails with ModuleNotFoundError. Most transitive deps are already in the
+# runtime lock; python-dateutil resolves from PyPI.
+invoice2data==1.0.1
