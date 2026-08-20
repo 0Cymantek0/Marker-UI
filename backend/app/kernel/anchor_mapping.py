@@ -378,8 +378,8 @@ def map_anchor(
                 candidates=ordered,
                 reason="near-text agreement above candidate threshold",
                 rule_evidence={
-                    "similarity_threshold": _FUZZY_CANDIDATE_THRESHOLD,
-                    "best_ratio": round(max(ratio for ratio, _ in fuzzy), 6),
+                    "similarity_threshold": str(_FUZZY_CANDIDATE_THRESHOLD),
+                    "best_ratio": f"{max(ratio for ratio, _ in fuzzy):.6f}",
                 },
             )
 
