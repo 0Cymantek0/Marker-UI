@@ -63,7 +63,7 @@ def upgrade() -> None:
             "kernel_commit_heads",
             sa.Column("workspace_id", sa.String(length=128), nullable=False),
             sa.Column("head_kernel_commit_id", sa.Integer(), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("workspace_id"),
         )
 
@@ -82,7 +82,7 @@ def upgrade() -> None:
             sa.Column("kernel_schema_version", sa.String(length=32), nullable=False),
             sa.Column("canonicalization_profile", sa.String(length=32), nullable=False),
             sa.Column("producer_json", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("workspace_id", "kernel_commit_id"),
         )
 
@@ -99,7 +99,7 @@ def upgrade() -> None:
             sa.Column("payload_json", sa.Text(), nullable=False),
             sa.Column("payload_byte_hash", sa.String(length=80), nullable=True),
             sa.Column("payload_length", sa.Integer(), nullable=True),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint(
                 "workspace_id", "identity_hash", name="uq_kernel_records_workspace_identity"
@@ -115,7 +115,7 @@ def upgrade() -> None:
             sa.Column("edge_kind", sa.String(length=64), nullable=False),
             sa.Column("source_record_id", sa.String(length=36), nullable=False),
             sa.Column("target_record_id", sa.String(length=36), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
             sa.ForeignKeyConstraint(
                 ["source_record_id"], ["kernel_records.id"], ondelete="RESTRICT"
             ),

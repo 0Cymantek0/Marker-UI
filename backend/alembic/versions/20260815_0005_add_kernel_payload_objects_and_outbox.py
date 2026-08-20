@@ -61,7 +61,7 @@ def upgrade() -> None:
             sa.Column("payload_length", sa.Integer(), nullable=False),
             sa.Column("store_profile", sa.String(length=64), nullable=False),
             sa.Column("storage_locator", sa.String(length=256), nullable=False),
-            sa.Column("published_at", sa.DateTime(), nullable=True),
+            sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("blob_key"),
         )
 
@@ -76,9 +76,9 @@ def upgrade() -> None:
             sa.Column("dedupe_key", sa.String(length=80), nullable=False),
             sa.Column("state", sa.String(length=16), nullable=False),
             sa.Column("attempts", sa.Integer(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("claimed_at", sa.DateTime(), nullable=True),
-            sa.Column("completed_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("dedupe_key", name="uq_kernel_outbox_dedupe_key"),
         )

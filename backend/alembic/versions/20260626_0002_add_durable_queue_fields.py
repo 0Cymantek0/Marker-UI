@@ -22,10 +22,10 @@ def upgrade() -> None:
     tables = set(sa.inspect(bind).get_table_names())
     job_columns = {column["name"] for column in sa.inspect(bind).get_columns("conversion_jobs")}
     _add_column_if_missing(job_columns, "queue_backend", sa.Column("queue_backend", sa.String(length=50), nullable=True))
-    _add_column_if_missing(job_columns, "queued_at", sa.Column("queued_at", sa.DateTime(), nullable=True))
-    _add_column_if_missing(job_columns, "started_at", sa.Column("started_at", sa.DateTime(), nullable=True))
+    _add_column_if_missing(job_columns, "queued_at", sa.Column("queued_at", sa.DateTime(timezone=True), nullable=True))
+    _add_column_if_missing(job_columns, "started_at", sa.Column("started_at", sa.DateTime(timezone=True), nullable=True))
     _add_column_if_missing(job_columns, "lease_owner", sa.Column("lease_owner", sa.String(length=255), nullable=True))
-    _add_column_if_missing(job_columns, "lease_expires_at", sa.Column("lease_expires_at", sa.DateTime(), nullable=True))
+    _add_column_if_missing(job_columns, "lease_expires_at", sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True))
     _add_column_if_missing(
         job_columns,
         "retry_count",
@@ -54,7 +54,7 @@ def upgrade() -> None:
             sa.Column("status", sa.String(length=50), nullable=True),
             sa.Column("message", sa.Text(), nullable=True),
             sa.Column("payload_json", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.ForeignKeyConstraint(["job_id"], ["conversion_jobs.id"], ondelete="CASCADE"),
             sa.PrimaryKeyConstraint("id"),
         )

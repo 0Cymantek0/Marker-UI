@@ -38,6 +38,11 @@ Contract:
 - Unknown or contradictory states fail closed with diagnostics; a failed
   migration can never leave the database reported as current (the runner
   re-verifies after every action).
+- PostgreSQL databases (PR83A) travel the same authority path through
+  ``app.db_migration_postgres``: identical states and entrypoints, with
+  ``pg_catalog``/``information_schema`` introspection and a server-side
+  advisory lock replacing the SQLite file lock. Pre-Alembic legacy
+  adoption is not offered on PostgreSQL.
 """
 
 from __future__ import annotations
@@ -600,10 +605,26 @@ class _MigrationLock:
 # ---------------------------------------------------------------------------
 
 
+def _url_backend(url: str) -> str:
+    """Classify a database URL into a supported migration profile."""
+    if url.startswith(("sqlite+aiosqlite:///", "sqlite:///")):
+        return "sqlite"
+    if url.startswith(("postgresql+asyncpg://", "postgresql://", "postgres://")):
+        return "postgresql"
+    raise MigrationError(
+        f"unsupported database URL for migrations: {url!r} "
+        "(supported: file-backed SQLite, PostgreSQL)"
+    )
+
+
 def inspect_database(url: str | None = None) -> DatabaseStatus:
     """Classify the migration state of the database at ``url`` (read-only)."""
     url = url or DATABASE_URL
     head = migration_head()
+    if _url_backend(url) == "postgresql":
+        from app.db_migration_postgres import inspect_database as pg_inspect
+
+        return pg_inspect(url)
     path = _sqlite_path(url)
     if not path.exists():
         return DatabaseStatus(DatabaseState.EMPTY, None, head)
@@ -719,6 +740,10 @@ def _upgrade_database_sync(
 ) -> MigrationResult:
     url = url or DATABASE_URL
     head = migration_head()
+    if _url_backend(url) == "postgresql":
+        from app.db_migration_postgres import upgrade_database_sync as pg_upgrade
+
+        return pg_upgrade(url, lock_timeout)
     path = _sqlite_path(url)
     path.parent.mkdir(parents=True, exist_ok=True)
     with _MigrationLock(path, lock_timeout):

@@ -87,9 +87,9 @@ def upgrade() -> None:
             sa.Column("required_payload_state", sa.String(length=24), nullable=False),
             sa.Column("completeness", sa.String(length=16), nullable=False),
             sa.Column("payload_state_counts_json", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("validated_at", sa.DateTime(), nullable=True),
-            sa.Column("activated_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("validated_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("generation_id"),
         )
 
@@ -128,7 +128,7 @@ def upgrade() -> None:
             "kernel_generation_heads",
             sa.Column("workspace_id", sa.String(length=128), nullable=False),
             sa.Column("current_generation_id", sa.String(length=80), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("workspace_id"),
         )
 

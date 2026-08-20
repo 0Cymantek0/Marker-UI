@@ -222,7 +222,7 @@ class KernelCommitHead(Base):
     workspace_id: Mapped[str] = mapped_column(String(MAX_WORKSPACE_ID_LENGTH), primary_key=True)
     head_kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
@@ -251,7 +251,7 @@ class KernelCommitManifest(Base):
     )
     producer_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
@@ -300,7 +300,7 @@ class KernelRecord(Base):
     payload_byte_hash: Mapped[str | None] = mapped_column(String(MAX_HASH_LENGTH), nullable=True)
     payload_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
@@ -341,7 +341,7 @@ class KernelRecordEdge(Base):
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
@@ -376,7 +376,7 @@ class KernelPayloadObject(Base):
         String(MAX_STORAGE_LOCATOR_LENGTH), nullable=False
     )
     published_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     def __repr__(self) -> str:
@@ -412,10 +412,10 @@ class KernelOutbox(Base):
     )
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -470,10 +470,10 @@ class KernelGeneration(Base):
     )
     payload_state_counts_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    validated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
-    activated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -556,7 +556,7 @@ class KernelGenerationHead(Base):
         String(MAX_HASH_LENGTH), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
@@ -583,7 +583,7 @@ class KernelViewHead(Base):
     )
     kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
@@ -628,10 +628,10 @@ class KernelRetentionRoot(Base):
         String(MAX_ROOT_STATE_LENGTH), index=True, nullable=False, default="active"
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -659,10 +659,10 @@ class KernelReaderPin(Base):
         String(MAX_WORKSPACE_ID_LENGTH), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(), index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -694,12 +694,12 @@ class KernelPayloadRetirement(Base):
         String(MAX_RETIRE_REASON_LENGTH), nullable=False
     )
     decided_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    swept_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    swept_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -732,12 +732,12 @@ class KernelWorkLease(Base):
         String(MAX_LEASE_STATE_LENGTH), nullable=False, default="leased"
     )
     #: takeover eligibility only (see class docstring); never authority.
-    lease_expires_at: Mapped[datetime] = mapped_column(DateTime(), nullable=False)
+    lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     def __repr__(self) -> str:
@@ -772,7 +772,7 @@ class KernelPublication(Base):
     fencing_token: Mapped[int] = mapped_column(Integer, nullable=False)
     owner_id: Mapped[str] = mapped_column(String(MAX_OWNER_ID_LENGTH), nullable=False)
     accepted_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     __table_args__ = (
@@ -811,9 +811,9 @@ class KernelSchedulingEntry(Base):
     )
     group_id: Mapped[str] = mapped_column(String(MAX_GROUP_ID_LENGTH), nullable=False)
     #: deadline pressure input; expiry does not cancel or reorder truth.
-    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     __table_args__ = (
@@ -858,7 +858,7 @@ class KernelSchedulingGroup(Base):
     age_boost_factor: Mapped[float] = mapped_column(Float, nullable=False, default=4.0)
     served_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     def __repr__(self) -> str:
@@ -896,18 +896,18 @@ class KernelLiveness(Base):
     #: external request the control loop is waiting on; liveness ends
     #: with it. Audit/eligibility input — never authority.
     request_expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(), nullable=True
+        DateTime(timezone=True), nullable=True
     )
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     renew_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_activity_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     def __repr__(self) -> str:
@@ -945,7 +945,7 @@ class KernelEvent(Base):
     )
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     def __repr__(self) -> str:
@@ -973,7 +973,7 @@ class KernelProgress(Base):
     counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     def __repr__(self) -> str:
@@ -1026,10 +1026,10 @@ class KernelLexicalGeneration(Base):
         String(MAX_PUBLICATION_STATE_LENGTH), index=True, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    validated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -1115,11 +1115,11 @@ class KernelPublicationSet(Base):
         String(MAX_PUBLICATION_STATE_LENGTH), index=True, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    validated_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(), nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -1149,7 +1149,7 @@ class KernelPublicationHead(Base):
         String(MAX_HASH_LENGTH), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
@@ -1179,10 +1179,10 @@ class KernelPublicationPin(Base):
         String(MAX_WORKSPACE_ID_LENGTH), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(), index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -1217,7 +1217,7 @@ class KernelQueryCursor(Base):
     cumulative_budget_json: Mapped[str] = mapped_column(Text, nullable=False)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(), index=True, nullable=False
+        DateTime(timezone=True), index=True, nullable=False
     )
     pin_id: Mapped[str | None] = mapped_column(
         String(MAX_CURSOR_PIN_ID_LENGTH), nullable=True
@@ -1235,11 +1235,11 @@ class KernelQueryCursor(Base):
         String(MAX_CURSOR_REPLAY_STATE_LENGTH), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(),
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 

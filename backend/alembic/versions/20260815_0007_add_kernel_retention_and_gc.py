@@ -79,8 +79,8 @@ def upgrade() -> None:
             sa.Column("required_payload_state", sa.String(length=24), nullable=False),
             sa.Column("producer_json", sa.Text(), nullable=False),
             sa.Column("state", sa.String(length=16), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("expires_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("root_id"),
         )
 
@@ -90,8 +90,8 @@ def upgrade() -> None:
             sa.Column("pin_id", sa.String(length=36), nullable=False),
             sa.Column("generation_id", sa.String(length=80), nullable=False),
             sa.Column("workspace_id", sa.String(length=128), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("expires_at", sa.DateTime(), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
             sa.PrimaryKeyConstraint("pin_id"),
         )
 
@@ -101,10 +101,10 @@ def upgrade() -> None:
             sa.Column("blob_key", sa.String(length=80), nullable=False),
             sa.Column("state", sa.String(length=16), nullable=False),
             sa.Column("reason", sa.String(length=64), nullable=False),
-            sa.Column("decided_at", sa.DateTime(), nullable=True),
+            sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
             sa.Column("attempts", sa.Integer(), nullable=False),
             sa.Column("last_error", sa.Text(), nullable=True),
-            sa.Column("swept_at", sa.DateTime(), nullable=True),
+            sa.Column("swept_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("blob_key"),
         )
 

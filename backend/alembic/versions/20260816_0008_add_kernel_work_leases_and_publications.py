@@ -61,9 +61,9 @@ def upgrade() -> None:
             sa.Column("fencing_token", sa.Integer(), nullable=False),
             sa.Column("owner_id", sa.String(length=64), nullable=False),
             sa.Column("state", sa.String(length=16), nullable=False),
-            sa.Column("lease_expires_at", sa.DateTime(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("work_id"),
         )
 
@@ -78,7 +78,7 @@ def upgrade() -> None:
             sa.Column("result_hash", sa.String(length=80), nullable=False),
             sa.Column("fencing_token", sa.Integer(), nullable=False),
             sa.Column("owner_id", sa.String(length=64), nullable=False),
-            sa.Column("accepted_at", sa.DateTime(), nullable=True),
+            sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("publication_id"),
             sa.UniqueConstraint(
                 "workspace_id", "work_id", name="uq_kernel_publications_scope"

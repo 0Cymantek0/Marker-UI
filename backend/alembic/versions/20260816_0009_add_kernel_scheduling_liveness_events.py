@@ -75,8 +75,8 @@ def upgrade() -> None:
             sa.Column("workspace_id", sa.String(length=128), nullable=False),
             sa.Column("resource_class", sa.String(length=32), nullable=False),
             sa.Column("group_id", sa.String(length=192), nullable=False),
-            sa.Column("deadline_at", sa.DateTime(), nullable=True),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
+            sa.Column("deadline_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("work_id"),
         )
 
@@ -90,7 +90,7 @@ def upgrade() -> None:
             sa.Column("age_boost_after_seconds", sa.Float(), nullable=False),
             sa.Column("age_boost_factor", sa.Float(), nullable=False),
             sa.Column("served_count", sa.Integer(), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("resource_class", "group_id"),
         )
 
@@ -102,12 +102,12 @@ def upgrade() -> None:
             sa.Column("progress_high_water", sa.Integer(), nullable=False),
             sa.Column("active_request_id", sa.String(length=192), nullable=False),
             sa.Column("topology_generation", sa.Integer(), nullable=True),
-            sa.Column("request_expires_at", sa.DateTime(), nullable=True),
-            sa.Column("cancelled_at", sa.DateTime(), nullable=True),
+            sa.Column("request_expires_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
             sa.Column("renew_count", sa.Integer(), nullable=False),
-            sa.Column("last_activity_at", sa.DateTime(), nullable=True),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("last_activity_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("work_id"),
         )
 
@@ -120,7 +120,7 @@ def upgrade() -> None:
             sa.Column("event_type", sa.String(length=100), nullable=False),
             sa.Column("durability", sa.String(length=16), nullable=False),
             sa.Column("payload_json", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("workspace_id", "stream", "semantic_sequence"),
         )
 
@@ -131,7 +131,7 @@ def upgrade() -> None:
             sa.Column("work_id", sa.Integer(), nullable=False),
             sa.Column("counter", sa.Integer(), nullable=False),
             sa.Column("payload_json", sa.Text(), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("workspace_id", "work_id"),
         )
 

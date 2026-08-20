@@ -57,13 +57,13 @@ def upgrade() -> None:
             sa.Column("keyset_json", sa.Text(), nullable=False),
             sa.Column("cumulative_budget_json", sa.Text(), nullable=False),
             sa.Column("page_count", sa.Integer(), nullable=False),
-            sa.Column("expires_at", sa.DateTime(), nullable=False),
+            sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("pin_id", sa.String(length=128), nullable=True),
             sa.Column("status", sa.String(length=16), nullable=False),
             sa.Column("nonce", sa.String(length=128), nullable=False),
             sa.Column("replay_state", sa.String(length=16), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("handle"),
         )
 

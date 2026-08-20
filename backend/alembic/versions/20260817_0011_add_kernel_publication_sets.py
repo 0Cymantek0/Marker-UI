@@ -105,8 +105,8 @@ def upgrade() -> None:
             sa.Column("text_char_count", sa.Integer(), nullable=False),
             sa.Column("content_digest", sa.String(length=80), nullable=False),
             sa.Column("state", sa.String(length=16), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("validated_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("validated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("lexical_generation_id"),
         )
     if "kernel_lexical_rows" not in existing:
@@ -135,9 +135,9 @@ def upgrade() -> None:
             sa.Column("vector_generation_id", sa.String(length=80), nullable=True),
             sa.Column("content_digest", sa.String(length=80), nullable=False),
             sa.Column("state", sa.String(length=16), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("validated_at", sa.DateTime(), nullable=True),
-            sa.Column("published_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("validated_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("publication_set_id"),
         )
     if "kernel_publication_heads" not in existing:
@@ -146,7 +146,7 @@ def upgrade() -> None:
             sa.Column("workspace_id", sa.String(length=128), nullable=False),
             sa.Column("profile", sa.String(length=64), nullable=False),
             sa.Column("current_publication_set_id", sa.String(length=80), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("workspace_id", "profile"),
         )
     if "kernel_publication_pins" not in existing:
@@ -155,8 +155,8 @@ def upgrade() -> None:
             sa.Column("pin_id", sa.String(length=36), nullable=False),
             sa.Column("publication_set_id", sa.String(length=80), nullable=False),
             sa.Column("workspace_id", sa.String(length=128), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("expires_at", sa.DateTime(), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
             sa.PrimaryKeyConstraint("pin_id"),
         )
 

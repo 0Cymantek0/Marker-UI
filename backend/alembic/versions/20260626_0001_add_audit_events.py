@@ -33,9 +33,9 @@ def upgrade() -> None:
             sa.Column("result_path", sa.String(length=1024), nullable=True),
             sa.Column("error_message", sa.Text(), nullable=True),
             sa.Column("progress", sa.Integer(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
-            sa.Column("completed_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("id"),
         )
     if "settings" not in existing:
@@ -45,8 +45,8 @@ def upgrade() -> None:
             sa.Column("key", sa.String(length=255), nullable=False),
             sa.Column("value", sa.Text(), nullable=False),
             sa.Column("category", sa.String(length=100), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=True),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("ix_settings_key", "settings", ["key"], unique=True)
@@ -61,7 +61,7 @@ def upgrade() -> None:
             sa.Column("resource_id", sa.String(length=255), nullable=True),
             sa.Column("status", sa.String(length=50), nullable=False),
             sa.Column("redacted_payload_json", sa.Text(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("ix_audit_events_created_at", "audit_events", ["created_at"])

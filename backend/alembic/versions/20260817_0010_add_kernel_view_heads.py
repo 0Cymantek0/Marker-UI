@@ -47,7 +47,7 @@ def upgrade() -> None:
             sa.Column("view_id", sa.String(length=64), nullable=False),
             sa.Column("current_revision_id", sa.String(length=80), nullable=False),
             sa.Column("kernel_commit_id", sa.Integer(), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=True),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("workspace_id", "view_id"),
         )
 
