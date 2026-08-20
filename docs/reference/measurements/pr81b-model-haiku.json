@@ -1,0 +1,6779 @@
+{
+  "corpus_context": {
+    "workspace_id": "ws-pr81a-bench",
+    "publication_sets": [
+      "sha256:b79704cf724bdb9a4b2a54768c036fabbae3ce4904021104ca2e10e1ebbe6770",
+      "sha256:0b9ac32d24df2a31b5a0a22ad7b4a5f4137f0e8eb3bb0c1d1602ff694bd38d59"
+    ],
+    "visual_generations": {
+      "clip": {
+        "v3": "sha256:7c967764dcf84e74cc9e565069756b5edcf097cc5166851209dbb8a6edfbbf37",
+        "v4": "sha256:c3e8404b02286874548b6f946d841d0ff7987c0e8e9da04f6882963376100910"
+      },
+      "siglip": {
+        "v3": "sha256:ae64569f1c9fc10e23fb68b38ef8a049a0e3179be753f9575d9c5097d52aee31",
+        "v4": "sha256:ca04dd456821d4067dea74cac933d5c9c0b2a776156a4026ff071d8164fbadfc"
+      }
+    },
+    "systems": {
+      "lexical-text": {
+        "kind": "baseline",
+        "evidence": "page oracle text"
+      },
+      "lexical-render": {
+        "kind": "baseline",
+        "evidence": "lexically selected page render"
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "kind": "dense visual",
+        "model": "openai/clip-vit-base-patch32",
+        "evidence": "visually selected page render"
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "kind": "dense visual",
+        "model": "google/siglip-base-patch16-224",
+        "evidence": "visually selected page render"
+      },
+      "visual-hybrid-rerank": {
+        "kind": "hybrid rerank",
+        "reranker": "hosted VLM contact sheet",
+        "evidence": "rerank-selected page render"
+      },
+      "visual-hybrid-rerank-text": {
+        "kind": "hybrid rerank ablation",
+        "evidence": "rerank-selected page oracle text (answer-modality ablation)"
+      },
+      "visual-hybrid-rerank-joint": {
+        "kind": "hybrid rerank ablation",
+        "evidence": "rerank-selected page render + oracle text"
+      },
+      "visual-hybrid-union-only": {
+        "kind": "hybrid ablation",
+        "evidence": "lexical-ordered candidate union, no rerank (rerank ablation)"
+      }
+    }
+  },
+  "metrics": {
+    "lexical-render": {
+      "queries_judged": 34,
+      "task_success": 23,
+      "task_success_rate": 0.6765,
+      "page_hits": 23,
+      "page_hit_rate": 0.6765,
+      "answers_delivered": 23,
+      "answer_correct": 23,
+      "answer_accuracy_on_delivered": 1.0,
+      "mrr": 0.8098,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {
+        "decoy_confusion": 1
+      },
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 5,
+          "page_hits": 5,
+          "dangers": 0,
+          "task_success_rate": 0.8333,
+          "page_hit_rate": 0.8333
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.2,
+          "page_hit_rate": 0.2
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 0.75,
+          "page_hit_rate": 0.75
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 1,
+          "task_success_rate": 0.25,
+          "page_hit_rate": 0.25
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "lexical-text": {
+      "queries_judged": 34,
+      "task_success": 23,
+      "task_success_rate": 0.6765,
+      "page_hits": 23,
+      "page_hit_rate": 0.6765,
+      "answers_delivered": 23,
+      "answer_correct": 23,
+      "answer_accuracy_on_delivered": 1.0,
+      "mrr": 0.8098,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {
+        "decoy_confusion": 1
+      },
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 5,
+          "page_hits": 5,
+          "dangers": 0,
+          "task_success_rate": 0.8333,
+          "page_hit_rate": 0.8333
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.2,
+          "page_hit_rate": 0.2
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 0.75,
+          "page_hit_rate": 0.75
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 1,
+          "task_success_rate": 0.25,
+          "page_hit_rate": 0.25
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "lexical-text:ha": {
+      "queries_judged": 1,
+      "task_success": 1,
+      "task_success_rate": 1.0,
+      "page_hits": 1,
+      "page_hit_rate": 1.0,
+      "answers_delivered": 1,
+      "answer_correct": 1,
+      "answer_accuracy_on_delivered": 1.0,
+      "mrr": 1.0,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {},
+      "slices": {
+        "authz.revocation": {
+          "queries": 1,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-dense:google/siglip-base-patch16-224": {
+      "queries_judged": 34,
+      "task_success": 6,
+      "task_success_rate": 0.1765,
+      "page_hits": 6,
+      "page_hit_rate": 0.1765,
+      "answers_delivered": 6,
+      "answer_correct": 6,
+      "answer_accuracy_on_delivered": 1.0,
+      "mrr": 0.5435,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {
+        "decoy_confusion": 1
+      },
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.2,
+          "page_hit_rate": 0.2
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 1,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.3333,
+          "page_hit_rate": 0.3333
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.25,
+          "page_hit_rate": 0.25
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-dense:openai/clip-vit-base-patch32": {
+      "queries_judged": 34,
+      "task_success": 9,
+      "task_success_rate": 0.2647,
+      "page_hits": 10,
+      "page_hit_rate": 0.2941,
+      "answers_delivered": 13,
+      "answer_correct": 9,
+      "answer_accuracy_on_delivered": 0.6923,
+      "mrr": 0.6247,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {
+        "decoy_confusion": 2
+      },
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 1,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 3,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 0.6,
+          "page_hit_rate": 0.8
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.3333,
+          "page_hit_rate": 0.3333
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 1,
+          "task_success_rate": 0.25,
+          "page_hit_rate": 0.25
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.5,
+          "page_hit_rate": 0.5
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-dense:openai/clip-vit-base-patch32:ha": {
+      "queries_judged": 1,
+      "task_success": 0,
+      "task_success_rate": 0.0,
+      "page_hits": 0,
+      "page_hit_rate": 0.0,
+      "answers_delivered": 0,
+      "answer_correct": 0,
+      "answer_accuracy_on_delivered": null,
+      "mrr": null,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {},
+      "slices": {
+        "authz.revocation": {
+          "queries": 1,
+          "task_success": 0,
+          "page_hits": 0,
+          "dangers": 0,
+          "task_success_rate": 0.0,
+          "page_hit_rate": 0.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-hybrid-rerank": {
+      "queries_judged": 34,
+      "task_success": 29,
+      "task_success_rate": 0.8529,
+      "page_hits": 30,
+      "page_hit_rate": 0.8824,
+      "answers_delivered": 30,
+      "answer_correct": 29,
+      "answer_accuracy_on_delivered": 0.9667,
+      "mrr": 0.9412,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {},
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 0.5,
+          "page_hit_rate": 0.5
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 4,
+          "page_hits": 5,
+          "dangers": 0,
+          "task_success_rate": 0.8,
+          "page_hit_rate": 1.0
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-hybrid-rerank-joint": {
+      "queries_judged": 34,
+      "task_success": 29,
+      "task_success_rate": 0.8529,
+      "page_hits": 30,
+      "page_hit_rate": 0.8824,
+      "answers_delivered": 30,
+      "answer_correct": 29,
+      "answer_accuracy_on_delivered": 0.9667,
+      "mrr": 0.9412,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {},
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 0.5,
+          "page_hit_rate": 0.5
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 4,
+          "page_hits": 5,
+          "dangers": 0,
+          "task_success_rate": 0.8,
+          "page_hit_rate": 1.0
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-hybrid-rerank-text": {
+      "queries_judged": 34,
+      "task_success": 27,
+      "task_success_rate": 0.7941,
+      "page_hits": 30,
+      "page_hit_rate": 0.8824,
+      "answers_delivered": 29,
+      "answer_correct": 27,
+      "answer_accuracy_on_delivered": 0.931,
+      "mrr": 0.9412,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {},
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 0.5,
+          "page_hit_rate": 0.5
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 4,
+          "page_hits": 5,
+          "dangers": 0,
+          "task_success_rate": 0.8,
+          "page_hit_rate": 1.0
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 1.0
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 3,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 0.75,
+          "page_hit_rate": 1.0
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-hybrid-rerank:ha": {
+      "queries_judged": 1,
+      "task_success": 1,
+      "task_success_rate": 1.0,
+      "page_hits": 1,
+      "page_hit_rate": 1.0,
+      "answers_delivered": 1,
+      "answer_correct": 1,
+      "answer_accuracy_on_delivered": 1.0,
+      "mrr": 1.0,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {},
+      "slices": {
+        "authz.revocation": {
+          "queries": 1,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    },
+    "visual-hybrid-union-only": {
+      "queries_judged": 34,
+      "task_success": 23,
+      "task_success_rate": 0.6765,
+      "page_hits": 23,
+      "page_hit_rate": 0.6765,
+      "answers_delivered": 23,
+      "answer_correct": 23,
+      "answer_accuracy_on_delivered": 1.0,
+      "mrr": 0.8113,
+      "unavailable": 0,
+      "not_admitted": 0,
+      "danger_counts": {
+        "decoy_confusion": 1
+      },
+      "slices": {
+        "text.easy_control": {
+          "queries": 6,
+          "task_success": 5,
+          "page_hits": 5,
+          "dangers": 0,
+          "task_success_rate": 0.8333,
+          "page_hit_rate": 0.8333
+        },
+        "chart.appearance": {
+          "queries": 5,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 0,
+          "task_success_rate": 0.2,
+          "page_hit_rate": 0.2
+        },
+        "chart.value_read": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "table.cell_grid": {
+          "queries": 4,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 0.75,
+          "page_hit_rate": 0.75
+        },
+        "form.label_placement": {
+          "queries": 3,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 0.6667,
+          "page_hit_rate": 0.6667
+        },
+        "layout.column_bind": {
+          "queries": 3,
+          "task_success": 3,
+          "page_hits": 3,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "near_duplicate.decoy": {
+          "queries": 4,
+          "task_success": 1,
+          "page_hits": 1,
+          "dangers": 1,
+          "task_success_rate": 0.25,
+          "page_hit_rate": 0.25
+        },
+        "revision.change": {
+          "queries": 4,
+          "task_success": 4,
+          "page_hits": 4,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        },
+        "authz.revocation": {
+          "queries": 2,
+          "task_success": 2,
+          "page_hits": 2,
+          "dangers": 0,
+          "task_success_rate": 1.0,
+          "page_hit_rate": 1.0
+        }
+      },
+      "no_delivery_required_ok": 1,
+      "no_delivery_required_total": 1
+    }
+  },
+  "danger_totals": {
+    "decoy_confusion": 6
+  },
+  "no_delivery": {
+    "lexical-render": {
+      "ok": 1,
+      "total": 1
+    },
+    "lexical-text": {
+      "ok": 1,
+      "total": 1
+    },
+    "lexical-text:ha": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-dense:google/siglip-base-patch16-224": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-dense:openai/clip-vit-base-patch32": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-dense:openai/clip-vit-base-patch32:ha": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-hybrid-rerank": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-hybrid-rerank-joint": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-hybrid-rerank-text": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-hybrid-rerank:ha": {
+      "ok": 1,
+      "total": 1
+    },
+    "visual-hybrid-union-only": {
+      "ok": 1,
+      "total": 1
+    }
+  },
+  "economics": {
+    "pages_rendered": 29,
+    "cache_hits": 835,
+    "render_bytes": 1598178,
+    "cached_bytes": 1598178,
+    "avg_render_bytes_per_page": 55110,
+    "cold_render_ms_mean": 54.95,
+    "warm_render_ms_mean": 0.4,
+    "not_admitted_skips": 0,
+    "render_failures": 0,
+    "revision_update_ms": 1267.0,
+    "revision_renders": 0,
+    "embedding_bytes_per_model": {
+      "clip": 47104,
+      "siglip": 70656
+    },
+    "avg_embedding_bytes_per_page": 3072,
+    "build_timings": {
+      "cold_build_clip_v3_s": 63.978,
+      "cold_build_siglip_v3_s": 13.676,
+      "rebuild_clip_v4_s": 9.061,
+      "rebuild_siglip_v4_s": 5.037
+    },
+    "visual_query_ms_p50": 6298.39,
+    "warm_query_ms_p50": 0.12,
+    "warm_query_ms_max": 0.17,
+    "lane_timings_ms": {
+      "lexical-render": {
+        "p50": 153.63,
+        "n": 35
+      },
+      "lexical-text": {
+        "p50": 160.27,
+        "n": 35
+      },
+      "lexical-text:ha": {
+        "p50": 397.05,
+        "n": 2
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "p50": 6408.07,
+        "n": 35
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "p50": 5924.97,
+        "n": 35
+      },
+      "visual-dense:openai/clip-vit-base-patch32:ha": {
+        "p50": 32.06,
+        "n": 2
+      },
+      "visual-hybrid-rerank": {
+        "p50": 7541.05,
+        "n": 35
+      },
+      "visual-hybrid-rerank-joint": {
+        "p50": 6001.11,
+        "n": 35
+      },
+      "visual-hybrid-rerank-text": {
+        "p50": 350.04,
+        "n": 35
+      },
+      "visual-hybrid-rerank:ha": {
+        "p50": 435.59,
+        "n": 2
+      },
+      "visual-hybrid-union-only": {
+        "p50": 203.55,
+        "n": 35
+      }
+    },
+    "admitted_pages": 23,
+    "index_files": {
+      "clip": {
+        "v3": "pr81a-visual-index-clip-v3.npz",
+        "v4": "pr81a-visual-index-clip-v4.npz"
+      },
+      "siglip": {
+        "v3": "pr81a-visual-index-siglip-v3.npz",
+        "v4": "pr81a-visual-index-siglip-v4.npz"
+      }
+    }
+  },
+  "acceptance": {
+    "all_queries_scored": true,
+    "expected_scored_pairs": 286,
+    "actual_scored_pairs": 286,
+    "scoring_deterministic": true,
+    "no_forbidden_delivery": true,
+    "no_stale_delivery": true,
+    "pinned_probe_attribution_v3": true,
+    "revision_probe_new_cut": true
+  },
+  "blockers": [],
+  "decision": {
+    "outcome": "do_not_promote",
+    "summary": "No visual route produced a material downstream gain over text/structure plus targeted page rendering. The text-easy control also regressed.",
+    "rule_results": {
+      "baseline_visual_hard_rate": 0.6566799999999999,
+      "baseline_text_easy_rate": 0.8333,
+      "dense_routes": {
+        "visual-dense:google/siglip-base-patch16-224": {
+          "visual_hard_rate": 0.30666000000000004,
+          "text_easy_rate": 0.0,
+          "gain_vs_baseline": -0.35,
+          "text_easy_control_ok": false
+        },
+        "visual-dense:openai/clip-vit-base-patch32": {
+          "visual_hard_rate": 0.38666,
+          "text_easy_rate": 0.0,
+          "gain_vs_baseline": -0.27,
+          "text_easy_control_ok": false
+        },
+        "visual-dense:openai/clip-vit-base-patch32:ha": {
+          "visual_hard_rate": null,
+          "text_easy_rate": null,
+          "gain_vs_baseline": null,
+          "text_easy_control_ok": true
+        }
+      },
+      "hybrid_gain_vs_baseline": 0.2367,
+      "hybrid_text_easy_rate": 0.5,
+      "hybrid_text_easy_control_ok": false,
+      "security_blockers": [],
+      "cost_blockers": [],
+      "thresholds": {
+        "promotion_margin": 0.1,
+        "control_tolerance": 0.1,
+        "rerank_margin": 0.1,
+        "experimental_floor": 0.05
+      }
+    },
+    "best_dense_system": "visual-dense:openai/clip-vit-base-patch32",
+    "declared_rule": "promote_narrow iff the best dense visual route gains >= 0.1 absolute task-success over lexical-render on ['chart.appearance', 'chart.value_read', 'table.cell_grid', 'form.label_placement', 'layout.column_bind'] while holding text.easy_control within 0.1, with zero forbidden/stale/unresolvable dangers, all no_delivery probes clean, and per-page storage plus warm query latency inside the declared envelope; else narrow_rerank_only when visual-hybrid-rerank gains >= 0.1; else experimental at >= 0.05; else do_not_promote."
+  },
+  "per_query": {
+    "q01": {
+      "lexical-text": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "ZETA-9"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "ZETA-9"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": "decoy_confusion",
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q01",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "ZETA-9"
+        }
+      }
+    },
+    "q02": {
+      "lexical-text": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "RW-2"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "RW-2"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q02",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "RW-2"
+        }
+      }
+    },
+    "q03": {
+      "lexical-text": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "15"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "15"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "15"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "15"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "15"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q03",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "15"
+        }
+      }
+    },
+    "q04": {
+      "lexical-text": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2450 USD"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2450 USD"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q04",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2450 USD"
+        }
+      }
+    },
+    "q05": {
+      "lexical-text": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "87.4%"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "87.4%"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "87.4%"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "87.4%"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "87.4%"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q05",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "87.4%"
+        }
+      }
+    },
+    "q06": {
+      "lexical-text": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "CLAUSE-9"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "CLAUSE-9"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "CLAUSE-9"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q06",
+        "slice_tag": "text.easy_control",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-leg-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q07": {
+      "lexical-text": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "4.0"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "4.0"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "4.0"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "4.0"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q07",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q08": {
+      "lexical-text": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q08",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      }
+    },
+    "q09": {
+      "lexical-text": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q09",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q10": {
+      "lexical-text": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "11.55"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "11.55"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "11.55"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "11.55"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q10",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q11": {
+      "lexical-text": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            2
+          ],
+          "delivered_revision": "v3"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            2
+          ],
+          "delivered_revision": "v3"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 8,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "72%"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "72%"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "72%"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q11",
+        "slice_tag": "chart.appearance",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            2
+          ],
+          "delivered_revision": "v3"
+        }
+      }
+    },
+    "q12": {
+      "lexical-text": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "West"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "West"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "South"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "West"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q12",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q13": {
+      "lexical-text": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q13",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      }
+    },
+    "q14": {
+      "lexical-text": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-mfg-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q14",
+        "slice_tag": "chart.value_read",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Omar Haddad"
+        }
+      }
+    },
+    "q15": {
+      "lexical-text": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "18.5"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "18.5"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "18.5"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "18.5"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "18.5"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q15",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "18.5"
+        }
+      }
+    },
+    "q16": {
+      "lexical-text": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.95"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.95"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.95"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.95"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.95"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q16",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.95"
+        }
+      }
+    },
+    "q17": {
+      "lexical-text": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 5,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": "decoy_confusion",
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "47"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "47"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "47"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q17",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q18": {
+      "lexical-text": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "L3"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "L3"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "L3"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "L3"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "L3"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q18",
+        "slice_tag": "table.cell_grid",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "L3"
+        }
+      }
+    },
+    "q19": {
+      "lexical-text": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "95000"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "95000"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 3,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "95000"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "95000"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "95000"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q19",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "95000"
+        }
+      }
+    },
+    "q20": {
+      "lexical-text": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Jun-24"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Jun-24"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Jun-24"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Jun-24"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Jun-24"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q20",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Jun-24"
+        }
+      }
+    },
+    "q21": {
+      "lexical-text": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 5,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 5,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "Mar-15"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "Mar-15"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q21",
+        "slice_tag": "form.label_placement",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-01",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q22": {
+      "lexical-text": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Depot East"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Depot East"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Depot East"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Depot East"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Depot East"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Depot East"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q22",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Depot East"
+        }
+      }
+    },
+    "q23": {
+      "lexical-text": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "3h40m"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "3h40m"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "3h40m"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "3h40m"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "3h40m"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "3h40m"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q23",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "3h40m"
+        }
+      }
+    },
+    "q24": {
+      "lexical-text": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Harbor Terminal"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Harbor Terminal"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-hr-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Harbor Terminal"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Harbor Terminal"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Harbor Terminal"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Harbor Terminal"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q24",
+        "slice_tag": "layout.column_bind",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Harbor Terminal"
+        }
+      }
+    },
+    "q25": {
+      "lexical-text": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": "decoy_confusion",
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 8,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-03",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "East"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-03",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-03",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "East"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q25",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q26": {
+      "lexical-text": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": "decoy_confusion",
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": "decoy_confusion",
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-03",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "14.7"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-03",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "14.7"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-03",
+            3
+          ],
+          "delivered_revision": "v1",
+          "answer": "14.7"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q26",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": "decoy_confusion",
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-01",
+            3
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q27": {
+      "lexical-text": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 4,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "39"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "39"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "39"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q27",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 2,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      }
+    },
+    "q28": {
+      "lexical-text": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q28",
+        "slice_tag": "near_duplicate.decoy",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "Firmware"
+        }
+      }
+    },
+    "q29": {
+      "lexical-text": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-text",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-render",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "4"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 6,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q29",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      }
+    },
+    "q33": {
+      "lexical-text": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.4M USD"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.4M USD"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.4M USD"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.4M USD"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.4M USD"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.4M USD"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q33",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "allowed",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-sec-01",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2.4M USD"
+        }
+      }
+    },
+    "q35": {
+      "lexical-text": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      },
+      "lexical-text:ha": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-text:ha",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32:ha": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32:ha",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-fin-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank:ha": {
+        "query_id": "q35",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank:ha",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-pub-03",
+            1
+          ],
+          "delivered_revision": "v1",
+          "answer": "2026-09-15"
+        }
+      }
+    },
+    "q34": {
+      "lexical-text": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-text",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-render",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "lexical-text:ha": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "lexical-text:ha",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32:ha": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32:ha",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      },
+      "visual-hybrid-rerank:ha": {
+        "query_id": "q34",
+        "slice_tag": "authz.revocation",
+        "system_id": "visual-hybrid-rerank:ha",
+        "phase": "baseline",
+        "profile": "denied",
+        "retrieval": "no_delivery_ok",
+        "downstream": "answer_null",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "expectation": "no_delivery"
+        }
+      }
+    },
+    "q30": {
+      "lexical-text": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-text",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "1"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-render",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "1"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "4"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 5,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "1"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "1"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "1"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q30",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "1"
+        }
+      }
+    },
+    "q31": {
+      "lexical-text": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-text",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "2026-08-02"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-render",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "2026-08-02"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 6,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 8,
+        "detail": {
+          "delivered_page": [
+            "doc-rd-02",
+            2
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "2026-08-02"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "2026-08-02"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "2026-08-02"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q31",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "post_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v4",
+          "answer": "2026-08-02"
+        }
+      }
+    },
+    "q32": {
+      "lexical-text": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-text",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "lexical-render": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "lexical-render",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-dense:openai/clip-vit-base-patch32": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:openai/clip-vit-base-patch32",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_wrong",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": null,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-01",
+            2
+          ],
+          "delivered_revision": "v1",
+          "answer": "4"
+        }
+      },
+      "visual-dense:google/siglip-base-patch16-224": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "visual-dense:google/siglip-base-patch16-224",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_miss",
+        "downstream": "answer_null",
+        "task_success": false,
+        "danger": null,
+        "rank_of_gold": 6,
+        "detail": {
+          "delivered_page": [
+            "doc-ops-02",
+            1
+          ],
+          "delivered_revision": "v1"
+        }
+      },
+      "visual-hybrid-rerank": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-hybrid-rerank-text": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-text",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-hybrid-rerank-joint": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-rerank-joint",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      },
+      "visual-hybrid-union-only": {
+        "query_id": "q32",
+        "slice_tag": "revision.change",
+        "system_id": "visual-hybrid-union-only",
+        "phase": "pinned_pre_revision",
+        "profile": "default",
+        "retrieval": "page_hit",
+        "downstream": "answer_correct",
+        "task_success": true,
+        "danger": null,
+        "rank_of_gold": 1,
+        "detail": {
+          "delivered_page": [
+            "doc-rev-01",
+            1
+          ],
+          "delivered_revision": "v3",
+          "answer": "3"
+        }
+      }
+    }
+  },
+  "repeatability": {
+    "scoring_deterministic": true,
+    "method": "scores serialized twice and compared byte-wise"
+  },
+  "schema_version": "marker.pr81a_visual_retrieval_evidence.v1",
+  "benchmark": "PR81A selective visual retrieval promotion experiment",
+  "git_sha": "b90a914f2c053ee6662fc084f5e0ab385cffd362",
+  "corpus": {
+    "manifest_version": "marker.pr81a_corpus.v1",
+    "fingerprint": "897acc38cd93e831f0c80ff4468bd6d2cac17d515afda0e4b424e7919bc32cfc",
+    "documents": 15,
+    "queries": 35,
+    "slice_counts": {
+      "text.easy_control": 6,
+      "chart.appearance": 5,
+      "chart.value_read": 3,
+      "table.cell_grid": 4,
+      "form.label_placement": 3,
+      "layout.column_bind": 3,
+      "near_duplicate.decoy": 4,
+      "revision.change": 4,
+      "authz.revocation": 3
+    },
+    "provenance": "Fully synthetic documents generated by backend/scripts/gen_pr81a_corpus.py from app.eval.pr81a.corpus_gen; ASCII-only content; no personal data; deterministic bytes (reportlab invariant mode)."
+  },
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "cpu_count": 12
+  },
+  "vlm": {
+    "model_chain": [
+      "kr/claude-haiku-4.5"
+    ],
+    "model_served": "claude-haiku-4.5",
+    "cache_mode": "live",
+    "calls": {
+      "live": 151,
+      "cache": 242
+    },
+    "usage_totals": {
+      "prompt_tokens": 831427,
+      "completion_tokens": 3400
+    }
+  },
+  "wall_time_s": 1238.656,
+  "capability_probe": {
+    "schema_version": "marker.pr81b_capability_probe.v1",
+    "model_chain": [
+      "kr/claude-haiku-4.5"
+    ],
+    "cases": [
+      {
+        "case_id": "fin01-bar-value",
+        "question": "Look at the chart. What is the numeric value printed on the tallest bar?",
+        "gold": "4.0",
+        "normalized_gold": "4",
+        "answer": "4.0",
+        "error": null,
+        "passed": true
+      },
+      {
+        "case_id": "fin01-bar-region",
+        "question": "Look at the chart. Which region label does the tallest bar belong to?",
+        "gold": "West",
+        "normalized_gold": "west",
+        "answer": "West",
+        "error": null,
+        "passed": true
+      },
+      {
+        "case_id": "ops01-budget",
+        "question": "What is the approved budget value shown on this page?",
+        "gold": "95000",
+        "normalized_gold": "95000",
+        "answer": "95000",
+        "error": null,
+        "passed": true
+      }
+    ],
+    "correct": 3,
+    "total": 3,
+    "passed": true,
+    "pass_rule": "at least 2 of 3 probe cases correct",
+    "model": "kr/claude-haiku-4.5"
+  }
+}

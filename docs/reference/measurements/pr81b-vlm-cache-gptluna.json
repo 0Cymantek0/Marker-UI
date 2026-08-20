@@ -1,0 +1,1389 @@
+{
+  "cache_schema_version": "marker.pr81a_vlm_cache.v1",
+  "gateway_origin": "OpenAI-compatible gateway: localhost",
+  "model_chain": [
+    "cx/gpt-5.6-luna"
+  ],
+  "responses": {
+    "01036266101e52a73e684bebb6b0e8c23e4f027ecc1f3abf49c44a8664821a1f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":0,\"B\":10,\"C\":2,\"D\":1,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 144,
+        "prompt_tokens": 1519,
+        "total_tokens": 1663
+      }
+    },
+    "0119bf6ba3048ae293ba5b90444433de13911c054223624bdf0fbfc4f27c2c70": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"15 days\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 613,
+        "total_tokens": 623
+      }
+    },
+    "015a851415b06324f979ecac42a1af0bb9e6c5348a4ca58cb211f666f16a9e19": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2450 USD\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 577,
+        "total_tokens": 588
+      }
+    },
+    "0289c205beb54351c3cafca13e8e35bee8ded8312487d8f54cb635fee5ae2d9f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"18.5 thousand\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2873,
+        "total_tokens": 2885
+      }
+    },
+    "05fcdfc14871c32772e20e27c19b96467f9429a253fefd11309fe31c6e4531fb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2.95\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2866,
+        "total_tokens": 2877
+      }
+    },
+    "09be0696f1f24ee2b94c2f9e4b617c843315b24d5eef0f702b83829a8ffa4f0a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"11.55\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2881,
+        "total_tokens": 2892
+      }
+    },
+    "0a7b3f76d700073ab5def359effe1c54e36a997d6f0eeb6694c515ffadca6054": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":2,\"B\":2,\"C\":0,\"D\":10,\"E\":10,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 167,
+        "prompt_tokens": 1523,
+        "total_tokens": 1690
+      }
+    },
+    "0c05c49e5d36adac82fed1fe24608c55e8328fd51ea79812ffff9b6041246a4b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2881,
+        "total_tokens": 2890
+      }
+    },
+    "0dd8d6e469e1631fd91debb93181a861c6ffb68674f6537df1601d19a21eb0f6": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":2,\"B\":10,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 200,
+        "prompt_tokens": 1519,
+        "total_tokens": 1719
+      }
+    },
+    "1241a9d9bc41cfcfd759b2e7a06283e60432e31af8ba47372ed0c4c081e50da7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"95000\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 2874,
+        "total_tokens": 2884
+      }
+    },
+    "15716d08e1f7ce931e2c90edc6aa7548673aa1e5fdda7d61c76c610fd6f3225c": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":2,\"C\":0,\"D\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 86,
+        "prompt_tokens": 1513,
+        "total_tokens": 1599
+      }
+    },
+    "17afbc5377cab90e0eb4132401b8543f9e1f5ab5b52c6eb72903540a20672bd3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2026-08-02\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 2872,
+        "total_tokens": 2886
+      }
+    },
+    "1afaf9619d40e18e78fcd001dc7e201f7f28bf4853408cc4964dc05a61e7db34": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":0,\"B\":0,\"C\":10,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 31,
+        "prompt_tokens": 1521,
+        "total_tokens": 1552
+      }
+    },
+    "1ff67811d5a49ba874fd717342beb666b8a01479ac055632a91a794e5ff7919e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"47\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2874,
+        "total_tokens": 2883
+      }
+    },
+    "20d4e853d89e84e1bbdf7fc2b068114a801357cd4b2b725054053b6fc28ac45f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Firmware\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2869,
+        "total_tokens": 2878
+      }
+    },
+    "2134d18a3d462c4d4c28f58951c3b258f126dc998d11649f90cf54c216ca5c4c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2450 USD\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2867,
+        "total_tokens": 2878
+      }
+    },
+    "2163b10d47b00a678ff6ad1f41fa4ba493382d467ea7d7f85b8af6cbaec9f0ef": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Firmware\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 580,
+        "total_tokens": 589
+      }
+    },
+    "223dd3b572532453abfbd40e8ff9116cfb132bd9ec1acf2dc80165b9b7c3f07b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2875,
+        "total_tokens": 2884
+      }
+    },
+    "23009bfe734d55971e253571c4b6a5cc791cda2f6e33ef5002178fd10f7a5d50": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 62,
+        "prompt_tokens": 1510,
+        "total_tokens": 1572
+      }
+    },
+    "2514b16d3457d953609f2bad520c7a272ffb799feb4beead417bd91cd7df468f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":1,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 80,
+        "prompt_tokens": 1508,
+        "total_tokens": 1588
+      }
+    },
+    "2546010949bd587916685ee17032d8a57a09d1bf06750e7d707945f0ff73998f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":8,\"C\":1,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 157,
+        "prompt_tokens": 1506,
+        "total_tokens": 1663
+      }
+    },
+    "2555a6d7d0e5a8e35d9870c0b55a5b712bc35aa2c04f9125dceaa9272833d236": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":0,\"B\":0,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 77,
+        "prompt_tokens": 1511,
+        "total_tokens": 1588
+      }
+    },
+    "264e28a9fc7b588d270f522f95b0e59200a82e65049d406f5ce145b209704af7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"39\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 648,
+        "total_tokens": 657
+      }
+    },
+    "2c145d9028bf0163ba8e124d3b1bbce09fa42f7c5cd1dea0a0bfe14f5dee53a7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"3h40m\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 636,
+        "total_tokens": 648
+      }
+    },
+    "2e471e1c168821fdf38c6b930effe2a13e6335ef4aa10a218d9730775c5d446a": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":2,\"B\":10,\"C\":0,\"D\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 117,
+        "prompt_tokens": 1513,
+        "total_tokens": 1630
+      }
+    },
+    "2f87a5b4fa7e2aa8f784da43fbc27801ec1ab185277db26cd863cf9c8f89cb21": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 63,
+        "prompt_tokens": 1506,
+        "total_tokens": 1569
+      }
+    },
+    "340bff456f857decb15905a0b2e80e04d9cc82ef4bb24d64784e891abde6865e": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":3,\"B\":10,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 152,
+        "prompt_tokens": 1523,
+        "total_tokens": 1675
+      }
+    },
+    "39b778205acd9bc2735136e1813d14ed787236aa55a1aa7bc96aedb1a0d910a5": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Firmware\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 574,
+        "total_tokens": 583
+      }
+    },
+    "3b1dd23bc8209e6e53db6104c5d58b02fc1914b5b5f6b3e21d2deebe0ff92150": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Depot East\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 635,
+        "total_tokens": 645
+      }
+    },
+    "3e2823bbf2980fb5848d1e2effe295dbdd27bbfdb4eefa0b3844769c21b06628": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2876,
+        "total_tokens": 2885
+      }
+    },
+    "3f2810f004722e65a6d4e149850eb55a3c8201399d737631ca48eb3cc6ae7e40": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Harbor Terminal\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 635,
+        "total_tokens": 646
+      }
+    },
+    "4216fda9dbc9e998fcd38999bbc0a95170bf7f5c4b89146425f186560ecd05d3": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":5,\"B\":10,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 72,
+        "prompt_tokens": 1511,
+        "total_tokens": 1583
+      }
+    },
+    "42317df06f11dcb7b83ed94a922e2b5cf44adff7e01a3ed80869b8e580bce6be": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":3,\"C\":5,\"D\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 106,
+        "prompt_tokens": 1511,
+        "total_tokens": 1617
+      }
+    },
+    "424bcb9a4892041962b1e6910a9313c3e685829fc9bc04614744f1f2c21022a3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2026-09-15\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 2862,
+        "total_tokens": 2876
+      }
+    },
+    "42d2e52429563aa5d25075eabf7a346a64b8e5c652963fbcfc4f5c127f0d485b": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 63,
+        "prompt_tokens": 1514,
+        "total_tokens": 1577
+      }
+    },
+    "43f58091144378ab4cf41e7c2ef9405cbb2675acfceba5cd5592bb4248014149": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"South\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 102,
+        "prompt_tokens": 598,
+        "total_tokens": 700
+      }
+    },
+    "4bc5e82d2542d749c638c0fc7bbe1eaa51419c281dbd6de7f6181c1a31b94413": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":5,\"C\":2,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 67,
+        "prompt_tokens": 1508,
+        "total_tokens": 1575
+      }
+    },
+    "4d6f86538cfa471aaf6414680c6fec5f8131922bcd7b82675ab46dc7aeb22e5a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"87.4%\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 584,
+        "total_tokens": 596
+      }
+    },
+    "4ed3a38f2ba1e1593728b263562ee4a66aa54b472299b878b984c4500ab79a6b": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":0,\"B\":0,\"C\":0,\"D\":10,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 82,
+        "prompt_tokens": 1519,
+        "total_tokens": 1601
+      }
+    },
+    "4f344180c45ded6666d9953bd62bfdd87fa976d060e6c2e202e8905276a3b764": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Jun-24\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 595,
+        "total_tokens": 606
+      }
+    },
+    "5267e56e8c2f530ec57a8e6bf6df5f04a8b3b2b0b330f75f1a85f687e0dfecd6": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 582,
+        "total_tokens": 591
+      }
+    },
+    "529c879c37cbeb35d894dcc33ed7ede628f0ee6bf6e627e91145ff8ca3f9e3ea": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"CLAUSE-9\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 562,
+        "total_tokens": 574
+      }
+    },
+    "538201b6cae22382caecc5775a6eda9bb0d9a265648c7b7d889bffd6f57ce762": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2.95\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 653,
+        "total_tokens": 664
+      }
+    },
+    "557f756bd93a30147304a121496f98b4f9ec4fc0de828fd6e313c13511ca91bc": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"South\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 141,
+        "prompt_tokens": 599,
+        "total_tokens": 740
+      }
+    },
+    "5593e1e4fdf264bb756ccc1151ef1e7e4efc5f1fc2380d4c8e52c4f1ff6af74f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"4.0\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 601,
+        "total_tokens": 612
+      }
+    },
+    "5c8522a9aa23abc4a44d4cffbeeb9abe5b0ed9e6b1f77f9987b38fec6f3aff38": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 53,
+        "prompt_tokens": 2879,
+        "total_tokens": 2932
+      }
+    },
+    "5e259f3501c7b749afa5b62ee5234e90857c252e665f5d4b75f159113a8b964a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2867,
+        "total_tokens": 2876
+      }
+    },
+    "5f34ec12f4dee551d084b511cef950b495ee43c5d3386d34c00d6fa5f975d32b": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 57,
+        "prompt_tokens": 1511,
+        "total_tokens": 1568
+      }
+    },
+    "64e99c64639106a40e60b9487b49775a80fd26b63063ab1d98c09e01c6d79c83": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"RW-2\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2866,
+        "total_tokens": 2877
+      }
+    },
+    "65e4f3aecd8adaf04c15329628bb92248f1036bb4b80af7ac5a1310bc193a3a3": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":1,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 111,
+        "prompt_tokens": 1514,
+        "total_tokens": 1625
+      }
+    },
+    "66bd1453b47f9e78f6416d4cba83a65d429e4ee035ed20214a720e0e8373e1b3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"3\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2866,
+        "total_tokens": 2875
+      }
+    },
+    "6811d6c01890c1b582bc9de9f77a35b74646586c4287ee960a1d43a47f51f120": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"CLAUSE-9\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2867,
+        "total_tokens": 2879
+      }
+    },
+    "68eacf84c9208af3538fd53d096ba3462dd74c387724fdc8d41a7376a5338279": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2026-09-15\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 577,
+        "total_tokens": 591
+      }
+    },
+    "6bdb5d4f510c3d1719ae5f2581d7a2fc41ec3eb3814608e631e5d1e12aa03686": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"1\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2866,
+        "total_tokens": 2875
+      }
+    },
+    "6c0ba89c075a7006c4f12a83ed6c8ac2a03533d4e557aedc2c3d0ae8c9d597e7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"ZETA-9\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 630,
+        "total_tokens": 642
+      }
+    },
+    "6d9c7efb5754e2c640c38aad199b94a76feb008b117c0ab67af58dbe81817e7a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"39\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2875,
+        "total_tokens": 2884
+      }
+    },
+    "6f056121f374ee390a4feed11122fbf233329c49223d9d6e5afc93adf73d6361": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"47\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 647,
+        "total_tokens": 656
+      }
+    },
+    "749e9c21ae868c9dfcf505dca26d2e6ba6f00eef8949f8228e3317f09e600a63": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2872,
+        "total_tokens": 2881
+      }
+    },
+    "7543636a9e1f209ab75ef6100001a5923edeb42a6662e8d7e91fcb7730035479": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Mar-15\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 588,
+        "total_tokens": 599
+      }
+    },
+    "780c610a2a9daa7cdf73173316134cc32bd4959bea8731f2e924c063b40fd797": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"3h40m\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2870,
+        "total_tokens": 2882
+      }
+    },
+    "7bb5b35feb61fcdc04ba3ce506cfd65728e196db472da186818181aa94f15ed6": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Omar Haddad\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2875,
+        "total_tokens": 2887
+      }
+    },
+    "8bd3923fd3e101610881b11be0b4762a6c6b277fa76d1b4750d0a240b181d3a4": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"11.55\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 585,
+        "total_tokens": 596
+      }
+    },
+    "8c64cdeeeb69367719cd5df739291f10f402ef4084ff34920292501d69363a53": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2873,
+        "total_tokens": 2882
+      }
+    },
+    "8c71105217a90c188e551048e359ebe827c90e734a41ab3e05c2fd5e7e762a40": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Omar Haddad\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 605,
+        "total_tokens": 617
+      }
+    },
+    "91c53b553f73425e6518c78714194d87db7b3d2aa6e369d5d21a151f08c7acc8": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":4,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 85,
+        "prompt_tokens": 1516,
+        "total_tokens": 1601
+      }
+    },
+    "94e6fcb8e5fc2bab0233f99a4cd2399ee61e09e00eeeebb3ff5155878e1abe08": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2862,
+        "total_tokens": 2871
+      }
+    },
+    "971ca1f70e4ad5adf10e2bf63e1284902c91fa866d99ee6331ae1f66278f989d": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":0,\"B\":10,\"C\":8,\"D\":2,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 236,
+        "prompt_tokens": 1518,
+        "total_tokens": 1754
+      }
+    },
+    "9744f89c7f700fe24041b3ddd19ab5ea0457fa3cea212ff01cb7b29c3d5ccf99": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 89,
+        "prompt_tokens": 1509,
+        "total_tokens": 1598
+      }
+    },
+    "994952a6f46bc3dbac0eaef6a1d49352105b9bff33695efb0977fdccdc89b432": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Firmware\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2874,
+        "total_tokens": 2883
+      }
+    },
+    "9b28fd44efbd1c1100f66feecfe0c22d60c771647e226e9046610bb2b5f72c45": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"18.5 thousand\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 691,
+        "total_tokens": 703
+      }
+    },
+    "9b663e8b6c11012938b7a24cf76c5f68bbe7ecaab97e20a37bf516a7378511dc": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"L3\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 651,
+        "total_tokens": 661
+      }
+    },
+    "9b83ea0f9a2310050b397f146c59d170e97c1de4d0c753f7ec401e0f79b9f74f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":2,\"C\":0,\"D\":1}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 64,
+        "prompt_tokens": 1509,
+        "total_tokens": 1573
+      }
+    },
+    "9c144eaccbb577ca6a6fa658a6ebfb478420cbf0b82d527425dc8acbc5824dcc": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":4,\"C\":2,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 72,
+        "prompt_tokens": 1508,
+        "total_tokens": 1580
+      }
+    },
+    "9c5a3f648ece82358d2de8f5b1379a5bb02b0e720eeb8526fcb2047470b46024": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"L3\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 2864,
+        "total_tokens": 2874
+      }
+    },
+    "a0de5973db9179900365c3d571e43fd87e2ba442794561da5ba4dfd9ec3472b4": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"14.7 thousand\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2873,
+        "total_tokens": 2885
+      }
+    },
+    "a1d8b934a9e4bd88a332a6d96c34a50429ae4e912286e14dc697ccbd9292f382": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 29,
+        "prompt_tokens": 2874,
+        "total_tokens": 2903
+      }
+    },
+    "a43c748bd242559d036bd0299072553ce48a519a34b4063ddbd93184e4089fd7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"14.7 thousand units\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 13,
+        "prompt_tokens": 691,
+        "total_tokens": 704
+      }
+    },
+    "a78ba612c7a08d1f34f7d25e1d7f8a07bca9599052398b342e5ee806dfbc69d0": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":2,\"C\":0,\"D\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 23,
+        "prompt_tokens": 1510,
+        "total_tokens": 1533
+      }
+    },
+    "ad98588ef715ee06bf2274abf99a4f72b92c563c31d68be0e00280725d87d313": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":0,\"B\":0,\"C\":0,\"D\":10,\"E\":2,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 94,
+        "prompt_tokens": 1516,
+        "total_tokens": 1610
+      }
+    },
+    "b291361634ea90014af1634f2189113ce104ae1762964eabdea7b5ffcca07aff": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"95000\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 599,
+        "total_tokens": 609
+      }
+    },
+    "b3210e1a0a9ab9adcad0bb0b5ef1cdbba3e0dbbe7783491c0e79131c5b1804ef": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2.4M USD\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 13,
+        "prompt_tokens": 2867,
+        "total_tokens": 2880
+      }
+    },
+    "b42e95e428d9bdd7d2c270fc9031ff7c981ee82b88124d64d0fcd1876e05ecd2": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2.4M USD\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 13,
+        "prompt_tokens": 594,
+        "total_tokens": 607
+      }
+    },
+    "ba67d7af92d49c4d5146e680cac531e54f78838504d5a7cdd106c08eb5b7e7a4": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 85,
+        "prompt_tokens": 1522,
+        "total_tokens": 1607
+      }
+    },
+    "bb427ed8f8204cdee34d3c1f0ab4cdcaf8e1e08aecf3e982dcf12a3daaed9e6a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Mar-15\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2872,
+        "total_tokens": 2883
+      }
+    },
+    "bb8b866e443ea3d76ce97c5c9da4d1702707e1c1ac55b1f71b379aed6ad1ffab": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"ZETA-9\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2871,
+        "total_tokens": 2883
+      }
+    },
+    "c1fd74dbd0135fd32feba14a2bd0f9b615e478e6408b269b77b4c9f4018d94d0": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"87.4%\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2870,
+        "total_tokens": 2882
+      }
+    },
+    "c3f161a74efe82a02455dc67c8d16f005318be8ebcd215b2b40ae987db93561f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"1\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 575,
+        "total_tokens": 584
+      }
+    },
+    "c4641ceeb9ecceec614e1b383c57c46485821c6fa7cc44547bba4f691c4e4c47": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Firmware\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 569,
+        "total_tokens": 578
+      }
+    },
+    "c8ce8d1cb9c2e60c6d6c56b3718f025295a12496edbe81db6e200b8f6069d89c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2875,
+        "total_tokens": 2884
+      }
+    },
+    "ce4c32b8d018d94f34b800aafb84bd02a7898528e4253d89186df636bc04b69f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"3\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 575,
+        "total_tokens": 584
+      }
+    },
+    "ce9a45d80ade3ddc08410a50cf1a32c6988fbb9b8a2fc78f78fe3cf4d5365334": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":0,\"D\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 64,
+        "prompt_tokens": 1514,
+        "total_tokens": 1578
+      }
+    },
+    "cf038635643ef5d28b182b5226a157dbd3f8eac3502a81823525955b75e70a49": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"72%\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 591,
+        "total_tokens": 601
+      }
+    },
+    "cf5742296cfbb9999b29520ce77958114595bb6507af3384e07dbe9e21334974": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"15 days\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 2869,
+        "total_tokens": 2879
+      }
+    },
+    "d34b01a7e840e90ae857f7b2859870174b3dfbd90826cab1776c5caa616c8cff": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"West\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2876,
+        "total_tokens": 2885
+      }
+    },
+    "d37330a6eb02e03893cfa737f8e33cefb883ae37dbb2ccd9ded73ea5f24f0717": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":3,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 91,
+        "prompt_tokens": 1511,
+        "total_tokens": 1602
+      }
+    },
+    "d4b3975ef69255d30f146902e4b538972a9d83d1f9f552d4e7fcb59a9b8232c6": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":0,\"C\":1,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 116,
+        "prompt_tokens": 1508,
+        "total_tokens": 1624
+      }
+    },
+    "d780e01c3f278e6af8bcc3d6ebac40304f5429a937fcd1d5744b4c2dc7424c64": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Omar Haddad\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 2868,
+        "total_tokens": 2880
+      }
+    },
+    "d81943e455b4d516724d6b6df38478c08595d1e95dbd8123666b613b7980fcb1": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":3,\"B\":10,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 133,
+        "prompt_tokens": 1518,
+        "total_tokens": 1651
+      }
+    },
+    "dfa416f3c6ad5fc0c3c19c5f55fb950bb9b1e12d4ee8456ee89e1a961a703cdd": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2867,
+        "total_tokens": 2876
+      }
+    },
+    "e155669c5d6f254481d47df65e9f67fafcebb93a879ad1614d05632423a099fa": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2867,
+        "total_tokens": 2876
+      }
+    },
+    "e1ae331ac41f0b3637de9f787e462dde2f79e98fa6dea124987ae48a90a0f6c2": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"RW-2\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 593,
+        "total_tokens": 604
+      }
+    },
+    "e836eb83ae037b9c4f32c74b934bc76fbfff2d027dc048cb91bfeae1a54162b1": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"East\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2877,
+        "total_tokens": 2886
+      }
+    },
+    "e8c877833e443831157f25aba97c73e59429dcefbb1b43363457644d497ab546": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Omar Haddad\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 598,
+        "total_tokens": 610
+      }
+    },
+    "eb2d49291d18ab8421089357319f15179ecc83ddc9e3a14a39bd6a66a93f470e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2877,
+        "total_tokens": 2886
+      }
+    },
+    "ec9e1895ca11bc178c30e3b3cac183b1d0b6e91158ab8b3cfdb92fdd22e7cc0a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Jun-24\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2870,
+        "total_tokens": 2881
+      }
+    },
+    "ed3bef8dbad6a87d273e2491966a667db539b7ffaf179d2ef7024fab942522cf": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"4.0\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2879,
+        "total_tokens": 2890
+      }
+    },
+    "ef0cf7da1aa61dc099b3d1bed859c47879fd924b3909aef39f0b1b0e522f353e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":null}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2877,
+        "total_tokens": 2886
+      }
+    },
+    "f0741de49a08f1c949de790176c9df189730307dfd5c1e3a898a606c46f441bc": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Depot East\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 2869,
+        "total_tokens": 2879
+      }
+    },
+    "f2a1d123124bd969012f68a6714793250d725383b57b98a0f14fd34b00134d15": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"72%\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 2877,
+        "total_tokens": 2887
+      }
+    },
+    "f6433a9424ebe5ca869776a872c2ec9c0559016980941efda8220b09268a0154": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":3,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 69,
+        "prompt_tokens": 1516,
+        "total_tokens": 1585
+      }
+    },
+    "fb6e53b0644129ed862e829f1fb80d1624f58c2af39cdcc3b4b9b627244ffeea": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":3,\"C\":0,\"D\":0,\"E\":0,\"F\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 71,
+        "prompt_tokens": 1511,
+        "total_tokens": 1582
+      }
+    },
+    "fc0c51285336a9aed9314d6c1f3b0eceed512e559044cf940538f5f2f92a4f95": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"2026-08-02\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 581,
+        "total_tokens": 595
+      }
+    },
+    "fc93ee99672b38b20e71f6f813e64c71b9340d849170b7ee11c98e33a2ce8311": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Harbor Terminal\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 2869,
+        "total_tokens": 2880
+      }
+    },
+    "fcd8afb65aba068a7c3eb1e6296872415c88ee3e9687fd78ab1b087ab10e5d45": {
+      "attempts": 1,
+      "content_raw": "{\"scores\":{\"A\":10,\"B\":1,\"C\":0,\"D\":0,\"E\":0}}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 94,
+        "prompt_tokens": 1511,
+        "total_tokens": 1605
+      }
+    },
+    "ff0c330f8e4712ec092ad34b626e9b4ea8c53981bd48ca074cbebab84a3c80ef": {
+      "attempts": 1,
+      "content_raw": "{\"answer\":\"Firmware\"}",
+      "error": null,
+      "model_requested": "cx/gpt-5.6-luna",
+      "model_served": "gpt-5.6-luna",
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 2880,
+        "total_tokens": 2889
+      }
+    }
+  }
+}

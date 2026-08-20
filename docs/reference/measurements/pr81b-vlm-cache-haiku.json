@@ -1,0 +1,2991 @@
+{
+  "cache_schema_version": "marker.pr81a_vlm_cache.v1",
+  "gateway_origin": "OpenAI-compatible gateway: localhost",
+  "model_chain": [
+    "kr/claude-haiku-4.5"
+  ],
+  "responses": {
+    "00643a68e44a77bec8a89f07686798a6886ac8e4c8e04ec569c64929d49bce53": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007830339237147595,
+        "prompt_tokens": 5803,
+        "total_tokens": 5811
+      }
+    },
+    "03a7fb27c1b413f511302e77aa58e9bbdbcb375ccdc7bccf94eaad66feedfe87": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document page shown only contains the \"Termination\" section of the Elm Street lease agreement. The monthly rent amount is not visible on this page.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 45,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009128455787728028,
+        "prompt_tokens": 5778,
+        "total_tokens": 5823
+      }
+    },
+    "048501c632cfc1a0b0ef4d1f653b6cb212ad00655f18757eba09e27f301b2de1": {
+      "attempts": 1,
+      "content_raw": "I need to find the total number of defects recorded for build B-102 in the Beta test results from the provided text transcript.\n\nLooking at the transcript, I can see it shows \"Issue Distribution by Category - Beta\" with percentages for different categories (Firmware 34%, Display 22%, Battery 18%, Connectivity 14%, Mechanical 12%), but it does not provide:\n- A specific total count of defects for build B-102\n- Any reference to build B-102\n- The actual number of defects (only percentages by category)\n\n```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 133,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01137794991708126,
+        "prompt_tokens": 4428,
+        "total_tokens": 4561
+      }
+    },
+    "06831c6d43c3d3dd6892bc9f6afa3f2b43e2af9b676e45ffc898e9f5cc672e92": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 3, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008321425273631841,
+        "prompt_tokens": 5308,
+        "total_tokens": 5324
+      }
+    },
+    "0b1a4463edf069371a5404195473e47221b81095797e2f87efbf84139ac43843": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007814033897180763,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "0d18cafd1edfa43ce7f28c34927292dbc97cec27ca763de02764c985c5df450e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"14.7\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006269064809286899,
+        "prompt_tokens": 4428,
+        "total_tokens": 4435
+      }
+    },
+    "0daa9d31de1eebe8fff5e7b2236b244faca1a7b429b8163d304a42fa64718e45": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shown does not contain any signature dates or a reviewer signature section. The visible portion only displays a table with proposed and approved maintenance parameters.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 52,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009134757611940299,
+        "prompt_tokens": 5782,
+        "total_tokens": 5834
+      }
+    },
+    "0dd09207dd1e17e387f48f7582fed7dcef5312b26e0a9753cd5be9f67e872cbf": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0078014302487562194,
+        "prompt_tokens": 5747,
+        "total_tokens": 5753
+      }
+    },
+    "0e87cfd88dd9897faa0b3a92c6554afbf14f0a1f7f605e102bcaaa819605eb51": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0078014302487562194,
+        "prompt_tokens": 5747,
+        "total_tokens": 5754
+      }
+    },
+    "0fd40f8c8be24523500338c0a455844d3d9ffcb253a48470e9ab1d389002fd38": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"47\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0061252244112769486,
+        "prompt_tokens": 4382,
+        "total_tokens": 4389
+      }
+    },
+    "110ddf1c879f1ef2edb9a43a7fb1297a38611f7f420aa0386e839785472b7c99": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"87.4%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0061367265008291875,
+        "prompt_tokens": 4323,
+        "total_tokens": 4330
+      }
+    },
+    "13dcdfc582effd0c61d77b1b4983b4beeab46995d0065ce3eca4d7edb33af316": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.4M USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006095055058043118,
+        "prompt_tokens": 4324,
+        "total_tokens": 4332
+      }
+    },
+    "1416c4aaad4f201f4eb77b657a89488bce6ad121b9c1a52f6d32f41d42539137": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"95000\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00790241824212272,
+        "prompt_tokens": 5758,
+        "total_tokens": 5765
+      }
+    },
+    "146345d1536fea027c23ed9d32a93031204381ec777f5589503439552e42562a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0060660666666666665,
+        "prompt_tokens": 4302,
+        "total_tokens": 4310
+      }
+    },
+    "16161d638b938b04c9f001e050306e6fa46f9c8b5f0e85e89c29945549969db4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Mar-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007897376782752902,
+        "prompt_tokens": 5754,
+        "total_tokens": 5762
+      }
+    },
+    "16682f72ed5bcc62a301810976cbfeed65c0d1cbe55f7b89d992b9f3e814fee1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided shows a \"Kantai Logistics Route Plan\" document, which contains information about two delivery routes (Route A and Route B) with their stops and drive times. There is no \"Beta issue distribution chart\" visible in this image.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 68,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010057751774461028,
+        "prompt_tokens": 5799,
+        "total_tokens": 5867
+      }
+    },
+    "1741999273cd20ff4dd48fe5297e28ac7c100d6d56135e307cc44b417f9e5521": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shows a \"Northwind Regional Sales Report 2024,\" not a 2023 report. The question asks about a 2023 regional sales report, which is not provided in the evidence.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 50,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009672625870646769,
+        "prompt_tokens": 5801,
+        "total_tokens": 5851
+      }
+    },
+    "180399a84e44da1661959115fe0c327e2ce7c958d389b1575c3ea55d4364d3b0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"18.5\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008158351708126036,
+        "prompt_tokens": 5927,
+        "total_tokens": 5934
+      }
+    },
+    "183f905df0b50941ebcaa6af700314803582ff68ebb575df0902911086d6336d": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"95000\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007964096716417911,
+        "prompt_tokens": 5842,
+        "total_tokens": 5849
+      }
+    },
+    "1a4bcc9b607b301a12bcf8c653150baacc09dbf6fda07856b949212aad55b473": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shown is the \"Northwind Regional Sales Report 2023\" with reference code ZETA-7. The question asks for the reference code of the regional sales report for 2024, which is not contained in the evidence provided.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 62,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00997188815920398,
+        "prompt_tokens": 5799,
+        "total_tokens": 5861
+      }
+    },
+    "1bc25b898b65c203963b471718e9610d8db99793fc486b400fb6b091654277d5": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 10, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008191369485903814,
+        "prompt_tokens": 5307,
+        "total_tokens": 5321
+      }
+    },
+    "1c5fc16f3c316320cc84e065abe1523557ab3bb58e8e52e8c0b8d70d128b857c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a \"Public Payroll Summary\" for People Operations. It does not contain information about a restructuring memo or any severance budget provision.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 49,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009172647960199004,
+        "prompt_tokens": 5778,
+        "total_tokens": 5827
+      }
+    },
+    "1d7fa4de481d11367bcab05a3e144e5db9d680c8679cc8f4d7cfb09c3be629d5": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007891074958540632,
+        "prompt_tokens": 5750,
+        "total_tokens": 5759
+      }
+    },
+    "1f0a305f1a565e6305f15885c93a0c7642e4054f859bb8e30d5dbf4314234cac": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence shows only a pie chart for \"Issue Distribution by Category - Beta\" from a Product Beta Test Results document. There is no line chart showing cost change over months, and therefore no line L1 data to reference.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 63,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009763530945273631,
+        "prompt_tokens": 5804,
+        "total_tokens": 5867
+      }
+    },
+    "1f3f81148be4ffcc73960f3a85e888d77f0c57f8b87a96a5e286b5b793e6c195": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3h40m\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008087771276948591,
+        "prompt_tokens": 5872,
+        "total_tokens": 5879
+      }
+    },
+    "208d5ae4897b53a9884782c487ca779d04b76d3236b8fcc036ce71283490f46a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007499647230514096,
+        "prompt_tokens": 5745,
+        "total_tokens": 5749
+      }
+    },
+    "21710f5bf76557a9dfa1b01c0c1227a5cb59fe2fb77292c1c6372a683d5d276f": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 7, \"E\": 10, \"F\": 2}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008729237744610282,
+        "prompt_tokens": 5324,
+        "total_tokens": 5342
+      }
+    },
+    "267e8fcb50e355d6b6bca2ee9ba400652b183592653dbc6a16f9173ae731b842": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}\n\nThe provided image shows a \"Vertex Manufacturing Cost Analysis\" with a line chart displaying \"Unit Cost Trend 2024\". There is no status panel with big number tiles and a semicircular dial visible in this document.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 57,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009538788988391377,
+        "prompt_tokens": 5796,
+        "total_tokens": 5853
+      }
+    },
+    "270a4303b9fded5fa1662ca3454552a9648f566b004d0e29c47bdd24bafddf56": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.005992806699834163,
+        "prompt_tokens": 4312,
+        "total_tokens": 4319
+      }
+    },
+    "295e0be0eacd74bc9ba069e8b943c6def287cb15f0140bb86b96a9964c37547a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"11.55\"}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0077937092537313435,
+        "prompt_tokens": 5809,
+        "total_tokens": 5813
+      }
+    },
+    "2b93e0c04b3938ec4f6bd3c80b49438fd1a6cacaad901080b50b246fa9f8e992": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007836561658374793,
+        "prompt_tokens": 5842,
+        "total_tokens": 5849
+      }
+    },
+    "2c3db8c6f5d60ec6eadb0b60564dae9a579dd6727503ba05146257e3b744a78c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"1\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006031957412935324,
+        "prompt_tokens": 4309,
+        "total_tokens": 4315
+      }
+    },
+    "2c7f40dc171ce864828cec495c64cca7812d5fd5f89e6557b34fb257dc75c368": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 2, \"B\": 9, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0087342792039801,
+        "prompt_tokens": 5328,
+        "total_tokens": 5346
+      }
+    },
+    "2cb5b0b98828a889eba618d24fc4203d044b873e6b2ffd8c55d7dc7b0722bab0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a Northwind Regional Sales Report from 2023. It contains no information about a restructuring memo or severance budget provisions.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 46,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009217862288557215,
+        "prompt_tokens": 5882,
+        "total_tokens": 5928
+      }
+    },
+    "2d5a54729992500b4ccbf5fe3af4e33f3dd203c7809e572029c4851f7d15db53": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008456522520729684,
+        "prompt_tokens": 5313,
+        "total_tokens": 5329
+      }
+    },
+    "2da55c27d15d5b29fd44e66c20aba5c9ddba8b774593d51988d2ef19ddfec8e1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"RW-2\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007978198938640133,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "2e1d1c3389936eae9c74f9f634fd24c3e5f8d121dddb5e44c4c7be4a95e0f58b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006164454527363184,
+        "prompt_tokens": 4346,
+        "total_tokens": 4355
+      }
+    },
+    "31033141b68e9720cff0221283ab03919b2ca30a91428d449afcedad2bf11df8": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"1\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007713045903814263,
+        "prompt_tokens": 5744,
+        "total_tokens": 5750
+      }
+    },
+    "3315b5db4874e0f53ac69e2159592074d87c517ceb9b6a21dbdaab9491e0080a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"47\"}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007503428325041459,
+        "prompt_tokens": 5749,
+        "total_tokens": 5753
+      }
+    },
+    "33515d64df4a593aca55947347451bc69f5d1ede3051dd3c6ceec83e4828249e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shows 2024 sales data, not 2023 data. The evidence does not contain 2023 sales units for SKU WT-300 in the West region.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 40,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009537528623548923,
+        "prompt_tokens": 5796,
+        "total_tokens": 5836
+      }
+    },
+    "34ffeebeea781eac2de451b8dae46c643c389e48c3137edf03912c1110927d35": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}\n\nThe document shows \"Product Gamma Test Results\" with defect counts for Gamma testing, not Beta testing. Build B-102 has 39 total defects in the Gamma test results, but the question specifically asks for Beta test results, which are not present in this document.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 69,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010287535190713102,
+        "prompt_tokens": 5812,
+        "total_tokens": 5881
+      }
+    },
+    "366249b999fbba412384086a02e597a375b841a74808326915b518337ea3d585": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.95\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006211088026533996,
+        "prompt_tokens": 4382,
+        "total_tokens": 4389
+      }
+    },
+    "369b1ad3e0722a3162f244498f4c0254687af6524389723d9b58af094086cf8d": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 8, \"B\": 9, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00872293592039801,
+        "prompt_tokens": 5319,
+        "total_tokens": 5337
+      }
+    },
+    "3a4183eea7bb604c334f9622c05f72fe06e304006c8a279d2157336af7d06326": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 1, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008596661227197346,
+        "prompt_tokens": 5322,
+        "total_tokens": 5340
+      }
+    },
+    "3c8995c9c4569d61146d1393ffc9c5e5242b1a447d0525c9911f2d616880bc62": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"39\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0061302658706467675,
+        "prompt_tokens": 4386,
+        "total_tokens": 4393
+      }
+    },
+    "3e2cbad54042d70064fc43f8071678c33ce22151909ceb5ff8a487de38f58967": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided shows a pie chart titled \"Issue Distribution by Category - Beta\" but does not contain a status panel with big number tiles and a semicircular dial.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 49,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009229443781094528,
+        "prompt_tokens": 5789,
+        "total_tokens": 5838
+      }
+    },
+    "3ecbc9e7831096749ef27c38bed82cc240b76dc2f12f1ab0f1d9a25cae5cd5bf": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is an organizational chart for the Operations Division, which does not contain information about a Line 4 status dashboard or OEE (Overall Equipment Effectiveness) metrics.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 56,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009354458109452738,
+        "prompt_tokens": 5787,
+        "total_tokens": 5843
+      }
+    },
+    "3ef12205282ce1ac62fee34ccbfb314cd550ca2dcc95181a8fc9c18d3ae20ddb": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 8, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008727977379767826,
+        "prompt_tokens": 5324,
+        "total_tokens": 5342
+      }
+    },
+    "43ead84068b23bc95ccd1031dca38e2e4c76a881f729b0cc0f4e52ffe7aa8fc7": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided shows only pages 1-2 of a 6-page lease agreement. The visible content contains only basic lease terms (monthly rent and lease duration) and does not include information about early termination clauses or clause codes.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 67,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009926435621890549,
+        "prompt_tokens": 5798,
+        "total_tokens": 5865
+      }
+    },
+    "459bcd0d7905f084cbcceeb7e6d268efe50ec10c16f997f045ac015d0930c755": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0078014302487562194,
+        "prompt_tokens": 5747,
+        "total_tokens": 5754
+      }
+    },
+    "464b84ee053656b934a6e1634fd865c92d07ecadf8b41efe803e4b3ecdd9621c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"11.55\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007951651873963517,
+        "prompt_tokens": 5763,
+        "total_tokens": 5770
+      }
+    },
+    "4736d4e457d1b6ebd4313b35ca978a0cb96ddbee32af72b23ea285b00947ccff": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007803950978441129,
+        "prompt_tokens": 5749,
+        "total_tokens": 5756
+      }
+    },
+    "476d374c997ac87fb1a3a48829c3754fdbd4b5aab5eb10a5833668ed3754ead0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"39\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007725649552238806,
+        "prompt_tokens": 5754,
+        "total_tokens": 5761
+      }
+    },
+    "479d3842b08617486514840ab660dedbca4b28fb5b8ccda5649a30c886872675": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"1\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007788667794361525,
+        "prompt_tokens": 5804,
+        "total_tokens": 5810
+      }
+    },
+    "49183b6562c09ab386af96f57e02331fe10af9d4f0d62f7fdc82f5b1b791a83c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a \"Kantai Logistics Route Plan\" showing depot network information for cycle 41. It does not contain any reference to a regional sales report for 2024 or a document reference code for such a report.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 63,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010016080331674958,
+        "prompt_tokens": 5801,
+        "total_tokens": 5864
+      }
+    },
+    "49b184ddf1f22350399c2d7752b509c76a08600db06a5b1b9de5047d97907428": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 7, \"B\": 9, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00872545665008292,
+        "prompt_tokens": 5322,
+        "total_tokens": 5340
+      }
+    },
+    "4d4c07f17b645af8fe0fcf4e892cf932780911066c9a493f8a46b5eeb4bac798": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe text transcript provided is about a Public Payroll Summary from People Operations and does not contain any quarterly revenue chart or region labels related to a 2024 sales report.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 53,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007511725306799336,
+        "prompt_tokens": 4359,
+        "total_tokens": 4412
+      }
+    },
+    "4d9e29a76a37b80ff7c118f3bbe63d0b9b7198d7c069824c89a45a579fa9d23c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"4\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007713045903814263,
+        "prompt_tokens": 5744,
+        "total_tokens": 5750
+      }
+    },
+    "5343237ab5315ba4f088afc71924daa20e75c7f4c388df23de1ec077cf24d990": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007767320995024875,
+        "prompt_tokens": 5753,
+        "total_tokens": 5761
+      }
+    },
+    "537546bf3b220b6ac047ea1d5f8c22f7433151f71c86ae9e88d8af4bc8e7824d": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"RW-2\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006095055058043118,
+        "prompt_tokens": 4324,
+        "total_tokens": 4331
+      }
+    },
+    "54ecfcc79cf442f37a4430a875e708e04ace8e5875bee7f217738cedb21bdbc7": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document contains a table showing \"Cost per Unit by Line (USD)\" but does not contain a chart drawn with connected line segments showing cost change over months. Therefore, the final month unit cost of line L1 cannot be determined from this evidence.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 70,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01011706832504146,
+        "prompt_tokens": 5813,
+        "total_tokens": 5883
+      }
+    },
+    "551df31504cf135d0481f79018d5a5e5eb03ab7e4d1b34aaafee874ae39bcb41": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.005990285970149255,
+        "prompt_tokens": 4309,
+        "total_tokens": 4316
+      }
+    },
+    "591278843748dab6108f4f7bff0ea074a336044122ea72839d8c6f9a255a1fcf": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"South\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0060546439800995035,
+        "prompt_tokens": 4327,
+        "total_tokens": 4334
+      }
+    },
+    "595b7f0b8a52b4c7781e2e8e9cb88b128073aebe35a074f897f6b1d3d3cf1394": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 3, \"B\": 7, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008321425273631841,
+        "prompt_tokens": 5308,
+        "total_tokens": 5324
+      }
+    },
+    "5a444ca0f659f3c4ce8b0b2cb7258feb1061d1120e11b88b65e36bd58708dcbc": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 9, \"B\": 2, \"C\": 1, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008322685638474298,
+        "prompt_tokens": 5309,
+        "total_tokens": 5325
+      }
+    },
+    "5db4ad7fd654a5655b3dc4283b98ce2e92169688038e3253818e41550b0848c6": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006073628855721394,
+        "prompt_tokens": 4307,
+        "total_tokens": 4315
+      }
+    },
+    "61c2f42ede04f37e25e9aeda6c6441bcc1d2c0ead379d686ef6bd92bcb937f5a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"72%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007945191243781097,
+        "prompt_tokens": 5827,
+        "total_tokens": 5834
+      }
+    },
+    "623516cacd8db8acc5f179b442cfd41dc7bfeb5b07d65c016d68916d3790b7e6": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3h40m\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007981980033167496,
+        "prompt_tokens": 5753,
+        "total_tokens": 5760
+      }
+    },
+    "62dc9d77c0b21257b4ea9c1c3f86ca15bb2ff6a7484d210cf8d7fd7128e36720": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 8, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008456522520729684,
+        "prompt_tokens": 5313,
+        "total_tokens": 5329
+      }
+    },
+    "668e6675b45c5e770c6c9896213f89da6f3b54f1872f9a7866342c3707ac9b13": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a \"Kantai Logistics Route Plan\" for depot network cycles. It contains information about two delivery routes (Route A and Route B) with stops and drive times, but does not contain any information about production lines or labor costs.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 72,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010142355024875623,
+        "prompt_tokens": 5798,
+        "total_tokens": 5870
+      }
+    },
+    "68c1b194236bf1f5d492614ec5fa0cb46ff98670b28218eee835ea4f97f6a2a7": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008193890215588725,
+        "prompt_tokens": 5309,
+        "total_tokens": 5323
+      }
+    },
+    "68d67cc92410f90ab33c71fe6e1443175ff92f485d812736c123a4171f219b10": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-09-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008061541824212272,
+        "prompt_tokens": 5749,
+        "total_tokens": 5758
+      }
+    },
+    "69030ac534f08df53b245fa6ebb1c006ea75aef5f5d8bcb72e3bc52eaaf0f511": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shown is a \"Product Gamma Test Results\" defect ledger table. It does not contain any information about a safety compliance checklist or the date of a last external audit.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 53,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00944410281923715,
+        "prompt_tokens": 5789,
+        "total_tokens": 5842
+      }
+    },
+    "693209baa2af4520b80d8450d13f66238328537d5cde16ad5e617bc6a6915989": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document contains \"Product Gamma Test Results\" with a defect ledger table. There is no payroll effective date mentioned in this evidence.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 42,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009033769618573799,
+        "prompt_tokens": 5770,
+        "total_tokens": 5812
+      }
+    },
+    "6b51cc3c1cc4c1c1e1e75dc6436bb9e1b55b7f0d8e63561e35228cb1c34472c3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"West\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0077269099170812604,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "6b6b53fdc34ea960ea9c06e5370ce31acd4ab60d8975ab1c1ec5f1feb0740be6": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe transcript provided shows a table of regional product sales by units, not a chart with groups of vertical bars comparing revenue across territories by quarter. The evidence does not contain the requested chart.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 61,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007686995422885572,
+        "prompt_tokens": 4464,
+        "total_tokens": 4525
+      }
+    },
+    "6c5f8e6d2db816facf3985e35f95f51748560ba59f0d0bfcdd38095cb4bed5f9": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007805211343283582,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "6cbe5b4998a2ca6176227e9e1bd6b51d16bb75896943c4db9138c91bb34a04dd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008465345074626866,
+        "prompt_tokens": 5319,
+        "total_tokens": 5335
+      }
+    },
+    "6d78894e11f8e341706c84581682c8ba826f3f24f9260759b8ab427b0de5adae": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007803950978441129,
+        "prompt_tokens": 5749,
+        "total_tokens": 5756
+      }
+    },
+    "6e2ceb85ef753c48158bbc18c83e748f22c2a0b1bff4eeeba39a754738006395": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00749208504145937,
+        "prompt_tokens": 5739,
+        "total_tokens": 5743
+      }
+    },
+    "7162809bc1dea72623cae9b9f8d15ef7278ba8c05bf1f74d7c35655658047deb": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a Confidential Payroll Schedule for People Operations and contains no information about build B-102 or GAMMA test results.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 44,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00909560689883914,
+        "prompt_tokens": 5785,
+        "total_tokens": 5829
+      }
+    },
+    "723b1a05ca3ba942a3c6b9d31558b7736f5a62bfede17643221df26469b06aba": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007848143150912108,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "75678bccc04711eefcb45e83275bf791a05bfd71236c677be04ae392b7a45cae": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}\n\nThe provided document is a \"Public Payroll Summary\" from People Operations dated 2026-09-15. It contains no information about a 2023 regional sales report or any quarterly revenue chart.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 51,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009407472835820897,
+        "prompt_tokens": 5795,
+        "total_tokens": 5846
+      }
+    },
+    "758a136fd09e17aaa3402b03f88ba420eeefb2edb9dc1dd80594c0a34fb9a781": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 8, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008716634096185737,
+        "prompt_tokens": 5314,
+        "total_tokens": 5332
+      }
+    },
+    "763c5c90fefea6caa2059a2b6a9674d143e57cfbba060685380ff688ee1787d4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a \"Vertex Manufacturing Cost Analysis\" showing cost per unit by production line (L1-L4). It does not contain any information about 2024 sales units, SKU WT-300, or regional sales data (West region).",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 63,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010288795555555556,
+        "prompt_tokens": 5813,
+        "total_tokens": 5876
+      }
+    },
+    "774898c3918d3c061859f128df1e9ab86898b14586449d441fedbcdb52573794": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0057806683913764504,
+        "prompt_tokens": 4314,
+        "total_tokens": 4318
+      }
+    },
+    "7c113b96e00017c2a3ac0bec38f80fa843cfb599945c83bd5d01390ff2e581da": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a \"Product Gamma Test Results\" document showing defect counts by build. It does not contain any HeatTech inspection form or information about maintenance budgets (approved or proposed).",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 60,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009581720796019901,
+        "prompt_tokens": 5796,
+        "total_tokens": 5856
+      }
+    },
+    "7d56c1b73f9e7076d9eb9f7cb890c6f3db379000a4b010cf6bb653941954775e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 9, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008452741426202323,
+        "prompt_tokens": 5309,
+        "total_tokens": 5325
+      }
+    },
+    "7db94a37ee6c74fd2abb9ba9bdb92c44808ac4204cba9aa31a1707f52ea26307": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Depot East\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007803950978441129,
+        "prompt_tokens": 5749,
+        "total_tokens": 5758
+      }
+    },
+    "7e33a772b200ed53ca15e43c27c6f8477fc0e305171940535e275ac3e18e4596": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-09-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006167054660033168,
+        "prompt_tokens": 4314,
+        "total_tokens": 4323
+      }
+    },
+    "7edd626f565fb41e9162da11154ed7e6ac75ea835e87f96481ee1be97e2f4927": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007921244311774461,
+        "prompt_tokens": 5808,
+        "total_tokens": 5814
+      }
+    },
+    "7ee453df6240f1f7c89ea7c51bb029b9878c76314857a5c13831cb22af431b73": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007802690613598673,
+        "prompt_tokens": 5748,
+        "total_tokens": 5755
+      }
+    },
+    "7f13cf15d4ee82d679606e6c952175f21163c5a92ceb4a3fc9ceb052b3e1d09b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-09-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008144725903814263,
+        "prompt_tokens": 5815,
+        "total_tokens": 5824
+      }
+    },
+    "7f2649b1649380b274a4cbc3e9868cba4afe8436c6d5cce27e1a7bb8e7a860b4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.95\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0079327464013267,
+        "prompt_tokens": 5749,
+        "total_tokens": 5756
+      }
+    },
+    "80e25fd86b65eb712e4e0d931131ee14d9dcf0baff1ed624be1c4bc2c4cbe2ea": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is an organizational chart for the Operations Division, not a logistics route plan. It contains no information about Route B or its stops.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 47,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008997139635157548,
+        "prompt_tokens": 5776,
+        "total_tokens": 5823
+      }
+    },
+    "836085213f12a15de0ebce14f3ffbd827ac60c79b49b0bea5614aedffb2ff7ab": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"CLAUSE-9\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007849403515754562,
+        "prompt_tokens": 5750,
+        "total_tokens": 5758
+      }
+    },
+    "847943e88c101a21a8570ef90d3dd25b74fc9e6cbcef61c371e621f8f8651d2c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a Kantai Logistics Route Plan showing depot network information and delivery routes. It contains no information about SKU WT-300, sales units, regions, or 2024 sales data.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 56,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009714297313432837,
+        "prompt_tokens": 5799,
+        "total_tokens": 5855
+      }
+    },
+    "85b56b1e06340ec4357041a27da0559e9400f0a41e6daccf88428d08e392fe77": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007508469784411276,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "8625c3449c3b8a91c9245b560fc14f6b4de0ac5362a70ae7ccfa3c7458f250a9": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Jun-24\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00791612344941957,
+        "prompt_tokens": 5837,
+        "total_tokens": 5845
+      }
+    },
+    "869162c9b5738e00a4bbe95ad5d9f4895b5649de5259e77425ecfbfce13cda09": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shown is an \"Employee Handbook Excerpt\" containing information about annual leave and sick leave policies. It does not contain an inspection form or any reviewer signature information.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 56,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009267334129353233,
+        "prompt_tokens": 5785,
+        "total_tokens": 5841
+      }
+    },
+    "8930fc8527804087080b0d26ad546dae35e2359b4bcd92f4a9dde03d2946c09e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0059839841459369825,
+        "prompt_tokens": 4304,
+        "total_tokens": 4311
+      }
+    },
+    "89b36a7099d35886ea8f699437b00d4159dd517663932058c8bff2a2d8f3c19b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a \"Kantai Logistics Route Plan\" document showing depot routes and drive times. It contains no information about a Line 4 status dashboard or OEE (Overall Equipment Effectiveness) metrics.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 60,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009884764179104479,
+        "prompt_tokens": 5798,
+        "total_tokens": 5858
+      }
+    },
+    "8a82deb0e95dd3d48d5ce277f72dd9ec09c259f6d3ff6448e857e112462390f4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shown is an organizational chart for the Operations Division, not a logistics route plan. It contains no information about Route B or any logistics routes.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 49,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009041331807628524,
+        "prompt_tokens": 5776,
+        "total_tokens": 5825
+      }
+    },
+    "8b158e6b81508e37f2a5f28a2d1e3478f0c33dac261d156a644f7ea69e2dc287": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shows a \"Northwind Regional Sales Report 2024\" with product sales data by region and product type (WT-100, WT-200, WT-300, WT-400). There is no information about production lines (L3) or labor costs in the evidence provided.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 66,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010672661094527363,
+        "prompt_tokens": 5810,
+        "total_tokens": 5876
+      }
+    },
+    "8b89b072eefbc398abf66a226909a3b2ba4228f7484763168ad73c3759a1c7e2": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a \"Public Payroll Summary\" document, not a \"2024 sales report,\" and it contains no quarterly revenue chart or region labels.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 44,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009229443781094528,
+        "prompt_tokens": 5789,
+        "total_tokens": 5833
+      }
+    },
+    "8fa49b7f338f1a0c2323c7aa36a18c51b5cb1cf05f8137ccc3befe95142b918a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Harbor Terminal\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 10,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00615303184079602,
+        "prompt_tokens": 4371,
+        "total_tokens": 4381
+      }
+    },
+    "90886ac36e98788564f4c1c05a241ea9f2661b3e99fa4c885707affd3adf4cdd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"L3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007921085505804311,
+        "prompt_tokens": 5875,
+        "total_tokens": 5882
+      }
+    },
+    "90af6ab0cbe73fdc7c6d780b764cf39f20df9e236c04788f9725aa8eb315a4aa": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"L3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00616437512437811,
+        "prompt_tokens": 4380,
+        "total_tokens": 4387
+      }
+    },
+    "91a192b9a8ca93a61c555ccb9fb67be348175cdd355c27ffdfd95b9dbcb7ecdd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007839161791044777,
+        "prompt_tokens": 5810,
+        "total_tokens": 5818
+      }
+    },
+    "91f8335fc7859f01fc8769f75ed6b79e12642541b90523ced534e8aa378eb354": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.4M USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00811691847429519,
+        "prompt_tokens": 5827,
+        "total_tokens": 5835
+      }
+    },
+    "92f589c4392e12759d3ae26e004ec44cef73ba25cf8ed2fa4c691348fc3ac235": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007493345406301825,
+        "prompt_tokens": 5741,
+        "total_tokens": 5745
+      }
+    },
+    "942764b90bb71a92d89b6b6ec3b540a2cf7b59277aae8d17feb90ff096060c75": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe text transcript provides quarterly revenue totals (Q1: 3.0, Q2: 3.4, Q3: 3.8, Q4: 3.5) but does not specify which region corresponds to the tallest bar in the quarterly revenue chart. The region labels (North, East, South, West) are listed separately without clear association to specific bars or quarters.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 85,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009723854660033168,
+        "prompt_tokens": 4411,
+        "total_tokens": 4496
+      }
+    },
+    "946ad4218b524de8e736bd32d2c9090ed8e569a8d4e62ab261f6448b18488e40": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007806471708126037,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "95762280ffb489711d7e2a499a3a65b41fb476ebfdf76b3b569c257b2373e9dd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-08-02\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0081055751907131,
+        "prompt_tokens": 5817,
+        "total_tokens": 5826
+      }
+    },
+    "960b3f30075180f4f5d73bc1e5c7068d829b2ff8192502298a773d7e5075c79b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008196410945273633,
+        "prompt_tokens": 5310,
+        "total_tokens": 5324
+      }
+    },
+    "96b4d6784156dbf634ad0c6488236cf1375fc6e40705af2f4eb394926e4feffa": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Harbor Terminal\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 10,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007759758805970151,
+        "prompt_tokens": 5748,
+        "total_tokens": 5758
+      }
+    },
+    "97eb6b7008a2058697851549a4e59c86657081f6fa1f6c4d16dd975f7050e257": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"72%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007859486434494196,
+        "prompt_tokens": 5758,
+        "total_tokens": 5765
+      }
+    },
+    "980e7f6aa9d09774e6566feff573a038183f628b5519aebf0bd254c06fdfe51b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 9, \"B\": 3, \"C\": 1, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008321425273631841,
+        "prompt_tokens": 5308,
+        "total_tokens": 5324
+      }
+    },
+    "981fea3b1647cef8d3919f8f98162ba215859e7a577cec95c5d12ebaf9d45c23": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a \"Kantai Logistics Route Plan\" showing depot network information, not a 2023 regional sales report with a quarterly revenue chart. The evidence does not contain the requested information.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 60,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00962843369817579,
+        "prompt_tokens": 5799,
+        "total_tokens": 5859
+      }
+    },
+    "9a543898a9f927ca3afe2549063abf3fe810b6a5b9eaceff641df0e96f7750f2": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"4.0\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00795039150912106,
+        "prompt_tokens": 5763,
+        "total_tokens": 5770
+      }
+    },
+    "9ceb5129d5f94e89e60ff946eae598e526300c301a9af87ac83088fcd70efe13": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"ZETA-9\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006227552172470979,
+        "prompt_tokens": 4361,
+        "total_tokens": 4369
+      }
+    },
+    "9d3fa6d767e3529dd599dcc87867a2d50a4dd5e45f560bfb1f350f4a30a63a2a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"18.5\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006269064809286899,
+        "prompt_tokens": 4428,
+        "total_tokens": 4435
+      }
+    },
+    "9ed78e89d565d0b18961cb9167ae7e284cf6f3d619dda4de82e6418387acd9a1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00872545665008292,
+        "prompt_tokens": 5322,
+        "total_tokens": 5340
+      }
+    },
+    "9f01fd98c992825751a95d2ef7a9cc53ef03374a9b7eec240a34f5f30e38336d": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided shows only a \"Public Payroll Summary\" for People Operations with no diagram of connected boxes showing reporting lines or any mention of a Quality director.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 52,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009181470514096185,
+        "prompt_tokens": 5785,
+        "total_tokens": 5837
+      }
+    },
+    "a04d8de2f6fb8a03899a68a992b95a24827f2e1386788543a084bd0976ffc611": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"14.7\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0079466104145937,
+        "prompt_tokens": 5759,
+        "total_tokens": 5766
+      }
+    },
+    "a06fba85b47511a52893a2942ffe6517d4ac82583035d4a13817b1ccea5a6b8b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006082451409618574,
+        "prompt_tokens": 4315,
+        "total_tokens": 4323
+      }
+    },
+    "a0c7e16afe4511004fe18472ac2aa008618afbcf8d8726644518a10bbc4ffd8c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence shows a pie chart with issue distribution by category for Beta testing, but does not contain any information about build B-102 or a total number of defects recorded for that specific build.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 58,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009492076086235491,
+        "prompt_tokens": 5793,
+        "total_tokens": 5851
+      }
+    },
+    "a17dc2c3cec19eb99d796d3f67b335d63fe9f3662336112cba49d65f6812b90f": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"4.0\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006145549054726368,
+        "prompt_tokens": 4331,
+        "total_tokens": 4338
+      }
+    },
+    "a1b4372d29bd8db2a1302db1c3c16d44a425652fbebcfbf7df93584503af6309": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"14.7\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008158351708126036,
+        "prompt_tokens": 5927,
+        "total_tokens": 5934
+      }
+    },
+    "a27e2547c6a99ae66ea028103d456dffc94d0dd21ba12c4fad97169130c42a8b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Depot East\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007953934394693201,
+        "prompt_tokens": 5868,
+        "total_tokens": 5877
+      }
+    },
+    "a2d7c6f617b1e6023e7e1ac07817c55c186c5c9dfd07787b9089532b522b8945": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3h40m\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0061984843781094515,
+        "prompt_tokens": 4372,
+        "total_tokens": 4379
+      }
+    },
+    "a2ff9d9399798e69a9696267ad5507bdb3f23d51183277f4ad9ea1562e40a040": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document contains regional product sales data but does not include any information about production lines or unit costs.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 38,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008593108258706468,
+        "prompt_tokens": 5762,
+        "total_tokens": 5800
+      }
+    },
+    "a338fc3033a60a78097c1130e3040a54bfc97860eeb981b86b7ceeae7575a63f": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"11.55\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006125383217247098,
+        "prompt_tokens": 4315,
+        "total_tokens": 4322
+      }
+    },
+    "a42dc7b9f8cf3335f637f274c70a795d812bc569701a930f9735417a19904eaa": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006031957412935324,
+        "prompt_tokens": 4309,
+        "total_tokens": 4315
+      }
+    },
+    "a5e5f7c8bc75f79bc38b85d0e10b4f34916940a0fe946a4b7d23d7c4cb819faf": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"72%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0061000965174129364,
+        "prompt_tokens": 4328,
+        "total_tokens": 4335
+      }
+    },
+    "a7c5494d4792019acfdf3583cd796473a8a8ee1a869243be21dd2a0cda13d287": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2450 USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006167054660033168,
+        "prompt_tokens": 4314,
+        "total_tokens": 4322
+      }
+    },
+    "a98479f15a10887275dce9bc2a9f9edbc0a06b0c50ecc4b754041ac0bbecb24d": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 1, \"E\": 1, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00872293592039801,
+        "prompt_tokens": 5319,
+        "total_tokens": 5337
+      }
+    },
+    "aa145a6dbcc11131f97285938e64f1c81e6a9954d9ae47c2a33b5dc5bd4405e0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"CLAUSE-9\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006059764842454395,
+        "prompt_tokens": 4296,
+        "total_tokens": 4304
+      }
+    },
+    "aaa62da5eedb56d6b655383e09783edf871079f7215f00c5ef8ac82877342470": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.005789490945273632,
+        "prompt_tokens": 4321,
+        "total_tokens": 4325
+      }
+    },
+    "ab22d9d8de3ee6b449989f3917e246a7bf81b5ead237fb2a32803b49b2d2fd8f": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 10, \"C\": 9, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008469126169154228,
+        "prompt_tokens": 5322,
+        "total_tokens": 5338
+      }
+    },
+    "ab7bf7289b210381a080645095f2843daade6e527484440e28cab6b74be10980": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008188848756218907,
+        "prompt_tokens": 5304,
+        "total_tokens": 5318
+      }
+    },
+    "ab9d418bc92eababc4281e2e3f6d4b6d7ceffae01cd3a75b1fefd916077bad27": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008018371807628525,
+        "prompt_tokens": 5851,
+        "total_tokens": 5860
+      }
+    },
+    "abe8d54cf716d0a1d69af2fbb88ea865c95d92ae751db686cd023176277f9ff0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 9, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008456522520729684,
+        "prompt_tokens": 5313,
+        "total_tokens": 5329
+      }
+    },
+    "ad4f81e11b6b29414ea520da6407559abdb41541fa638c4cd646fac8459a5ed3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0060798512769485915,
+        "prompt_tokens": 4347,
+        "total_tokens": 4354
+      }
+    },
+    "adb5957f805a73d89652f994427e9a7b3e05e1570073c261600f18f35a354669": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe text transcript provided is a table showing cost components, not a chart with connected line segments showing cost change over months. The instructions require answering strictly from the evidence given, and the evidence does not contain a chart with monthly cost progression data needed to identify a \"final month unit cost.\"",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 90,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00857217864013267,
+        "prompt_tokens": 4450,
+        "total_tokens": 4540
+      }
+    },
+    "aed75158888e4e7b11cdfef37440b6b327efabc9b993a6380a15b976206703e1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 10, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00873175847429519,
+        "prompt_tokens": 5327,
+        "total_tokens": 5345
+      }
+    },
+    "affb906da242fded6bb14361d40f1d2b758b4da8b3deef3b9887de3cfbbac70c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 10, \"C\": 1, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00833528928689884,
+        "prompt_tokens": 5319,
+        "total_tokens": 5335
+      }
+    },
+    "b30984fcf690316020ac8f48ff4e4b32a48175d31e8b36010cff8cfdf0ce15e2": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Jun-24\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006159413067993367,
+        "prompt_tokens": 4342,
+        "total_tokens": 4350
+      }
+    },
+    "b3414aaba9df4e4e0ea317edb564851575aa9fa9b88fcf777bbe16bce0b20bb5": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007814033897180763,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "b4ae114b8e0f2b230751379dc3bf2acf6c5ec9b88892b8163c1a904cc3277d7e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 3, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008154739502487563,
+        "prompt_tokens": 5311,
+        "total_tokens": 5325
+      }
+    },
+    "b61df38f8f1a046759d79020d550eb4cf45284df229ffc780b5bcb182baa9b11": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 9, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008735539568822556,
+        "prompt_tokens": 5329,
+        "total_tokens": 5347
+      }
+    },
+    "b98dda5b4dc89b961b854e2b3c7b7a897b841bd9381182a7e63b964f900afb37": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007759758805970151,
+        "prompt_tokens": 5748,
+        "total_tokens": 5756
+      }
+    },
+    "ba991e52cd502eb024c15bee0814583f5b60fa8d462d2ac0df3c6f28b4aa0507": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"87.4%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008070205572139303,
+        "prompt_tokens": 5823,
+        "total_tokens": 5830
+      }
+    },
+    "bac2485ff2ddbde04e8aa6a4081e28a700df6b66529c678f3923f23d85778824": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008009549253731344,
+        "prompt_tokens": 5843,
+        "total_tokens": 5852
+      }
+    },
+    "bd34aa5c26fcc61372f90452836aaa1ba7833c3af1d3fdecdee1a0e786a47605": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a Kantai Logistics Route Plan document containing depot network information and delivery routes. It does not contain any sales data, SKU information, regional sales units, or 2023 sales figures for SKU WT-300 or any other product.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 71,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010332987728026535,
+        "prompt_tokens": 5813,
+        "total_tokens": 5884
+      }
+    },
+    "be61b91fede118250a6aff29cd1163f572104b458ffa16d099ce379b6c85d5b4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 9, \"B\": 0, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008198931674958542,
+        "prompt_tokens": 5313,
+        "total_tokens": 5327
+      }
+    },
+    "be63ca87ad1ff7482ef748a20fe37cf8e5c85e84db48fd2b9451c2da16f7f471": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shown is a \"Vertex Manufacturing Cost Analysis\" displaying unit cost trends for 2024. It does not contain any information about a logistics route plan or Route A drive time.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 54,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009396129552238805,
+        "prompt_tokens": 5785,
+        "total_tokens": 5839
+      }
+    },
+    "bed3243f5f04a6ecd968f137e2b7475c4f54437f27813f50ed5a074d7c820bd4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided contains only 2024 sales data. The question asks for 2023 sales units, which are not present in the transcript.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 40,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007418061293532339,
+        "prompt_tokens": 4454,
+        "total_tokens": 4494
+      }
+    },
+    "c39be2923824260458d14deb0c7a320a30c42fb6c16ece647211e16bbf011c97": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"ZETA-9\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00798324039800995,
+        "prompt_tokens": 5754,
+        "total_tokens": 5762
+      }
+    },
+    "c5470ea377d3563cc9aadd04e44b131608a6fbaae68b4c7db6d1de4d16401320": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe image shows a \"Safety Compliance Checklist v3\" document page with only a title and brief description of a register. There is no status panel with big number tiles and a semicircular dial visible in this evidence.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 61,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009803942023217249,
+        "prompt_tokens": 5802,
+        "total_tokens": 5863
+      }
+    },
+    "c70ba4686d2bcee0ac712bb24d7282e01969d89dd1cac8423fb9de81660d36b5": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document provided is a \"Northwind Regional Sales Report 2023\" and contains no information about a restructuring memo or severance budget provision.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 45,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009084263615257047,
+        "prompt_tokens": 5776,
+        "total_tokens": 5821
+      }
+    },
+    "c74c2af7dd8eb943be10c4c43919f7899550489d47277bfbc3f3d1bee7958723": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007899897512437812,
+        "prompt_tokens": 5756,
+        "total_tokens": 5765
+      }
+    },
+    "c7a5f6a69b6a86b872137e9f54306f90f791dd5b7b630980d486e7dda1141eb2": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008455262155887232,
+        "prompt_tokens": 5311,
+        "total_tokens": 5327
+      }
+    },
+    "c89d325d709613c1ac01a091a78a8cca4acf331625ba9a5460f41efcdcafc1e9": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"East\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007728170281923716,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "c962fd184ea1fc5899b189b137593aea06b00d88f30a085d501061e1e442c920": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.005968859767827529,
+        "prompt_tokens": 4292,
+        "total_tokens": 4299
+      }
+    },
+    "cb209dd217d37f41d1c6cb017f118f2abb06b63833a07f93f2e632a13b161087": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided shows a \"Product Beta Test Results\" document from Quality Engineering with a pie chart displaying issue distribution by category. It does not contain a diagram of connected boxes showing reporting lines in the operations division, nor does it identify a Quality director.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 80,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009932737446102818,
+        "prompt_tokens": 5802,
+        "total_tokens": 5882
+      }
+    },
+    "ccc1a7ad6bc374c32ddd7ec8cbd984dd74b47c7c2f4ad4c297eb92f3fa5f27ea": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00791612344941957,
+        "prompt_tokens": 5837,
+        "total_tokens": 5844
+      }
+    },
+    "ce4dd3642666a6cd8f785d33ecfb663d0be8bbbd4b7fe1ea5b83155c9f55f663": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"West\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007811354361525704,
+        "prompt_tokens": 5822,
+        "total_tokens": 5829
+      }
+    },
+    "cefa672597e62f8daa2b8c078fdeed054ec16457bac96a1a721bcb0833a9257c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"East\"}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0077242303814262035,
+        "prompt_tokens": 5822,
+        "total_tokens": 5826
+      }
+    },
+    "cf9e2f6cc907fbf9ca7ab5c9ff7011e1670dc9b3a4f7aeeacbf68ed2960f1721": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 9, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008733018839137645,
+        "prompt_tokens": 5328,
+        "total_tokens": 5346
+      }
+    },
+    "cf9ecdefe5033672ad54bc421563734d59868fa568e0c66038428307afe04dbb": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007890916152570482,
+        "prompt_tokens": 5817,
+        "total_tokens": 5824
+      }
+    },
+    "d05dde163d267b6a610d1a379e53194fc3f2ca0232fdd1c95456273f03165226": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"95000\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006119001990049752,
+        "prompt_tokens": 4343,
+        "total_tokens": 4350
+      }
+    },
+    "d101273bfd05c2a8f757985b311668ee4302efe8dfa44ad11f3afc70fdbd63fd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 9,\n    \"B\": 8,\n    \"C\": 2,\n    \"D\": 1,\n    \"E\": 1\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 23,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009157295456053068,
+        "prompt_tokens": 5324,
+        "total_tokens": 5347
+      }
+    },
+    "d3ac7b17374098b9f8917ec448c3faa276715bde044d3e0a56a7138cab1aad0e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.4M USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008023651475953566,
+        "prompt_tokens": 5753,
+        "total_tokens": 5761
+      }
+    },
+    "d57bc31556c9b4d6df143385f63235002be08a2b7122cb72a89c8f49e445f63b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007822777048092871,
+        "prompt_tokens": 5798,
+        "total_tokens": 5806
+      }
+    },
+    "d5b9df7381a7e9d2d974c4a5e81af826098d6ff8cced2193f73a7146adbe0424": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe provided text transcript is a payroll summary for People Operations and does not contain a diagram of connected boxes showing reporting lines in the operations division, nor does it identify a Quality director.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 61,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007552136384742953,
+        "prompt_tokens": 4356,
+        "total_tokens": 4417
+      }
+    },
+    "d60b74afd8f5debbfa339b6d9634a990ac582bdb1ee64a31bb4fb055ef84785c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-08-02\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0062604804643449415,
+        "prompt_tokens": 4320,
+        "total_tokens": 4329
+      }
+    },
+    "d65fcbba4fb8b6b11c2f517b941015979f4344b67e39fe966ea7264ccc0719aa": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document is a Kantai Logistics Route Plan showing depot network delivery routes. It contains no information about production lines or unit costs.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 44,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008946645638474296,
+        "prompt_tokens": 5769,
+        "total_tokens": 5813
+      }
+    },
+    "d7898506badbc83a292db65696fd2397b988936680321762e7e24f3596efe918": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.005819739701492537,
+        "prompt_tokens": 4345,
+        "total_tokens": 4349
+      }
+    },
+    "d84e9cde2ebf57191f9261599c653e1cf3f82467f1e9bd5e6f56ac22e91ad0ad": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.95\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008100374925373134,
+        "prompt_tokens": 5881,
+        "total_tokens": 5888
+      }
+    },
+    "d8bac6857f67d7f9cebc793aa05001bcf54ba8a632987f56e9c6aa896285ece1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Firmware\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007776143548922057,
+        "prompt_tokens": 5761,
+        "total_tokens": 5769
+      }
+    },
+    "d8e2f82c682f1f7bdd905b892aefedfb05e3a83324ab619771f391a7772eca69": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"4.0\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008034835953565507,
+        "prompt_tokens": 5829,
+        "total_tokens": 5836
+      }
+    },
+    "d979ab472d29fcf79a69506499d44b675350f7ab52171c9962b55d88cab05eb3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}\n\nThe document shown is an \"Assembly Line 4 Status Dashboard\" displaying operational metrics (throughput, defect rate, OEE, line load, and a throughput sparkline). It does not contain an operations org chart or information about who holds the Quality director seat.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 70,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.010144875754560531,
+        "prompt_tokens": 5801,
+        "total_tokens": 5871
+      }
+    },
+    "da7b9abe06d8a24b89589161c9bfeb2c96701f3c9e3e11eb3fbf8af5b7bb1062": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00781277353233831,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "ddeed17dee28ea2244699083de7342c22cbdee4ef653f1d590e06895bae66f2c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007613080066334992,
+        "prompt_tokens": 5835,
+        "total_tokens": 5839
+      }
+    },
+    "de1333bdc67607f322aaa753af95ac5f5cac7436d79a5f670a1f51315f616a71": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007796388789386402,
+        "prompt_tokens": 5743,
+        "total_tokens": 5750
+      }
+    },
+    "dff7749c493473434be2eab98d16bd558c8a448387ea29cc413aebcb096e65b6": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"CLAUSE-9\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00803743608623549,
+        "prompt_tokens": 5798,
+        "total_tokens": 5806
+      }
+    },
+    "e00d88d05e500a586c0b7c0c067e7381238b7cae84a6553a1ccf0df7054a405c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe provided text is a Northwind Regional Sales Report from 2023, not a restructuring memo. It contains no information about severance budget provisions.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 45,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0073727675621890545,
+        "prompt_tokens": 4385,
+        "total_tokens": 4430
+      }
+    },
+    "e2281e8c8a50459247cdbcc5fe7d0eaa4eed334961c9ef0a036a1be82f81d15f": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 10, \"E\": 9, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008738060298507462,
+        "prompt_tokens": 5332,
+        "total_tokens": 5350
+      }
+    },
+    "e2a2dd5bb08390f3f4e791267b7e44352b3c9a31d81eeb1bd3a4918caf6ec996": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"47\"}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007793550447761195,
+        "prompt_tokens": 5876,
+        "total_tokens": 5880
+      }
+    },
+    "e2b1021befabeccb00242e4748b7d2642e901bfc173ac4438ea3302233927874": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-08-02\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00794156895522388,
+        "prompt_tokens": 5756,
+        "total_tokens": 5765
+      }
+    },
+    "e316f3f348f68287a8a31af41cf69a914a514c9a740a727f7a96a6c9ec5438d1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```\n\nPage A contains \"Issue Distribution by Category - Beta\" with a circular pie chart divided into wedges. The largest wedge is blue, labeled \"Process 32%\".",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 54,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009931248955223881,
+        "prompt_tokens": 5359,
+        "total_tokens": 5413
+      }
+    },
+    "e38f1ae394950db25073a47a6e9007c3340317f784a1ac0b739ad1dd75516cfb": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.006173277081260364,
+        "prompt_tokens": 4352,
+        "total_tokens": 4361
+      }
+    },
+    "e496d69fafe1a20fa34d5267bf81fd717d3e57d4ff9fcb3621ed9c113f1d815e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Jun-24\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007808992437810945,
+        "prompt_tokens": 5753,
+        "total_tokens": 5761
+      }
+    },
+    "e5d492d9b140b470421ab95f1e098c907ac1306ee4f1a8aefd3a7465c72ea885": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe document shows a pie chart with issue distribution by category for Gamma testing, but does not contain specific data for build B-102 or a total defect count.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 47,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009272375588723052,
+        "prompt_tokens": 5789,
+        "total_tokens": 5836
+      }
+    },
+    "e89c9a4a0d2d83d85b4e584ccb8137e95e276fab36d27042b178e8af20497ae4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"L3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00775345698175788,
+        "prompt_tokens": 5743,
+        "total_tokens": 5750
+      }
+    },
+    "eae6a52d72b187a6bc1fe0b1ba5522e12824b9ea7afaf3a96e69a1497d5af04b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}\n\nThe provided image shows a table of product sales by region and product type, not a bar chart comparing revenue across territories by quarter. The requested visualization does not appear on this page.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 54,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009231964510779437,
+        "prompt_tokens": 5792,
+        "total_tokens": 5846
+      }
+    },
+    "ef3fe1b0456ffe1053c83298696cddd3b183f4dec1334cbba545506cf7ab5fa0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"39\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008019552769485905,
+        "prompt_tokens": 5886,
+        "total_tokens": 5893
+      }
+    },
+    "ef5403974d38de23e7ca1eb0de879a4ff4b59bda7ce476495db5614402c7ae37": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a \"Northwind Regional Sales Report 2024\" showing product sales data by region. It contains no information about an Elm Street lease agreement or monthly rent.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 53,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009393608822553898,
+        "prompt_tokens": 5783,
+        "total_tokens": 5836
+      }
+    },
+    "efc6eec0651ec0aa7f97eb9fec3b1cbc1ffb6494102fd4832d946c4c6139465e": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided does not contain the monthly rent amount. The document only shows a termination clause that references \"one month rent equivalent\" but does not state the actual monthly rent value.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 58,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009404872703150912,
+        "prompt_tokens": 5827,
+        "total_tokens": 5885
+      }
+    },
+    "f081ff6eea76020acf0e4e5ac541a4fee2b33aaca5ea8c7c50ab335eaa82fe3a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe provided document is a \"Kantai Logistics Route Plan\" showing depot network information, not a 2024 sales report with a quarterly revenue chart. The evidence does not contain the answer to the question.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 58,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009671365505804313,
+        "prompt_tokens": 5799,
+        "total_tokens": 5857
+      }
+    },
+    "f253d3f23338848afd7520dd7f6272ea5b0d21bd9320a99ba31fdf8425791e76": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"87.4%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007984500762852405,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "f356441aebb6aaa779aafa17ede69d5f9835da3935777d9f119e5d5f6941fb53": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.005775626932006634,
+        "prompt_tokens": 4309,
+        "total_tokens": 4313
+      }
+    },
+    "f65fd6d0f64239453817586b4146710bb5244e67a962564c696fac01661712ed": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe text transcript does not contain any signature date information for either the reviewer or technician. While the form is titled \"HeatTech Facility Inspection Form HT-07,\" the provided text only shows maintenance budget, inspection cycle, contractor, and outage window data\u2014no signature dates are present.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 84,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008855135588723051,
+        "prompt_tokens": 4402,
+        "total_tokens": 4486
+      }
+    },
+    "f69c75b1e67992334b7becba8342f0fa2225818cc93466e14479e7493905e366": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a Kantai Logistics Route Plan document containing delivery route information, not an employee handbook. It contains no information about remote work policies or policy codes.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 57,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009259771940298507,
+        "prompt_tokens": 5779,
+        "total_tokens": 5836
+      }
+    },
+    "f76431c776bbd879406bf31eadfae7cb071a35d9a950284834fedd9eb1236563": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2450 USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007979459303482588,
+        "prompt_tokens": 5751,
+        "total_tokens": 5759
+      }
+    },
+    "f7c761347b7e5e7421839e948c1f7b562509d20eca865c13c6d1803f76ff2394": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe evidence provided is a logistics route plan for Kantai Logistics and does not contain any information about an Elm Street lease or its termination clauses.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 47,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.009175168689883915,
+        "prompt_tokens": 5781,
+        "total_tokens": 5828
+      }
+    },
+    "f88aeaca4fc828fdfe060add63fc97479b4583b688ea351f7a6cd3da7bc94fa0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Harbor Terminal\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 10,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007909742222222222,
+        "prompt_tokens": 5867,
+        "total_tokens": 5877
+      }
+    },
+    "f8e1acedb7206702d39ce48c44e6cbe9448fbb86d76d00047a5f0e3e15f24067": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"18.5\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0079466104145937,
+        "prompt_tokens": 5759,
+        "total_tokens": 5766
+      }
+    },
+    "f9b7358ac1fe846a7cefdc0847cb61198111659426072dc9f6770310630a82bd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```\n\nThe text transcript does not contain information about a policy code that governs remote work.",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 31,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00669602096185738,
+        "prompt_tokens": 4359,
+        "total_tokens": 4390
+      }
+    },
+    "f9e5e738f78046ab2752d91ee98d7226e381ea6cfa86c523769704b986275925": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.007808992437810945,
+        "prompt_tokens": 5753,
+        "total_tokens": 5760
+      }
+    },
+    "fca4aec4613abf7baa7b483258d3e13a99e399950102bc6a5c5135e3357c0fd8": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Depot East\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.00615303184079602,
+        "prompt_tokens": 4371,
+        "total_tokens": 4380
+      }
+    },
+    "fd99a1b4f33327f7cb16bfb93fe8169e6200ffce5d9c8c763a50bc938f15d245": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 2, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-haiku-4.5",
+      "model_served": "claude-haiku-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.008471646898839138,
+        "prompt_tokens": 5324,
+        "total_tokens": 5340
+      }
+    }
+  }
+}

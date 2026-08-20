@@ -1,0 +1,84 @@
+{
+  "models": {
+    "cx/gpt-5.6-luna": {
+      "schema_version": "marker.pr81b_capability_probe.v1",
+      "model_chain": [
+        "cx/gpt-5.6-luna"
+      ],
+      "cases": [
+        {
+          "case_id": "fin01-bar-value",
+          "question": "Look at the chart. What is the numeric value printed on the tallest bar?",
+          "gold": "4.0",
+          "normalized_gold": "4",
+          "answer": "4.0",
+          "error": null,
+          "passed": true
+        },
+        {
+          "case_id": "fin01-bar-region",
+          "question": "Look at the chart. Which region label does the tallest bar belong to?",
+          "gold": "West",
+          "normalized_gold": "west",
+          "answer": "West",
+          "error": null,
+          "passed": true
+        },
+        {
+          "case_id": "ops01-budget",
+          "question": "What is the approved budget value shown on this page?",
+          "gold": "95000",
+          "normalized_gold": "95000",
+          "answer": "95000",
+          "error": null,
+          "passed": true
+        }
+      ],
+      "correct": 3,
+      "total": 3,
+      "passed": true,
+      "pass_rule": "at least 2 of 3 probe cases correct",
+      "model": "cx/gpt-5.6-luna"
+    },
+    "free/bbl/gemini-3.0-flash": {
+      "schema_version": "marker.pr81b_capability_probe.v1",
+      "model_chain": [
+        "free/bbl/gemini-3.0-flash"
+      ],
+      "cases": [
+        {
+          "case_id": "fin01-bar-value",
+          "question": "Look at the chart. What is the numeric value printed on the tallest bar?",
+          "gold": "4.0",
+          "normalized_gold": "4",
+          "answer": null,
+          "error": "answer was null",
+          "passed": false
+        },
+        {
+          "case_id": "fin01-bar-region",
+          "question": "Look at the chart. Which region label does the tallest bar belong to?",
+          "gold": "West",
+          "normalized_gold": "west",
+          "answer": "West",
+          "error": null,
+          "passed": true
+        },
+        {
+          "case_id": "ops01-budget",
+          "question": "What is the approved budget value shown on this page?",
+          "gold": "95000",
+          "normalized_gold": "95000",
+          "answer": "95000",
+          "error": null,
+          "passed": true
+        }
+      ],
+      "correct": 2,
+      "total": 3,
+      "passed": true,
+      "pass_rule": "at least 2 of 3 probe cases correct",
+      "model": "free/bbl/gemini-3.0-flash"
+    }
+  }
+}

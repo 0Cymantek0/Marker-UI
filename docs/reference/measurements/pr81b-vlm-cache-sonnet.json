@@ -1,0 +1,2879 @@
+{
+  "cache_schema_version": "marker.pr81a_vlm_cache.v1",
+  "gateway_origin": "OpenAI-compatible gateway: localhost",
+  "model_chain": [
+    "kr/claude-sonnet-4.5"
+  ],
+  "responses": {
+    "00369ce0dac4901738628ca540046888ff313c4886a3425f3cd8dba5ec7c9a8e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02464471787728027,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "00c073023b40570fb213be519a1ba5f2c05a870e0437924b501132933efa6bb5": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024661102620232172,
+        "prompt_tokens": 5748,
+        "total_tokens": 5752
+      }
+    },
+    "014691ba48d5d351044fd92785514b24d3a59bebb3f9ff0d348bea52da645231": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"4.0\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025395094046434495,
+        "prompt_tokens": 5824,
+        "total_tokens": 5828
+      }
+    },
+    "019e046f1cc54e1276ac8a4984eaf8c3524732a19fd58db85a7dc750564c32ce": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026461908756218906,
+        "prompt_tokens": 5847,
+        "total_tokens": 5856
+      }
+    },
+    "01ff7e50bca330d7ccb963c330afbc57acbd7041627254cb4e0c22292743f686": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 10,\n    \"B\": 4,\n    \"C\": 0,\n    \"D\": 0,\n    \"E\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 23,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.030048459353233827,
+        "prompt_tokens": 5325,
+        "total_tokens": 5348
+      }
+    },
+    "0313b276f030fdf7659af92a8f17fbcba2f9fa7cb447ee2e811c435b3b8ad5c2": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019049844278606964,
+        "prompt_tokens": 4309,
+        "total_tokens": 4314
+      }
+    },
+    "086fccad38633c1e1b4d37bcbd03f56fe19b7158956fee56699e17f942ad8841": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Harbor Terminal\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 10,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019997353482587066,
+        "prompt_tokens": 4371,
+        "total_tokens": 4381
+      }
+    },
+    "08f045a04491b9a24c6d6fcd0cc79e1f5f42bd11da52cf42a5293eb4d4951dc3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02836592648424544,
+        "prompt_tokens": 5324,
+        "total_tokens": 5342
+      }
+    },
+    "0919374399c25fff0a082cac45b615f14ca399893f31276a4668121c2d2b56a0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"87.4%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02008798568822554,
+        "prompt_tokens": 4324,
+        "total_tokens": 4331
+      }
+    },
+    "092984bb147a877a7c3361eef7532398c2f1ed8d68714a03467680da41c9a053": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 10, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.028370022669983418,
+        "prompt_tokens": 5324,
+        "total_tokens": 5342
+      }
+    },
+    "0ae0a925a7927c7fa41b46a61da2c5eef91541831d55650e1194396443ba6bc0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"South\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01968168912106136,
+        "prompt_tokens": 4328,
+        "total_tokens": 4335
+      }
+    },
+    "0e674171927bee9db2d807e0c5365856877c2092dbb551937ce3518d6f884e73": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01877078752902156,
+        "prompt_tokens": 4309,
+        "total_tokens": 4313
+      }
+    },
+    "0eeeffabf44f55a79a41af8490966eaf70a0d2cd74086fbbb52f71b6491f5d20": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Omar Haddad\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025772459253731346,
+        "prompt_tokens": 5848,
+        "total_tokens": 5854
+      }
+    },
+    "0f4f468933ea6e747137ea0e1969d3e573c50ad9893bfa71ee83850899e61dc6": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"87.4%\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025510045306799338,
+        "prompt_tokens": 5818,
+        "total_tokens": 5822
+      }
+    },
+    "10276e781dec20639c5c37d9796307334c37d968c1448aa3d40b64ea199d18c3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"95000\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026026938888888893,
+        "prompt_tokens": 5842,
+        "total_tokens": 5849
+      }
+    },
+    "10efe37ae6b5884ebb01e3999a5d4ac625c51b8299071efaaf1a627b171ca303": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02834954174129353,
+        "prompt_tokens": 5319,
+        "total_tokens": 5337
+      }
+    },
+    "1325ddcd598583d06c80335647d1fcc04f89589eb282efbbb660566e4cf98d75": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"CLAUSE-9\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019263362056384743,
+        "prompt_tokens": 4293,
+        "total_tokens": 4298
+      }
+    },
+    "136cec357386ac7d9db871af2ae0d1e528648a93c30322fafdb6a8e49cabdc99": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 8, \"B\": 2, \"C\": 8, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026621950829187398,
+        "prompt_tokens": 5307,
+        "total_tokens": 5321
+      }
+    },
+    "1b504f3616a3337f22c44cd4b6b7b794b33ee681df4861e13108900ef9e96b96": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02467748736318408,
+        "prompt_tokens": 5751,
+        "total_tokens": 5755
+      }
+    },
+    "1c13f5d03e127c184530374458df15303ad95faccabbd6c1d8dbd047e26413f6": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3h40m\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025941435107794363,
+        "prompt_tokens": 5753,
+        "total_tokens": 5760
+      }
+    },
+    "1fc47125c312e240b9ec4591702b99d0ce06820cadf610d79c164e0deae4d080": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 10, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0283905035986733,
+        "prompt_tokens": 5329,
+        "total_tokens": 5347
+      }
+    },
+    "212417420cf6753cbacc9f48e092ca95ebed2a2ad1ef24f71d1c31025fd587d3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02467748736318408,
+        "prompt_tokens": 5751,
+        "total_tokens": 5755
+      }
+    },
+    "227e5fe03dae7c1d82740c59b336330ca3009df604edd4a9ffaee89ad9f27612": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"East\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02582187154228856,
+        "prompt_tokens": 5827,
+        "total_tokens": 5834
+      }
+    },
+    "22ea523b841934093f11c7c4e4f4581523159c9d24202f0f540f06f215d007a7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02469387210613599,
+        "prompt_tokens": 5756,
+        "total_tokens": 5760
+      }
+    },
+    "23a8166ff97d7ecaa384f10df2cbcfebedff47842f4428f65c2a0e8eabd254cd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.027483698192371474,
+        "prompt_tokens": 5313,
+        "total_tokens": 5329
+      }
+    },
+    "27945641babced23ccf78e36c75aa20045eb5d366e8d4104bf627a3a3855a110": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 8, \"B\": 0, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02664652794361526,
+        "prompt_tokens": 5313,
+        "total_tokens": 5327
+      }
+    },
+    "27b8bf0b8fe0606c597799261ce5250434bfb240bda30705bee688ec258cb8c9": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2026-09-15\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025752236384742958,
+        "prompt_tokens": 5809,
+        "total_tokens": 5815
+      }
+    },
+    "29d5a317742a5ee8770ee62eb7d0cc707f753ce36cf0da0abcba8ca78ddd4451": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 10,\n    \"B\": 10,\n    \"C\": 0,\n    \"D\": 0,\n    \"E\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 23,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.030068940281923716,
+        "prompt_tokens": 5330,
+        "total_tokens": 5353
+      }
+    },
+    "2a1b3068fabfcc80bf57a006d7244f460c4455925c45f3250557fc63c1448b96": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2450 USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026183110066334996,
+        "prompt_tokens": 5813,
+        "total_tokens": 5821
+      }
+    },
+    "2a3d254732b37c5c6294452b535dccc7ec14ccc05c92e9fc512201178de64b5a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-08-02\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02034656150912106,
+        "prompt_tokens": 4320,
+        "total_tokens": 4329
+      }
+    },
+    "2c779841944d95de91fb4a423bde9da63525c73ed3f61363ec6ba8c2a64c6d11": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02467748736318408,
+        "prompt_tokens": 5751,
+        "total_tokens": 5755
+      }
+    },
+    "2d2b2fb26939385db6708336b512035be2de19df99180fc7b3c0c044510a41fb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"18.5\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019656337827529024,
+        "prompt_tokens": 4424,
+        "total_tokens": 4428
+      }
+    },
+    "2d7d857e09028f52997aab736ac3c52d1b5641f3af5ce87f8611c693500f8bb6": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02469387210613599,
+        "prompt_tokens": 5756,
+        "total_tokens": 5760
+      }
+    },
+    "2e33a2acf83e9ae7f4210f067b88d1599ee904a019ec6cd3b6d790d0f982714d": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Jun-24\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025440152089552238,
+        "prompt_tokens": 5835,
+        "total_tokens": 5840
+      }
+    },
+    "2e56c99756c0a374a23a9ee4df5d920a00e3122e6b6b0b32935bddeda910623c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"14.7\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025796520248756217,
+        "prompt_tokens": 5922,
+        "total_tokens": 5926
+      }
+    },
+    "2ee20a311eb1d22f53544bd0642c68c9bdf7cdc526c124f7688403ef6066757c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"47\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024817015737976785,
+        "prompt_tokens": 5751,
+        "total_tokens": 5755
+      }
+    },
+    "300b700a09e3e5f1dde08503450d0f029164de5298c2465488ee099912a4f010": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024632429320066335,
+        "prompt_tokens": 5741,
+        "total_tokens": 5745
+      }
+    },
+    "30c87e11d7ba6e3524ca86a8ed30daae4e41a1178d3013245233a57c67a03555": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024657006434494196,
+        "prompt_tokens": 5747,
+        "total_tokens": 5751
+      }
+    },
+    "34771801044aa167412f812a6a344264470889426daf7a930b93db99110db316": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024624236948590384,
+        "prompt_tokens": 5738,
+        "total_tokens": 5742
+      }
+    },
+    "354cfe76f8a6423b6dec1b06ec19accab0f78a28fb4622d694216336d3d76a16": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"CLAUSE-9\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025941435107794363,
+        "prompt_tokens": 5753,
+        "total_tokens": 5761
+      }
+    },
+    "378f248d72c2b75a400da7ce34ca8693dff2f5a432cf5fc5dd9e2a6fd6e089eb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"CLAUSE-9\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025403544477611943,
+        "prompt_tokens": 5793,
+        "total_tokens": 5798
+      }
+    },
+    "3ad0300f1850fff11a25132e4260c32c86975310be992ec751fe7592e3f4c59b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 8, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.027475505820895522,
+        "prompt_tokens": 5310,
+        "total_tokens": 5326
+      }
+    },
+    "3bec637c9ea48293c6ddbd72610b5b83277f2c9e88158f56532d452daa6f8c17": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.4M USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02637998504145937,
+        "prompt_tokens": 5827,
+        "total_tokens": 5835
+      }
+    },
+    "3bf4ecb2fdadae96fb99a3adc58806ee358efb81252bcc87e4ca04f1264879e1": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025161353399668324,
+        "prompt_tokens": 5802,
+        "total_tokens": 5807
+      }
+    },
+    "3c92715072201bbc0ea9c54475fed6aa044a0bb10a7843e56fa65e31c7f92ddd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 10,\n    \"B\": 0,\n    \"C\": 0,\n    \"D\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 20,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.028928136169154232,
+        "prompt_tokens": 5324,
+        "total_tokens": 5344
+      }
+    },
+    "3ff5633af929e59269c22239033819bd529285d9e9620743a08b2adb573556cb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018811749386401327,
+        "prompt_tokens": 4320,
+        "total_tokens": 4324
+      }
+    },
+    "41d951451a1166861ca93f1bdb9d37c5618321c8a58fa8626807c6d3b766bcd0": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024685679734660036,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "42a0a281d5b85d2f1292d5eda9375c34d8b6dbee3d7c60acd6ad5f56c7cafed3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018914154029850746,
+        "prompt_tokens": 4345,
+        "total_tokens": 4349
+      }
+    },
+    "435311a68c42e929053708ffff6013314cee584b160345b29a8f3d1b12223b36": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026105540597014927,
+        "prompt_tokens": 5759,
+        "total_tokens": 5768
+      }
+    },
+    "44c6239c1a5f88450c4f9d107df9215d5e6e28ae27e5cb4b0bbc399b10217ad2": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02468977592039801,
+        "prompt_tokens": 5754,
+        "total_tokens": 5758
+      }
+    },
+    "4660d15d76628c974007b1ed93b62d68f65d4e8d91cb4601931365b0342963af": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"RW-2\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025518237678275293,
+        "prompt_tokens": 5821,
+        "total_tokens": 5825
+      }
+    },
+    "479c42250f7574cc9f203712298d7c151227280f9fe6e1aacce1f7b4a5e0d3a8": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-08-02\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026486743930348257,
+        "prompt_tokens": 5818,
+        "total_tokens": 5827
+      }
+    },
+    "4847219cc41b80087c5d610ebf63f2ee766e2a6df46589d555d247ba48f2ed15": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"11.55\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019907495456053068,
+        "prompt_tokens": 4315,
+        "total_tokens": 4322
+      }
+    },
+    "49dbffc93b1c7c7cc0cc246b56fd0d481d5d572bb3f0957fa14fb61799415862": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Q3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019821217495854065,
+        "prompt_tokens": 4328,
+        "total_tokens": 4335
+      }
+    },
+    "4aad3944e473757c9c180dc898f2076294ed81a68e4155a8c12ae9286a5b00fc": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019603861592039803,
+        "prompt_tokens": 4309,
+        "total_tokens": 4315
+      }
+    },
+    "4b3cc1b5f21cf55bec77ccfb46fc035436667f3cf50610ba76d08ced46591d37": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025395610165837478,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "4b5ffa50fe6ecf558d341082449888d404e16d46f5a075bdc7911d27dfd4cbfd": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"47\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019906979336650085,
+        "prompt_tokens": 4382,
+        "total_tokens": 4389
+      }
+    },
+    "4ce9cae46f1d384fee10b461879af18b04262310172483173b166147abdd727c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"ZETA-9\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025805228739635158,
+        "prompt_tokens": 5857,
+        "total_tokens": 5862
+      }
+    },
+    "4d533e22107328fde14bb3b938234d280b7a74de018612a0b34c7ebc2300a367": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"West\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024825208109452736,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "4de575dd91ccf25f1d9898e1e6b93bb241986a53eb89b836fa80f03462e18c7f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024956544112769485,
+        "prompt_tokens": 5751,
+        "total_tokens": 5756
+      }
+    },
+    "4e725a377b16d7cc404bff4c940c966ade3d261acc3eb0b65127af13a7d57728": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 7, \"B\": 7, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.027475505820895522,
+        "prompt_tokens": 5310,
+        "total_tokens": 5326
+      }
+    },
+    "50d7a33f1a41ab338bf1a27cbc2112845841a2808a0898bf23209d628fcdedde": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.027483698192371474,
+        "prompt_tokens": 5313,
+        "total_tokens": 5329
+      }
+    },
+    "5132c87f6f40954d660961310abd6fe60e22b38bdd3b45f7c07310d3020b5cf1": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024669294991708123,
+        "prompt_tokens": 5750,
+        "total_tokens": 5754
+      }
+    },
+    "513c779ff24c68fd4a2da00a8717c6454bc54aeb136b872702dc9cd5339a676a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"72%\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019107190878938644,
+        "prompt_tokens": 4323,
+        "total_tokens": 4327
+      }
+    },
+    "526546eaa6957f0839a92509f91519bd4a3a6f093dcc5668d4458fc182f6f98b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01875849897180763,
+        "prompt_tokens": 4307,
+        "total_tokens": 4311
+      }
+    },
+    "52668ccb270f8b498d5db4a444ee3b1cd9ebbff1e1c9b9891fdc20f38cee8f86": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024640621691542287,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "52fbb0a83c93aef124f3013e06799dd6fa1b54a2363552aa11448900521dcdbb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02467748736318408,
+        "prompt_tokens": 5751,
+        "total_tokens": 5755
+      }
+    },
+    "53478fba5acbcfaae3ca32701217090000ba533a968fd582c1ed3f2529e6a630": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"RW-2\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025929146550580432,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "556b13a195d4a286db1499c8ecfca970476f57dd10dc0d7b1cb4bf15d4ea79b3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Depot East\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.020140978043117742,
+        "prompt_tokens": 4371,
+        "total_tokens": 4380
+      }
+    },
+    "55b29449517b6bacceebc2603fd3f2fee6baaf7bc14a82e98312fb0351c39a69": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Jun-24\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025810099104477614,
+        "prompt_tokens": 5756,
+        "total_tokens": 5764
+      }
+    },
+    "55ef0cfc76d9bc017e5a5dc5f90c27f1bf3227a5e29362b67e72d5dbe77d0d8b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02465291024875622,
+        "prompt_tokens": 5745,
+        "total_tokens": 5749
+      }
+    },
+    "570d505cbcf99e0a1bbfb5b35b4bc24870f6c5efd8cd4ee15fe989605d7662f7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019098482388059702,
+        "prompt_tokens": 4390,
+        "total_tokens": 4394
+      }
+    },
+    "5b42637241d493a654fa580943910cdbdd91625190e37a99202482e383d180e1": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024620140762852405,
+        "prompt_tokens": 5737,
+        "total_tokens": 5741
+      }
+    },
+    "5dd1d0820cd72375a3c323cf8c557827b52bdef39d36ecd2d4d52924b2fa0729": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02032172633499171,
+        "prompt_tokens": 4348,
+        "total_tokens": 4357
+      }
+    },
+    "5e31c79c6a19525f021471a5118239ce9a2e4375938dfa464a84595c0b6b6b58": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02464471787728027,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "60ea1f995432b5b2dde72222c7982ae4d147d55cfc7bebe0773d7c1f1f3d2a59": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"1\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 3,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018885738789386403,
+        "prompt_tokens": 4303,
+        "total_tokens": 4306
+      }
+    },
+    "63034893364b97de1b13880dc90c8a7af7f82c9b2c6df92d47f88e7429d208d9": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.028382311227197348,
+        "prompt_tokens": 5328,
+        "total_tokens": 5346
+      }
+    },
+    "63fc96e24c076891eb04c9300b07977496593ee7ab945a1cd6e1c63634d98893": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 9, \"B\": 9, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02834954174129353,
+        "prompt_tokens": 5319,
+        "total_tokens": 5337
+      }
+    },
+    "645d5108161bb0da0693317e8ab2c7484143980b1c283c2beeb2767f1edab365": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"4.0\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02583877240464345,
+        "prompt_tokens": 5763,
+        "total_tokens": 5770
+      }
+    },
+    "6560a6fc2a6b4fef38f3cc32f1d9725118df4f255866882563abf3357271b3ee": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"3h40m\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025710758407960204,
+        "prompt_tokens": 5868,
+        "total_tokens": 5872
+      }
+    },
+    "658bf52147413f99e50bf0bbe555ee9413ae4eb11a2b4b191efb5c69a12b7f77": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 8, \"B\": 9, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.028357734112769487,
+        "prompt_tokens": 5322,
+        "total_tokens": 5340
+      }
+    },
+    "66bdc26f24e8c1c80430463fe9e2c98ca1eadd2344faf9232930b68de7f2af99": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025395610165837478,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "6785e246a375a6f79c9208c8372b1c556a048823cd76e0fcb43032d428d1f7fd": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024673391177446106,
+        "prompt_tokens": 5750,
+        "total_tokens": 5754
+      }
+    },
+    "689b73936b6b08498dc3b33c02e90b5acffc4b152851a226161b74df04f15347": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-09-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.020330176766169154,
+        "prompt_tokens": 4315,
+        "total_tokens": 4324
+      }
+    },
+    "6dd601e65c00c22007881a86e4c1c9a8dd63a77f493eb4de3f5cfbb1adaf55d0": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024681583548922057,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "720da2380c3048b2080c1ab086465878231c64c18c9d81cdb084bb0c55e11d7b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"West\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02509965255389718,
+        "prompt_tokens": 5821,
+        "total_tokens": 5825
+      }
+    },
+    "72d26178c64a76a1e6c055bbfd233cad9bc08103c5e01666efa81d1ac89859d1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Harbor Terminal\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 10,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026137535903814263,
+        "prompt_tokens": 5869,
+        "total_tokens": 5879
+      }
+    },
+    "72e4e8cefc5e66fdf8a3e68e533746b5ae979d0907bf671b232725becc94fafe": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024632429320066335,
+        "prompt_tokens": 5741,
+        "total_tokens": 5745
+      }
+    },
+    "74ff2b7279c8ee9c203ea787649f734cf0357da108a00f86bf42fa8e27f041b5": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2450 USD\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019324804842454395,
+        "prompt_tokens": 4309,
+        "total_tokens": 4314
+      }
+    },
+    "7565daaa100b109f8215a6127c38d1b623bc107c8a223c77be1a96e5c041d333": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0274796020066335,
+        "prompt_tokens": 5311,
+        "total_tokens": 5327
+      }
+    },
+    "77537b5676d36c13ca5ff18f23a72cbff73f0096a6171eb38346a5c7c7b37102": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"L3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025629608872305143,
+        "prompt_tokens": 5745,
+        "total_tokens": 5752
+      }
+    },
+    "7756fc886aba555f800b03e934da3b6398fb9594bc81c895e6a58f5b93c65cfe": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"14.7\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019656337827529024,
+        "prompt_tokens": 4424,
+        "total_tokens": 4428
+      }
+    },
+    "77e2617ba862ecb8aafcb811bb1f70edf03140f6e368987c6c248344744b07bc": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024661102620232172,
+        "prompt_tokens": 5748,
+        "total_tokens": 5752
+      }
+    },
+    "7807edfd53dd251d778812f0c31bf061f787d874fe39c8383046c3e756dc0e77": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02535874449419569,
+        "prompt_tokens": 5748,
+        "total_tokens": 5755
+      }
+    },
+    "79a7df04ac2133d5e8cf4b7053cb0405b40f2348b7a7673272760a9bfc07ce51": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024624236948590384,
+        "prompt_tokens": 5738,
+        "total_tokens": 5742
+      }
+    },
+    "7bb2235825c52cb8f7276ad046b06c9cce02514f41171882c4abdd1aa80ae4d4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"39\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019923364079601994,
+        "prompt_tokens": 4386,
+        "total_tokens": 4393
+      }
+    },
+    "7ccd6ef91440cfcc27e7b18c2ef66dd1212761c1bf9d32f40fb0446bebb4efbc": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024685679734660036,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "8226cfbd09bdf072aca21bb4ce6df8071544dad5d31a15eae34eb2294190d58f": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025506465240464352,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "82784b45120d69d0068862fb7571dbb1dfadb1b124bd1660ad4dd1630ce535de": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"East\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02482930429519072,
+        "prompt_tokens": 5754,
+        "total_tokens": 5758
+      }
+    },
+    "85a4730dc31945b6e3170f49982cc5cd26919e1139e9c48b4b883c0bbaf6496b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2.95\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025608095704809288,
+        "prompt_tokens": 5876,
+        "total_tokens": 5880
+      }
+    },
+    "867bf044c98409756d262b9ed9b2c67ef7e1d4222a3196bcaa2046c7c0b9aeb1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.4M USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.020239802620232176,
+        "prompt_tokens": 4328,
+        "total_tokens": 4336
+      }
+    },
+    "86a8a515e5919add1737096f487dac924a2646704cd97fe63f707d780b0f0302": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"95000\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019886756467661693,
+        "prompt_tokens": 4343,
+        "total_tokens": 4350
+      }
+    },
+    "86ced1ff818d3ab8f544d04af7b760c92dd02e98a1cdc7ddaa1ff03447654f63": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"ZETA-9\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01966504631840796,
+        "prompt_tokens": 4357,
+        "total_tokens": 4362
+      }
+    },
+    "87459573c7f218e1bb8d77d1adfbe76d7fb02a0d5d09fa71654474860c37ad41": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02463652550580431,
+        "prompt_tokens": 5742,
+        "total_tokens": 5746
+      }
+    },
+    "876a7f6745e2dc6c5f76b628c9a7707293e0604810db0969e7676b4dd89b03ec": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 10,\n    \"B\": 0,\n    \"C\": 0,\n    \"D\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 20,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.028936328540630184,
+        "prompt_tokens": 5327,
+        "total_tokens": 5347
+      }
+    },
+    "8a4701cfc776217532c8a8ebc35bbfd75229bd0e525e6e1d4980ea1c0e3e2610": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02463652550580431,
+        "prompt_tokens": 5742,
+        "total_tokens": 5746
+      }
+    },
+    "8aa284eb289aa1bc1299358355c15a763484be67d766e5fa8b9e65e7f24e1d6e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02464881406301824,
+        "prompt_tokens": 5744,
+        "total_tokens": 5748
+      }
+    },
+    "8b4d0e2d5f00a0def7cc3628f0436657bcfc39d0c7421d2545c7b641ac91a5be": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024661102620232172,
+        "prompt_tokens": 5748,
+        "total_tokens": 5752
+      }
+    },
+    "8d780485156ca68c3d9af2ab82e3e2558f5da2ce4135d867b82d6426b7bc62bd": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018815845572139306,
+        "prompt_tokens": 4321,
+        "total_tokens": 4325
+      }
+    },
+    "8d9c142dc74f65eeda0904762ce9ff9c0fbcd6471f6470e1a9363e71d8f76c8c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019225464145936982,
+        "prompt_tokens": 4421,
+        "total_tokens": 4425
+      }
+    },
+    "8e550ce5d55aa41cde73447792665e1a9963b45721371f286fa6e29ea8a38cd0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 2, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02747140963515755,
+        "prompt_tokens": 5309,
+        "total_tokens": 5325
+      }
+    },
+    "8e8e75dfffaf3d97dfd9e490dc5f52da26eac0e2aab186f3ddc193d2c23f1dd5": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024681583548922057,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "93e647554658428f9b0313530d5c9025e7a1c199d98893d2d600ce2065cfaaf0": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 0,\n    \"B\": 10,\n    \"C\": 2,\n    \"D\": 0,\n    \"E\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 23,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.03010580595356551,
+        "prompt_tokens": 5339,
+        "total_tokens": 5362
+      }
+    },
+    "948856cd25bb4d880eabacdb8d50a6a9d0cf3a8f247946d38a5f665b87692c1c": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02535874449419569,
+        "prompt_tokens": 5748,
+        "total_tokens": 5755
+      }
+    },
+    "99aa5982ad53ad73072543a55afb6ea376b8853c4ab9bfd2b56bd4e6c3ab62b0": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02463652550580431,
+        "prompt_tokens": 5742,
+        "total_tokens": 5746
+      }
+    },
+    "9a9fc7432178b83e09fa7bef4636d5b6f0f8f87c557182c7f769c5b246d811a3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.027475505820895522,
+        "prompt_tokens": 5310,
+        "total_tokens": 5326
+      }
+    },
+    "9b6c98d3e0797deaf1420c680e2fed8d0d24cd9f8d33b5ff274c4c7c656ff027": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01902117097844113,
+        "prompt_tokens": 4302,
+        "total_tokens": 4307
+      }
+    },
+    "9b8600d40cf3a2b277902dd409c3f97a597138fbcb030f50ad19bc18fdd7ac3d": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"L3\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.020034219154228854,
+        "prompt_tokens": 4380,
+        "total_tokens": 4387
+      }
+    },
+    "9be221715141bd1298e79fbf99811be831dfffd24ccd9a027ad6c857d41dedff": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 0,\n    \"B\": 0,\n    \"C\": 0,\n    \"D\": 10,\n    \"E\": 10,\n    \"F\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 26,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.031271187180762855,
+        "prompt_tokens": 5352,
+        "total_tokens": 5378
+      }
+    },
+    "9cde2ba0da03133bd18d0afc60d08305680f0cb4422adb93778e8b471d45bb07": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024685679734660036,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "9e13b98e0cfa8b1fce6f510a8601626ae50598e9483c004f0ee39a07ac20f77a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"47\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026047161757877284,
+        "prompt_tokens": 5881,
+        "total_tokens": 5888
+      }
+    },
+    "9e409dfc473cf22167892c99c3b3887ced4fde4156064c641220f57f603da3b2": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2.95\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025063303001658377,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "9eb7e3d7f4a25b18f23aec764ffeb03e86632ce36a4fd2e46fd5c0b02e8a3b57": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Harbor Terminal\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024931966998341628,
+        "prompt_tokens": 5745,
+        "total_tokens": 5752
+      }
+    },
+    "9f1b0639924c13b0cfd5101c5cf380b583c586374cb6b1cd43a977706945f285": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026613758457711446,
+        "prompt_tokens": 5304,
+        "total_tokens": 5318
+      }
+    },
+    "9f31b9cfc8eb2ce10be68fc360fd9135fd19297e08d8bb8a66222082dc35c625": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018799460829187396,
+        "prompt_tokens": 4316,
+        "total_tokens": 4320
+      }
+    },
+    "a13b979af35996f56a6706c349221184feb8a0f09630a0eb133d70f857c2a631": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"39\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024821111923714757,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "a309965b65f823b56186717879310caf4d9e0e9d283a7db0ea6f0d76c06c28b1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"4.0\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0199730344278607,
+        "prompt_tokens": 4331,
+        "total_tokens": 4338
+      }
+    },
+    "a372bb79fc1e1e061a3ae902da95c7ea887de29654bd84e7c103fa0971a89514": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02589969907131012,
+        "prompt_tokens": 5846,
+        "total_tokens": 5853
+      }
+    },
+    "a82794852b34930468780327f87278c80c1c4cf9b47468c9251f702f145e7efb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024657006434494196,
+        "prompt_tokens": 5747,
+        "total_tokens": 5751
+      }
+    },
+    "acccb7d5efb37a6cc2e37464e328b414fdfbb024748befa884c2e83944805d50": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"RW-2\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019378055257048096,
+        "prompt_tokens": 4322,
+        "total_tokens": 4326
+      }
+    },
+    "ad6db1a0d54ae2f9725d9ab8cb1fb9574ab14cc7c93bfe3cbfd5000208defbf4": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 2,\n    \"B\": 10,\n    \"C\": 0,\n    \"D\": 0,\n    \"E\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 23,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.030118094510779434,
+        "prompt_tokens": 5342,
+        "total_tokens": 5365
+      }
+    },
+    "ad93f7aa13f2335296bfce4a5d0b6ca18e1999bcde7d22598e5216d235e9cb5b": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.019759516650082923,
+        "prompt_tokens": 4347,
+        "total_tokens": 4354
+      }
+    },
+    "ad97e5be81ad6c904fb6a5726e67e88e94113e668e01ee8c69f9f7b0c14178c5": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024640621691542287,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "adb2596810918c9bcac21941320b67c61124a9b468523921d8043992dcd993fc": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Jun-24\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.020018092470978438,
+        "prompt_tokens": 4342,
+        "total_tokens": 4350
+      }
+    },
+    "adda169f0bce71e93e002e46c89d56c058dd82efeb11b02320dba1de353508ac": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024640621691542287,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "aeec5fcc6304cfe5429f9e67a54b5b58590635addae7258317490ed967833ddf": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Mar-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025810099104477614,
+        "prompt_tokens": 5756,
+        "total_tokens": 5764
+      }
+    },
+    "af8e7c9a80100334dce4049864c26a91ca8bd38a76f73aebdf61a022f2832417": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"18.5\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02582648384742952,
+        "prompt_tokens": 5759,
+        "total_tokens": 5766
+      }
+    },
+    "b12476b1706f85c8e99d4179ba017c521f31da73b9c018325562240c0f51773f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024673391177446106,
+        "prompt_tokens": 5750,
+        "total_tokens": 5754
+      }
+    },
+    "b17607071f59cec45821de1b871f262071c85789bca4fca1e631036c2d2b25fb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024681583548922057,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "b2a71b94d68b016ab2ac89f5db7f5f4e6d927861154f65233224ec501c9fc7eb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"3\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 3,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0250259212106136,
+        "prompt_tokens": 5802,
+        "total_tokens": 5805
+      }
+    },
+    "b4c3b54cc8c2a27cc98752533d21d478e1170732650caee07b50b3a7b4143136": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"3\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 3,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02478015006633499,
+        "prompt_tokens": 5743,
+        "total_tokens": 5746
+      }
+    },
+    "b57495a48ba06c7c01bcd6aa3a162f834479a3aaf7fb3d0d2ecdafe1d0a5cd98": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"ZETA-9\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02608915585406302,
+        "prompt_tokens": 5756,
+        "total_tokens": 5764
+      }
+    },
+    "b5f39d921c677ea3b16cf701f9b59ade2fdf524e7a7d1996b9872d5dd14aac23": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02540789872305141,
+        "prompt_tokens": 5759,
+        "total_tokens": 5766
+      }
+    },
+    "b77cdbd14425acbad8d1327d2f811f478829cc41312036ecdbf6a7c95ba01102": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Depot East\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025563037661691542,
+        "prompt_tokens": 5866,
+        "total_tokens": 5872
+      }
+    },
+    "b77e78239c2a0907f6d14403dc5979433ebea3ad0bedf20170c296cf6805321d": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025362840679933666,
+        "prompt_tokens": 5749,
+        "total_tokens": 5756
+      }
+    },
+    "b8254c9c0b5aa243b1048a1d66a16637003ba38277c52c9681866bee64e545cf": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024681583548922057,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "b89b08cea113c90fda97bfb8e212f49b59033a8b5862feec638ce427d5c47a75": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 10, \"C\": 3, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02752466004975124,
+        "prompt_tokens": 5322,
+        "total_tokens": 5338
+      }
+    },
+    "bb1aa3c3770a0c4ea35dae6587817a9886e4a0da34779e8e25170c56b1853416": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.4M USD\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02607686729684909,
+        "prompt_tokens": 5753,
+        "total_tokens": 5761
+      }
+    },
+    "bbc7d2868187cdd9648315d3c017a611330df074991dd92a193d05204fe02e9e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"87.4%\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025231504676616917,
+        "prompt_tokens": 5750,
+        "total_tokens": 5754
+      }
+    },
+    "bbd5954c4ce5cda6e2c4f1f33d5bca1031bc6ea14886610f53b684f36b66620d": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"L3\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025456278772802658,
+        "prompt_tokens": 5874,
+        "total_tokens": 5878
+      }
+    },
+    "bd1436902002211d3a0cba747825bce0f838f459696106b519087944668c7b59": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02536693686567164,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "bd777d02592dfc464b0a812adf08ff68ddb7643e30407a9029915a1bd30b1fd7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02464471787728027,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "bf7d6f47e39f2e6ddaecd3247de65d53d14ac5484cb7bffc96ab53ffddda5e19": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Mar-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 8,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0199730344278607,
+        "prompt_tokens": 4331,
+        "total_tokens": 4339
+      }
+    },
+    "c2e8636fa1f1bc585b80f152b1204a14ed9a62563a852ff4040a8a9f3ad1bdbc": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024673391177446106,
+        "prompt_tokens": 5750,
+        "total_tokens": 5754
+      }
+    },
+    "c3fb1f8c821207508917f0b6cca1418f0c472f2b60328fc1f535ddbd53c45bc5": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025354648308457715,
+        "prompt_tokens": 5747,
+        "total_tokens": 5754
+      }
+    },
+    "c5bbec88fbbd8b72c9eaf2573f5693af7f7ad7840a1be30f6ef737bc9cb6be5a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02536693686567164,
+        "prompt_tokens": 5750,
+        "total_tokens": 5757
+      }
+    },
+    "c5f39e60ae0d21dc8068d62fe9ff7b8a61f8fb34672ede270cc458ad4c1f796e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"18.5\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025796520248756217,
+        "prompt_tokens": 5922,
+        "total_tokens": 5926
+      }
+    },
+    "c678bd9a75dde0378b251b4bc0a263453daa00886e315220d779bb72b9ed5500": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 10,\n    \"B\": 0,\n    \"C\": 0,\n    \"D\": 0,\n    \"E\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 23,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.030122190696517413,
+        "prompt_tokens": 5343,
+        "total_tokens": 5366
+      }
+    },
+    "c69fc79b1a0811c5f9860d2f6333f534597655f832ae48848c26746a569852aa": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02464471787728027,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "c9ae606953b54e4dc38461546e4ecf50bfed764df5dbb6bc9bc5b98ecd4bfa24": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 10, \"C\": 0, \"D\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 14,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02664652794361526,
+        "prompt_tokens": 5313,
+        "total_tokens": 5327
+      }
+    },
+    "c9b016720d9bbdbb3996ad88245d754d8c45dc3247f15288fd5b80172f35d5d1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"72%\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02596549610281924,
+        "prompt_tokens": 5828,
+        "total_tokens": 5835
+      }
+    },
+    "cacbb60a16d31de472b1b99ac127e9fd5b998ce49b5c3edfeaacb78369a00790": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.01923775270315091,
+        "prompt_tokens": 4424,
+        "total_tokens": 4428
+      }
+    },
+    "cb5bc7318819e921a11a33e82bd155582fff64c4c3b32a48210caa2585d7556a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024931966998341628,
+        "prompt_tokens": 5745,
+        "total_tokens": 5750
+      }
+    },
+    "cb5e664658c7820307da8d05a5ef87e8054a4432c55ee9b1a51ab23bb5a9b2ed": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024620140762852405,
+        "prompt_tokens": 5737,
+        "total_tokens": 5741
+      }
+    },
+    "cdb04a16f0af7e104fd8524a830e276d3c0c1d2207de84bb32d7069802cb11df": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"3h40m\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0202886987893864,
+        "prompt_tokens": 4374,
+        "total_tokens": 4381
+      }
+    },
+    "ce2715bb131cfc491436f0f593ff2ea4fe38d2247a62da254589cd072bc83e9a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025395610165837478,
+        "prompt_tokens": 5756,
+        "total_tokens": 5763
+      }
+    },
+    "d0dc502cd7a6632e211f1d1d022b3565b5112223ece4ce9bc7a784bd0b4d9347": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024681583548922057,
+        "prompt_tokens": 5753,
+        "total_tokens": 5757
+      }
+    },
+    "d39c623ed7a37d8e4d01f16797e6907445ed00a80f31066e7de5b06aebe5ae86": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02467748736318408,
+        "prompt_tokens": 5751,
+        "total_tokens": 5755
+      }
+    },
+    "d455dab27957afe2ec2fb03bd0a551ef510ed45dc1e0c1eaceadcf6c9a85ac60": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02467748736318408,
+        "prompt_tokens": 5751,
+        "total_tokens": 5755
+      }
+    },
+    "d6502cdec6f3a05c9b27044d7dcbf32ef82f7b7fb9f5a26427330e8aaff61208": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024640621691542287,
+        "prompt_tokens": 5743,
+        "total_tokens": 5747
+      }
+    },
+    "d676c34cbe89158757c82f48af14c09550c229ec584607d99303e323e32568b6": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-08-02\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02624097278606965,
+        "prompt_tokens": 5758,
+        "total_tokens": 5767
+      }
+    },
+    "d6c12483e2273a42fb48be3110751baa5c8bbb61f1c63af0a557f86b6899c89b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02464881406301824,
+        "prompt_tokens": 5744,
+        "total_tokens": 5748
+      }
+    },
+    "d6f66b7d332c542cb579729087409a62d299dfbee64a8edd94f0f860dd85b02a": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"11.55\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026047677877280268,
+        "prompt_tokens": 5813,
+        "total_tokens": 5820
+      }
+    },
+    "d7f86335b90484e6bdf340caff917f834fa79ab9c79e52c2f41c554fe89dadbf": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025136776285240466,
+        "prompt_tokens": 5796,
+        "total_tokens": 5801
+      }
+    },
+    "d82f2353365bb58d7a36c534e653dd4cfec30bd529eac22b9f222c00fc340cab": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018750306600331675,
+        "prompt_tokens": 4304,
+        "total_tokens": 4308
+      }
+    },
+    "d8749139c74b955a28be5da9d14b9572857befe600881161f7473e2dd6bf33ea": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 10,\n    \"B\": 0,\n    \"C\": 0,\n    \"D\": 0,\n    \"E\": 0,\n    \"F\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 26,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.031230225323383085,
+        "prompt_tokens": 5342,
+        "total_tokens": 5368
+      }
+    },
+    "dbfb6970a94a6409d7e515912d28eb2ba276d7a38794d5998fde9132cad8c787": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018729825671641796,
+        "prompt_tokens": 4300,
+        "total_tokens": 4304
+      }
+    },
+    "dc075fd5140f6db35b02e18720fcff3c9310500b30f4d6ebee1863b465f2c77e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2450 USD\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02521511993366501,
+        "prompt_tokens": 5747,
+        "total_tokens": 5752
+      }
+    },
+    "dd4e08d81ca5a7ade41567f77300f2f28629349f7809db533323ac1f47582237": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2026-09-15\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02620001092868988,
+        "prompt_tokens": 5749,
+        "total_tokens": 5758
+      }
+    },
+    "dd4e684cb9a258fae866e091cfac53f2998042e5b24a18a5d6e7d5b4d46ee680": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.020350399635157546,
+        "prompt_tokens": 4355,
+        "total_tokens": 4364
+      }
+    },
+    "ddc1579d34258908a9ca0e32675515dd543cdc02d96d7f344047e12956d29322": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 10, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02837821504145937,
+        "prompt_tokens": 5327,
+        "total_tokens": 5345
+      }
+    },
+    "de4bfd948be52f49dba5ca66880c8f596a538fb9c0319bcb96fb6099778c96b8": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"1\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02549827286898839,
+        "prompt_tokens": 5748,
+        "total_tokens": 5754
+      }
+    },
+    "e11969d6f4ce2655997340c52d0e5a6beb58b472013325d6ed9393e81e4472b3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"39\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.026063546500829187,
+        "prompt_tokens": 5886,
+        "total_tokens": 5893
+      }
+    },
+    "e11a9c78cbd429cec940548d1af7e5818c1682621a353b86f2d74e5c297046c3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"72%\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02496883266998342,
+        "prompt_tokens": 5754,
+        "total_tokens": 5758
+      }
+    },
+    "e26e02024d6ea83ce9298f414e578d29fef9c17c03d38bce32d9684a32bb54c1": {
+      "attempts": 1,
+      "content_raw": "```json\n{\n  \"scores\": {\n    \"A\": 10,\n    \"B\": 0,\n    \"C\": 0,\n    \"D\": 0,\n    \"E\": 0,\n    \"F\": 0\n  }\n}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 26,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.031201552023217248,
+        "prompt_tokens": 5335,
+        "total_tokens": 5361
+      }
+    },
+    "e530f8f8a3e1496eebce379b2746f1e6568c404c451fc707fa5e3e82d299eb99": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 3, \"C\": 2, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0274796020066335,
+        "prompt_tokens": 5311,
+        "total_tokens": 5327
+      }
+    },
+    "e7b0a2e7a2ae53d94295454374526d5ece2ede4210a6f659dde13a87be2ea0ce": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025190026699834164,
+        "prompt_tokens": 5809,
+        "total_tokens": 5814
+      }
+    },
+    "e8f0a53760d87686ccb0040a9728acc14adc75092a3d65973f98e37add588d39": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"11.55\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025842868590381426,
+        "prompt_tokens": 5763,
+        "total_tokens": 5770
+      }
+    },
+    "ea11251e08ab57d38949f1219f24eecb7a94fdb1b1c4e01608b5ecd48a900791": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02562909275290216,
+        "prompt_tokens": 5813,
+        "total_tokens": 5820
+      }
+    },
+    "ea775b20998d9920183d7562ce58d6ee1c16215a1693ac08a957cc2ad7a5cf3f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018996593864013266,
+        "prompt_tokens": 4296,
+        "total_tokens": 4301
+      }
+    },
+    "eb0305a4a84f59725dad1e79b349535a59c744338f0910ecf992fc8cb09b7078": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"14.7\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02582648384742952,
+        "prompt_tokens": 5759,
+        "total_tokens": 5766
+      }
+    },
+    "ebb9b2512cbacd47f2087c97285f225203b6912a0dfbc67a28ab30d7049e2740": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"Omar Haddad\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 9,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02607686729684909,
+        "prompt_tokens": 5753,
+        "total_tokens": 5762
+      }
+    },
+    "ee951147da5ac0c57c11dc24b6d48f76ce725cfd05ceac6f8c96cb8e7b645362": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Depot East\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 6,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025075591558872307,
+        "prompt_tokens": 5747,
+        "total_tokens": 5753
+      }
+    },
+    "ef4fd5462188663cfe71d91595f274578c97d4d1b940201dbd46c6fd6bead231": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 2, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02838640741293532,
+        "prompt_tokens": 5328,
+        "total_tokens": 5346
+      }
+    },
+    "f250a94625cb576a6bb7f0ffb0036deed71182c0bd0a25ac7c6966e8e88140a3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02465291024875622,
+        "prompt_tokens": 5745,
+        "total_tokens": 5749
+      }
+    },
+    "f2cd85dd7c6b01d5dcf4f9eb523d86d199a50fec52e08a1062652a8e5accfbe3": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"95000\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02568285928689884,
+        "prompt_tokens": 5758,
+        "total_tokens": 5765
+      }
+    },
+    "f6d505a2d768a870942a7d2b680704c4be05dadb3dcc536cfefe67647ef74406": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 18,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.028370022669983418,
+        "prompt_tokens": 5324,
+        "total_tokens": 5342
+      }
+    },
+    "f973b28fc504c2d269e5bd188565e5435dddca14928a4105f5d0029679a38516": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Mar-15\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.025395094046434495,
+        "prompt_tokens": 5824,
+        "total_tokens": 5829
+      }
+    },
+    "f9ab8f0e9c0e2dcf0dd1e921194971545da73a29987db261b96824d1c2031190": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 5,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024985217412935325,
+        "prompt_tokens": 5758,
+        "total_tokens": 5763
+      }
+    },
+    "fa1a75bff58d23e1de940b68b211c297b9a1c823e0cc793e6e7ce41b11214858": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.018738018043117748,
+        "prompt_tokens": 4302,
+        "total_tokens": 4306
+      }
+    },
+    "fbc934f2134c4829bfd34026a7c7d140a20fbdc7bf8b68d1b55168e03b8e9f2b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024661102620232172,
+        "prompt_tokens": 5748,
+        "total_tokens": 5752
+      }
+    },
+    "fcadf0a4f4012fdb5dcf45a77aeea8c3ae0ccbe66967d691e47ec860d2d253f5": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": \"2.95\"}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 7,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.02018603608623549,
+        "prompt_tokens": 4382,
+        "total_tokens": 4389
+      }
+    },
+    "fe4fadc516f81043ea6001151e99d61a92c93ec666ee58ef9daeabfa94a538f3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"1\"}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 3,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.0250259212106136,
+        "prompt_tokens": 5802,
+        "total_tokens": 5805
+      }
+    },
+    "ff5262ba34439c6a3fdbbb49404c7f6ebb7ae754957c780488e26d323b2622de": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n```",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 16,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.027512371492537317,
+        "prompt_tokens": 5319,
+        "total_tokens": 5335
+      }
+    },
+    "ffdbf5503b7af85d6182750f0cc45683fc1b28c8a37e69a83efb4d6a28dd1b4a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "kr/claude-sonnet-4.5",
+      "model_served": "claude-sonnet-4.5",
+      "usage": {
+        "completion_tokens": 4,
+        "kiro_credit_unit": "credit",
+        "kiro_credits": 0.024669294991708123,
+        "prompt_tokens": 5750,
+        "total_tokens": 5754
+      }
+    }
+  }
+}

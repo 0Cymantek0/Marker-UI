@@ -1,0 +1,1716 @@
+{
+  "cache_schema_version": "marker.pr81a_vlm_cache.v1",
+  "gateway_origin": "OpenAI-compatible gateway: localhost",
+  "model_chain": [
+    "free/bbl/gemini-3.0-flash"
+  ],
+  "responses": {
+    "03780d8008d5215f057c397f543c852b4eaac0b136436fcae184f45cfb71e510": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"72%\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 331,
+        "prompt_tokens": 19974,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20305
+      }
+    },
+    "04b39fd38e430757f0b9577b5cc39abaed38d8ea9726420f8bc5973ed40101cb": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 803,
+        "prompt_tokens": 21053,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21856
+      }
+    },
+    "098f4542cbe623f7cd34284271ba7ef634cee8cf67519fafcf6538837ce69a72": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"South\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 2616,
+        "prompt_tokens": 19975,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 22591
+      }
+    },
+    "0ac5f966d4b11f0cb1453d1015f426f93928979f3d736e8ed0d541b97e671dfe": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2.4M USD\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 289,
+        "prompt_tokens": 19964,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20253
+      }
+    },
+    "0d6dad5b9e71136d1d569e143b48e9138c6992200e98fd66e287c2c634da078b": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 0, \"B\": 10, \"C\": 3, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 422,
+        "prompt_tokens": 21064,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21486
+      }
+    },
+    "0d8bbc2361b27d449a0915db90a850a23a52ffa26d4e5e00be1928f90b0f763c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Jun-24\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 160,
+        "prompt_tokens": 21061,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21221
+      }
+    },
+    "0e8cb81205289facb158421a8b9d0541941527b72e3cab62f54485b16988a791": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"RW-2\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 143,
+        "prompt_tokens": 19965,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20108
+      }
+    },
+    "12da2d4e6ae9224679e01eea1ad7d15cc32f58fccb12e5d9e9b1b9da4ae9e0c4": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"L3\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 303,
+        "prompt_tokens": 21059,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21362
+      }
+    },
+    "1c461de7eeca5deef22eac3916b1ee752639a42e2c014f1be45ca226a32a48dd": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2026-08-02\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 220,
+        "prompt_tokens": 21066,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21286
+      }
+    },
+    "1c6781a65359e5f16ee2785173f153456ea34f64fc1f25424cd58c14536af34c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 208,
+        "prompt_tokens": 21073,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21281
+      }
+    },
+    "1cb307afdfabe2999eb1ed0f5ab250cec96f2c4d6c6a8f29523e9db2c9b73246": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"L3\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 122,
+        "prompt_tokens": 20038,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20160
+      }
+    },
+    "1f75d7f59f2a1fa289576620bbac530d47a5f1642c6282563530288ef9ced3cb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 206,
+        "prompt_tokens": 21064,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21270
+      }
+    },
+    "202bae55dbfd0d2794ec68797efb95280c626ef09882c0bc5594d22656507d06": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 2, \"B\": 10, \"C\": 3, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 552,
+        "prompt_tokens": 21063,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21615
+      }
+    },
+    "23d48d0c9c5b9a61eeb589168cc10e09085bac13c85045097f3fd5db3b8609f1": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"18.5\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 212,
+        "prompt_tokens": 20091,
+        "prompt_tokens_details": {
+          "cached_tokens": 8138
+        },
+        "total_tokens": 20303
+      }
+    },
+    "2839a016ab369fcc1c58dc5b6322f9c15cdd77fca89934c494038f369f1f7d5b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"3h40m\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 148,
+        "prompt_tokens": 20009,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20157
+      }
+    },
+    "2ab546384de84490b88937d1ae30aadcdc55b58ca4a17d56599d6e4a8779d0e2": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2450 USD\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 179,
+        "prompt_tokens": 21059,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21238
+      }
+    },
+    "2c3fffd80f8f0cc0774ef88b8e8afad4d71161adc96158f0bfd55eeb02c40b1b": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"95000\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 251,
+        "prompt_tokens": 21067,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21318
+      }
+    },
+    "2ef66813d3e32a26b3b19734e1276aeeaed3161a541d6475d373e329f1f1959a": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 350,
+        "prompt_tokens": 21052,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21402
+      }
+    },
+    "2f3acb37fd649f3e7110e7914c7a456964d755788f28a3cd7a5644f095301a3d": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"East\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 450,
+        "prompt_tokens": 21074,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21524
+      }
+    },
+    "2f8c2e5a459237eb3b2780eceba15604a73c728c669ab18e452d36c16d5279ba": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"95000\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 144,
+        "prompt_tokens": 19983,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20127
+      }
+    },
+    "3348dd70d1d143f5390d3c2f89cf9976a5b456c57a68c51483da9c7c486fb45f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 3, \"C\": 0, \"D\": 0, \"E\": 0}}\n\nFinal stop Route B Harbor Terminal. Page A list stops. Stop 4 last.",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 429,
+        "prompt_tokens": 21053,
+        "prompt_tokens_details": {
+          "cached_tokens": 8139
+        },
+        "total_tokens": 21482
+      }
+    },
+    "34c95028fc664c46f5c31840f7bf1b4f50759e77be0f46fe3290eecd64e09f1b": {
+      "attempts": 4,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 219,
+        "prompt_tokens": 21064,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21283
+      }
+    },
+    "36286f773f740a5adf0f8ff9780b5bcc4c8350dcfdce52bf52cb7dbfd07eb876": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 1059,
+        "prompt_tokens": 21052,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 22111
+      }
+    },
+    "3683afcf16330094d38ce1c16135e78a29d03eac34a5bc29a2130ec6404c8546": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"3h40m\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 240,
+        "prompt_tokens": 21065,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21305
+      }
+    },
+    "369093c1f052eb0f120b9c8b4f9c753af290afa3d9704a985dbdb8088b2c9d99": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Mar-15\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 287,
+        "prompt_tokens": 21068,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21355
+      }
+    },
+    "3a81332a360dcf7909e09ecf4fcb604c87f57dcf00a22d5a0c6b03ba99f810f1": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 145,
+        "prompt_tokens": 19953,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20098
+      }
+    },
+    "3b346f592e83287ecef33e02d87dedeebc90ff794c776ce5bf8fa03228103682": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 324,
+        "prompt_tokens": 21057,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21381
+      }
+    },
+    "3e3a23a5bf9c03e4c7fc7766dc2627e4101d6c4657cdc531c33f63f5a423df61": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Harbor Terminal\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 210,
+        "prompt_tokens": 21064,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21274
+      }
+    },
+    "3e897c39b09eb5fe75a4cb2ec8c97db01949a29212595b8e1046b2ab880d9673": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"11.55\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 217,
+        "prompt_tokens": 21074,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21291
+      }
+    },
+    "3eaff1674a364d31c0054a36481c03ebdc3557c3e956822f517e806b6c8286d9": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"4.0\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 300,
+        "prompt_tokens": 21071,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21371
+      }
+    },
+    "430c57a3fdb64039a6f252f7b1b2687fdef5cc8cddaa076772ae448d428383ec": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"3\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 178,
+        "prompt_tokens": 19954,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20132
+      }
+    },
+    "4448c6723f4f44c7d1db37b64ae0ce3abe56c0a0a286e95935ca8a6803577c44": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 3, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 302,
+        "prompt_tokens": 21053,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21355
+      }
+    },
+    "461216924ebb039677c1668279e6c396b509aa46469285cf63ae1c651b8fd6e8": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 290,
+        "prompt_tokens": 21074,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21364
+      }
+    },
+    "466c264aa679e7d0cf2b2639d684a245264c0988b8cfdacbcd549487a8ddc043": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"CLAUSE-9\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 177,
+        "prompt_tokens": 19934,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20111
+      }
+    },
+    "48003ed2d2569ce3108b85cf4cb76dcd26c17420b22d18c042f9674c493cf95d": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"87.4%\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 191,
+        "prompt_tokens": 19966,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20157
+      }
+    },
+    "4953d131ca7e39fe47b464678d55bdc18efaf63ab72c4fff77f79cb5ee0c6d4e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"18.5\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 407,
+        "prompt_tokens": 21072,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21479
+      }
+    },
+    "497c783eae510a91837f82efae9c6623db758a6de510ed646cf7ab3e64de37aa": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 466,
+        "prompt_tokens": 21052,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21518
+      }
+    },
+    "4b5b508c784ca117b06e90c962c0fd45f8f4f340565a3ab99aa68866f2fc454a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2026-09-15\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 137,
+        "prompt_tokens": 21055,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21192
+      }
+    },
+    "50076084e600afcb4ca9961f803e80fdba206c66bef60c0ae344490dac8ebc84": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Mar-15\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 142,
+        "prompt_tokens": 19962,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20104
+      }
+    },
+    "56c907213e87f9541bbed0f829a2f70819a89ae1929e482dc804d85d493e454f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 196,
+        "prompt_tokens": 21068,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21264
+      }
+    },
+    "5ce87be889df96a58c964624791b067aa6a3eab8a1b67b27e79c3c222e35aba1": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"14.7\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 285,
+        "prompt_tokens": 20091,
+        "prompt_tokens_details": {
+          "cached_tokens": 8138
+        },
+        "total_tokens": 20376
+      }
+    },
+    "5d415198befa224c23076c4797291f35c6686befcda1498c8eed83c3c1e79dd8": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 400,
+        "prompt_tokens": 21056,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21456
+      }
+    },
+    "65de96bb7f05b32ca6de763108212ad653dea73ccd39e74e9518bfd1a17bfcc9": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 1170,
+        "prompt_tokens": 21056,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 22226
+      }
+    },
+    "660b90b14f1867f5fa0e5aeb619bd5d40c4834ffc57a9f3f389f27358cf86b5f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 1, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 596,
+        "prompt_tokens": 21051,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21647
+      }
+    },
+    "683dfdff52be22253f666c87cbe84aa6727d0703691dbac44a6fdf2305ad9f76": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2450 USD\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 185,
+        "prompt_tokens": 19955,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20140
+      }
+    },
+    "68cd1b0575a103358967c05889ddaf5a29f5eaa1f991e96089294d02462e26e6": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 482,
+        "prompt_tokens": 21050,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21532
+      }
+    },
+    "6903947eac2a330f3792c7837667f2e6e58aa1b8f26c0b670bb2f940f32224a1": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 10, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 745,
+        "prompt_tokens": 21058,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21803
+      }
+    },
+    "69a1e3598e45fafe769632f12a972a864841e096c04ee72da33bc529449c6c14": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 262,
+        "prompt_tokens": 21076,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21338
+      }
+    },
+    "6babc19c89acc5123fb6aeafd1877be524c20e716c6d954a1814517007c68f53": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 349,
+        "prompt_tokens": 21058,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21407
+      }
+    },
+    "6c5937f61c0ff53a07b8a5d29e2f88985a8794a9fc5c0fd2b1354f908dbcb422": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 692,
+        "prompt_tokens": 21058,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21750
+      }
+    },
+    "6c925c8be4b5eba16377733ab076322384e89795f93c8e7cba0a7d1a7df16edf": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 452,
+        "prompt_tokens": 21056,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21508
+      }
+    },
+    "71ca6cf2f83f671bb9a805a1a118c57ad555dbab8e9caf5d3dbead63a355924e": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 3, \"B\": 7, \"C\": 4, \"D\": 4, \"E\": 3}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 595,
+        "prompt_tokens": 12922,
+        "total_tokens": 13517
+      }
+    },
+    "756aa9af6a5665c9f527a17054685eb74cb374b520bd36aeeffb647fd43e60be": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 276,
+        "prompt_tokens": 21072,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21348
+      }
+    },
+    "778ca80294fb91e643f295707aea6ddf3fe22808b0e3f142567f82943d9eed64": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"South\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 2160,
+        "prompt_tokens": 19976,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 22136
+      }
+    },
+    "77a1ae46869d30af0258bdad3e740cbb66b791c657261ac5bc896b378c13057d": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 449,
+        "prompt_tokens": 21048,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21497
+      }
+    },
+    "79fce484ad425cef0bdb15e10fc40fe0bf325e1fd34b45d406c168a5c77662b4": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"15\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 162,
+        "prompt_tokens": 21063,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21225
+      }
+    },
+    "7cf24b182de28acb202875774ece3241c71c02df6688becd534e5e105eb11c1a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 403,
+        "prompt_tokens": 21071,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21474
+      }
+    },
+    "7f1cb63b2f34deb8641dde5597e8313a371243fc1b88ceb9b741deb13c24f311": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"RW-2\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 247,
+        "prompt_tokens": 21061,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21308
+      }
+    },
+    "7f5b84841a680f41be0ba7618c76391ef83bd92ceaf334635963fbb082a5f604": {
+      "attempts": 2,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 2461,
+        "prompt_tokens": 21074,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 23535
+      }
+    },
+    "7ffaf397707e8a666f039b1aaf4bcedd67e070f7bb5570ae9d1b8dc9ed85226f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 1, \"C\": 0, \"D\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 1132,
+        "prompt_tokens": 21049,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 22181
+      }
+    },
+    "80843d43627df878be16816f1cf6e733241c43c86236b25035b326648e0a667f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 345,
+        "prompt_tokens": 21069,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21414
+      }
+    },
+    "845e4581da3d4c24b0b6db57b422229fa37c62f2461d3a8a4cb6c05440901608": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}\n\nPage A have chart. Firmware largest wedge.",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 1487,
+        "prompt_tokens": 21062,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 22549
+      }
+    },
+    "8e30d1d3f5e8a1d1f72d6d5dacf1921a74c210ef4d971ae537b88ed4e962579e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"CLAUSE-9\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 270,
+        "prompt_tokens": 21060,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21330
+      }
+    },
+    "93176ae055159634d5a6b597ae2c134be4eaf637443c1b26699d7b2b6f70814d": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"47\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 223,
+        "prompt_tokens": 20035,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20258
+      }
+    },
+    "98f9485252adb300a4d0304f266ee139de55372a12f126c5e90f9964277f9514": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"14.7\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 376,
+        "prompt_tokens": 21067,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21443
+      }
+    },
+    "9f9c163e7ef6cbe7c51c9e709ae1f02e65206933ce53b5ca419550a0ae8a8753": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 314,
+        "prompt_tokens": 21069,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21383
+      }
+    },
+    "a0fb930e3ffeab7740b88036386113e662eb829ba391133d58b18c5b17dcd0fa": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 3, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 666,
+        "prompt_tokens": 21048,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21714
+      }
+    },
+    "a20bb4caf1914d70cd7302ad0e4970c710854ae55fd84226fc9669fbeaa90dd9": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Depot East\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 361,
+        "prompt_tokens": 20008,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20369
+      }
+    },
+    "a37a10decf7be3c5e7dc3931c631ae2de66f3170106f68a3e0693936aa9a2d7e": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2.95\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 235,
+        "prompt_tokens": 20040,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20275
+      }
+    },
+    "a4b96807ddd1d7b45555b51eb9ff1c8cf7f070c433ef93b105e15d368ea0a31c": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 1610,
+        "prompt_tokens": 21047,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 22657
+      }
+    },
+    "a59de4f917f9e606bf8dbbc4a2ac0dead5aa187ceb88ea49f8e9174db0e6b34a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"39\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 141,
+        "prompt_tokens": 20035,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20176
+      }
+    },
+    "a628cd898681f7f8a6b99a6a41df8dd891bab8a20a8f0c3c9e4dab21898aefd5": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 282,
+        "prompt_tokens": 21074,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21356
+      }
+    },
+    "abd70611d324327731709e526172c21f394030f60ff06d219e66a067999036d9": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Harbor Terminal\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 165,
+        "prompt_tokens": 20008,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20173
+      }
+    },
+    "ae106ea5a7730cad75febd7500610963f2a39868244e626cdf740a9b6742ffd8": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"3\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 175,
+        "prompt_tokens": 21062,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21237
+      }
+    },
+    "b6460bf4cba88ae81dbcc888c8479a8e64206d48a8e09bf11e43a9ec10b1a905": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 1, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 523,
+        "prompt_tokens": 21057,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21580
+      }
+    },
+    "b6b5a38d86ac95f742999701053603e399375cf40349932141f35f71f2026968": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2.4M USD\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 131,
+        "prompt_tokens": 21057,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21188
+      }
+    },
+    "b6cd99417e748abac45e52b45648b2ee1842528dd98cdfa69d49e59dbe8cfd5c": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 2, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 817,
+        "prompt_tokens": 21062,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21879
+      }
+    },
+    "b9164a7300bd160a68ddba5f9282527feee3c06132898c6be1ff90a1d34910e7": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 2, \"B\": 10, \"C\": 0, \"D\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 774,
+        "prompt_tokens": 21061,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21835
+      }
+    },
+    "b960f0152fca7d02358e18c04157c0669de049b3ca882bad9b67dc69b8265443": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 2, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 779,
+        "prompt_tokens": 21051,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21830
+      }
+    },
+    "bb438f091972111a4612a8bbf9d604073201a67725e583e6f5cf2a7370abc8f4": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 10, \"E\": 10, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 1403,
+        "prompt_tokens": 21066,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 22469
+      }
+    },
+    "bbd8fd724b9fa2c09e04e0870b3c98465d2250ce34fbd2d07dee137649215ded": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 1, \"B\": 10, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 2760,
+        "prompt_tokens": 21067,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 23827
+      }
+    },
+    "bd9d8e9502f8c23ae352a7fba5ede32eddf1426c6f756110b88e58196cce1358": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 212,
+        "prompt_tokens": 19958,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20170
+      }
+    },
+    "c1652268a4a484debbc3b5cb59d655caee10b80b17f909d2be9544bde2490676": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"4.0\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 339,
+        "prompt_tokens": 19976,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20315
+      }
+    },
+    "c17abb01e8380538cf93f4b6e6e363dd3b12b1f38bda61010733103ea6d0abae": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"87.4%\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 243,
+        "prompt_tokens": 21062,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21305
+      }
+    },
+    "c82d64feaca4be2fa6bc2484f38db85f08bd2d2d184531c6120fae4371e8c169": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 277,
+        "prompt_tokens": 21069,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21346
+      }
+    },
+    "ca1eff025d60e9daa9c08cb2bcde699bd364dbb94b233386a2707320dbbb0040": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Omar Haddad\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 153,
+        "prompt_tokens": 19965,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20118
+      }
+    },
+    "cf176e810fb0f7b0c4191418563465cb8fa009ba0d2783bc0fc054bd3f23d0eb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"West\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 473,
+        "prompt_tokens": 21072,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21545
+      }
+    },
+    "d2f04b79c5a7bd940fde72810002a1df342e1b012278b47a8f2a745d98de3f83": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 434,
+        "prompt_tokens": 21053,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21487
+      }
+    },
+    "d3d3a5cb073ec0c2360f41bffc5f007b93ddc279310fd882cb83a9e8a7dfd676": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"ZETA-9\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 147,
+        "prompt_tokens": 20008,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20155
+      }
+    },
+    "d424fe67120c8caa05cb7950ca0b797f414c486df72526c1dd17442f5d3f60c4": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 201,
+        "prompt_tokens": 21065,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21266
+      }
+    },
+    "db963fa0f7618156d342e475febe8b51844810953c10914372c058370c91414a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2.95\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 184,
+        "prompt_tokens": 21060,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21244
+      }
+    },
+    "dcf69af3b4e0bbd5dc267580056cf56f00017567dc6c959dbe057bd3cd3b7eb3": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Depot East\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 161,
+        "prompt_tokens": 21064,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21225
+      }
+    },
+    "dd55c804124556eddc2536ac1a459a860709f38764984b6a4e7bd6b8c62197d7": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"ZETA-9\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 175,
+        "prompt_tokens": 21067,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21242
+      }
+    },
+    "de25ece6ca3c17633d442b00e2ec8afad23987df4cf432fb061752a010c783c5": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"8.10\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 1359,
+        "prompt_tokens": 19960,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 21319
+      }
+    },
+    "e06a0ea7e41a88f851977dadf3341cbe4021c699f86f7bc48e459c005de3a21a": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 0, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 365,
+        "prompt_tokens": 21052,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21417
+      }
+    },
+    "e342468ffe9d39c24602aa8ffa9951c51cb160a135378c3c4a79e073bbf76fe0": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 2, \"C\": 0, \"D\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 535,
+        "prompt_tokens": 21059,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21594
+      }
+    },
+    "e3f38ac4480ff7c6a15b5dd6abb0706ca9a0037bb5dccddd68d9dcf307f12c1c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 140,
+        "prompt_tokens": 19949,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20089
+      }
+    },
+    "e54573a3f92240f632cdf2e8e9786366ef2d7d7c051c2a395924151a7d98f2dd": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2026-09-15\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 132,
+        "prompt_tokens": 19954,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20086
+      }
+    },
+    "e55d52b95607e6d12165cc05cd964ebf0f7f80cdf2a177ee706842df40a22576": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"47\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 253,
+        "prompt_tokens": 21071,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21324
+      }
+    },
+    "e75fa56a0783ed130ce78fa06109b2f89206f8763600855b0f6588b03e6c8ef6": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 10, \"B\": 3, \"C\": 0, \"D\": 0, \"E\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 623,
+        "prompt_tokens": 21055,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21678
+      }
+    },
+    "e98f746509274bb4e9eea96111e49d9e81af8b171d48875eb68acafa16e994cb": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"72%\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 186,
+        "prompt_tokens": 21073,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21259
+      }
+    },
+    "ea81f8df57b513e2487302c6521f257a7a38e5fe1822146b2173adbbf5f9a304": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"15\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 266,
+        "prompt_tokens": 19989,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20255
+      }
+    },
+    "eabd9e2908f9e2f573aa0dc58f3e72627589d44ecede2485da729894ea63ce48": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Omar Haddad\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 252,
+        "prompt_tokens": 21063,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21315
+      }
+    },
+    "eb188fd6fdd7054990a20d66769bd91397aca622e5e422049322184987142304": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Jun-24\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 147,
+        "prompt_tokens": 19979,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20126
+      }
+    },
+    "ee1e55e39bf2df6e486fb7cff0c79bd73b0f8480bb12ce6bbffe1ba6247c97db": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"answer\": null}\n```",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 413,
+        "prompt_tokens": 19967,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20380
+      }
+    },
+    "eec0503f1077e46d763f28526daebffec92d9a2e6186277f476fe3cbaf1d59be": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"41\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 401,
+        "prompt_tokens": 21071,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21472
+      }
+    },
+    "f15d3be2163375da3ad9328a1969f7cea3cf8ce30d3f9e31991aaa34bce8eb86": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"2026-08-02\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 196,
+        "prompt_tokens": 19960,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20156
+      }
+    },
+    "f433368f648e8d515ad44ec429b128144bf0a7b3b5450cc6899f724168440bde": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"1\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 134,
+        "prompt_tokens": 21063,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21197
+      }
+    },
+    "f67bfd414d7971a6dbd032a603e2562bf4387e0b55b4ad7bfa82c3a57f97cc1a": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"1\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 57,
+        "prompt_tokens": 19954,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20011
+      }
+    },
+    "f6e77247f2e8eaf14a4c0534a0123f7c43453edab329904258c7fd974ec92d61": {
+      "attempts": 1,
+      "content_raw": "```json\n{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 0, \"D\": 10, \"E\": 0, \"F\": 0}}\n```\n\nQuality director Omar Haddad. Page D show org chart. Done.",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 3320,
+        "prompt_tokens": 21058,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 24378
+      }
+    },
+    "f70831b8faa188eaed13a73e9b5d7c4b52796a8c748943b536e1299d93f6e0ff": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 20,
+        "prompt_tokens": 25262,
+        "prompt_tokens_details": {
+          "cached_tokens": 8112
+        },
+        "total_tokens": 25282
+      }
+    },
+    "fc1a83a019e11228c863a3dceea0db85aad7d55f126c54f74eb1842f73f7fd0f": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": null}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 141,
+        "prompt_tokens": 21059,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21200
+      }
+    },
+    "fda6aa07d4a80de317c4a6a5916a3848f71890dd83024903f2e17dbe6f9c0e8f": {
+      "attempts": 1,
+      "content_raw": "{\"scores\": {\"A\": 0, \"B\": 0, \"C\": 10, \"D\": 0, \"E\": 0, \"F\": 0}}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 593,
+        "prompt_tokens": 21065,
+        "prompt_tokens_details": {
+          "cached_tokens": 8140
+        },
+        "total_tokens": 21658
+      }
+    },
+    "fe072a461849b5af731e53be150248e969418508f0f6a89bf487a74b7c64c37c": {
+      "attempts": 1,
+      "content_raw": "{\"answer\": \"Firmware\"}",
+      "error": null,
+      "model_requested": "free/bbl/gemini-3.0-flash",
+      "model_served": "bbl/gemini-3.0-flash",
+      "usage": {
+        "completion_tokens": 166,
+        "prompt_tokens": 19960,
+        "prompt_tokens_details": {
+          "cached_tokens": 8137
+        },
+        "total_tokens": 20126
+      }
+    }
+  }
+}

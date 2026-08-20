@@ -1,0 +1,213 @@
+{
+  "schema_version": "marker.pr81b_model_sensitivity.v1",
+  "benchmark": "PR81B VLM model-sensitivity matrix over the PR81A experiment",
+  "git_sha": "b90a914f2c053ee6662fc084f5e0ab385cffd362",
+  "models": [
+    "kr/claude-sonnet-4.5",
+    "kr/claude-haiku-4.5",
+    "cx/gpt-5.6-luna",
+    "free/bbl/gemini-3.0-flash"
+  ],
+  "confirmation": {
+    "outcome": "confirmed",
+    "attribution": "rerank_vision",
+    "summary": "3 capable models hold the hybrid route (2 frontier-tier) under the per-model PR81A rule with zero security dangers; attribution: rerank_vision.",
+    "holders": [
+      "cx/gpt-5.6-luna",
+      "free/bbl/gemini-3.0-flash",
+      "kr/claude-sonnet-4.5"
+    ],
+    "frontier_holders": [
+      "cx/gpt-5.6-luna",
+      "kr/claude-sonnet-4.5"
+    ],
+    "capable_models": [
+      "cx/gpt-5.6-luna",
+      "free/bbl/gemini-3.0-flash",
+      "kr/claude-haiku-4.5",
+      "kr/claude-sonnet-4.5"
+    ],
+    "answer_vision_models": [],
+    "rerank_vision_models": [
+      "cx/gpt-5.6-luna",
+      "free/bbl/gemini-3.0-flash",
+      "kr/claude-sonnet-4.5"
+    ],
+    "models": {
+      "kr/claude-sonnet-4.5": {
+        "model": "kr/claude-sonnet-4.5",
+        "tier": "frontier",
+        "capability_probe_passed": true,
+        "capability_probe_correct": 3,
+        "per_model_outcome": "narrow_rerank_only",
+        "baseline_visual_hard_rate": 0.6566799999999999,
+        "hybrid_visual_hard_rate": 0.96,
+        "hybrid_gain_vs_baseline": 0.3033,
+        "hybrid_text_easy_rate": 1.0,
+        "hybrid_text_easy_control_ok": true,
+        "ceiling_clause_applied": false,
+        "security_dangers": {},
+        "no_delivery_clean": true,
+        "holds": true,
+        "ablation_visual_hard_rates": {
+          "hybrid_image_answer": 0.96,
+          "hybrid_text_answer": 0.8933399999999999,
+          "hybrid_joint_answer": 0.96,
+          "union_only_no_rerank": 0.6566799999999999
+        },
+        "ablation_deltas": {
+          "answer_vision_delta": 0.0667,
+          "rerank_delta": 0.3033,
+          "joint_over_image_delta": 0.0
+        }
+      },
+      "kr/claude-haiku-4.5": {
+        "model": "kr/claude-haiku-4.5",
+        "tier": "frontier",
+        "capability_probe_passed": true,
+        "capability_probe_correct": 3,
+        "per_model_outcome": "do_not_promote",
+        "baseline_visual_hard_rate": 0.6566799999999999,
+        "hybrid_visual_hard_rate": 0.8933399999999999,
+        "hybrid_gain_vs_baseline": 0.2367,
+        "hybrid_text_easy_rate": 0.5,
+        "hybrid_text_easy_control_ok": false,
+        "ceiling_clause_applied": false,
+        "security_dangers": {},
+        "no_delivery_clean": true,
+        "holds": false,
+        "ablation_visual_hard_rates": {
+          "hybrid_image_answer": 0.8933399999999999,
+          "hybrid_text_answer": 0.82668,
+          "hybrid_joint_answer": 0.8933399999999999,
+          "union_only_no_rerank": 0.6566799999999999
+        },
+        "ablation_deltas": {
+          "answer_vision_delta": 0.0667,
+          "rerank_delta": 0.2367,
+          "joint_over_image_delta": 0.0
+        }
+      },
+      "cx/gpt-5.6-luna": {
+        "model": "cx/gpt-5.6-luna",
+        "tier": "frontier",
+        "capability_probe_passed": true,
+        "capability_probe_correct": 3,
+        "per_model_outcome": "narrow_rerank_only",
+        "baseline_visual_hard_rate": 0.60668,
+        "hybrid_visual_hard_rate": 0.9099999999999999,
+        "hybrid_gain_vs_baseline": 0.3033,
+        "hybrid_text_easy_rate": 0.8333,
+        "hybrid_text_easy_control_ok": true,
+        "ceiling_clause_applied": false,
+        "security_dangers": {},
+        "no_delivery_clean": true,
+        "holds": true,
+        "ablation_visual_hard_rates": {
+          "hybrid_image_answer": 0.9099999999999999,
+          "hybrid_text_answer": 0.8433399999999999,
+          "hybrid_joint_answer": null,
+          "union_only_no_rerank": 0.60668
+        },
+        "ablation_deltas": {
+          "answer_vision_delta": 0.0667,
+          "rerank_delta": 0.3033,
+          "joint_over_image_delta": null
+        }
+      },
+      "free/bbl/gemini-3.0-flash": {
+        "model": "free/bbl/gemini-3.0-flash",
+        "tier": "economy",
+        "capability_probe_passed": true,
+        "capability_probe_correct": 2,
+        "per_model_outcome": "narrow_rerank_only",
+        "baseline_visual_hard_rate": 0.6566799999999999,
+        "hybrid_visual_hard_rate": 0.9199999999999999,
+        "hybrid_gain_vs_baseline": 0.2633,
+        "hybrid_text_easy_rate": 1.0,
+        "hybrid_text_easy_control_ok": true,
+        "ceiling_clause_applied": false,
+        "security_dangers": {},
+        "no_delivery_clean": true,
+        "holds": true,
+        "ablation_visual_hard_rates": {
+          "hybrid_image_answer": 0.9199999999999999,
+          "hybrid_text_answer": 0.8933399999999999,
+          "hybrid_joint_answer": null,
+          "union_only_no_rerank": 0.6566799999999999
+        },
+        "ablation_deltas": {
+          "answer_vision_delta": 0.0267,
+          "rerank_delta": 0.2633,
+          "joint_over_image_delta": null
+        }
+      }
+    },
+    "thresholds": {
+      "material_margin": 0.1,
+      "ceiling_floor": 0.9,
+      "min_holders": 3,
+      "min_frontier_holders": 2,
+      "security_dangers": [
+        "forbidden_delivered",
+        "stale_revision_delivered",
+        "unresolvable_source"
+      ]
+    },
+    "declared_rule": "Per model: the committed PR81A decision rule is re-applied to that model's artifact (B2 baseline vs hybrid on the visual-hard slices, text-easy control, zero forbidden/stale/unresolvable dangers, clean no-delivery probes, cost envelope). A model holds iff it passed the capability probe, its per-model outcome is narrow_rerank_only or promote_narrow, and it has no security dangers \u2014 or the pre-declared ceiling clause applies (hybrid visual-hard >= 0.9 without regressing its own baseline, control and security intact). Confirmation requires >= 3 holders including >= 2 frontier-tier models; 1..N-1 holders means model_gated_experimental with a model-quality gate; zero holders means do_not_promote. Independently, attribution is answer_vision if the text-answer ablation costs >= 0.1 for any holder, else rerank_vision if the union-only ablation costs >= 0.1 for any holder, else retrieval_only and the promotion claim is re-scoped from visual answering to candidate-union recall plus rerank selection."
+  },
+  "summary": {
+    "kr/claude-sonnet-4.5": {
+      "capability_probe_passed": true,
+      "per_model_outcome": "narrow_rerank_only",
+      "baseline_visual_hard_rate": 0.6566799999999999,
+      "hybrid_visual_hard_rate": 0.96,
+      "hybrid_gain_vs_baseline": 0.3033,
+      "holds": true,
+      "ablation_deltas": {
+        "answer_vision_delta": 0.0667,
+        "rerank_delta": 0.3033,
+        "joint_over_image_delta": 0.0
+      }
+    },
+    "kr/claude-haiku-4.5": {
+      "capability_probe_passed": true,
+      "per_model_outcome": "do_not_promote",
+      "baseline_visual_hard_rate": 0.6566799999999999,
+      "hybrid_visual_hard_rate": 0.8933399999999999,
+      "hybrid_gain_vs_baseline": 0.2367,
+      "holds": false,
+      "ablation_deltas": {
+        "answer_vision_delta": 0.0667,
+        "rerank_delta": 0.2367,
+        "joint_over_image_delta": 0.0
+      }
+    },
+    "cx/gpt-5.6-luna": {
+      "capability_probe_passed": true,
+      "per_model_outcome": "narrow_rerank_only",
+      "baseline_visual_hard_rate": 0.60668,
+      "hybrid_visual_hard_rate": 0.9099999999999999,
+      "hybrid_gain_vs_baseline": 0.3033,
+      "holds": true,
+      "ablation_deltas": {
+        "answer_vision_delta": 0.0667,
+        "rerank_delta": 0.3033,
+        "joint_over_image_delta": null
+      }
+    },
+    "free/bbl/gemini-3.0-flash": {
+      "capability_probe_passed": true,
+      "per_model_outcome": "narrow_rerank_only",
+      "baseline_visual_hard_rate": 0.6566799999999999,
+      "hybrid_visual_hard_rate": 0.9199999999999999,
+      "hybrid_gain_vs_baseline": 0.2633,
+      "holds": true,
+      "ablation_deltas": {
+        "answer_vision_delta": 0.0267,
+        "rerank_delta": 0.2633,
+        "joint_over_image_delta": null
+      }
+    }
+  }
+}
