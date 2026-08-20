@@ -1,0 +1,99 @@
+{
+  "schema_version": "marker.model_catalog.v1",
+  "providers": [
+    {
+      "id": "local-gateway",
+      "transport": "openai_chat",
+      "base_url_env": "MARKER_LLM_BASE_URL",
+      "api_key_env": "MARKER_LLM_API_KEY",
+      "base_url_default": null
+    },
+    {
+      "id": "openrouter",
+      "transport": "openai_chat",
+      "base_url_env": "MARKER_LLM_BASE_URL",
+      "api_key_env": "MARKER_LLM_API_KEY",
+      "base_url_default": "https://openrouter.ai/api/v1"
+    }
+  ],
+  "models": [
+    {
+      "id": "kr/claude-sonnet-4.5",
+      "provider": "local-gateway",
+      "context_window": 200000,
+      "max_output": 64000,
+      "tier": "frontier",
+      "vision": true,
+      "reasoning": true,
+      "tools": true,
+      "search": true,
+      "thinking": { "format": "claude-budget", "can_disable": true },
+      "tags": ["pr81b-holder"]
+    },
+    {
+      "id": "kr/claude-haiku-4.5",
+      "provider": "local-gateway",
+      "context_window": 200000,
+      "max_output": 64000,
+      "tier": "frontier",
+      "vision": true,
+      "reasoning": true,
+      "tools": true,
+      "search": true,
+      "thinking": { "format": "claude-budget", "can_disable": true },
+      "tags": ["pr81b-control-breach"]
+    },
+    {
+      "id": "cx/gpt-5.6-luna",
+      "provider": "local-gateway",
+      "context_window": 272000,
+      "max_output": 128000,
+      "tier": "frontier",
+      "vision": true,
+      "reasoning": true,
+      "tools": true,
+      "search": true,
+      "thinking": { "format": "openai", "can_disable": true },
+      "tags": ["pr81b-holder"]
+    },
+    {
+      "id": "free/bbl/gemini-3.0-flash",
+      "provider": "local-gateway",
+      "context_window": 1048576,
+      "max_output": 65536,
+      "tier": "economy",
+      "vision": true,
+      "reasoning": true,
+      "tools": true,
+      "search": true,
+      "thinking": { "format": "gemini-level", "can_disable": false },
+      "tags": ["pr81b-holder"]
+    },
+    {
+      "id": "oc/mimo-v2.5-free",
+      "provider": "local-gateway",
+      "context_window": 1048576,
+      "max_output": 131072,
+      "tier": "economy",
+      "vision": true,
+      "reasoning": false,
+      "tools": true,
+      "search": false,
+      "thinking": { "format": null, "can_disable": true },
+      "tags": ["pr81b-rate-limited"]
+    },
+    {
+      "id": "google/gemma-4-26b-a4b-it:free",
+      "provider": "openrouter",
+      "context_window": 131072,
+      "max_output": 32768,
+      "tier": "economy",
+      "vision": true,
+      "reasoning": false,
+      "tools": true,
+      "search": false,
+      "thinking": { "format": null, "can_disable": true },
+      "tags": ["pr81a-reference"]
+    }
+  ]
+}

@@ -34,6 +34,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND))
 
+from app.eval.model_catalog import load_catalog  # noqa: E402
 from app.eval.pr81a.corpus import load_corpus  # noqa: E402
 from app.eval.pr81a.vlm import OPENROUTER_BASE_URL, VlmClient  # noqa: E402
 from app.eval.pr81b.decision import evaluate_confirmation  # noqa: E402
@@ -44,15 +45,35 @@ MATRIX_SCHEMA = "marker.pr81b_model_sensitivity.v1"
 MEASUREMENTS = BACKEND.parent / "docs" / "reference" / "measurements"
 CORPUS_ROOT = BACKEND / "eval_data" / "pr81a"
 PR81A_RUNNER = BACKEND / "scripts" / "bench_pr81a_visual_retrieval.py"
-#: model id -> artifact/cache tag; short, filesystem-safe, stable.
-#: Model ids are the user-declared exact gateway ids — never rewritten.
+#: the declared PR81B matrix that completed (mimo was probed and passed
+#: but its gateway route stayed rate-limited below usability, so no
+#: artifact exists — select it explicitly to include it in a future
+#: run); the catalog knows more models than this default
+DEFAULT_MODELS = (
+    "kr/claude-sonnet-4.5",
+    "kr/claude-haiku-4.5",
+    "cx/gpt-5.6-luna",
+    "free/bbl/gemini-3.0-flash",
+)
 MODEL_TAGS: dict[str, str] = {
     "oc/mimo-v2.5-free": "mimo",
     "kr/claude-sonnet-4.5": "sonnet",
     "kr/claude-haiku-4.5": "haiku",
     "cx/gpt-5.6-luna": "gptluna",
     "free/bbl/gemini-3.0-flash": "gemflash",
+    "google/gemma-4-26b-a4b-it:free": "gemma",
 }
+#: known model ids get stable short artifact tags; anything else derives
+#: a filesystem-safe tag from its id (catalog selections may add models
+#: without touching this map)
+
+
+def _tag_for(model_id: str) -> str:
+    if model_id in MODEL_TAGS:
+        return MODEL_TAGS[model_id]
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", model_id.lower()).strip("-")
 
 
 def _model_artifact_path(tag: str) -> Path:
@@ -84,7 +105,7 @@ def run_probe_for_model(model: str, base_url: str, api_key: str, cache_dir: Path
             [model],
             api_key=api_key,
             base_url=base_url,
-            cache_path=cache_dir / f"pr81b-probe-cache-{MODEL_TAGS[model]}.json",
+            cache_path=cache_dir / f"pr81b-probe-cache-{_tag_for(model)}.json",
             mode="auto",
             **_retry_knobs(),
         )
@@ -94,7 +115,7 @@ def run_probe_for_model(model: str, base_url: str, api_key: str, cache_dir: Path
 
 
 def run_model_benchmark(model: str, base_url: str, api_key: str, index_root: Path, lean: bool) -> int:
-    tag = MODEL_TAGS[model]
+    tag = _tag_for(model)
     index_dir = index_root / f"pr81b-indexes-{tag}"
     index_dir.mkdir(parents=True, exist_ok=True)
     env = {
@@ -127,7 +148,7 @@ def run_model_benchmark(model: str, base_url: str, api_key: str, index_root: Pat
 
 
 def merge_probe_into_artifact(model: str, probe: dict) -> None:
-    tag = MODEL_TAGS[model]
+    tag = _tag_for(model)
     path = _model_artifact_path(tag)
     artifact = json.loads(path.read_text(encoding="utf-8"))
     artifact["capability_probe"] = probe
@@ -137,7 +158,7 @@ def merge_probe_into_artifact(model: str, probe: dict) -> None:
 def aggregate(models: list[str]) -> dict:
     per_model: dict[str, dict] = {}
     for model in models:
-        path = _model_artifact_path(MODEL_TAGS[model])
+        path = _model_artifact_path(_tag_for(model))
         if not path.is_file():
             raise SystemExit(f"missing per-model artifact: {path}")
         per_model[model] = json.loads(path.read_text(encoding="utf-8"))
@@ -176,12 +197,22 @@ def main() -> int:
     )
     parser.add_argument(
         "--models",
-        default=",".join(MODEL_TAGS),
-        help="comma-separated model ids (default: all declared PR81B models)",
+        default=",".join(DEFAULT_MODELS),
+        help="comma-separated exact model ids, or a catalog capability "
+        "selector like @vision / @tier:frontier / @tier:frontier&vision "
+        "(default: all declared PR81B models)",
+    )
+    parser.add_argument(
+        "--catalog",
+        type=Path,
+        default=None,
+        help="model catalog path (default: the committed app/eval catalog)",
     )
     parser.add_argument(
         "--base-url",
-        default=os.environ.get("PR81A_VLM_BASE_URL", OPENROUTER_BASE_URL),
+        default=None,
+        help="gateway base URL override; otherwise resolved from the catalog "
+        "provider env (MARKER_LLM_BASE_URL) or the provider default",
     )
     parser.add_argument(
         "--probe-cache-dir",
@@ -207,20 +238,37 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    models = [m.strip() for m in args.models.split(",") if m.strip()]
-    unknown = [m for m in models if m not in MODEL_TAGS]
-    if unknown:
-        raise SystemExit(f"no declared tag for model(s): {unknown}")
+    try:
+        catalog = load_catalog(args.catalog)
+        if args.live:
+            # live runs need a resolvable endpoint (env-driven)
+            selection = catalog.resolve(args.models)
+        else:
+            # offline aggregation only needs the model ids
+            selection = None
+            picked = catalog.pick(args.models)
+    except Exception as exc:
+        raise SystemExit(f"model selection failed: {exc}") from exc
+    if args.live:
+        models = [m.id for m in selection.models]
+        base_url = args.base_url or os.environ.get("PR81A_VLM_BASE_URL") or selection.base_url
+        print(f"[pr81b] selection {selection.selector!r} via provider {selection.provider.id}")
+    else:
+        models = [m.id for m in picked]
+        base_url = args.base_url
 
     if args.live:
-        api_key = os.environ.get("PR81A_VLM_API_KEY")
+        # back-compat env first, then the catalog provider's declared key env
+        api_key = os.environ.get("PR81A_VLM_API_KEY") or os.environ.get(selection.api_key_env)
         if not api_key:
-            raise SystemExit("--live requires PR81A_VLM_API_KEY in the environment")
+            raise SystemExit(
+                f"--live requires PR81A_VLM_API_KEY or ${selection.api_key_env} in the environment"
+            )
         args.probe_cache_dir.mkdir(parents=True, exist_ok=True)
         probe_table: dict[str, dict] = {}
         failures: dict[str, str] = {}
         for model in models:
-            tag = MODEL_TAGS[model]
+            tag = _tag_for(model)
             print(f"[pr81b] capability probe: {model}", flush=True)
             probe = run_probe_for_model(model, args.base_url, api_key, args.probe_cache_dir)
             probe_table[model] = probe

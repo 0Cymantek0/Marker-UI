@@ -254,6 +254,16 @@ cd backend && PR81A_VLM_API_KEY=<key> PR81A_VLM_BASE_URL=<base-url> \
   PR81A_VLM_MODELS=<exact-model-id> python scripts/bench_pr81b_model_sensitivity.py --live --lean
 ```
 
+Model selection is catalog-driven (`app/eval/model_catalog.py` +
+`model_catalog.default.json`): providers declare env var *names* for
+base URL and key (no values in the repo), models carry capability
+metadata (context window, max output, vision, thinking format/toggles,
+tier, tags), and `--models` accepts exact ids or capability selectors
+(`@vision`, `@tier:frontier&vision`) resolved against the catalog. The
+gateway's own capability listing is the metadata source. Nothing here
+extends `marker.query.v1`; product-runtime adoption is a future promoted
+decision.
+
 Scope claims: this matrix covers four vision-capable gateway models on
 one 15-document / 35-query corpus with CLIP-B/32 candidates. mimo was
 probed (3/3 after retry hardening) but not benchmarked (route
