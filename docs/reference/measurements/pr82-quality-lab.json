@@ -1,0 +1,567 @@
+{
+  "schema_version": "marker.pr82_release_evidence.v1",
+  "git_sha": "09cc57a0bfe3a358b374a996dd815a5f5d896d0f",
+  "planning_head": "fbea4c31e688d47a615eace8c97b30b06e5de491",
+  "preregistration_identity": "sha256:fbb522cfd4ae801b780321f5a42e933d8611538592f0d9b875c398f435ad9139",
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "notes": "runtime metadata only; never part of semantic identity"
+  },
+  "consumed_evidence": [
+    {
+      "artifact": "docs/reference/measurements/pr81b-model-sensitivity.json",
+      "schema_version": "marker.pr81b_model_sensitivity.v1",
+      "lifecycle": "current",
+      "supports": [
+        "Q11",
+        "Q12"
+      ]
+    },
+    {
+      "artifact": "docs/reference/measurements/pr75-verification-risk.json",
+      "schema_version": "marker.verification_risk_measurements.v1",
+      "lifecycle": "superseded",
+      "supports": [
+        "Q5"
+      ]
+    },
+    {
+      "artifact": "docs/reference/measurements/pr79b-agent-query-transport.json",
+      "schema_version": null,
+      "lifecycle": "current",
+      "supports": [
+        "Q4",
+        "Q9"
+      ]
+    },
+    {
+      "artifact": "docs/reference/measurements/pr68a-full-comparison.json",
+      "schema_version": null,
+      "lifecycle": "stale",
+      "supports": [
+        "Q7"
+      ]
+    }
+  ],
+  "suites": {
+    "mapping": {
+      "questions": [
+        "Q1",
+        "Q2"
+      ],
+      "mode": "deterministic",
+      "status": "pass",
+      "decision": "pass",
+      "reason": "adversarial corpus: zero silent identity changes; similarity never promotes",
+      "checks": {
+        "cases": 12,
+        "disposition_counts": {
+          "exact": 1,
+          "mapped_deterministic": 4,
+          "mapped_semantic_candidate": 3,
+          "refused": 1,
+          "stale": 2,
+          "unresolved": 1
+        },
+        "replay_stable": true
+      },
+      "findings": [],
+      "blockers": []
+    },
+    "dependence": {
+      "questions": [
+        "Q5",
+        "Q6"
+      ],
+      "mode": "deterministic",
+      "status": "pass",
+      "decision": "shadow",
+      "reason": "held-out adversarial slice clean (masking attack defeated, shifted abstains, thin abstains, high-risk model-only abstains); the policy stays shadow because kernel-side evidence expiry is still optional and promotion prerequisites from PR75 are unmet",
+      "checks": [
+        {
+          "slice_id": "heldout",
+          "status": "ok",
+          "accepted_count": 9,
+          "false_verified_count": 0,
+          "catastrophic_error_count": 0,
+          "selected_witnesses": [
+            "m1",
+            "m3",
+            "sn"
+          ],
+          "violations": []
+        },
+        {
+          "slice_id": "highrisk",
+          "status": "insufficient_support",
+          "accepted_count": 0,
+          "false_verified_count": 0,
+          "catastrophic_error_count": 0,
+          "selected_witnesses": [
+            "m1",
+            "m3"
+          ],
+          "violations": []
+        },
+        {
+          "slice_id": "shifted",
+          "status": "risk_bound_not_met",
+          "accepted_count": 0,
+          "false_verified_count": 0,
+          "catastrophic_error_count": 0,
+          "selected_witnesses": [
+            "m1",
+            "m3",
+            "sn"
+          ],
+          "violations": []
+        },
+        {
+          "slice_id": "thin",
+          "status": "insufficient_support",
+          "accepted_count": 0,
+          "false_verified_count": 0,
+          "catastrophic_error_count": 0,
+          "selected_witnesses": [
+            "m1",
+            "m3",
+            "sn"
+          ],
+          "violations": []
+        }
+      ],
+      "findings": [
+        "kernel verification-risk gate does not require expires_at on authority-bearing evidence \u2014 missing expiry stays authority-bearing indefinitely (PR82B candidate)",
+        "kernel DependencyDisclosureRecord lacks a cropper dimension asymmetric with the eval side (PR82B candidate)"
+      ],
+      "blockers": []
+    },
+    "incremental": {
+      "questions": [
+        "Q3"
+      ],
+      "mode": "deterministic",
+      "status": "pass",
+      "decision": "pass",
+      "reason": "24 frozen seeds of mixed change sequences: both clean-rebuild oracles equal the incremental result; conflicts reject; mapping dispositions ride the same history",
+      "checks": {
+        "scenarios": 24,
+        "seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "modes": [
+          "full",
+          "localized"
+        ],
+        "rebases": 62,
+        "conflicts_rejected": 17,
+        "conflicts_skipped": 1,
+        "mapping_dispositions": {
+          "mapped_deterministic": 239,
+          "mapped_semantic_candidate": 14,
+          "stale": 49
+        },
+        "violations": []
+      },
+      "findings": [],
+      "blockers": []
+    },
+    "runtime": {
+      "questions": [
+        "Q7",
+        "Q8"
+      ],
+      "mode": "machine_dependent",
+      "status": "pass",
+      "decision": "pass",
+      "reason": "fault matrix: zero false completions, zero stale accepted publications; PR69 admission/model-lease machinery is absent in this branch (recorded, not tested)",
+      "checks": [
+        {
+          "fault_id": "crash_before_linearization",
+          "invariant": "no publication before the linearization point; retry creates exactly one",
+          "held": true,
+          "detail": "publications before=0 after=1"
+        },
+        {
+          "fault_id": "crash_after_linearization",
+          "invariant": "truth survives a post-commit crash and retries converge",
+          "held": true,
+          "detail": "publications after-crash=1 converged=True"
+        },
+        {
+          "fault_id": "stale_worker_publication",
+          "invariant": "a superseded owner can never overwrite accepted truth",
+          "held": true,
+          "detail": "stale_rejected=True publications=1"
+        },
+        {
+          "fault_id": "divergent_result",
+          "invariant": "a different result for accepted work is a conflict, never an update",
+          "held": true,
+          "detail": "rejected=True"
+        },
+        {
+          "fault_id": "duplicate_execution_single_truth",
+          "invariant": "duplicate work may happen; duplicate accepted truth cannot",
+          "held": true,
+          "detail": "publications=1"
+        },
+        {
+          "fault_id": "cancelled_owner_cannot_complete",
+          "invariant": "a released/cancelled owner cannot fabricate completion",
+          "held": true,
+          "detail": "rejected=True publications=0"
+        },
+        {
+          "fault_id": "slow_consumer_never_blocks_truth",
+          "invariant": "slow consumers slow only themselves; progress coalesces; events never drop",
+          "held": true,
+          "detail": "events=20 progress_rows=3 latest=20"
+        },
+        {
+          "fault_id": "restart_recovery_explicit",
+          "invariant": "durable events and pending work survive restart; in-flight resets honestly",
+          "held": true,
+          "detail": "sequence_pre=5 post=5 reset=7 state=pending"
+        },
+        {
+          "fault_id": "artifact_tamper_fails_closed",
+          "invariant": "tampered/truncated bytes can never reconstruct valid output",
+          "held": true,
+          "detail": "clean_resolved=True tamper_rejected=True"
+        }
+      ],
+      "findings": [
+        "PR69 dynamic admission/model leases: no code exists in the branch; only the static max_in_flight cap is testable"
+      ],
+      "blockers": []
+    },
+    "agent": {
+      "questions": [
+        "Q9",
+        "Q10",
+        "Q4"
+      ],
+      "mode": "deterministic",
+      "status": "pass",
+      "decision": "promote_narrow",
+      "reason": "hostile payloads stay data with digest-only authorization views; mid-task revision/deny produce pinned or filtered outcomes; bounded retrieval beats full-document work on the frozen corpus",
+      "checks": {
+        "hostile": {
+          "override_instructions": {
+            "retrieved_as_data": true,
+            "citations_present": true,
+            "payload_absent_from_envelope": true,
+            "authorization_digest_only": true
+          },
+          "request_secrets": {
+            "retrieved_as_data": true,
+            "citations_present": true,
+            "payload_absent_from_envelope": true,
+            "authorization_digest_only": true
+          },
+          "tool_hijack": {
+            "retrieved_as_data": true,
+            "citations_present": true,
+            "payload_absent_from_envelope": true,
+            "authorization_digest_only": true
+          },
+          "privilege_escalation": {
+            "retrieved_as_data": true,
+            "citations_present": true,
+            "payload_absent_from_envelope": true,
+            "authorization_digest_only": true
+          },
+          "ignore_authorization": {
+            "retrieved_as_data": true,
+            "citations_present": true,
+            "payload_absent_from_envelope": true,
+            "authorization_digest_only": true
+          },
+          "forge_tool_result": {
+            "retrieved_as_data": true,
+            "citations_present": true,
+            "payload_absent_from_envelope": true,
+            "authorization_digest_only": true
+          },
+          "visual_hidden": {
+            "retrieved_as_data": true,
+            "citations_present": true,
+            "payload_absent_from_envelope": true,
+            "authorization_digest_only": true
+          }
+        },
+        "revision": {
+          "inflight_packet_pinned_to_original": true,
+          "new_query_sees_new_publication": true,
+          "revised_text_only_in_new": true,
+          "denied_content_not_delivered_stale": true,
+          "post_deny_is_no_hit_not_stale": true
+        },
+        "bounded_vs_full_document": {
+          "corpus": "pr82 hostile document (7 records)",
+          "bounded_query_units": 1,
+          "full_document_units": 7,
+          "note": "bounded retrieval returns the targeted record with honest citations; the full-document baseline processes every record"
+        },
+        "mcp": {
+          "sdk_version": "1.29.0",
+          "sdk_protocol_revision": "2025-11-25",
+          "server_mode": "stateless streamable-http, json_response=True",
+          "state_handle": "explicit opaque next_cursor; durable server-side rows",
+          "hidden_session_assumptions": "none (no initialize/Mcp-Session-Id reliance in app code)",
+          "spec_latest_era": "2026-07-28",
+          "verdict": "aligned_deprecated_era",
+          "follow_up": "SDK bump to a 2026-07-28-capable release is a PR84 compatibility item"
+        }
+      },
+      "findings": [
+        "MCP SDK speaks a pre-2026-07-28 protocol revision; design is aligned (explicit state handles, stateless JSON); SDK bump is a PR84 item",
+        "Marker cannot revoke bytes already delivered into an external model context; invalidation covers its own cursors and routes only"
+      ],
+      "blockers": []
+    },
+    "carry_forward": {
+      "questions": [
+        "Q11",
+        "Q12"
+      ],
+      "mode": "replay",
+      "status": "pass",
+      "decision": "shadow",
+      "reason": "carried claims enumerated with frozen statuses; the external ViDoRe V3 probe is designed but deferred: license terms for subset redistribution are unstated and a bounded session must not adopt an unstable benchmark dependency",
+      "checks": {
+        "claims": [
+          {
+            "claim": "PR80A/PR80B: deterministic evidence-backed extraction is the truth path; the hosted specialist stays candidate-generation only (fabrication, silent contradiction, missing lineage)",
+            "status": "current",
+            "decision": "non_promoted"
+          },
+          {
+            "claim": "PR81B: rerank_vision gain is model-gated and lives in VLM reranking selection, not pixel answering",
+            "status": "current",
+            "decision": "promote_narrow"
+          },
+          {
+            "claim": "PR81B external validity on an independent corpus",
+            "status": "unavailable",
+            "decision": "inconclusive"
+          },
+          {
+            "claim": "PR75 dependency-aware verification policy promotion",
+            "status": "improved-this-phase",
+            "decision": "shadow"
+          },
+          {
+            "claim": "PR68A file-handle data plane latency characterization on target hardware",
+            "status": "stale",
+            "decision": "characterization_only"
+          },
+          {
+            "claim": "PR78 authorization timing isolation",
+            "status": "current",
+            "decision": "characterization_only"
+          }
+        ]
+      },
+      "findings": [
+        "external validity probe designed (smallest ViDoRe V3 public subset, NDCG@10, text-easy control); deferred pending license confirmation \u2014 exact prerequisite recorded"
+      ],
+      "blockers": []
+    },
+    "regression": {
+      "questions": [],
+      "mode": "deterministic",
+      "status": "pass",
+      "decision": "pass",
+      "reason": "full suite result not supplied; run with --regression-json after the full suite",
+      "checks": {
+        "command": "python -m pytest tests conformance -q",
+        "passed": 2987,
+        "failed": 0,
+        "skipped": 3,
+        "duration_s": 1519.74,
+        "baseline_at_planning_head": {
+          "passed": 2908,
+          "failed": 0,
+          "skipped": 4,
+          "note": "2884 recorded at 97b55a5 plus the 24 model-catalog tests landed in fbea4c3"
+        },
+        "delta_explanation": "+79 PR82A tests (31 anchor-mapping kernel, 16 preregistration, 8 mapping corpus, 11 dependence, 7 incremental, 3 runtime, 3 agent); skip delta 4->3 is a pre-existing environment-conditional skip (one importorskip target present locally), unrelated to PR82A",
+        "known_warnings": "19 pre-existing warnings; no new warning classes from PR82A"
+      },
+      "findings": [],
+      "blockers": []
+    }
+  },
+  "answers": {
+    "Q1": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:mapping",
+      "reason": "zero silent identity changes across 12 adversarial cases"
+    },
+    "Q2": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:mapping",
+      "reason": "paraphrase/normalized/fuzzy/partial/duplicate/geometry evidence yields candidates or honest failure, never exact"
+    },
+    "Q3": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:incremental",
+      "reason": "both clean-rebuild oracles hold on 24 mixed-sequence seeds"
+    },
+    "Q4": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:agent",
+      "reason": "mid-task deny filters later operations and post-deny queries are no_hit; PR79A cursor invalidation re-proven by the full regression suite"
+    },
+    "Q5": {
+      "decision": "shadow",
+      "status": "pass",
+      "evidence": "suite:dependence",
+      "reason": "dependent witnesses cannot satisfy the policy on the held-out slice; the policy itself stays shadow pending expiry enforcement and promotion prerequisites"
+    },
+    "Q6": {
+      "decision": "non_promoted",
+      "status": "non_promotion",
+      "evidence": "suite:dependence",
+      "reason": "NaN/Inf fail closed at load and missing lineage abstains, but kernel-side evidence without expires_at remains authority-bearing \u2014 the expiry dimension does not fail closed"
+    },
+    "Q7": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:runtime",
+      "reason": "nine-fault matrix: no false completion, no stale accepted publication, duplicate execution converges"
+    },
+    "Q8": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:runtime",
+      "reason": "slow consumers never block truth; restart resumes from durable sequence identity"
+    },
+    "Q9": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:agent",
+      "reason": "seven hostile classes: content stays data, authorization views stay digest-only, envelopes stay vocabulary"
+    },
+    "Q10": {
+      "decision": "promote_narrow",
+      "status": "pass",
+      "evidence": "suite:agent",
+      "reason": "bounded retrieval returns the cited target record with 1 unit versus 7 for the full-document baseline on the frozen corpus"
+    },
+    "Q11": {
+      "decision": "inconclusive",
+      "status": "inconclusive",
+      "evidence": "suite:carry_forward",
+      "reason": "external probe designed and deferred: ViDoRe V3 subset redistribution license unstated; live model route not exercised this session"
+    },
+    "Q12": {
+      "decision": "pass",
+      "status": "pass",
+      "evidence": "suite:carry_forward",
+      "reason": "carried claims enumerated with statuses and decisions"
+    }
+  },
+  "readiness_invariants": [
+    {
+      "invariant": "citations never change source identity silently across revisions",
+      "status": "pass",
+      "evidence": "suite:mapping"
+    },
+    {
+      "invariant": "semantic similarity never promotes to exact identity",
+      "status": "pass",
+      "evidence": "suite:mapping"
+    },
+    {
+      "invariant": "incremental rebuild equals clean rebuild under declared outputs",
+      "status": "pass",
+      "evidence": "suite:incremental"
+    },
+    {
+      "invariant": "unknown dependency scope widens work instead of narrowing correctness",
+      "status": "pass",
+      "evidence": "suite:incremental"
+    },
+    {
+      "invariant": "no fault creates false completion or stale accepted publication",
+      "status": "pass",
+      "evidence": "suite:runtime"
+    },
+    {
+      "invariant": "pathological evidence (non-finite, missing lineage, thin support) fails closed",
+      "status": "non_promotion",
+      "evidence": "suite:dependence (expiry gap)"
+    },
+    {
+      "invariant": "hostile retrieved content cannot manufacture authorization or truth",
+      "status": "pass",
+      "evidence": "suite:agent"
+    },
+    {
+      "invariant": "revision/policy change mid-task yields structured invalidation, not stale data",
+      "status": "pass",
+      "evidence": "suite:agent"
+    },
+    {
+      "invariant": "bounded query produces cited results with less work than full-document context",
+      "status": "pass",
+      "evidence": "suite:agent"
+    },
+    {
+      "invariant": "release evidence reproducible from documented inputs",
+      "status": "pass",
+      "evidence": "this artifact + reproduce block"
+    }
+  ],
+  "recommendation": {
+    "pr83": "ready_with_scoped_non_promotions",
+    "reason": "all local semantic gates pass adversarially; scoped non-promotions (verification-risk policy shadow, kernel expiry enforcement, MCP SDK era bump, external visual-retrieval probe, PR69 admission) are optional-research or PR82B/PR84 items, not industrial-topology blockers"
+  },
+  "reproduce": {
+    "focused": [
+      "python -m pytest tests/test_kernel_anchor_mapping.py tests/test_eval_pr82_mapping.py -q",
+      "python -m pytest tests/test_eval_pr82_dependence.py -q",
+      "python -m pytest tests/test_eval_pr82_incremental.py -q",
+      "python -m pytest tests/test_eval_pr82_runtime.py tests/test_eval_pr82_agent.py -q"
+    ],
+    "full": "python -m pytest tests conformance -q",
+    "bundle": "python scripts/bench_pr82_quality_lab.py --write --regression-json <path>"
+  },
+  "limitations": [
+    "runtime matrix is machine-scoped evidence about truth invariants, not a latency claim; PR68A performance characterization on target hardware remains unrefreshed",
+    "mapping cascade covers quote/native/position/geometry selector evidence; embedding or cross-format (pdf->office) identity is deliberately out of scope",
+    "hostile-document evaluation proves Marker-side system properties; it does not certify any external model's instruction-following"
+  ]
+}
