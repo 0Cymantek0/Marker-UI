@@ -98,9 +98,20 @@ def main() -> int:
         "union-only) and the hybrid lane under high assurance; the default "
         "lane set and the committed PR81A evidence stay byte-identical",
     )
+    parser.add_argument(
+        "--lean-lanes",
+        action="store_true",
+        help="PR81B reduced lane set: keep lexical-render, the hybrid, and the "
+        "text/union ablations; drop lexical-text, the dense visual lanes, and "
+        "the joint ablation (their PR81A verdicts are model-independent or "
+        "secondary). The per-model decision rule and attribution stay "
+        "computable; requires --ablations",
+    )
     args = parser.parse_args()
 
     started = time.perf_counter()
+    if args.lean_lanes and not args.ablations:
+        raise SystemExit("--lean-lanes requires --ablations")
     corpus = load_corpus(CORPUS_ROOT)
     git_sha = _git_sha()
 
@@ -110,11 +121,15 @@ def main() -> int:
 
     base_url = os.environ.get("PR81A_VLM_BASE_URL", OPENROUTER_BASE_URL)
     env_models = os.environ.get("PR81A_VLM_MODELS")
+    retry_knobs = {
+        "max_retries": int(os.environ.get("PR81A_VLM_MAX_RETRIES", "4")),
+        "retry_backoff": float(os.environ.get("PR81A_VLM_RETRY_BACKOFF", "4.0")),
+    }
     if args.live:
         # auto = cache first, network on miss: reruns resume and only
         # refill calls that previously failed, so transient outages heal
         models = [m.strip() for m in env_models.split(",") if m.strip()] if env_models else None
-        vlm = VlmClient(models=models, base_url=base_url, cache_path=args.vlm_cache, mode="auto")
+        vlm = VlmClient(models=models, base_url=base_url, cache_path=args.vlm_cache, mode="auto", **retry_knobs)
     else:
         header_models = None
         if args.vlm_cache.is_file():
@@ -140,6 +155,7 @@ def main() -> int:
                     index_dir=args.index_dir,
                     live=args.live,
                     ablations=args.ablations,
+                    lean_lanes=args.lean_lanes,
                 )
             finally:
                 await engine.dispose()
@@ -205,7 +221,7 @@ def main() -> int:
 
 async def _run_benchmark(
     *, factory, service, corpus, tmp_path, vlm, dense_specs, index_dir, live: bool,
-    ablations: bool = False,
+    ablations: bool = False, lean_lanes: bool = False,
 ) -> dict:
     ws = await seed_workspace(
         factory=factory,
@@ -278,6 +294,18 @@ async def _run_benchmark(
             (V2_JOINT_SYSTEM, primary),
             (V2_UNION_SYSTEM, primary),
         ]
+        if lean_lanes:
+            # model-independent verdicts (lexical-text parity, dense
+            # negative) are PR81A-committed; the joint ablation is
+            # secondary — keep only rule- and attribution-critical lanes
+            ablation_systems = [
+                (V2_TEXT_SYSTEM, primary),
+                (V2_UNION_SYSTEM, primary),
+            ]
+            systems_a = [
+                (B2_SYSTEM, None),
+                (V2_SYSTEM, primary),
+            ]
     systems_a = systems_a + ablation_systems
     await phase(systems_a, ctx, phase_a_queries)
 
@@ -445,8 +473,8 @@ async def _run_benchmark(
     }
 
     expected_pairs = (
-        len(corpus.queries) * (3 + len(dense_specs) + len(ablation_systems))  # B1, B2, V2 + dense + ablations
-        + (len(denied_queries) + len(no_delivery_queries)) * len(ha_systems)  # HA lanes
+        len(corpus.queries) * len(systems_a)
+        + (len(denied_queries) + len(no_delivery_queries)) * len(ha_systems)
     )
     actual_pairs = len(scores)
     pinned_ok = all(

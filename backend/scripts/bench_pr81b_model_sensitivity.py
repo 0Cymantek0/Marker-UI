@@ -69,6 +69,13 @@ def _git_sha() -> str:
     ).stdout.strip()
 
 
+def _retry_knobs() -> dict:
+    return {
+        "max_retries": int(os.environ.get("PR81A_VLM_MAX_RETRIES", "6")),
+        "retry_backoff": float(os.environ.get("PR81A_VLM_RETRY_BACKOFF", "8.0")),
+    }
+
+
 def run_probe_for_model(model: str, base_url: str, api_key: str, cache_dir: Path) -> dict:
     corpus = load_corpus(CORPUS_ROOT)
     with tempfile.TemporaryDirectory(prefix="pr81b-probe-") as tmp:
@@ -79,13 +86,14 @@ def run_probe_for_model(model: str, base_url: str, api_key: str, cache_dir: Path
             base_url=base_url,
             cache_path=cache_dir / f"pr81b-probe-cache-{MODEL_TAGS[model]}.json",
             mode="auto",
+            **_retry_knobs(),
         )
         result = run_capability_probe(corpus, store, client)
     result["model"] = model
     return result
 
 
-def run_model_benchmark(model: str, base_url: str, api_key: str, index_root: Path) -> int:
+def run_model_benchmark(model: str, base_url: str, api_key: str, index_root: Path, lean: bool) -> int:
     tag = MODEL_TAGS[model]
     index_dir = index_root / f"pr81b-indexes-{tag}"
     index_dir.mkdir(parents=True, exist_ok=True)
@@ -95,25 +103,26 @@ def run_model_benchmark(model: str, base_url: str, api_key: str, index_root: Pat
         "PR81A_VLM_MODELS": model,
         "PR81A_VLM_API_KEY": api_key,
     }
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-X",
-            "utf8",
-            str(PR81A_RUNNER),
-            "--live",
-            "--write",
-            "--ablations",
-            "--output",
-            str(_model_artifact_path(tag)),
-            "--vlm-cache",
-            str(_model_cache_path(tag)),
-            "--index-dir",
-            str(index_dir),
-        ],
-        cwd=BACKEND,
-        env=env,
-    )
+    command = [
+        sys.executable,
+        "-X",
+        "utf8",
+        str(PR81A_RUNNER),
+        "--live",
+        "--write",
+        "--ablations",
+    ]
+    if lean:
+        command.append("--lean-lanes")
+    command += [
+        "--output",
+        str(_model_artifact_path(tag)),
+        "--vlm-cache",
+        str(_model_cache_path(tag)),
+        "--index-dir",
+        str(index_dir),
+    ]
+    completed = subprocess.run(command, cwd=BACKEND, env=env)
     return completed.returncode
 
 
@@ -158,6 +167,13 @@ def aggregate(models: list[str]) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", help="run probes + benchmarks live")
+    parser.add_argument(
+        "--lean",
+        action="store_true",
+        help="run benchmarks with the reduced PR81B lane set (drops lexical-text, "
+        "dense visual lanes, and the joint ablation; halves live VLM calls "
+        "while keeping the decision rule and attribution computable)",
+    )
     parser.add_argument(
         "--models",
         default=",".join(MODEL_TAGS),
@@ -217,7 +233,7 @@ def main() -> int:
                 failures[model] = "capability probe failed"
                 continue
             print(f"[pr81b] benchmark: {model}", flush=True)
-            code = run_model_benchmark(model, args.base_url, api_key, args.index_root)
+            code = run_model_benchmark(model, args.base_url, api_key, args.index_root, lean=args.lean)
             if code != 0:
                 failures[model] = f"benchmark exit {code}"
                 continue
