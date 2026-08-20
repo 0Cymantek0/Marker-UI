@@ -1,12 +1,14 @@
 """Single transactional Truth Kernel commit authority (V3.2 PR63A/PR64).
 
 This module is the ONE local code path that creates authoritative kernel
-commits. The SQLite portion of the V3.2 commit protocol:
+commits. The V3.2 commit protocol (SQLite and PostgreSQL profiles):
 
 1. begin one transaction and immediately write the workspace
-   ``KernelCommitHead`` row (insert-or-ignore) — this takes the SQLite
-   writer lock up front, so concurrent committers serialize at the
-   database rather than racing through a read snapshot;
+   ``KernelCommitHead`` row (insert-or-ignore) and read it back under a
+   row lock — on SQLite the write-first upsert takes the database writer
+   lock up front, and on PostgreSQL the ``SELECT ... FOR UPDATE``
+   re-read holds the head row until commit, so concurrent committers
+   serialize at the database rather than racing through a read snapshot;
 2. read the committed head, derive ``kernel_commit_id = head + 1`` and
    ``parent_kernel_commit_id = head`` (causal order, never wall time);
 3. validate external record references against visible committed state;
@@ -40,11 +42,12 @@ commits. The SQLite portion of the V3.2 commit protocol:
    manifest, payload references, outbox, and view-head movement visible
    atomically.
 
-Contention policy: ``SQLITE_BUSY``/lock errors and concurrent head
-movement are expected, retryable conditions with a bounded budget.
-Payload staging happens once per ``commit()`` call, before the retry
-loop: staging is content-addressed and idempotent, and a database retry
-never re-publishes bytes.
+Contention policy: SQLite ``SQLITE_BUSY``/lock errors, PostgreSQL
+serialization/deadlock SQLSTATEs, and concurrent head movement are
+expected, retryable conditions with a bounded budget (see
+``app.kernel.dialects``). Payload staging happens once per ``commit()``
+call, before the retry loop: staging is content-addressed and
+idempotent, and a database retry never re-publishes bytes.
 """
 
 from __future__ import annotations
@@ -56,9 +59,14 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from sqlalchemy import delete, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from app.kernel.dialects import (
+    dialect_insert,
+    integrity_constraint_name,
+    is_retryable_contention,
+)
 
 from app.kernel.errors import (
     BatchTooLargeError,
@@ -182,8 +190,6 @@ DEFAULT_BUSY_RETRY_ATTEMPTS = 8
 DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
 MAX_RETRY_DELAY = 0.5
 
-_BUSY_MARKERS = ("database is locked", "database table is locked", "database is busy")
-
 
 class _PayloadVanishedMidCommit(Exception):
     """Internal retry signal: a staged object was swept by GC after
@@ -278,7 +284,7 @@ class KernelCommitService:
         self._readiness_check = readiness_check
         self._ready = readiness_check is None
         self._payload_store = payload_store
-        #: observed SQLITE_BUSY/lock retries (contention observability)
+        #: observed writer-contention retries (SQLite busy / PG serialization)
         self.busy_retries = 0
         #: observed concurrent-head-move retries
         self.head_retries = 0
@@ -293,7 +299,15 @@ class KernelCommitService:
     # preparation (pre-transaction, side-effect free)
     # ------------------------------------------------------------------
 
-    def _prepare(self, batch: KernelCommitBatch) -> tuple[str, tuple[PreparedRecord, ...], tuple[KernelEdge, ...], str]:
+    def _prepare(
+        self, batch: KernelCommitBatch
+    ) -> tuple[
+        str,
+        tuple[PreparedRecord, ...],
+        tuple[KernelEdge, ...],
+        str,
+        tuple[tuple[OutboxIntent, str], ...],
+    ]:
         workspace_id = validate_workspace_id(batch.workspace_id)
         records = tuple(batch.records)
         edges = tuple(batch.edges)
@@ -465,7 +479,7 @@ class KernelCommitService:
                 self.head_retries += 1
                 last_error = None
             except OperationalError as exc:
-                if not _is_busy(exc):
+                if not is_retryable_contention(exc):
                     raise
                 self.busy_retries += 1
                 last_error = exc
@@ -474,7 +488,7 @@ class KernelCommitService:
             await asyncio.sleep(_retry_delay(self._busy_retry_base_delay, attempt))
         if last_error is not None:
             raise KernelBusyError(
-                f"workspace={workspace_id!r}: SQLite writer contention persisted after "
+                f"workspace={workspace_id!r}: database writer contention persisted after "
                 f"{self._busy_retry_attempts} attempts: {last_error}"
             ) from last_error
         raise KernelBusyError(
@@ -501,17 +515,22 @@ class KernelCommitService:
             async with session.begin():
                 maybe_inject(PHASE_BEGIN)
 
-                # 1. Write-first head upsert: acquires the SQLite writer lock
-                #    before any read, so committers serialize here.
+                # 1. Write-first head upsert + locked re-read. On SQLite
+                #    the write-first upsert acquires the database writer
+                #    lock; on PostgreSQL the FOR UPDATE re-read holds the
+                #    head row until this transaction ends. Either way,
+                #    committers for one workspace serialize here before
+                #    any read, and the check-then-act phases below have
+                #    no TOCTOU window.
                 await session.execute(
-                    sqlite_insert(KernelCommitHead)
+                    dialect_insert(session.bind, KernelCommitHead)
                     .values(workspace_id=workspace_id, head_kernel_commit_id=0)
                     .on_conflict_do_nothing(index_elements=[KernelCommitHead.workspace_id])
                 )
                 current_head = await session.scalar(
-                    select(KernelCommitHead.head_kernel_commit_id).where(
-                        KernelCommitHead.workspace_id == workspace_id
-                    )
+                    select(KernelCommitHead.head_kernel_commit_id)
+                    .where(KernelCommitHead.workspace_id == workspace_id)
+                    .with_for_update()
                 )
                 assert current_head is not None  # upsert guarantees the row exists
                 next_commit_id = current_head + 1
@@ -549,9 +568,9 @@ class KernelCommitService:
                             f"other workspaces: {foreign}"
                         )
 
-                # 2.5. PR65B tombstone rescue. The writer lock is held
-                #     (write-first head upsert above), so this check and
-                #     a concurrent GC sweep cannot interleave. Any staged
+                # 2.5. PR65B tombstone rescue. The head row lock is held
+                #     (write-first upsert + locked read above), so this
+                #     check and a concurrent GC sweep cannot interleave. Any staged
                 #     hash carrying a retirement tombstone is either
                 #     physically present — delete the tombstone; this
                 #     commit is re-referencing the bytes — or absent,
@@ -588,7 +607,7 @@ class KernelCommitService:
                             )
                         )
 
-                # 2.7. PR73 view advancement check. The writer lock is
+                # 2.7. PR73 view advancement check. The head row lock is
                 #     held, so the precondition evaluation below and any
                 #     concurrent view head movement cannot interleave.
                 #     A false precondition raises a typed conflict and
@@ -680,7 +699,7 @@ class KernelCommitService:
                 for blob_key in sorted(staged_payloads):
                     length, locator = staged_payloads[blob_key]
                     await session.execute(
-                        sqlite_insert(KernelPayloadObject)
+                        dialect_insert(session.bind, KernelPayloadObject)
                         .values(
                             blob_key=blob_key,
                             payload_length=length,
@@ -759,7 +778,7 @@ class KernelCommitService:
                         payload_json=payload_json,
                     )
                     result = await session.execute(
-                        sqlite_insert(KernelOutbox)
+                        dialect_insert(session.bind, KernelOutbox)
                         .values(
                             workspace_id=workspace_id,
                             kernel_commit_id=next_commit_id,
@@ -860,29 +879,30 @@ class KernelCommitService:
         )
 
 
-def _is_busy(exc: OperationalError) -> bool:
-    text = str(exc).lower()
-    return any(marker in text for marker in _BUSY_MARKERS)
-
-
 def _retry_delay(base: float, attempt: int) -> float:
-    return min(base * (2**attempt), MAX_RETRY_DELAY)
+    return min(base * 2**attempt, MAX_RETRY_DELAY)
 
 
 def _map_integrity_error(workspace_id: str, exc: IntegrityError) -> KernelError:
+    # PostgreSQL carries the violated constraint natively; SQLite only
+    # embeds it in the message text. Both vocabularies must map to the
+    # same typed kernel conflicts.
+    constraint = integrity_constraint_name(exc) or ""
     text = str(exc)
     upper = text.upper()
-    if _duplicate_identity_marker in text or (
-        "UNIQUE" in upper
-        and "KERNEL_RECORDS" in upper
-        and "IDENTITY_HASH" in upper
+    if (
+        _duplicate_identity_marker in constraint
+        or _duplicate_identity_marker in text
+        or ("UNIQUE" in upper and "KERNEL_RECORDS" in upper and "IDENTITY_HASH" in upper)
     ):
         return DuplicateRecordIdentityError(
             f"workspace={workspace_id!r}: record semantic identity already committed; "
             "supersession requires a new record"
         )
-    if _manifest_pk_marker in text or (
-        "UNIQUE" in upper and "KERNEL_COMMIT_MANIFESTS" in upper
+    if (
+        _manifest_pk_marker in constraint
+        or _manifest_pk_marker in text
+        or ("UNIQUE" in upper and "KERNEL_COMMIT_MANIFESTS" in upper)
     ):
         return HeadMovedError(
             f"workspace={workspace_id!r}: commit id already taken concurrently"
