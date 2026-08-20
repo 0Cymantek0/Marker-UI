@@ -115,7 +115,7 @@ from app.kernel.patches import (
     ViewFlip,
     check_view_advancement,
 )
-from app.kernel.payloads import LOCAL_STORE_PROFILE, LocalPayloadStore
+from app.kernel.payloads import LOCAL_STORE_PROFILE, KernelPayloadStore, LocalPayloadStore
 from app.kernel.proofs import ProofBatchRecord, check_batch_proof_integrity
 from app.kernel.records import KernelEdge, KernelRecord as RecordInput
 from app.kernel.verification_risk import check_batch_verification_risk
@@ -275,7 +275,7 @@ class KernelCommitService:
         busy_retry_attempts: int = DEFAULT_BUSY_RETRY_ATTEMPTS,
         busy_retry_base_delay: float = DEFAULT_BUSY_RETRY_BASE_DELAY,
         readiness_check: Callable[[], Awaitable[None]] | None = None,
-        payload_store: LocalPayloadStore | None = None,
+        payload_store: KernelPayloadStore | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._max_batch_records = max_batch_records

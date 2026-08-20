@@ -59,6 +59,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from app.kernel.errors import InjectedFaultError, PayloadStageError
 from app.utils.canonical import payload_byte_hash
@@ -67,7 +68,9 @@ __all__ = [
     "BLOB_HEX_PATTERN",
     "BLOB_KEY_PATTERN",
     "DeleteResult",
+    "KERNEL_PAYLOAD_STORE_PROTOCOL",
     "LOCAL_STORE_PROFILE",
+    "KernelPayloadStore",
     "PAYLOAD_FAULT_PHASES",
     "LocalPayloadStore",
     "ObjectCheck",
@@ -148,6 +151,40 @@ class DeleteResult:
     blob_key: str
     existed: bool
     deleted: bool
+
+
+@runtime_checkable
+class KernelPayloadStore(Protocol):
+    """The payload-store behavior the kernel commit path depends on
+    (PR83A Workstream 2).
+
+    Exactly the operations ``KernelCommitService`` uses around the
+    database visibility boundary — nothing more — so an industrial
+    object-store implementation can satisfy the same semantics without
+    forking kernel truth. Content identity, idempotent republication,
+    verified availability claims, and cheap existence probes are the
+    contract; the local filesystem store below is the reference
+    implementation, and ``tests/test_payload_store_conformance.py`` is
+    the reusable behavioral suite any implementation must pass.
+    """
+
+    async def stage(self, data: bytes) -> StagedBlob:
+        """Publish exact bytes durably; content-addressed, idempotent."""
+        ...
+
+    async def check_object(
+        self, blob_key: str, *, expected_length: int | None = None
+    ) -> ObjectCheck:
+        """Verified availability of one object (never a bare stat)."""
+        ...
+
+    async def object_exists(self, blob_key: str) -> bool:
+        """Cheap existence probe used inside the commit transaction."""
+        ...
+
+
+#: Human-readable name of the behavioral contract (evidence metadata).
+KERNEL_PAYLOAD_STORE_PROTOCOL = "marker.kernel.payload.store.v1"
 
 
 class LocalPayloadStore:
