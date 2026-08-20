@@ -200,12 +200,12 @@ session cannot quietly re-add them without new measurements.
 - Replay determinism: the final artifact was produced **offline**
   (214 cache hits, 0 live calls) and its metrics are byte-identical to
   the live run.
-- Known open evidence limitation: the promoted hybrid route and the
-  baselines were answered by one VLM identity
-  (`google/gemma-4-26b-a4b-it:free`). Model sensitivity across VLM
-  quality tiers — including whether stronger models erase the visual
-  gain by reasoning over the page text alone — is unmeasured and is
-  the declared next experiment.
+- Known open evidence limitation — single-VLM identity — was **resolved
+  by PR81B** (`docs/reference/pr81b-model-sensitivity.md`): the
+  promotion held across four gateway vision models (three holders
+  including two frontier-tier), with the gain re-scoped to VLM rerank
+  *selection* rather than pixel answering, and one capable model
+  (haiku-4.5) excluded by its own text-easy control breach.
 
 ## 10. Reproduction
 
@@ -226,3 +226,6 @@ generation time). The experiment's scope claims are limited to: this
 gemma-4-26b answerer/reranker via the local gateway; the negative dense
 result is a property of *this* measured slice, and the positive rerank
 result is a property of *this* reranker and contact-sheet shape.
+Model sensitivity across VLM quality tiers is measured by the PR81B
+follow-up (`pr81b-model-sensitivity.md`), which confirmed the rerank
+promotion and re-scoped its attribution.
