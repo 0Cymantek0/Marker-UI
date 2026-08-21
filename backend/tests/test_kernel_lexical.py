@@ -209,9 +209,9 @@ def test_page_query_postgres_rank_direction_is_descending() -> None:
     sql, params = page_query(
         POSTGRESQL, "kernel_fts_abc", text="alpha", mode="all_terms", limit=5
     )
-    assert "ts_rank(tsv, phraseto_tsquery(:cfg, :t0))" in sql
+    assert "ts_rank(tsv, (phraseto_tsquery(:cfg, :t0)))" in sql
     assert "ORDER BY rank_value DESC, row_index ASC LIMIT :limit" in sql
-    assert 'tsv @@ phraseto_tsquery(:cfg, :t0)' in sql
+    assert 'tsv @@ (phraseto_tsquery(:cfg, :t0))' in sql
     assert params["t0"] == "alpha"
 
 
@@ -227,7 +227,7 @@ def test_page_query_postgres_keyset_mirrors_descending_direction() -> None:
     )
     # ts_rank: better matches are numerically larger; the keyset resumes
     # via (rank <, row_index >). Direction must NOT be inherited from FTS5.
-    assert "ts_rank(tsv, phraseto_tsquery(:cfg, :t0)) < :after_rank" in sql
+    assert "ts_rank(tsv, (phraseto_tsquery(:cfg, :t0))) < :after_rank" in sql
     assert "row_index > :after_row_index" in sql
     assert params["after_rank"] == 0.75
 
@@ -258,8 +258,8 @@ def test_anchor_query_both_backends() -> None:
         POSTGRESQL, "kernel_fts_abc", text="alpha", mode="all_terms", after_row_index=7
     )
     assert "row_index = :after_row_index" in sql
-    assert "tsv @@ phraseto_tsquery(:cfg, :t0)" in sql
-    assert "ts_rank(tsv," in sql
+    assert "tsv @@ (phraseto_tsquery(:cfg, :t0))" in sql
+    assert "ts_rank(tsv, (" in sql
     assert params["after_row_index"] == 7
 
 

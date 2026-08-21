@@ -55,7 +55,7 @@ disagree about query identity.
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import text
 
@@ -379,7 +379,8 @@ async def physical_integrity_problems(session: Any, backend: str, table: str) ->
             text(
                 "SELECT i.indisvalid FROM pg_index i "
                 "JOIN pg_class c ON c.oid = i.indexrelid "
-                "WHERE c.relname = :ixname AND i.indrelid = :relname::regclass "
+                "WHERE c.relname = :ixname "
+                "AND i.indrelid = CAST(:relname AS regclass) "
                 "LIMIT 1"
             ),
             {"ixname": pg_index_name(table), "relname": table},
@@ -428,15 +429,18 @@ def _sqlite_page_query(table: str, query_param: str, keyset: bool) -> str:
 
 
 def _postgres_page_query(table: str, q: str, keyset: bool) -> str:
-    where = f"tsv @@ {q}"
+    # The tsquery expression is parenthesized everywhere: ``@@`` and the
+    # tsquery operators share precedence and associate left, so an
+    # unparenthesized ``tsv @@ a && b`` would parse as ``(tsv @@ a) && b``.
+    where = f"WHERE tsv @@ ({q})"
     if keyset:
         where += (
-            f" AND (ts_rank(tsv, {q}) < :after_rank OR "
-            f"(ts_rank(tsv, {q}) = :after_rank AND row_index > :after_row_index))"
+            f" AND (ts_rank(tsv, ({q})) < :after_rank OR "
+            f"(ts_rank(tsv, ({q})) = :after_rank AND row_index > :after_row_index))"
         )
     return (
         f'SELECT row_index, record_id, view_id, node_id, "text", '
-        f"ts_rank(tsv, {q}) AS rank_value FROM \"{table}\" {where} "
+        f"ts_rank(tsv, ({q})) AS rank_value FROM \"{table}\" {where} "
         "ORDER BY rank_value DESC, row_index ASC LIMIT :limit"
     )
 
@@ -508,8 +512,8 @@ def anchor_query(
         q, params = postgres_query_expression(text, mode)
         sql = (
             f'SELECT row_index, record_id, view_id, node_id, "text", '
-            f"ts_rank(tsv, {q}) AS rank_value FROM \"{table}\" "
-            f"WHERE row_index = :after_row_index AND tsv @@ {q} LIMIT 1"
+            f"ts_rank(tsv, ({q})) AS rank_value FROM \"{table}\" "
+            f"WHERE row_index = :after_row_index AND tsv @@ ({q}) LIMIT 1"
         )
     else:
         raise KernelError(
