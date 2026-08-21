@@ -1,0 +1,92 @@
+{
+  "schema": "marker.pr83b1_industrial_persistence_evidence.v1",
+  "generated": "2026-08-21",
+  "session": "PR83B1 — industrial runtime, materialization and payload durability parity (control plane + runtime + materialization/retention + S3 object store + lifecycle/GC + strict CI)",
+  "audited_branch_head_at_start": "6f95e4b (PR83B1 checkpoints A-E already landed, unpushed)",
+  "evidence_head": "bf07d67 (evidence commit follows)",
+  "checkpoints_claimed": [
+    "A: repository truth freeze, portability inventory, red baselines (prior session commits)",
+    "B: transaction primitives + control-plane authority on PostgreSQL (fencing/scheduler/liveness/events; strict conformance 26+ real-SQLSTATE proofs)",
+    "C: production KernelRuntimeCoordinator on PostgreSQL (18 runtime histories, restart recovery, compatibility projection)",
+    "D: materialized generations + retention parity (build/validate/activate, atomic head switch, pins/holds, dual-backend)",
+    "E: S3-compatible payload store (SigV4 single-PUT, conditional create with verified convergence, falsification suite vs real MinIO)",
+    "F: lifecycle closure — store-neutral snapshots/reconciliation/GC, PostgreSQL deletion-decision linearization, physical sweep + crash repair, lexical fail-closure (this session's continuation)",
+    "G: strict industrial CI, one-command reproduction, full regression, evidence (this session's continuation)"
+  ],
+  "checkpoint_F_details": {
+    "maintenance_capability": "PayloadMaintenanceStore protocol (read/list_objects/stat_object/delete_object) separated from the commit capability; ObjectStat carries length + store-clock age for GC accounting; both stores implement it; shared conformance 24 passed (12 cases x 2 stores vs real MinIO)",
+    "store_neutral_verification": "resolve_snapshot and verify_payload_availability/reconcile type against the protocols; staging-scratch residue is a detected local-profile capability (S3 single-PUT reports none honestly)",
+    "gc_port": "dialect_insert tombstones; shared contention budget (SQLite busy text + PostgreSQL 40001/40P01/55P03) replacing the module-local retry; orphan age/size through stat_object — zero object_path().stat() assumptions remain in gc.py",
+    "deletion_linearization": "PAYLOAD_DECISION_LOCK_SCOPE ('kernel-payloads','gc-decision') taken via pg_advisory_xact_lock inside: GC recheck/tombstone transaction, generation/publication-set retirement, retention declare_hold/acquire_reader_pin/renew_reader_pin, generation _activate, and payload-carrying commits (commit takes the advisory BEFORE the head row lock so one global order advisory->row prevents deadlock with activation). SQLite keeps writer-lock serialization (advisory is a no-op there)",
+    "lexical_fail_closed": "LexicalRetirementUnsupportedError raised pre-write when the plan contains lexical candidates on PostgreSQL (execute_collection pre-check + per-retirement guard); dormant migrated FTS metadata stays inspectable; SQLite FTS5 retirement unchanged and covered by its existing suite",
+    "deterministic_pause_hooks": "GC_PAUSE_PHASES (recheck-before-lock, recheck-after-roots) on execute_collection — barrier-controlled race tests force true overlap instead of timing luck",
+    "incidental_fix": "pre-existing flake (2/5) in test_two_identical_builds_converge_idempotently diagnosed and fixed: _stage_transaction now raises _ConcurrentPointerMove instead of GenerationStateError when a sibling builder activates the same identity between the staged-state read and the purge, so the rolled-back purge retries and converges (8/8 + full cluster green)"
+  },
+  "checkpoint_G_details": {
+    "one_command_reproduction": "python backend/scripts/run_industrial_conformance.py — provisions/reuses real PostgreSQL + real MinIO, prints server banners, runs 8 industrial suites in strict mode, refuses success on any skip",
+    "ci_job": "industrial-persistence job in .github/workflows/ci.yml: postgres:16-alpine + minio/minio:latest as health-checked service containers, strict env, and a guard step failing the job on any skip line in the captured run output"
+  },
+  "environment": {
+    "host_os": "Windows 10.0.26200 x64",
+    "python": "3.11.9",
+    "sqlalchemy": "2.0.36",
+    "alembic": "1.14.0",
+    "asyncpg": "0.30.0",
+    "aiosqlite": "0.20.0",
+    "httpx": "0.28.1",
+    "pytest": "8.3.4",
+    "pytest_asyncio": "0.24.0",
+    "postgresql_server": "PostgreSQL 16.14 on x86_64-pc-linux-musl (Docker, 127.0.0.1:55433)",
+    "object_store": "MinIO (RELEASE tag via minio/minio image, endpoint 127.0.0.1:55440, unversioned bucket per test, path-style, S3 SigV4)",
+    "docker": "Docker 29.1.3"
+  },
+  "reproduction": {
+    "industrial_matrix": "python backend/scripts/run_industrial_conformance.py   (strict; reuses/starts both services; zero-skip enforced)",
+    "lifecycle_gate_6": "cd backend && pytest tests/test_kernel_lifecycle_conformance.py -q   (with MARKER_TEST_POSTGRES_ADMIN_URL + MARKER_TEST_S3_* env; strict variants refuse missing provisioning)",
+    "sqlite_fast_path": "cd backend && python -m pytest tests conformance -q   (no services required; PostgreSQL params skip with actionable reasons)"
+  },
+  "behavior_matrix_gate6": [
+    {"behavior": "commit -> reopen -> verify -> snapshot completeness", "sqlite+local": "pass", "sqlite+s3": "pass", "postgresql+local": "pass", "postgresql+s3": "pass", "evidence": "test_commit_reopen_verify_and_snapshot_completeness — fresh engine + store handle classify available/missing/corrupt honestly"},
+    {"behavior": "orphan reported by reconciliation, deleted only by collection", "all_combos": "pass", "evidence": "test_orphan_reported_then_collected_registry_survives — registry rows permanent, tombstone+deleted for swept bytes"},
+    {"behavior": "root added after mark rescued at recheck", "all_combos": "pass", "evidence": "test_root_declared_after_mark_is_rescued_at_recheck"},
+    {"behavior": "reader pin added after mark rescues superseded generation", "all_combos": "pass", "evidence": "test_pinned_superseded_generation_survives_collection — release then retires; head untouched"},
+    {"behavior": "store-wide dedup domain (one workspace cannot delete another's live bytes)", "all_combos": "pass", "evidence": "test_storewide_dedup_protects_shared_bytes_across_workspaces"},
+    {"behavior": "decision-first vs late root -> retired + heal-by-restage", "all_combos": "pass", "evidence": "test_decision_first_late_root_sees_retired_then_heals — commit-side tombstone rescue verified in raw table"},
+    {"behavior": "two collectors cannot create conflicting terminal outcomes", "all_combos": "pass", "evidence": "test_concurrent_collectors_converge_on_one_outcome — one tombstone, one delete, idempotent reconcile"},
+    {"behavior": "root commits before decision lock -> rescued", "all_combos": "pass", "evidence": "test_barrier_root_committing_before_decision_rescues_bytes (pause recheck-before-lock)"},
+    {"behavior": "decision holding linearization lock blocks then beats late root", "all_combos": "pass", "evidence": "test_barrier_decision_holding_lock_blocks_then_beats_late_root (pause recheck-after-roots; asserts blocked writer + zero visible roots mid-decision, then honest retired state)"},
+    {"behavior": "crash after decision / after delete -> restart reconciles", "all_combos": "pass", "evidence": "test_crash_after_decision_and_after_delete_both_reconcile (gc-after-recheck / gc-after-unlink faults, reopened durable state)"},
+    {"behavior": "delete transport failure recorded retryable, never success", "all_combos": "pass", "evidence": "test_delete_transport_failure_is_retryable_never_success — RETIRE_STATE_FAILED then clean retry -> DELETED"},
+    {"behavior": "PostgreSQL never executes SQLite FTS DDL", "postgresql": "pass (typed fail-closed, pre-write)", "sqlite": "pass (FTS retirement converges)", "evidence": "test_lexical_retirement_fails_closed_on_postgresql"},
+    {"behavior": "post-GC snapshot honesty per requirement", "all_combos": "pass", "evidence": "test_retired_snapshot_stays_degraded_until_bytes_return — degraded with retired count, complete again after exact-byte restage"}
+  ],
+  "results": {
+    "lifecycle_gate6_matrix": "56 passed / 0 failed / 0 skipped (14 scenarios x 2 databases x 2 stores; strict PostgreSQL 16.14 + real MinIO); race subset re-run stable",
+    "payload_store_conformance": "24 passed (12 cases x local_file + s3_minio vs real MinIO)",
+    "industrial_one_command": "275 passed / 0 failed / 0 skipped in 574.73s — run_industrial_conformance.py over the 8 industrial suites (dual-backend commit, control-plane, materialization/retention, kernel runtime, dialects, payload-store, S3 falsification, lifecycle)",
+    "sqlite_lifecycle_cluster": "96 passed (gc, gc-concurrency, gc-faults, publication-gc, retention, generation, generation-concurrency, reconcile, snapshot)",
+    "dialects": "14 passed (incl. on_retry observability hook)",
+    "lockfile_drift_gate": "in sync (lock_dependencies.py --check)",
+    "full_backend_regression": "3083 passed / 0 failed / 115 skipped in 1915.32s (python -m pytest tests conformance -q, no service env — the documented fast path). Skip classification: 99 PostgreSQL provisioning params across the five dual-backend suites (dual-backend 13, control-plane 31, kernel-runtime 29, lifecycle 14, materialization 8, misc 4) + 12 S3 provisioning params (payload-store-s3 8, conformance factory 4) — every one actionable and executed for real by the strict runner (275/0/0) and the CI industrial job — plus the same 4 pre-existing local-environment skips as the PR83A baseline (3 slow real-marker opt-ins, 1 optional 'unstructured' dep). Passed delta vs the PR83A baseline (3008) = +75: the A–E dual-backend suites' SQLite parameters running for the first time in a full pass (control-plane/runtime/materialization locals) plus this session's additions (dialects +2, payload-store conformance local +3, lifecycle conformance sqlite-local +14); this is the first full-suite count since the baseline because checkpoints A–E recorded targeted suite counts only"
+  },
+  "implementation_decisions": [
+    "Maintenance capability split from commit capability: PayloadMaintenanceStore (read/list_objects/stat_object/delete_object) — the commit path never gains delete authority; tmp-scratch ops stay a detected local-only optional capability",
+    "GC retry now delegates to the shared run_with_contention_retry (with on_retry observability feeding busy_retries) — one vocabulary, asyncpg DBAPIError shape already fixed in 6f95e4b",
+    "Linearization scope PAYLOAD_DECISION_LOCK_SCOPE chosen over per-blob locks: GC decisions, root/pin writers, activation, and payload commits all contend on one scope; collision-freedom is not required, only mutual serialization; commit acquires it before the head row to keep a single global lock order",
+    "ObjectStat.last_modified_epoch is store-clock metadata (mtime / S3 Last-Modified), used only for orphan age grace — never causal truth",
+    "Lexical retirement on PostgreSQL fails closed pre-write rather than being profile-gated silently: a dormant FTS artifact is inspectable evidence, a half-retired one is corruption",
+    "Barrier pause hooks are test-only parameters on execute_collection, mirroring the established _inject_fault_at pattern"
+  ],
+  "known_deviations_and_nonclaims": [
+    "industrial lexical index / PublicationSet query serving on PostgreSQL remains unimplemented — FTS5 generations are SQLite-only and their retirement fails closed on PG (X-C14); this session does not claim query-serving parity",
+    "source-artifact topology (LocalSourceStore) remains local filesystem — no stateless-replica claim",
+    "no HA failover, no cross-region object store, no backup/restore drills, no RPO/RTO claims (PR83C)",
+    "S3 profile is single-PUT, unversioned buckets, path-style, ETag not trusted — one implementation (MinIO-tested) does not certify every S3-compatible vendor",
+    "PR69 dynamic model admission and PR84 readiness/compatibility remain out of scope"
+  ],
+  "pr83_followups": [
+    "industrial PublicationSet/query-serving slice (real lexical index, atomic membership, mixed-generation query proofs)",
+    "industrial source-artifact topology if stateless replicas are required",
+    "PR83C durability/failover: DB + object-store backup/restore drills, measured RPO/RTO"
+  ]
+}
