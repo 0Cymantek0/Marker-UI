@@ -56,11 +56,14 @@ from app.kernel.records import (
     SourceIdentityRecord,
     SourceObservationRecord,
 )
+from app.kernel.source_object_store import S3_SOURCE_STORE_PROFILE
 from app.kernel.source_store import (
+    LOCAL_SOURCE_STORE_PROFILE,
     IncoherentSourceError,
     SourceArtifactStore,
     SourceStoreError,
 )
+from app.services.source_materialization import VerifiedSourceMaterializer
 from app.services.policy import (
     _is_under,
     unrestricted_local_paths_enabled,
@@ -76,6 +79,7 @@ from app.utils.canonical import (
 __all__ = [
     "AcquiredSourceRevision",
     "SOURCE_CONFIG_KEY",
+    "SOURCE_STORE_PROFILES",
     "SourceAcquisitionService",
     "default_source_acquisition_service",
     "set_default_source_acquisition_service",
@@ -119,6 +123,14 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+#: Config blocks may carry one of these declared store profiles. A
+#: block committed before PR83B3 carries no ``store_profile`` and is
+#: interpreted as the local profile — the only topology that existed
+#: when it was committed; it is never silently reinterpreted as
+#: guaranteed-available in the shared topology.
+SOURCE_STORE_PROFILES = frozenset({LOCAL_SOURCE_STORE_PROFILE, S3_SOURCE_STORE_PROFILE})
+
+
 @dataclass(frozen=True)
 class AcquiredSourceRevision:
     """Committed source truth handed to submission/probe/execution."""
@@ -133,6 +145,7 @@ class AcquiredSourceRevision:
     media_type: str
     suffix: str
     kernel_commit_id: int
+    store_profile: str = LOCAL_SOURCE_STORE_PROFILE
 
     def to_config(self) -> dict[str, Any]:
         return {
@@ -146,12 +159,18 @@ class AcquiredSourceRevision:
             "media_type": self.media_type,
             "suffix": self.suffix,
             "kernel_commit_id": self.kernel_commit_id,
+            "store_profile": self.store_profile,
         }
 
     @classmethod
     def from_config(cls, block: Mapping[str, Any]) -> "AcquiredSourceRevision | None":
         """Strictly validate a config block's shape (no kernel lookup)."""
         try:
+            store_profile = str(
+                block.get("store_profile") or LOCAL_SOURCE_STORE_PROFILE
+            )
+            if store_profile not in SOURCE_STORE_PROFILES:
+                return None
             return cls(
                 source_id=str(block["source_id"]),
                 content_revision_id=str(block["content_revision_id"]),
@@ -163,6 +182,7 @@ class AcquiredSourceRevision:
                 media_type=str(block["media_type"]),
                 suffix=str(block["suffix"]),
                 kernel_commit_id=int(block.get("kernel_commit_id") or 0),
+                store_profile=store_profile,
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -178,11 +198,31 @@ class SourceAcquisitionService:
         store: SourceArtifactStore,
         *,
         workspace_id: str = "local",
+        cache_root: Path | None = None,
     ) -> None:
         self._sf = session_factory
         self._commit_service = commit_service
         self.store = store
         self.workspace_id = workspace_id
+        self._cache_root = cache_root
+        self._materializer: VerifiedSourceMaterializer | None = None
+
+    @property
+    def store_profile(self) -> str:
+        """Active physical source-artifact topology identity."""
+        return self.store.profile
+
+    @property
+    def legacy_submit_fallback(self) -> bool:
+        """Whether submissions without a source revision may proceed.
+
+        True only for the node-local profile: its historical
+        path-trust shape is a documented compatibility contract. An
+        industrial (shared) profile must never execute unowned paths —
+        acquisition failures propagate and the submission fails
+        honestly.
+        """
+        return self.store.profile == LOCAL_SOURCE_STORE_PROFILE
 
     # ------------------------------------------------------------------
     # acquisition
@@ -317,6 +357,7 @@ class SourceAcquisitionService:
             media_type=media_type,
             suffix=suffix,
             kernel_commit_id=result["commit_id"],
+            store_profile=self.store.profile,
         )
 
     # ------------------------------------------------------------------
@@ -330,12 +371,21 @@ class SourceAcquisitionService:
 
         Returns None when the block is malformed, its revision is not
         committed in this workspace, the committed record disagrees with
-        the block, or the artifact bytes are no longer available. Callers
-        must re-acquire (fresh revision) rather than fall back to an
-        external path.
+        the block, the block belongs to a different store profile than
+        the active one, or the artifact bytes are no longer available
+        under the active profile. Callers must re-acquire (fresh
+        revision) rather than fall back to an external path or another
+        topology.
         """
         candidate = AcquiredSourceRevision.from_config(block)
         if candidate is None:
+            return None
+        if candidate.store_profile != self.store.profile:
+            # The revision's bytes are durable in the profile that
+            # committed them; this runtime's topology cannot vouch for
+            # them. Honest unresolvability — never a cross-profile
+            # fallback (a legacy block without a profile is local-only
+            # by construction).
             return None
 
         async with self._sf() as session:
@@ -368,7 +418,44 @@ class SourceAcquisitionService:
         return candidate
 
     async def artifact_path_for(self, revision: AcquiredSourceRevision) -> Path:
+        """Local-profile artifact path (the immutable owned file)."""
         return self.store.artifact_path(revision.blob_key, revision.suffix)
+
+    def execution_locator_for(self, revision: AcquiredSourceRevision) -> str:
+        """Durable, credential-free locator for the revision's bytes.
+
+        Local profile keeps the historical artifact-path string for
+        compatibility; shared profiles report their object-store
+        locator so authorized records self-describe their topology.
+        """
+        if self.store.profile == LOCAL_SOURCE_STORE_PROFILE:
+            return str(self.store.artifact_path(revision.blob_key, revision.suffix))
+        return self.store.locator_for(revision.blob_key, revision.suffix)
+
+    async def consumable_path_for(self, revision: AcquiredSourceRevision) -> Path:
+        """Converter-facing local path holding exactly the revision's bytes.
+
+        Local profile: the immutable owned artifact itself (no copy).
+        Shared profile: a verified node-local materialization — every
+        use is content-verified against the committed identity, and a
+        corrupt or stale working copy is rebuilt from durable shared
+        truth. Raises SourceStoreError when the shared bytes are
+        missing or fail verification: unavailable truth, never a
+        fallback authority.
+        """
+        if self.store.profile == LOCAL_SOURCE_STORE_PROFILE:
+            return await self.artifact_path_for(revision)
+        if self._materializer is None:
+            from app.core.config import SOURCE_CACHE_ROOT
+
+            self._materializer = VerifiedSourceMaterializer(
+                self.store, self._cache_root or SOURCE_CACHE_ROOT
+            )
+        return await self._materializer.path_for(
+            revision.blob_key,
+            revision.suffix,
+            expected_length=revision.byte_length,
+        )
 
     # ------------------------------------------------------------------
     # policy / epoch
@@ -639,7 +726,10 @@ def default_source_acquisition_service() -> SourceAcquisitionService:
     """
     global _default_service
     if _default_service is None:
-        from app.core.config import KERNEL_RUNTIME_WORKSPACE
+        from app.core.config import (
+            KERNEL_RUNTIME_WORKSPACE,
+            SOURCE_CACHE_ROOT,
+        )
         from app.database import async_session_factory
         from app.kernel.commit import default_commit_service
         from app.kernel.source_store import build_source_store
@@ -649,6 +739,7 @@ def default_source_acquisition_service() -> SourceAcquisitionService:
             default_commit_service(),
             build_source_store(),
             workspace_id=KERNEL_RUNTIME_WORKSPACE,
+            cache_root=SOURCE_CACHE_ROOT,
         )
     return _default_service
 
