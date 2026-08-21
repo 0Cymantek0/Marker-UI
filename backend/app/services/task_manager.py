@@ -543,6 +543,11 @@ class TaskManager:
             self._lease_seconds = 1800
 
         self._lock = threading.Lock()
+        # Event loop that owns the shared async engine's connections
+        # (captured on the first kernel-path submit). Worker threads
+        # marshal DB coroutines here instead of driving pooled asyncpg
+        # connections from private loops, which corrupts the protocol.
+        self._db_loop: asyncio.AbstractEventLoop | None = None
         self._drain_stop = threading.Event()
         self._drain_thread: Optional[threading.Thread] = None
 
@@ -596,6 +601,10 @@ class TaskManager:
         exist for tests. The coordinator is not started here — the caller
         (app lifespan, tests) runs ``recover()`` and then ``start()``.
         """
+        try:
+            self._db_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass  # constructed outside a loop; worker threads use private loops
         if self._kernel_runtime is not None:
             return self._kernel_runtime
         from app.core.config import (
@@ -997,20 +1006,31 @@ class TaskManager:
         # terminal _proc_jobs entry by the time the delay elapses.
         self._cleanup_job_memory(job_id, delay=30.0)
 
-    @staticmethod
-    def _run_async(coro: Any) -> Any:
+    def _run_async(self, coro: Any) -> Any:
         """Run an async coroutine to completion from a sync (worker/drainer) context.
 
-        Production callers (worker threads, the process-event drain
-        thread) have no running loop, so ``asyncio.run`` is the normal
-        path. When a loop IS running (tests driving sync seams from a
-        coroutine), the coroutine runs on a private loop and the caller's
-        loop is restored.
+        The shared async engine's pooled connections are bound to the
+        event loop that created them. asyncpg connections driven from a
+        different loop corrupt the wire protocol ("got result for
+        unknown protocol callback"), so when the owning loop is known
+        (``self._db_loop``, captured on the first kernel-path submit),
+        the coroutine is marshalled there with
+        ``asyncio.run_coroutine_threadsafe`` and the caller blocks on
+        the result — one engine, one loop, many threads.
+
+        Legacy deployments without a captured loop keep the original
+        behavior: ``asyncio.run`` from true sync contexts, a private
+        loop when a (non-owning) loop is already running in this
+        thread.
         """
         try:
             running = asyncio.get_running_loop()
         except RuntimeError:
             running = None
+        owner = self._db_loop
+        if owner is not None and owner.is_running() and running is not owner:
+            future = asyncio.run_coroutine_threadsafe(coro, owner)
+            return future.result(timeout=120.0)
         if running is None:
             return asyncio.run(coro)
         loop = asyncio.new_event_loop()
@@ -1526,14 +1546,7 @@ class TaskManager:
         # Record a durable lease so a crash mid-conversion is detectable by
         # recover_queued's expired-lease branch. No-op when no durable backend.
         try:
-            asyncio.run(self._mark_job_started_durable(job_id))
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(self._mark_job_started_durable(job_id))
-            finally:
-                loop.close()
+            self._run_async(self._mark_job_started_durable(job_id))
         except Exception:  # noqa: BLE001 - lease start must never block a job
             logger.exception("mark_started dispatch failed for job %s", job_id)
         try:
@@ -1587,15 +1600,7 @@ class TaskManager:
                 return await self._finalize_job(job_id, result, config, formats_envelopes)
 
             projected = True
-            try:
-                projected = asyncio.run(_finalize_coro())
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    projected = loop.run_until_complete(_finalize_coro())
-                finally:
-                    loop.close()
+            projected = self._run_async(_finalize_coro())
             if not projected:
                 # Acceptance was rejected (stale/conflict/cancelled): the
                 # in-memory success view must not claim completion either.
@@ -1631,14 +1636,7 @@ class TaskManager:
                     else:
                         await self._fail_job(job_id, failure_message)
 
-                asyncio.run(_fail_coro())
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(_fail_coro())
-                finally:
-                    loop.close()
+                self._run_async(_fail_coro())
             except Exception:
                 logger.exception("Failed to record error for job %s", job_id)
             raise

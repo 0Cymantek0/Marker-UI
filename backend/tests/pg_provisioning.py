@@ -13,6 +13,7 @@ the create/drop coroutines are awaited by the fixtures that use them.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
 import uuid
@@ -86,6 +87,11 @@ async def drop_postgres_database(admin_url: str, url: str) -> None:
         )
     )
     try:
+        await conn.execute(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE datname = $1 AND pid <> pg_backend_pid()",
+            db_name,
+        )
         await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
     finally:
         await conn.close()
@@ -116,6 +122,11 @@ async def provisioned_database(backend: str, sqlite_path):
         try:
             yield ProvisionedBackend(backend, url, admin_url)
         finally:
+            # Give in-flight connection returns a moment to land before
+            # teardown; then force any stragglers off so the throwaway
+            # database always drops (tests must not leak databases even
+            # when a cancellation races a pooled connection return).
+            await asyncio.sleep(0.2)
             await drop_postgres_database(admin_url, url)
     else:
         url = f"sqlite+aiosqlite:///{sqlite_path}"
