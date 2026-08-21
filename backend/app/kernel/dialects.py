@@ -176,6 +176,7 @@ async def run_with_contention_retry(
     attempts: int | None = None,
     base_delay: float | None = None,
     operation_name: str = "kernel operation",
+    on_retry: Callable[[int, DBAPIError], None] | None = None,
 ) -> _T:
     """Run one whole operation under the shared contention budget.
 
@@ -194,6 +195,11 @@ async def run_with_contention_retry(
     immediately. Exhaustion raises
     :class:`app.kernel.errors.KernelBusyError` carrying the subsystem
     name and the last error for diagnosis.
+
+    ``on_retry``, when supplied, is invoked as ``on_retry(n, exc)``
+    with the 1-based retry count and the classified error, before the
+    backoff sleep — the observability hook subsystems use to surface
+    their own retry counters without re-implementing the loop.
     """
     budget = attempts or DEFAULT_CONTENTION_RETRY_ATTEMPTS
     delay = base_delay if base_delay else DEFAULT_CONTENTION_RETRY_BASE_DELAY
@@ -205,6 +211,8 @@ async def run_with_contention_retry(
             if not is_retryable_contention(exc):
                 raise
             last_error = exc
+            if on_retry is not None:
+                on_retry(_attempt + 1, exc)
             await asyncio.sleep(_retry_delay(delay, _attempt))
     raise KernelBusyError(
         f"{operation_name} still busy after {budget} attempts: {last_error}"

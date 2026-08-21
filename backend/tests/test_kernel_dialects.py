@@ -145,6 +145,47 @@ async def test_contention_budget_exhaustion_is_typed_with_context() -> None:
     assert calls["n"] == 3
 
 
+async def test_contention_budget_reports_each_retry_through_on_retry() -> None:
+    calls = {"n": 0}
+    observed: list[tuple[int, str]] = []
+
+    async def flaky():
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            driver = _FakeDriverError()
+            driver.sqlstate = "40P01"
+            raise _wrapped(nested=driver)
+        return "ok"
+
+    result = await run_with_contention_retry(
+        flaky,
+        base_delay=0.001,
+        operation_name="probe",
+        on_retry=lambda n, exc: observed.append((n, str(exc.__cause__) or "err")),
+    )
+    assert result == "ok"
+    assert calls["n"] == 3
+    # 1-based retry counts, one callback per classified retry, before
+    # the final converging attempt.
+    assert [n for n, _ in observed] == [1, 2]
+    assert all(isinstance(text, str) for _, text in observed)
+
+
+async def test_contention_budget_on_retry_not_called_on_success_or_fatal() -> None:
+    observed: list[int] = []
+
+    async def fatal():
+        raise _wrapped(nested=_FakeDriverError())  # non-retryable
+
+    with pytest.raises(OperationalError):
+        await run_with_contention_retry(
+            fatal,
+            base_delay=0.001,
+            on_retry=lambda n, exc: observed.append(n),
+        )
+    assert observed == []
+
+
 def test_advisory_lock_key_is_deterministic_and_bigint_safe() -> None:
     a = advisory_lock_key("workspace-1", "work")
     b = advisory_lock_key("workspace-1", "work")
