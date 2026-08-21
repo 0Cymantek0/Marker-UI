@@ -33,7 +33,7 @@ import asyncio
 from typing import Any, Awaitable, Callable, TypeVar
 
 from sqlalchemy import Table, text
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.kernel.errors import KernelBusyError, KernelError
 
@@ -182,19 +182,26 @@ async def run_with_contention_retry(
     The unit of retry is the complete operation (fresh session and
     transaction per attempt — callers pass a closure that opens its
     own transaction), matching PostgreSQL's rule that a serialization
-    or deadlock abort invalidates the entire transaction. Contention is
-    classified by :func:`is_retryable_contention`; every other error
-    escapes immediately. Exhaustion raises
+    or deadlock abort invalidates the entire transaction.
+
+    Contention is classified by :func:`is_retryable_contention`. The
+    catch clause must be ``DBAPIError`` rather than the narrower
+    ``OperationalError``: SQLAlchemy's asyncpg adapter surfaces
+    serialization/deadlock aborts (40001/40P01) as plain ``DBAPIError``
+    instances, so an OperationalError-only loop would never retry them
+    on PostgreSQL (verified against SQLAlchemy 2.0.36 + asyncpg 0.30).
+    Non-retryable errors — including integrity violations — escape
+    immediately. Exhaustion raises
     :class:`app.kernel.errors.KernelBusyError` carrying the subsystem
     name and the last error for diagnosis.
     """
     budget = attempts or DEFAULT_CONTENTION_RETRY_ATTEMPTS
     delay = base_delay if base_delay else DEFAULT_CONTENTION_RETRY_BASE_DELAY
-    last_error: OperationalError | None = None
+    last_error: DBAPIError | None = None
     for _attempt in range(budget):
         try:
             return await operation()
-        except OperationalError as exc:
+        except DBAPIError as exc:
             if not is_retryable_contention(exc):
                 raise
             last_error = exc
