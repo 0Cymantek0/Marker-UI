@@ -11,11 +11,9 @@ three things:
 * **publication serving state (PR76)** — superseded/failed (or stale
   staged/validated) publication sets that no publication head and no
   unexpired publication pin protects, plus lexical generations no
-  surviving set row references (dropping their runtime-managed FTS5
-  tables transactionally — SQLite only; the PostgreSQL profile fails
-  closed on lexical retirement because FTS5 generations are a
-  local-profile physical artifact this session deliberately does not
-  reimplement);
+  surviving set row references (dropping their runtime-managed physical
+  tables transactionally — FTS5 virtual tables on SQLite, tsvector+GIN
+  tables on PostgreSQL, both named by the generation manifest);
 * **physical payload bytes** — content-addressed objects whose hashes
   no live retention root requires, plus pre-commit orphan objects the
   registry never accepted.
@@ -62,10 +60,13 @@ Safety boundaries this module refuses to cross:
   staging age exceeds a grace threshold, so in-flight builds never race
   the collector;
 * current generations are structurally never candidates;
-* the PostgreSQL profile never executes SQLite FTS5 DDL: lexical
-  retirement raises :class:`LexicalRetirementUnsupportedError` before
-  any write, leaving dormant migrated metadata inspectable for the
-  future industrial lexical-index slice.
+* lexical retirement is proof-closed on both profiles: a generation
+  referenced by any surviving publication set row, protected by an
+  unexpired pin, or still inside the staging grace is rescued, and the
+  physical artifact named by its manifest is dropped in the same
+  transaction as its locator and manifest rows (PR83B2 gave
+  PostgreSQL generations real physical artifacts, replacing the former
+  fail-closed boundary).
 
 Store-neutral since PR83B1 WS6: physical accounting (orphan age/size)
 and deletion run through ``PayloadMaintenanceStore`` — the local
@@ -84,9 +85,7 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.kernel.dialects import (
-    POSTGRESQL,
     advisory_xact_lock,
-    backend_name,
     dialect_insert,
     run_with_contention_retry,
 )
@@ -140,7 +139,6 @@ __all__ = [
     "GenerationCandidate",
     "CollectionPlan",
     "CollectionReport",
-    "LexicalRetirementUnsupportedError",
     "PHASE_GC_AFTER_GENERATIONS",
     "PHASE_GC_AFTER_MARK",
     "PHASE_GC_AFTER_RECHECK",
@@ -200,18 +198,6 @@ GC_PAUSE_PHASES = frozenset({PHASE_GC_PAUSE_BEFORE_LOCK, PHASE_GC_PAUSE_AFTER_RO
 #: they may be an in-flight or resumable build. Crash residue older
 #: than the threshold is collectible through the normal recheck path.
 DEFAULT_STALE_STAGING_SECONDS = 3600.0
-
-
-class LexicalRetirementUnsupportedError(KernelError):
-    """Lexical-generation retirement is a SQLite-FTS5 physical artifact.
-
-    The runtime-managed FTS5 virtual table behind a lexical generation
-    cannot be dropped on the PostgreSQL profile, and this session
-    deliberately does not fabricate an industrial lexical index. Any
-    attempt to retire lexical metadata on PostgreSQL fails closed
-    before writing: dormant migrated rows stay inspectable until the
-    industrial lexical publication slice owns them.
-    """
 
 
 class _GcRetry:
@@ -807,20 +793,6 @@ async def execute_collection(
     t0 = time.perf_counter()
     state = _ExecutionState()
 
-    # ---- fail closed before any write: lexical retirement is a
-    # SQLite-FTS5 physical artifact and cannot run on PostgreSQL.
-    if plan.eligible_lexical_generations:
-        async with session_factory() as session:
-            is_postgresql = backend_name(session.bind) == POSTGRESQL
-        if is_postgresql:
-            raise LexicalRetirementUnsupportedError(
-                "lexical-generation retirement requires the SQLite FTS5 "
-                "profile; the PostgreSQL profile fails closed and leaves "
-                f"the {len(plan.eligible_lexical_generations)} dormant "
-                "lexical rows inspectable (industrial lexical publication "
-                "is a later slice)"
-            )
-
     # ---- recheck + tombstone (ONE transaction; serialized) -----------
     candidate_keys = sorted(set(plan.candidate_registry_keys))
 
@@ -1238,30 +1210,23 @@ async def _retire_lexical_generation(
     retry: _GcRetry,
     stale_staging_seconds: float,
 ) -> bool:
-    """Delete one lexical generation and its FTS5 table; True if rescued.
+    """Delete one lexical generation and its physical table; True if rescued.
 
-    SQLite profile only: the runtime-managed FTS5 virtual table is a
-    physical SQLite artifact, so on PostgreSQL this fails closed with
-    :class:`LexicalRetirementUnsupportedError` before touching
-    anything (``execute_collection`` pre-checks the same boundary for
-    the no-partial-state guarantee; this guard covers any other
-    caller).
+    Store- and backend-neutral since PR83B2: the physical artifact is
+    named by the generation manifest (FTS5 virtual table on SQLite,
+    tsvector+GIN table on PostgreSQL) and ``DROP TABLE`` is portable,
+    so retirement runs identically on both profiles.
 
     A lexical generation survives while ANY publication set row still
     references it (sets retire first, releasing their references);
     staged/validated residue obeys the same staleness grace as
-    generations. The FTS5 virtual table is dropped in the same
-    transaction as its manifest and locator rows.
+    generations. The physical table is dropped in the same transaction
+    as its manifest and locator rows.
     """
 
     async def retire_tx() -> bool:
         async with session_factory() as session:
             async with session.begin():
-                if backend_name(session.bind) == POSTGRESQL:
-                    raise LexicalRetirementUnsupportedError(
-                        "lexical-generation retirement requires the SQLite "
-                        "FTS5 profile; refusing on PostgreSQL"
-                    )
                 touched = await session.execute(
                     update(KernelLexicalGeneration)
                     .where(

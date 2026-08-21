@@ -41,7 +41,6 @@ from app.kernel.gc import (
     RETIRE_STATE_DELETED,
     RETIRE_STATE_FAILED,
     RETIRE_STATE_PENDING,
-    LexicalRetirementUnsupportedError,
     collect,
     execute_collection,
     plan_collection,
@@ -741,7 +740,15 @@ async def test_delete_transport_failure_is_retryable_never_success(
 # ---------------------------------------------------------------------------
 
 
-async def test_lexical_retirement_fails_closed_on_postgresql(lifecycle_env) -> None:
+async def test_lexical_retirement_runs_on_both_backends(lifecycle_env) -> None:
+    """Lexical retirement is backend-neutral since PR83B2.
+
+    The former PostgreSQL fail-closed boundary is gone: real industrial
+    lexical generations exist, their physical artifact is named by the
+    manifest, and ``DROP TABLE`` is portable. A dormant unreferenced
+    generation retires identically on SQLite and PostgreSQL (the here
+    absent physical table makes the drop a no-op on both).
+    """
     env = lifecycle_env
     now = datetime.now(timezone.utc)
     lexical_id = "sha256:" + "d0" * 32
@@ -769,27 +776,12 @@ async def test_lexical_retirement_fails_closed_on_postgresql(lifecycle_env) -> N
     plan = await plan_collection(env.session_factory, env.store)
     assert lexical_id in plan.eligible_lexical_generations
 
-    if env.backend == "postgresql":
-        with pytest.raises(LexicalRetirementUnsupportedError):
-            await execute_collection(env.session_factory, env.store, plan)
-
-        # Fail-closed means fail BEFORE writing: no tombstone, no sweep,
-        # and the dormant lexical metadata stays inspectable.
-        assert await _retirement_rows(env) == {}
-        async with env.session_factory() as session:
-            surviving = await session.scalar(
-                select(func.count()).select_from(KernelLexicalGeneration)
-            )
-        assert surviving == 1
-    else:
-        # SQLite keeps its FTS5 retirement behavior: the (here absent)
-        # table drop is a no-op and the metadata retires normally.
-        await execute_collection(env.session_factory, env.store, plan)
-        async with env.session_factory() as session:
-            surviving = await session.scalar(
-                select(func.count()).select_from(KernelLexicalGeneration)
-            )
-        assert surviving == 0
+    await execute_collection(env.session_factory, env.store, plan)
+    async with env.session_factory() as session:
+        surviving = await session.scalar(
+            select(func.count()).select_from(KernelLexicalGeneration)
+        )
+    assert surviving == 0
 
 
 # ---------------------------------------------------------------------------
