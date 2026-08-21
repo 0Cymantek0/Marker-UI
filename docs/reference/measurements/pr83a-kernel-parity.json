@@ -1,0 +1,80 @@
+{
+  "schema": "marker.pr83a_kernel_parity_evidence.v1",
+  "generated": "2026-08-21",
+  "session": "PR83A — PostgreSQL kernel parity & persistence-portability foundation",
+  "audited_branch_head_at_start": "508bc2bdd83fa2935681bd9f14ec7d329f7f1551",
+  "workstreams_claimed": [
+    "WS1: real PostgreSQL kernel parity (engine bootstrap, portable commit semantics, migration path, dual-backend conformance harness)",
+    "WS2: backend-neutral payload-store boundary at the kernel commit path"
+  ],
+  "workstreams_explicitly_not_claimed": [
+    "WS3 (stretch): real S3-compatible/object-store payload execution — not attempted; no object-store code was added",
+    "production object-store durability, multipart/lifecycle/multi-region policy",
+    "industrial generation publication and reader pinning",
+    "database + object-store backup/restore, failover drills, RPO/RTO",
+    "kernel subsystems beyond the commit path (events, fencing, gc, generations, liveness, publications, retention, scheduler) still import the SQLite upsert construct and are exercised on SQLite only (PR83B+ scope)"
+  ],
+  "environment": {
+    "host_os": "Windows 10.0.26200 x64",
+    "python": "3.11.9",
+    "sqlalchemy": "2.0.36",
+    "alembic": "1.14.0",
+    "asyncpg": "0.30.0",
+    "aiosqlite": "0.20.0",
+    "pytest": "8.3.4",
+    "pytest_asyncio": "0.24.0",
+    "postgresql_server": "PostgreSQL 16.14 on x86_64-pc-linux-musl (postgres:16-alpine Docker image, port 127.0.0.1:55432)",
+    "docker": "Docker 29.1.3"
+  },
+  "reproduction": {
+    "postgresql_conformance": "python backend/scripts/run_kernel_pg_conformance.py   (from repo root; reuses or starts the Dockerized server, strict mode on)",
+    "external_server": "python backend/scripts/run_kernel_pg_conformance.py --external-url postgresql+asyncpg://user:pass@host:5432/postgres",
+    "manual_migration": "cd backend && python -m app.db_migration --url postgresql+asyncpg://marker:marker@127.0.0.1:55432/marker upgrade",
+    "sqlite_regression": "cd backend && python -m pytest tests conformance -q",
+    "backend_selection": "MARKER_DATABASE_URL=postgresql+asyncpg://... switches the application profile; SQLite remains the default"
+  },
+  "validation_matrix": [
+    {"behavior": "clean DB bootstrap / current migrations", "sqlite": "pass", "postgresql": "pass", "evidence": "tests/test_kernel_dual_backend_conformance.py::test_bootstrap_reaches_current_head — Alembic chain 0001..0013 initializes both; verify_database_ready returns CURRENT"},
+    {"behavior": "basic authoritative kernel commit", "sqlite": "pass", "postgresql": "pass", "evidence": "test_commit_visible_result — identical visible records/manifest/head/payload-registry/outbox outcome"},
+    {"behavior": "per-head monotonic commit identities", "sqlite": "pass", "postgresql": "pass", "evidence": "test_concurrent_same_head_writers_never_fork — 12 concurrent writers, ids 1..12 contiguous, parent links i-1, single head, no duplicate manifest ids"},
+    {"behavior": "same-request idempotent replay", "sqlite": "pass", "postgresql": "pass", "evidence": "test_replay_of_accepted_request_resolves_consistently — typed DuplicateRecordIdentityError, no duplicate history"},
+    {"behavior": "conflicting request identity", "sqlite": "pass", "postgresql": "pass", "evidence": "test_conflicting_identity_reuse_fails_without_mutation — typed failure, head and committed bytes unchanged"},
+    {"behavior": "concurrent same-head writers", "sqlite": "pass", "postgresql": "pass", "evidence": "FOR UPDATE head-row lock on PostgreSQL (write-first upsert on SQLite); busy/head retry counters observed 0 under the 12-writer run"},
+    {"behavior": "transaction rollback", "sqlite": "pass", "postgresql": "pass", "evidence": "test_fault_before_commit_rolls_back_everything — six fault phases, zero partial state"},
+    {"behavior": "payload staged, DB transaction fails", "sqlite": "pass", "postgresql": "pass", "evidence": "test_staged_payload_db_failure_leaves_safe_orphan + rollback-phase cases — verified orphan bytes, zero registry rows, clean retry"},
+    {"behavior": "existing local/kernel regression coverage", "sqlite": "pass", "postgresql": "n/a (local-specific)", "evidence": "full backend suite result recorded below"},
+    {"behavior": "real backend confirmation", "postgresql": "pass", "evidence": "fixture asserts engine.dialect.name == 'postgresql' and SELECT version() banner; strict runner fails on any skip"},
+    {"behavior": "kernel payload dependency backend-neutral", "sqlite": "pass", "postgresql": "pass", "evidence": "KernelPayloadStore protocol; commit service accepts any implementation; LocalPayloadStore unchanged reference implementation"},
+    {"behavior": "shared payload-store conformance cases", "backend_independent": "pass", "evidence": "tests/test_payload_store_conformance.py — 9 behavioral cases over the factory registry"},
+    {"behavior": "real S3-compatible/object-store execution", "status": "not attempted (optional WS3)"}
+  ],
+  "results": {
+    "dual_backend_conformance": "26 passed / 0 failed / 0 skipped (13 scenarios x 2 backends, PostgreSQL 16.14 real server)",
+    "payload_store_conformance": "9 passed / 0 failed (local_file implementation)",
+    "sqlite_migration_authority_gates": "61 passed / 0 failed (test_database_migration, test_kernel_migration, test_context_runtime_cursor_migration)",
+    "kernel_commit_concurrency_fault_payloadcommit": "51 passed / 0 failed",
+    "lockfile_drift_gate": "in sync (lock_dependencies.py --check)",
+    "full_sqlite_regression": "3008 passed / 0 failed / 17 skipped in 1858.77s (python -m pytest tests conformance -q); skips = 13 unprovisioned PostgreSQL conformance params (actionable reason, impossible under the strict runner) + 4 pre-existing local-environment skips; session additions +22 passing tests account exactly (2986 + 22 = 3008)"
+  },
+  "implementation_decisions": [
+    "Driver: asyncpg 0.30.0 (mature SQLAlchemy-async integration); lazily imported so SQLite-only environments never need it",
+    "Serialization: write-first head upsert + SELECT ... FOR UPDATE re-read — SQLite keeps its writer-lock semantics, PostgreSQL holds the head row until commit; single-lock ordering avoids committer deadlocks",
+    "Retryable contention unified in app/kernel/dialects.py: SQLite lock/busy text + PostgreSQL SQLSTATEs 40001/40P01/55P03 feed the same bounded budget",
+    "Integrity mapping prefers the violated constraint name (asyncpg native) with the SQLite text match retained as fallback",
+    "Timestamps: all DateTime columns are timezone-aware (PostgreSQL TIMESTAMPTZ; SQLite rendering and contracts byte-identical) because the kernel stamps aware UTC and asyncpg rejects aware values against naive columns",
+    "PostgreSQL migration authority compares observed schema against the ORM contract directly; the migrations-vs-ORM reference diff stays on the SQLite profile (same chain and metadata feed both)",
+    "Legacy (pre-Alembic) database adoption is not offered on PostgreSQL — a PG database must be born from Alembic; documented fail-closed state",
+    "Migration-writer mutual exclusion on PostgreSQL is a pg_advisory_lock keyed by target database, released exactly when the holder connection closes",
+    "KernelPayloadStore is a minimal 3-operation protocol (stage/check_object/object_exists) — exactly what the commit path uses; larger store surface (read/delete/list) stays implementation-owned until PR83B needs it"
+  ],
+  "known_deviations_between_profiles": [
+    "PostgreSQL introspection is asynchronous: inspect_database(url) for PG URLs must run without a running event loop (CLI/worker thread); async callers use app.db_migration_postgres.inspect_database_async",
+    "Other kernel subsystems (events, fencing, gc, generations, liveness, publications, retention, scheduler) still use the SQLite-native upsert import and have not been exercised on PostgreSQL in this session"
+  ],
+  "pr83_followups": [
+    "PR83B: port remaining kernel subsystems to dialect_insert; industrial object-store payload implementation behind KernelPayloadStore with the same conformance suite",
+    "PR83B: DB-to-object-store consistency and upload/finalization failure injection",
+    "PR83C: generation publication, reader pinning, backup/restore, failover, RPO/RTO evidence across DB + object store",
+    "CI: consider a PostgreSQL service container job running the strict conformance runner"
+  ]
+}
