@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Dual-backend kernel conformance runner (PR83A).
+"""Dual-backend kernel conformance runner (PR83A/PR83B1).
 
 Provisions a real PostgreSQL server (reusing a running container,
 starting one via Docker, or accepting an external server URL), then
-runs ``tests/test_kernel_dual_backend_conformance.py`` in strict mode:
-the PostgreSQL parameters FAIL when the server is missing instead of
+runs the dual-backend kernel suites (PR83A commit conformance, PR83B1
+control-plane conformance, dialect vocabulary) in strict mode: the
+PostgreSQL parameters FAIL when the server is missing instead of
 skipping, so an invoked industrial conformance target can never pass
 silently. Exits non-zero on any test failure, any skip, or any missing
 prerequisite (Docker unavailable, server never becoming ready).
@@ -33,7 +34,14 @@ import time
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-TEST_TARGET = "tests/test_kernel_dual_backend_conformance.py"
+#: Dual-backend suites executed by this strict runner. PR83A commit
+#: conformance plus the PR83B1 control-plane and dialect suites; every
+#: one of them fails (never skips) in strict mode without a server.
+TEST_TARGETS = (
+    "tests/test_kernel_dual_backend_conformance.py",
+    "tests/test_kernel_control_plane_conformance.py",
+    "tests/test_kernel_dialects.py",
+)
 ADMIN_URL_ENV = "MARKER_TEST_POSTGRES_ADMIN_URL"
 STRICT_ENV = "MARKER_TEST_POSTGRES_STRICT"
 
@@ -217,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.executable,
         "-m",
         "pytest",
-        TEST_TARGET,
+        *TEST_TARGETS,
         "-q",
         "-rs",
         "--no-header",
