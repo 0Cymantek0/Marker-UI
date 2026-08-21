@@ -4,10 +4,10 @@ The public query surface is a *typed request object*, never
 agent-authored SQL or FTS5 syntax. This module defines the finite
 operator set actually implemented, validates requests fail-closed
 (unknown fields, unknown operators, unimplemented operators, malformed
-values, over-budget operation counts), normalizes the request into a
-deterministic canonical form for EvidencePacket identity, and compiles
-lexical intent into a safely quoted FTS5 MATCH expression where caller
-text can never become FTS5 grammar.
+values, over-budget operation counts), and normalizes the request into a
+deterministic canonical form for EvidencePacket identity. Lexical
+intent stays logical here; the kernel lexical layer compiles it per
+physical backend (PR83B2).
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from app.context_runtime.errors import (
     QueryContractError,
     UnsupportedOperatorError,
 )
+from app.kernel.lexical import compile_sqlite_match
 from app.kernel.publications import (
     HIGH_ASSURANCE_PROFILE_PREFIX,
     validate_publication_profile,
@@ -312,26 +313,8 @@ def normalized_query(request: QueryRequest) -> dict[str, Any]:
     }
 
 
-def _quote(term: str) -> str:
-    """Quote one term as an FTS5 phrase so its bytes can never be
-    parsed as MATCH grammar (inner quotes are doubled per FTS5)."""
-    return '"' + term.replace('"', '""') + '"'
-
-
-def compile_lexical_match(text: str, mode: LexicalMode) -> str:
-    """Compile typed lexical intent into a bounded, safely quoted FTS5
-    MATCH expression.
-
-    ``text`` must already be validated (NFC, non-empty, every token
-    contains a searchable character). Tokens are whitespace-separated;
-    each becomes a quoted phrase, so ``OR``, ``NEAR(...)``, column
-    filters, and bareword operators inside user text are always literal
-    content.
-    """
-    tokens = text.split()
-    if not tokens:
-        raise QueryContractError("lexical text must contain non-whitespace characters")
-    if mode == "phrase":
-        return _quote(" ".join(tokens))
-    joiner = " AND " if mode == "all_terms" else " OR "
-    return joiner.join(_quote(token) for token in tokens)
+#: Physical MATCH compilation now lives in the kernel lexical layer
+#: (PR83B2): one authority compiles logical ``(text, mode)`` intent per
+#: backend, so this package no longer embeds FTS5 grammar at all. The
+#: re-export keeps the historical import path working.
+compile_lexical_match = compile_sqlite_match

@@ -23,6 +23,7 @@ from app.context_runtime.errors import (
     QueryContractError,
     UnsupportedOperatorError,
 )
+from app.kernel.errors import LexicalQueryError
 
 
 def _request(**overrides) -> dict:
@@ -246,7 +247,9 @@ def test_compile_neutralizes_fts_operators_and_quotes() -> None:
 
 
 def test_compile_rejects_empty_text() -> None:
-    with pytest.raises(QueryContractError):
+    # Compilation authority moved to the kernel lexical layer (PR83B2);
+    # empty input fails closed with the kernel's typed query error.
+    with pytest.raises(LexicalQueryError):
         compile_lexical_match("   ", "all_terms")
 
 
