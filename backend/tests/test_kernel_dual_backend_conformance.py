@@ -21,9 +21,7 @@ Reproduce with::
 from __future__ import annotations
 
 import asyncio
-import os
 import pathlib
-import uuid
 from dataclasses import dataclass
 
 import pytest
@@ -53,13 +51,13 @@ from app.kernel.models import (
 from app.kernel.outbox import OutboxIntent
 from app.kernel.payloads import LocalPayloadStore
 from app.kernel.records import ObservationRecord
-
-BACKENDS = ("sqlite", "postgresql")
+from tests.pg_provisioning import (
+    BACKENDS,
+    engine_kwargs_for,
+    provisioned_database,
+)
 
 pytestmark = pytest.mark.asyncio
-
-_ADMIN_URL_ENV = "MARKER_TEST_POSTGRES_ADMIN_URL"
-_STRICT_ENV = "MARKER_TEST_POSTGRES_STRICT"
 
 #: Commit-protocol fault phases that must roll back the whole batch.
 _ROLLBACK_PHASES = (
@@ -70,29 +68,6 @@ _ROLLBACK_PHASES = (
     PHASE_HEAD_ADVANCED,
     PHASE_PRE_COMMIT,
 )
-
-
-def _postgres_admin_url() -> str | None:
-    return os.getenv(_ADMIN_URL_ENV) or None
-
-
-def _strict_mode() -> bool:
-    return os.getenv(_STRICT_ENV, "").lower() in ("1", "true", "yes")
-
-
-def _require_postgres_admin_url() -> str:
-    url = _postgres_admin_url()
-    if url is None:
-        message = (
-            "PostgreSQL kernel conformance needs "
-            f"{_ADMIN_URL_ENV} (server maintenance-database URL); run "
-            "backend/scripts/run_kernel_pg_conformance.py to provision a "
-            "real server automatically"
-        )
-        if _strict_mode():
-            pytest.fail(f"strict mode refuses to skip: {message}")
-        pytest.skip(message)
-    return url
 
 
 @dataclass
@@ -107,41 +82,6 @@ class ConformanceEnv:
     service: KernelCommitService
     #: server banner when the backend is a real PostgreSQL instance
     server_version: str = ""
-
-
-async def _create_postgres_database(admin_url: str) -> str:
-    import asyncpg
-    from sqlalchemy.engine import make_url
-
-    admin = make_url(admin_url)
-    db_name = f"marker_conf_{uuid.uuid4().hex[:10]}"
-    conn = await asyncpg.connect(
-        admin.set(database="postgres").set(drivername="postgresql").render_as_string(
-            hide_password=False
-        )
-    )
-    try:
-        await conn.execute(f'CREATE DATABASE "{db_name}"')
-    finally:
-        await conn.close()
-    return admin.set(database=db_name).render_as_string(hide_password=False)
-
-
-async def _drop_postgres_database(admin_url: str, url: str) -> None:
-    import asyncpg
-    from sqlalchemy.engine import make_url
-
-    admin = make_url(admin_url)
-    db_name = make_url(url).database
-    conn = await asyncpg.connect(
-        admin.set(database="postgres").set(drivername="postgresql").render_as_string(
-            hide_password=False
-        )
-    )
-    try:
-        await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
-    finally:
-        await conn.close()
 
 
 def make_observation(observer: str, derivation: dict, payload: bytes | None = None):
@@ -165,53 +105,39 @@ def backend(request) -> str:
 @pytest_asyncio.fixture
 async def commit_env(backend: str, tmp_path: pathlib.Path):
     """Fresh, fully migrated database + wired kernel commit service."""
-    pg_admin_url: str | None = None
-    pg_url: str | None = None
-    if backend == "postgresql":
-        pg_admin_url = _require_postgres_admin_url()
-        pg_url = await _create_postgres_database(pg_admin_url)
-        url = pg_url
-    else:
-        url = f"sqlite+aiosqlite:///{(tmp_path / 'kernel.db').as_posix()}"
+    async with provisioned_database(backend, (tmp_path / "kernel.db").as_posix()) as prov:
+        url = prov.url
+        result = await upgrade_database(url=url)
+        assert result.to_revision, "bootstrap must reach a migration head"
 
-    result = await upgrade_database(url=url)
-    assert result.to_revision, "bootstrap must reach a migration head"
+        engine = create_async_engine(url, **engine_kwargs_for(backend))
+        # Real-backend confirmation: the engine's dialect must match the
+        # profile the test claims to exercise (guards against URL mixups).
+        assert engine.dialect.name == backend
 
-    engine_kwargs = (
-        {"connect_args": {"check_same_thread": False}}
-        if backend == "sqlite"
-        else {"pool_pre_ping": True}
-    )
-    engine = create_async_engine(url, **engine_kwargs)
-    # Real-backend confirmation: the engine's dialect must match the
-    # profile the test claims to exercise (guards against URL mixups).
-    assert engine.dialect.name == backend
-
-    session_factory = async_sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    store = LocalPayloadStore(tmp_path / "payloads")
-    service = KernelCommitService(session_factory, payload_store=store)
-
-    server_version = ""
-    if backend == "postgresql":
-        async with engine.connect() as conn:
-            server_version = await conn.scalar(text("SELECT version()"))
-
-    try:
-        yield ConformanceEnv(
-            backend=backend,
-            url=url,
-            engine=engine,
-            session_factory=session_factory,
-            store=store,
-            service=service,
-            server_version=server_version,
+        session_factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
         )
-    finally:
-        await engine.dispose()
-        if pg_url is not None and pg_admin_url is not None:
-            await _drop_postgres_database(pg_admin_url, pg_url)
+        store = LocalPayloadStore(tmp_path / "payloads")
+        service = KernelCommitService(session_factory, payload_store=store)
+
+        server_version = ""
+        if backend == "postgresql":
+            async with engine.connect() as conn:
+                server_version = await conn.scalar(text("SELECT version()"))
+
+        try:
+            yield ConformanceEnv(
+                backend=backend,
+                url=url,
+                engine=engine,
+                session_factory=session_factory,
+                store=store,
+                service=service,
+                server_version=server_version,
+            )
+        finally:
+            await engine.dispose()
 
 
 # ---------------------------------------------------------------------------
