@@ -55,6 +55,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 #: The expanded industrial matrix. Every target must pass with real
 #: PostgreSQL and the real S3-compatible service in strict mode.
 #: PR83B2 adds real-backend lexical publication + query serving.
+#: PR83B3 adds the industrial source-artifact topology (store,
+#: acquisition, runtime, and process-boundary proofs).
 TEST_TARGETS = (
     "tests/test_kernel_dual_backend_conformance.py",
     "tests/test_kernel_control_plane_conformance.py",
@@ -66,6 +68,11 @@ TEST_TARGETS = (
     "tests/test_kernel_lifecycle_conformance.py",
     "tests/test_kernel_publication_lexical_conformance.py",
     "tests/test_context_runtime_lexical_conformance.py",
+    "tests/test_source_store_conformance.py",
+    "tests/test_source_store_s3.py",
+    "tests/test_kernel_source_acquisition_s3.py",
+    "tests/test_kernel_source_runtime_s3.py",
+    "tests/test_kernel_source_industrial_topology.py",
 )
 
 S3_ENDPOINT_ENV = "MARKER_TEST_S3_ENDPOINT"

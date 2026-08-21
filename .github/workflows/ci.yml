@@ -205,6 +205,11 @@ jobs:
             tests/test_kernel_lifecycle_conformance.py \
             tests/test_kernel_publication_lexical_conformance.py \
             tests/test_context_runtime_lexical_conformance.py \
+            tests/test_source_store_conformance.py \
+            tests/test_source_store_s3.py \
+            tests/test_kernel_source_acquisition_s3.py \
+            tests/test_kernel_source_runtime_s3.py \
+            tests/test_kernel_source_industrial_topology.py \
             -q -rs --no-header | tee pytest-industrial.out
 
       - name: "Guard: fail on any skip in the industrial matrix"
