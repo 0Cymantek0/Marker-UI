@@ -203,6 +203,8 @@ jobs:
             tests/test_payload_store_conformance.py \
             tests/test_payload_store_s3.py \
             tests/test_kernel_lifecycle_conformance.py \
+            tests/test_kernel_publication_lexical_conformance.py \
+            tests/test_context_runtime_lexical_conformance.py \
             -q -rs --no-header | tee pytest-industrial.out
 
       - name: "Guard: fail on any skip in the industrial matrix"
