@@ -513,7 +513,7 @@ async def submit_conversion_job(
             raise UsageError(
                 f"Source changed while being acquired; retry the submission. ({exc})"
             ) from exc
-        stored_path = str(await acquisition_service.artifact_path_for(acquired))
+        stored_path = str(await acquisition_service.consumable_path_for(acquired))
         config[SOURCE_CONFIG_KEY] = acquired.to_config()
         config["durable_filepath"] = stored_path
 

@@ -168,6 +168,7 @@ class KernelRuntimeCoordinator:
         session_factory: Callable[[], Any] | None = None,
         commit_service: KernelCommitService | None = None,
         source_store: SourceArtifactStore | None = None,
+        source_cache_root: Path | None = None,
         workspace_id: str = "local",
         owner_id: str = "marker-runtime",
         lease_seconds: float = 900.0,
@@ -180,6 +181,7 @@ class KernelRuntimeCoordinator:
         self._session_factory_ref = session_factory
         self._commit_service_ref = commit_service
         self._source_store = source_store
+        self._source_cache_root = source_cache_root
         self._source_service_ref: SourceAcquisitionService | None = None
         self.workspace_id = workspace_id
         self.owner_id = owner_id
@@ -220,6 +222,7 @@ class KernelRuntimeCoordinator:
                 self._commit_service(),
                 store,
                 workspace_id=self.workspace_id,
+                cache_root=self._source_cache_root,
             )
         return self._source_service_ref
 
@@ -267,14 +270,30 @@ class KernelRuntimeCoordinator:
 
         acquired = await self._validated_source_revision(job_id, config)
 
+        source_service = self._source_service()
+        if acquired is None and not source_service.legacy_submit_fallback:
+            # Industrial profiles never execute unowned paths: a
+            # submission without committed source truth is rejected at
+            # authorization, not silently run against a node-local or
+            # external path whose provenance cannot be bound to a
+            # revision. (Restart adoption calls authorize() per row and
+            # logs this refusal instead of blocking boot.)
+            raise KernelError(
+                f"job {job_id!r}: the active source-artifact profile "
+                f"({source_service.store_profile}) requires a committed "
+                "source revision; path-trust submission is not available"
+            )
+
         source_uri = str(config.get("source_url") or "") or (
             "file://" + str(config.get("local_filepath") or config.get("durable_filepath") or job_id)
         )
         locator = str(config.get("durable_filepath") or config.get("local_filepath") or "")
         if acquired is not None:
             # The execution source is the acquired revision's immutable
-            # artifact, never the mutable external path.
-            locator = str(await self._source_service().artifact_path_for(acquired))
+            # artifact, never the mutable external path; the locator is
+            # the durable, credential-free address of those bytes under
+            # the active profile.
+            locator = source_service.execution_locator_for(acquired)
         properties: dict[str, Any] = {
             "job_id": str(job_id),
             "output_format": str(config.get("output_format") or "markdown"),
@@ -296,7 +315,7 @@ class KernelRuntimeCoordinator:
             locator=locator or job_id,
             media_type=str(config.get("input_format") or "document"),
             extractor_name="marker-ui-runtime",
-            extractor_version="pr70",
+            extractor_version="pr83b3",
             properties=properties,
         )
         intent_payload = {"job_id": str(job_id)}
@@ -382,6 +401,15 @@ class KernelRuntimeCoordinator:
 
         path = Path(filepath or "")
         if not path.is_file():
+            if not service.legacy_submit_fallback:
+                # Industrial profile: a submission whose source file is
+                # already gone cannot acquire and must not continue as
+                # unowned path-trust work.
+                raise KernelError(
+                    f"job {job_id!r}: source file is missing and the active "
+                    f"source-artifact profile ({service.store_profile}) "
+                    "requires acquisition before submission"
+                )
             return config  # launch-time terminal failure owns missing files
         try:
             from app.core.config import UPLOAD_DIR
@@ -394,9 +422,17 @@ class KernelRuntimeCoordinator:
                 job_id=job_id,
             )
             config[SOURCE_CONFIG_KEY] = acquired.to_config()
-            config["durable_filepath"] = str(await service.artifact_path_for(acquired))
+            if service.legacy_submit_fallback:
+                # A node-local artifact path is durable executable state
+                # for the local profile; shared profiles resolve bytes
+                # from committed truth at launch instead.
+                config["durable_filepath"] = str(await service.artifact_path_for(acquired))
             await self._persist_row_config(job_id, config)
-        except Exception as exc:  # noqa: BLE001 - policy/IO must not kill legacy-shaped submits
+        except Exception as exc:  # noqa: BLE001
+            if not service.legacy_submit_fallback:
+                # Industrial fail-closure: acquisition/policy failures
+                # propagate — never a silent legacy-shaped submit.
+                raise
             logger.info(
                 "kernel submission for job %s runs without a source revision (%s: %s)",
                 job_id,
@@ -534,19 +570,22 @@ class KernelRuntimeCoordinator:
             return
 
         # Source resolution: a job with a committed source revision
-        # executes against the revision's immutable artifact ONLY. A
-        # missing/truncated artifact terminal-fails honestly — falling
-        # back to the external path here would reopen the exact
-        # validate-A-parse-B hole source truth exists to close.
+        # executes against the revision's immutable bytes ONLY — the
+        # local profile consumes the owned artifact path directly, a
+        # shared profile consumes a verified node-local materialization
+        # of the durable object. A missing/truncated/corrupt source
+        # terminal-fails honestly — falling back to the external path
+        # here would reopen the exact validate-A-parse-B hole source
+        # truth exists to close.
         acquired = AcquiredSourceRevision.from_config(config.get(SOURCE_CONFIG_KEY) or {})
         if acquired is not None:
             try:
-                artifact = self._source_service().store.artifact_path(
-                    acquired.blob_key, acquired.suffix
+                consumable = Path(
+                    await self._source_service().consumable_path_for(acquired)
                 )
-                if not artifact.is_file() or artifact.stat().st_size != acquired.byte_length:
+                if not consumable.is_file() or consumable.stat().st_size != acquired.byte_length:
                     raise FileNotFoundError(
-                        f"artifact for {acquired.blob_key}{acquired.suffix} is "
+                        f"source for {acquired.blob_key}{acquired.suffix} is "
                         "missing or truncated"
                     )
             except (SourceStoreError, OSError) as exc:
@@ -557,7 +596,7 @@ class KernelRuntimeCoordinator:
                     attempts=0,
                 )
                 return
-            filepath = str(artifact)
+            filepath = str(consumable)
         else:
             filepath = str(
                 config.get("durable_filepath") or config.get("local_filepath") or ""

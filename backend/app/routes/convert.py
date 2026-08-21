@@ -951,7 +951,7 @@ async def upload_file(
                 status_code=409,
                 detail=f"Source changed while being acquired; retry the submission. ({exc})",
             ) from exc
-        stored_path = str(await acquisition_service.artifact_path_for(acquired))
+        stored_path = str(await acquisition_service.consumable_path_for(acquired))
         config[SOURCE_CONFIG_KEY] = acquired.to_config()
         config["durable_filepath"] = stored_path
 
@@ -1926,7 +1926,7 @@ async def retry_job(
                 status_code=409,
                 detail=f"Source changed while being re-acquired for retry. ({exc})",
             ) from exc
-        stored_path = str(await retry_service.artifact_path_for(acquired))
+        stored_path = str(await retry_service.consumable_path_for(acquired))
         config[SOURCE_CONFIG_KEY] = acquired.to_config()
         if (
             isinstance(old_block, dict)
