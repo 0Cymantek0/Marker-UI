@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -120,16 +121,24 @@ def s3_request_headers(
     query: str = "",
     body: bytes = b"",
     extra_headers: dict[str, str] | None = None,
+    content_sha256: str | None = None,
 ) -> dict[str, str]:
     """AWS Signature Version 4 headers for one S3 request.
 
     Path-style addressing; the payload hash is always known (we hash
     what we upload, the empty string otherwise), so unsigned-payload
-    streaming is never needed.
+    streaming is never needed. ``content_sha256`` lets a caller sign a
+    streamed body whose SHA-256 was computed in a prior pass (the hex
+    digest without the ``sha256:`` prefix); the server then verifies the
+    received bytes against the signed hash end to end.
     """
     parsed = urllib.parse.urlsplit(f"{config.base_url}{path}")
     canonical_uri = urllib.parse.quote(path, safe="/")
-    payload_sha256 = hashlib.sha256(body).hexdigest()
+    if content_sha256 is not None and not re.fullmatch(r"[0-9a-f]{64}", content_sha256):
+        raise PayloadStageError(
+            "content_sha256 must be a bare 64-hex sha256 digest for signing"
+        )
+    payload_sha256 = content_sha256 or hashlib.sha256(body).hexdigest()
     now = datetime.now(timezone.utc)
     amz_date = now.strftime("%Y%m%dT%H%M%SZ")
     date_stamp = now.strftime("%Y%m%d")

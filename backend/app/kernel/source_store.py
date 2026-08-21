@@ -129,6 +129,11 @@ def _stat_evidence(st: os.stat_result) -> dict[str, int]:
     }
 
 
+#: Public alias — shared staging-discipline evidence used by every
+#: source-artifact profile (the historical ``__all__`` name).
+SourceStatEvidence = _stat_evidence
+
+
 @dataclass(frozen=True)
 class StagedSource:
     """Result of one coherent acquisition into the store.
@@ -570,17 +575,46 @@ def build_source_store():
     source truth must never be an accidental side effect of a local
     default.
     """
-    from app.core.config import SOURCE_STORE_PROFILE, SOURCE_STORE_ROOT
+    from app.core.config import (
+        SOURCE_S3_ACCESS_KEY,
+        SOURCE_S3_BUCKET,
+        SOURCE_S3_ENDPOINT,
+        SOURCE_S3_PREFIX,
+        SOURCE_S3_REGION,
+        SOURCE_S3_SECRET_KEY,
+        SOURCE_STORE_PROFILE,
+        SOURCE_STORE_ROOT,
+    )
 
     profile = SOURCE_STORE_PROFILE.strip().lower()
     if profile in ("", "local", "local_file"):
         return LocalSourceStore(SOURCE_STORE_ROOT)
     if profile in ("s3", "object_store"):
-        # The industrial implementation lands with the PR83B3 store
-        # module; until then the profile is a declared, fail-closed
-        # selection rather than a silent local fallback.
-        raise SourceStoreError(
-            "source store profile 's3' is not available in this build"
+        missing = [
+            name
+            for name, value in (
+                ("MARKER_SOURCE_S3_ENDPOINT", SOURCE_S3_ENDPOINT),
+                ("MARKER_SOURCE_S3_BUCKET", SOURCE_S3_BUCKET),
+                ("MARKER_SOURCE_S3_ACCESS_KEY", SOURCE_S3_ACCESS_KEY),
+                ("MARKER_SOURCE_S3_SECRET_KEY", SOURCE_S3_SECRET_KEY),
+            )
+            if not value
+        ]
+        if missing:
+            raise SourceStoreError(
+                "source store profile 's3' requires "
+                + ", ".join(missing)
+                + "; refusing to fall back to a local source store"
+            )
+        from app.kernel.source_object_store import S3SourceStore
+
+        return S3SourceStore.build_default(
+            endpoint_url=SOURCE_S3_ENDPOINT,
+            bucket=SOURCE_S3_BUCKET,
+            access_key_id=SOURCE_S3_ACCESS_KEY,
+            secret_access_key=SOURCE_S3_SECRET_KEY,
+            region=SOURCE_S3_REGION,
+            prefix=SOURCE_S3_PREFIX or "kernel-sources",
         )
     raise SourceStoreError(
         f"unknown MARKER_SOURCE_STORE_PROFILE {SOURCE_STORE_PROFILE!r}; "
