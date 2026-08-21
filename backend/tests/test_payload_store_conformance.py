@@ -24,6 +24,7 @@ from app.kernel.payloads import (
     BLOB_KEY_PATTERN,
     KernelPayloadStore,
     LocalPayloadStore,
+    PayloadMaintenanceStore,
 )
 from app.utils.canonical import payload_byte_hash
 from tests.s3_provisioning import maybe_s3_store_factory
@@ -56,6 +57,7 @@ def store_name(request) -> str:
 async def payload_store(store_name: str, tmp_path: pathlib.Path):
     store = STORE_FACTORIES[store_name](tmp_path / f"store-{store_name}")
     assert isinstance(store, KernelPayloadStore)  # structural contract
+    assert isinstance(store, PayloadMaintenanceStore)  # lifecycle contract
     yield store
     closer = getattr(store, "close", None)
     if closer is not None:
@@ -131,6 +133,39 @@ async def test_object_exists_distinguishes_presence(payload_store) -> None:
     missing = payload_byte_hash(b"absent")
     assert await payload_store.object_exists(blob.blob_key)
     assert not await payload_store.object_exists(missing)
+
+
+# ---------------------------------------------------------------------------
+# Maintenance metadata (GC accounting; PR83B1 WS6)
+# ---------------------------------------------------------------------------
+
+
+async def test_stat_object_reports_length_and_age_of_staged_bytes(
+    payload_store,
+) -> None:
+    import time
+
+    before = time.time()
+    blob = await payload_store.stage(b"stat-me")
+    stat = await payload_store.stat_object(blob.blob_key)
+    assert stat is not None
+    assert stat.blob_key == blob.blob_key
+    assert stat.length == len(b"stat-me")
+    # Age metadata comes from the store's own clock and may lag the
+    # caller's; it must not predate the staging call.
+    assert stat.last_modified_epoch >= before - 5.0
+
+
+async def test_stat_object_of_missing_key_is_none(payload_store) -> None:
+    missing = payload_byte_hash(b"never-existed")
+    assert await payload_store.stat_object(missing) is None
+
+
+async def test_stat_object_none_after_authorized_delete(payload_store) -> None:
+    blob = await payload_store.stage(b"retire-me")
+    result = await payload_store.delete_object(blob.blob_key)
+    assert result.deleted
+    assert await payload_store.stat_object(blob.blob_key) is None
 
 
 # ---------------------------------------------------------------------------

@@ -4,10 +4,10 @@ An industrial object-store implementation of the ``KernelPayloadStore``
 contract (``app.kernel.payloads``): the same three commit-path
 operations — ``stage`` / ``check_object`` / ``object_exists`` — plus the
 maintenance surface retirement and reconciliation rely on (``read`` /
-``list_objects`` / ``delete_object``). Implemented directly over the S3
-REST API with AWS Signature Version 4 on ``httpx.AsyncClient``: no SDK
-dependency, exact control over the request semantics the kernel's
-invariants depend on.
+``list_objects`` / ``stat_object`` / ``delete_object``). Implemented
+directly over the S3 REST API with AWS Signature Version 4 on
+``httpx.AsyncClient``: no SDK dependency, exact control over the request
+semantics the kernel's invariants depend on.
 
 Store profile — declared, and what the conformance suites prove
 against a real service (MinIO by default, any S3v4 endpoint accepted):
@@ -54,6 +54,7 @@ from app.kernel.payloads import (
     BLOB_KEY_PATTERN,
     DeleteResult,
     ObjectCheck,
+    ObjectStat,
     StagedBlob,
 )
 from app.utils.canonical import payload_byte_hash
@@ -426,6 +427,42 @@ class S3PayloadStore:
             return False
         raise PayloadStageError(
             f"object store HEAD {blob_key} failed: HTTP {response.status_code}"
+        )
+
+    async def stat_object(self, blob_key: str) -> ObjectStat | None:
+        """Physical metadata (size + Last-Modified) for GC accounting.
+
+        A bare HEAD probe, never an availability claim — mirrors the
+        local store's stat. ``None`` when the object is absent.
+        """
+        self.validate_blob_key(blob_key)
+        response = await self._status("HEAD", self._object_path(blob_key))
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise PayloadStageError(
+                f"object store HEAD {blob_key} failed: HTTP "
+                f"{response.status_code}"
+            )
+        try:
+            length = int(response.headers["Content-Length"])
+        except (KeyError, ValueError) as exc:
+            raise PayloadStageError(
+                f"object store HEAD {blob_key} returned no usable "
+                f"Content-Length: {response.headers.get('Content-Length')!r}"
+            ) from exc
+        modified = response.headers.get("Last-Modified")
+        try:
+            assert modified is not None
+            modified_at = datetime.strptime(
+                modified, "%a, %d %b %Y %H:%M:%S %Z"
+            ).replace(tzinfo=timezone.utc).timestamp()
+        except (AssertionError, ValueError):
+            modified_at = 0.0  # age unknown: report epoch zero, never guess
+        return ObjectStat(
+            blob_key=blob_key,
+            length=length,
+            last_modified_epoch=modified_at,
         )
 
     # -- maintenance capability (GC / reconcile; never on the commit path) --

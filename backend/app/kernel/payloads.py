@@ -71,9 +71,13 @@ __all__ = [
     "KERNEL_PAYLOAD_STORE_PROTOCOL",
     "LOCAL_STORE_PROFILE",
     "KernelPayloadStore",
-    "PAYLOAD_FAULT_PHASES",
-    "LocalPayloadStore",
     "ObjectCheck",
+    "ObjectStat",
+    "PAYLOAD_DECISION_LOCK_SCOPE",
+    "PAYLOAD_FAULT_PHASES",
+    "PAYLOAD_MAINTENANCE_STORE_PROTOCOL",
+    "LocalPayloadStore",
+    "PayloadMaintenanceStore",
     "StagedBlob",
 ]
 
@@ -153,6 +157,22 @@ class DeleteResult:
     deleted: bool
 
 
+@dataclass(frozen=True)
+class ObjectStat:
+    """Cheap physical metadata for one object (maintenance accounting).
+
+    Presence probe plus length and age, without the verification
+    authority of :class:`ObjectCheck`: GC orphan accounting and
+    min-age grace consume this. ``last_modified_epoch`` is UTC epoch
+    seconds under the store's own clock (filesystem mtime / S3
+    Last-Modified); it is operational metadata, never causal truth.
+    """
+
+    blob_key: str
+    length: int
+    last_modified_epoch: float
+
+
 @runtime_checkable
 class KernelPayloadStore(Protocol):
     """The payload-store behavior the kernel commit path depends on
@@ -185,6 +205,50 @@ class KernelPayloadStore(Protocol):
 
 #: Human-readable name of the behavioral contract (evidence metadata).
 KERNEL_PAYLOAD_STORE_PROTOCOL = "marker.kernel.payload.store.v1"
+
+
+@runtime_checkable
+class PayloadMaintenanceStore(Protocol):
+    """The payload-store behavior lifecycle maintenance depends on
+    (PR83B1 Workstream 6): reconciliation, snapshot verification beyond
+    the commit capability, and the PR65B collector.
+
+    Deliberately separate from :class:`KernelPayloadStore` so the commit
+    path never gains delete authority just because GC needs it. Local
+    scratch-residue operations (``list_tmp``/``cleanup_tmp``) are an
+    optional further capability only stores that can create staging
+    residue implement — the S3 single-PUT profile cannot, so callers
+    feature-detect rather than the protocol lying about it.
+    """
+
+    async def read(self, blob_key: str) -> bytes:
+        """Re-open and return verified bytes for one object."""
+        ...
+
+    async def list_objects(self) -> list[str]:
+        """All blob keys physically present in the store's namespace."""
+        ...
+
+    async def stat_object(self, blob_key: str) -> ObjectStat | None:
+        """Cheap physical metadata; None when the object is absent."""
+        ...
+
+    async def delete_object(self, blob_key: str) -> DeleteResult:
+        """Retire one object a durable GC tombstone authorized."""
+        ...
+
+
+#: Human-readable name of the maintenance contract (evidence metadata).
+PAYLOAD_MAINTENANCE_STORE_PROTOCOL = "marker.kernel.payload.maintenance.v1"
+
+#: Advisory-lock scope serializing payload-retention decisions with the
+#: GC deletion decision (PR83B1 Workstream 6). Participants: the GC
+#: recheck/tombstone transaction, retention root/pin creation, generation
+#: head activation, and payload-carrying commits (registry adoption +
+#: tombstone rescue). On SQLite the single-writer model already supplies
+#: this serialization; on PostgreSQL every participant takes
+#: ``pg_advisory_xact_lock`` on this scope inside its transaction.
+PAYLOAD_DECISION_LOCK_SCOPE = ("kernel-payloads", "gc-decision")
 
 
 class LocalPayloadStore:
@@ -475,6 +539,27 @@ class LocalPayloadStore:
         """
         async with self._io_lock:
             return await asyncio.to_thread(self.object_path(blob_key).is_file)
+
+    async def stat_object(self, blob_key: str) -> ObjectStat | None:
+        """Physical metadata (size + mtime) for maintenance accounting.
+
+        A bare stat, never an availability claim: GC's orphan age/size
+        accounting consumes it. None when the object is absent.
+        """
+        async with self._io_lock:
+            return await asyncio.to_thread(self._stat_object_sync, blob_key)
+
+    def _stat_object_sync(self, blob_key: str) -> ObjectStat | None:
+        path = self.object_path(blob_key)
+        try:
+            info = path.stat()
+        except OSError:
+            return None
+        return ObjectStat(
+            blob_key=blob_key,
+            length=info.st_size,
+            last_modified_epoch=info.st_mtime,
+        )
 
     async def delete_object(self, blob_key: str) -> DeleteResult:
         """Unlink one object; idempotent and honest about absence.
