@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import String, Text
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -29,7 +29,7 @@ class AuditEvent(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="success")
     redacted_payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
         index=True,
     )
 
