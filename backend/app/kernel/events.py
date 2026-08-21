@@ -44,9 +44,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Mapping
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.kernel.dialects import (
+    advisory_xact_lock,
+    dialect_insert,
+    run_with_contention_retry,
+)
 from app.kernel.errors import (
     InvalidEventError,
     KernelBusyError,
@@ -81,9 +86,8 @@ _DURABILITY_VALUES = frozenset({DURABILITY_DURABLE, DURABILITY_DIAGNOSTIC})
 EVENT_STREAM_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 EVENT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_.:-]{0,99}$")
 
-DEFAULT_BUSY_RETRY_ATTEMPTS = 8
-DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
-_MAX_RETRY_DELAY = 0.5
+#: Advisory-lock scope for per-(workspace, stream) sequence allocation.
+_SEQUENCE_LOCK_SCOPE = "kernel_events.sequence"
 
 _EVENT_CLAIMED = "work.claimed"
 _EVENT_ACCEPTED = "work.accepted"
@@ -99,39 +103,6 @@ def _iso(value: datetime | None) -> str | None:
     if value.tzinfo is not None:
         value = value.astimezone(timezone.utc).replace(tzinfo=None)
     return value.isoformat()
-
-
-def _is_busy(exc: OperationalError) -> bool:
-    text = str(exc).lower()
-    return any(
-        marker in text
-        for marker in (
-            "database is locked",
-            "database table is locked",
-            "database is busy",
-        )
-    )
-
-
-def _retry_delay(base: float, attempt: int) -> float:
-    return min(base * (2**attempt), _MAX_RETRY_DELAY)
-
-
-async def _run_with_busy_retry(operation, *, busy_retry_attempts, busy_retry_base_delay):
-    attempts = busy_retry_attempts or DEFAULT_BUSY_RETRY_ATTEMPTS
-    base_delay = busy_retry_base_delay or DEFAULT_BUSY_RETRY_BASE_DELAY
-    last_error: OperationalError | None = None
-    for attempt in range(attempts):
-        try:
-            return await operation()
-        except OperationalError as exc:
-            if not _is_busy(exc):
-                raise
-            last_error = exc
-            await asyncio.sleep(_retry_delay(base_delay, attempt))
-    raise KernelBusyError(
-        f"event operation still busy after {attempts} attempts: {last_error}"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -225,12 +196,21 @@ async def _append_in_session(
     durability: str,
 ) -> SemanticEvent:
     """Append inside a caller-owned transaction; the caller's commit is
-    the sequence linearization point. Writer serialization makes the
-    MAX+1 allocation race-free; a unique-violation can only mean the
-    caller raced outside a transaction, so it fails loudly rather than
-    silently forking the sequence."""
+    the sequence linearization point.
+
+    Sequence allocation is serialized per ``(workspace, stream)``:
+    SQLite's single-writer model already serializes the ``MAX+1``
+    allocation; PostgreSQL takes a transaction-scoped advisory lock on
+    the same scope (see :func:`app.kernel.dialects.advisory_xact_lock`),
+    so independent writers cannot both observe the same maximum. The
+    composite primary key remains the uniqueness backstop: a violation
+    can only mean a caller raced the allocation outside the lock, which
+    fails loudly rather than silently forking the sequence."""
     from app.kernel.models import KernelEvent
 
+    await advisory_xact_lock(
+        session, _SEQUENCE_LOCK_SCOPE, workspace_id, stream
+    )
     next_seq = (
         select(func.coalesce(func.max(KernelEvent.semantic_sequence), 0) + 1)
         .where(
@@ -250,9 +230,9 @@ async def _append_in_session(
     session.add(row)
     try:
         await session.flush()
-    except IntegrityError as exc:  # pragma: no cover - writer serialization guard
+    except IntegrityError as exc:  # pragma: no cover - allocation backstop
         raise KernelBusyError(
-            "semantic sequence allocation raced outside writer "
+            "semantic sequence allocation raced outside the per-stream "
             "serialization; retry the append inside one transaction"
         ) from exc
     return SemanticEvent(
@@ -307,10 +287,11 @@ async def append(
                     durability=durability,
                 )
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="event operation",
     )
 
 
@@ -330,8 +311,6 @@ async def append_progress(
     tick, repeated or lagging ticks overwrite in place, and nothing here
     can block or lose durable semantic events. ``counter`` is the
     caller's monotonic progress measure; it is stored, not enforced."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.kernel.models import KernelProgress
 
     if not isinstance(work_id, int) or isinstance(work_id, bool) or work_id <= 0:
@@ -345,7 +324,7 @@ async def append_progress(
             async with session.begin():
                 now = _utcnow()
                 stmt = (
-                    sqlite_insert(KernelProgress)
+                    dialect_insert(session.bind, KernelProgress)
                     .values(
                         workspace_id=workspace_id,
                         work_id=work_id,
@@ -368,10 +347,11 @@ async def append_progress(
                 )
                 return _progress_view(row)
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="event operation",
     )
 
 

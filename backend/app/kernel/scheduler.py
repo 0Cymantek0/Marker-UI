@@ -30,8 +30,10 @@ Policy (weighted fair queuing with aging):
   coordinator waiting on children holds no lease and consumes no slot.
   The cap is a hard, database-observable invariant: the capacity
   decision and the capacity-consuming ownership transition commit in
-  one write-serialized transaction, so concurrent dispatchers can
-  never oversubscribe a group, not even transiently;
+  one transaction serialized per scheduling group (SQLite's writer
+  lock via ``BEGIN IMMEDIATE``; PostgreSQL ``SELECT ... FOR UPDATE``
+  on the group row), so concurrent dispatchers can never oversubscribe
+  a group, not even transiently;
 * **bounded look-ahead**: each pass scores at most ``lookahead``
   oldest pending items *per group* (a window, never a global id-ordered
   scan that would keep late-arriving groups invisible behind an older
@@ -64,13 +66,17 @@ from fractions import Fraction
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.kernel.dialects import (
+    POSTGRESQL,
+    backend_name,
+    dialect_insert,
+    run_with_contention_retry,
+)
 from app.kernel.errors import (
     InvalidEventError,
     InvalidGroupPolicyError,
-    KernelBusyError,
     UnknownWorkError,
 )
 from app.kernel.events import DURABILITY_DURABLE, _append_in_session
@@ -126,54 +132,18 @@ DEFAULT_AGE_BOOST_AFTER_SECONDS = 30.0
 DEFAULT_AGE_BOOST_FACTOR = 4.0
 DEFAULT_LOOKAHEAD = 16
 
-DEFAULT_BUSY_RETRY_ATTEMPTS = 8
-DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
-_MAX_RETRY_DELAY = 0.5
-
-
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
 def _naive(value: datetime | None) -> datetime | None:
+    """Normalize to naive-UTC for scoring arithmetic against database
+    values (SQLite reads back tz-naive; PostgreSQL tz-aware)."""
     if value is None:
         return None
     if value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
     return value
-
-
-def _is_busy(exc: OperationalError) -> bool:
-    text = str(exc).lower()
-    return any(
-        marker in text
-        for marker in (
-            "database is locked",
-            "database table is locked",
-            "database is busy",
-        )
-    )
-
-
-def _retry_delay(base: float, attempt: int) -> float:
-    return min(base * (2**attempt), _MAX_RETRY_DELAY)
-
-
-async def _run_with_busy_retry(operation, *, busy_retry_attempts, busy_retry_base_delay):
-    attempts = busy_retry_attempts or DEFAULT_BUSY_RETRY_ATTEMPTS
-    base_delay = busy_retry_base_delay or DEFAULT_BUSY_RETRY_BASE_DELAY
-    last_error: OperationalError | None = None
-    for attempt in range(attempts):
-        try:
-            return await operation()
-        except OperationalError as exc:
-            if not _is_busy(exc):
-                raise
-            last_error = exc
-            await asyncio.sleep(_retry_delay(base_delay, attempt))
-    raise KernelBusyError(
-        f"scheduler operation still busy after {attempts} attempts: {last_error}"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -296,8 +266,6 @@ async def set_group_policy(
     """Create or update the fair-share policy for one group. The
     served-count bookkeeping is preserved across policy changes —
     fairness accounting continuity, never reset by configuration."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.kernel.models import KernelSchedulingGroup
 
     validate_resource_class(resource_class)
@@ -309,7 +277,7 @@ async def set_group_policy(
             async with session.begin():
                 now = _utcnow()
                 stmt = (
-                    sqlite_insert(KernelSchedulingGroup)
+                    dialect_insert(session.bind, KernelSchedulingGroup)
                     .values(
                         resource_class=resource_class,
                         group_id=group_id,
@@ -335,10 +303,11 @@ async def set_group_policy(
                 )
                 return _group_view(row)
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="scheduler operation",
     )
 
 
@@ -394,8 +363,6 @@ async def register_work(
     Re-registration updates class/group/deadline and preserves the
     original registration time so aging stays honest. Work registered
     with no explicit group schedules under its workspace id."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.kernel.models import (
         KernelOutbox,
         KernelSchedulingEntry,
@@ -414,7 +381,7 @@ async def register_work(
                 validate_group_id(resolved_group)
                 now = _utcnow()
                 stmt = (
-                    sqlite_insert(KernelSchedulingEntry)
+                    dialect_insert(session.bind, KernelSchedulingEntry)
                     .values(
                         work_id=work_id,
                         workspace_id=outbox_row.workspace_id,
@@ -436,7 +403,7 @@ async def register_work(
                 # The group must be schedulable under default policy even
                 # when nothing else ever touched it.
                 await session.execute(
-                    sqlite_insert(KernelSchedulingGroup)
+                    dialect_insert(session.bind, KernelSchedulingGroup)
                     .values(
                         resource_class=resource_class,
                         group_id=resolved_group,
@@ -447,10 +414,11 @@ async def register_work(
                     )
                 )
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="scheduler operation",
     )
 
 
@@ -472,8 +440,6 @@ async def _backfill_missing_entries(
     bounded ``SQLITE_BUSY`` retry envelope as every other scheduler
     write — contention exhausts into :class:`KernelBusyError`, never a
     raw ``OperationalError``."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.kernel.models import KernelOutbox, KernelSchedulingEntry, KernelSchedulingGroup
 
     async def _operation() -> None:
@@ -497,7 +463,7 @@ async def _backfill_missing_entries(
                 for row in missing:
                     validate_group_id(row.workspace_id)
                     await session.execute(
-                        sqlite_insert(KernelSchedulingEntry)
+                        dialect_insert(session.bind, KernelSchedulingEntry)
                         .values(
                             work_id=row.id,
                             workspace_id=row.workspace_id,
@@ -508,7 +474,7 @@ async def _backfill_missing_entries(
                         .on_conflict_do_nothing(index_elements=["work_id"])
                     )
                     await session.execute(
-                        sqlite_insert(KernelSchedulingGroup)
+                        dialect_insert(session.bind, KernelSchedulingGroup)
                         .values(
                             resource_class=DEFAULT_RESOURCE_CLASS,
                             group_id=row.workspace_id,
@@ -517,10 +483,11 @@ async def _backfill_missing_entries(
                         .on_conflict_do_nothing(index_elements=["resource_class", "group_id"])
                     )
 
-    await _run_with_busy_retry(
+    await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="scheduler operation",
     )
 
 
@@ -543,11 +510,12 @@ async def claim_fair(
     claimed, fenced elsewhere, accepted, or held back by its group's
     hard fan-out cap. The claim path is the PR66 path — selection only
     changes *which* item is attempted, never how authority is taken or
-    recorded. The winning candidate commits in one write-serialized
-    transaction: delivery claim, lease + fence, served-count increment,
-    challenge evidence seed, and ``work.claimed`` semantic event, with
-    the group's live-lease capacity checked under the same writer lock
-    (``BEGIN IMMEDIATE``) so concurrent dispatchers cannot oversubscribe
+    recorded. The winning candidate commits in one transaction serialized
+    per scheduling group (SQLite writer lock; PostgreSQL row lock on the
+    group's policy row): delivery claim, lease + fence, served-count
+    increment, challenge evidence seed, and ``work.claimed`` semantic
+    event, with the group's live-lease capacity checked under that same
+    serialization so concurrent dispatchers cannot oversubscribe
     ``max_in_flight``. The returned ``challenge_nonce`` is handed only
     to this claimer. ``lookahead`` bounds the scored window per
     scheduling group."""
@@ -685,7 +653,7 @@ async def claim_fair(
     scored.sort(key=lambda item: (item[0], item[1]))
 
     for _effective, work_id, group_id, _group, oldest in scored:
-        result = await _run_with_busy_retry(
+        result = await run_with_contention_retry(
             lambda wid=work_id, grp=group_id, item=oldest: _claim_under_capacity(
                 session_factory,
                 work_id=wid,
@@ -698,8 +666,9 @@ async def claim_fair(
                 group_id=grp,
                 topology_generation=topology_generation,
             ),
-            busy_retry_attempts=busy_retry_attempts,
-            busy_retry_base_delay=busy_retry_base_delay,
+            attempts=busy_retry_attempts,
+            base_delay=busy_retry_base_delay,
+            operation_name="scheduler operation",
         )
         if result is not None:
             return result
@@ -721,12 +690,18 @@ async def _claim_under_capacity(
 ) -> ClaimFairResult | None:
     """Capacity decision + ownership transition in ONE transaction.
 
-    ``BEGIN IMMEDIATE`` takes SQLite's single-writer lock before the
-    first read, so the live-lease count observed here includes every
-    lease committed before this transaction — two dispatchers cannot
-    both admit work into a group's last capacity slot. A group at its
-    configured ``max_in_flight`` therefore cannot commit another live
-    lease; the read-phase scoring above remains only a ranking hint.
+    The capacity check is serialized per scheduling group. On SQLite,
+    ``BEGIN IMMEDIATE`` takes the database's single-writer lock before
+    the first read, so the live-lease count observed here includes
+    every lease committed before this transaction. On PostgreSQL the
+    group's policy row is locked with ``SELECT ... FOR UPDATE`` — every
+    dispatcher claiming into the same group queues on that row, and the
+    live-lease count each one observes (READ COMMITTED re-snapshots per
+    statement) includes every lease committed by the dispatchers ahead
+    of it. Either way two dispatchers cannot both admit work into a
+    group's last capacity slot, and a group at its configured
+    ``max_in_flight`` cannot commit another live lease; the read-phase
+    scoring above remains only a ranking hint.
 
     Losing the capacity check, the delivery claim, or the fence race
     rolls the entire transaction back: no partial state (no orphan
@@ -742,13 +717,28 @@ async def _claim_under_capacity(
     from app.utils.canonical import canonical_json_str, to_json_ready
 
     async with session_factory() as session:
-        conn = await session.connection()  # autobegin; driver still idle
-        await conn.exec_driver_sql("BEGIN IMMEDIATE")  # writer lock first
-
-        group = await session.get(
-            KernelSchedulingGroup,
-            {"resource_class": resource_class, "group_id": group_id},
-        )
+        if backend_name(session.bind) == POSTGRESQL:
+            # Serialize capacity decisions on the group's policy row:
+            # concurrent claimers queue here until the previous claim
+            # transaction commits, so each live-lease count sees every
+            # lease the queued dispatchers already committed.
+            group = (
+                await session.execute(
+                    select(KernelSchedulingGroup)
+                    .where(
+                        KernelSchedulingGroup.resource_class == resource_class,
+                        KernelSchedulingGroup.group_id == group_id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+        else:
+            conn = await session.connection()  # autobegin; driver still idle
+            await conn.exec_driver_sql("BEGIN IMMEDIATE")  # writer lock first
+            group = await session.get(
+                KernelSchedulingGroup,
+                {"resource_class": resource_class, "group_id": group_id},
+            )
         if group is None:
             # Policy row vanished between scoring and this transaction;
             # skip honestly rather than inventing policy at dispatch time.
@@ -914,10 +904,11 @@ async def accept_work(
                 )
                 return True
 
-    appended = await _run_with_busy_retry(
+    appended = await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="scheduler operation",
     )
     return outcome, appended
 
@@ -977,10 +968,11 @@ async def reconcile_dispatch(
                 )
                 return result.rowcount
 
-    released = await _run_with_busy_retry(
+    released = await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="scheduler operation",
     )
 
     async with session_factory() as session:

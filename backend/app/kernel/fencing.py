@@ -4,7 +4,7 @@ PR66).
 The PR64 outbox is honestly at-least-once: duplicate execution,
 redelivery, and failover are expected. This module adds the durable
 authority boundary that turns that honesty into a guarantee — for one
-outbox work item, the SQLite database can always answer *which
+outbox work item, the kernel database can always answer *which
 ownership generation may turn an executed result into accepted state*.
 
 Two durable primitives (revision ``20260816_0008``):
@@ -24,8 +24,10 @@ Two durable primitives (revision ``20260816_0008``):
 
 Concurrency model: every transition is a conditional ``UPDATE`` (or
 guarded ``INSERT``) checked via ``rowcount`` inside one transaction, so
-racing contenders cannot both win; SQLite writer serialization plus a
-bounded busy-retry loop handles ``SQLITE_BUSY``.
+racing contenders cannot both win. Contention is classified through the
+shared dialect vocabulary in :mod:`app.kernel.dialects` — SQLite
+lock/busy messages and PostgreSQL retryable SQLSTATEs feed the same
+bounded retry budget.
 
 Acceptance outcomes:
 
@@ -44,7 +46,6 @@ itself supplies a real idempotency primitive.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -52,15 +53,19 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.kernel.dialects import (
+    dialect_insert,
+    integrity_constraint_name,
+    run_with_contention_retry,
+)
 from app.kernel.errors import (
     InjectedFaultError,
     InvalidOwnerIdError,
     InvalidWorkLeaseError,
     InvalidWorkResultError,
-    KernelBusyError,
     PublicationConflictError,
     StaleFenceError,
     UnknownWorkError,
@@ -117,10 +122,6 @@ DEFAULT_WORK_LEASE_SECONDS = 300.0
 
 OWNER_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
 
-DEFAULT_BUSY_RETRY_ATTEMPTS = 8
-DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
-_MAX_RETRY_DELAY = 0.5
-
 #: Framing domains separating work results and publications from other
 #: kernel hashes.
 _RESULT_FRAMING_RECORD_TYPE = "marker.kernel.work_result.v1"
@@ -149,7 +150,8 @@ def _utcnow() -> datetime:
 
 def _iso(value: datetime | None) -> str | None:
     """Naive-UTC isoformat so views are stable across reopen (SQLite
-    returns tz-naive datetimes; in-session rows may be tz-aware)."""
+    returns tz-naive datetimes; PostgreSQL returns tz-aware ones;
+    in-session rows may be either)."""
     if value is None:
         return None
     if value.tzinfo is not None:
@@ -157,47 +159,9 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat()
 
 
-def _is_busy(exc: OperationalError) -> bool:
-    text = str(exc).lower()
-    return any(
-        marker in text
-        for marker in (
-            "database is locked",
-            "database table is locked",
-            "database is busy",
-        )
-    )
-
-
-def _retry_delay(base: float, attempt: int) -> float:
-    return min(base * (2**attempt), _MAX_RETRY_DELAY)
-
-
 def _maybe_inject(phase: str | None, expected: str) -> None:
     if phase == expected:
         raise InjectedFaultError(phase)
-
-
-async def _run_with_busy_retry(
-    operation,
-    *,
-    busy_retry_attempts: int | None,
-    busy_retry_base_delay: float | None,
-) -> Any:
-    attempts = busy_retry_attempts or DEFAULT_BUSY_RETRY_ATTEMPTS
-    base_delay = busy_retry_base_delay or DEFAULT_BUSY_RETRY_BASE_DELAY
-    last_error: OperationalError | None = None
-    for attempt in range(attempts):
-        try:
-            return await operation()
-        except OperationalError as exc:
-            if not _is_busy(exc):
-                raise
-            last_error = exc
-            await asyncio.sleep(_retry_delay(base_delay, attempt))
-    raise KernelBusyError(
-        f"work fencing operation still busy after {attempts} attempts: {last_error}"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -368,10 +332,11 @@ async def acquire(
                     lease_seconds=lease_seconds,
                 )
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="work fencing operation",
     )
 
 
@@ -386,8 +351,6 @@ async def _acquire_in_session(
     open write transaction (internal transactional API; the scheduler
     uses it so capacity decisions and ownership transitions commit
     together). Behavior contract is exactly :func:`acquire`."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.kernel.models import KernelOutbox, KernelWorkLease
 
     outbox_row = await session.get(KernelOutbox, work_id)
@@ -405,7 +368,7 @@ async def _acquire_in_session(
         # primary key makes this contender cleanly lose (T2) instead of
         # failing the transaction.
         inserted = await session.execute(
-            sqlite_insert(KernelWorkLease)
+            dialect_insert(session.bind, KernelWorkLease)
             .values(
                 work_id=work_id,
                 workspace_id=outbox_row.workspace_id,
@@ -510,10 +473,11 @@ async def release(
                 )
                 return result.rowcount == 1
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="work fencing operation",
     )
 
 
@@ -659,23 +623,30 @@ async def accept(
             return AcceptOutcome(publication=view, already_accepted=False)
 
     try:
-        return await _run_with_busy_retry(
+        return await run_with_contention_retry(
             _operation,
-            busy_retry_attempts=busy_retry_attempts,
-            busy_retry_base_delay=busy_retry_base_delay,
+            attempts=busy_retry_attempts,
+            base_delay=busy_retry_base_delay,
+            operation_name="work fencing operation",
         )
     except IntegrityError as exc:
-        # SQLite's unique-violation text names the table/columns, not
-        # the constraint, so match either form.
+        # A unique violation on the publication scope means another
+        # acceptance holding the same current fence committed first.
+        # PostgreSQL names the violated constraint; SQLite's text names
+        # the table/columns instead, so match either form.
+        constraint = integrity_constraint_name(exc) or ""
         text = str(exc)
-        if ("kernel_publications" in text or _PUBLICATION_SCOPE_MARKER in text) and (
-            not converged_race
-        ):
+        if (
+            _PUBLICATION_SCOPE_MARKER in constraint
+            or "kernel_publications" in text
+            or _PUBLICATION_SCOPE_MARKER in text
+        ) and not converged_race:
             converged_race = True
-            return await _run_with_busy_retry(
+            return await run_with_contention_retry(
                 _operation,
-                busy_retry_attempts=busy_retry_attempts,
-                busy_retry_base_delay=busy_retry_base_delay,
+                attempts=busy_retry_attempts,
+                base_delay=busy_retry_base_delay,
+                operation_name="work fencing operation",
             )
         raise
 
@@ -749,10 +720,11 @@ async def complete_work(
                 )
                 return result.rowcount == 1
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="work fencing operation",
     )
 
 

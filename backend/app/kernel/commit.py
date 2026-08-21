@@ -59,7 +59,7 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from sqlalchemy import delete, select, update
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.kernel.dialects import (
@@ -478,13 +478,25 @@ class KernelCommitService:
             except HeadMovedError:
                 self.head_retries += 1
                 last_error = None
+            except IntegrityError as exc:
+                raise _map_integrity_error(workspace_id, exc) from exc
             except OperationalError as exc:
+                # SQLite lock/busy text arrives here (aiosqlite).
                 if not is_retryable_contention(exc):
                     raise
                 self.busy_retries += 1
                 last_error = exc
-            except IntegrityError as exc:
-                raise _map_integrity_error(workspace_id, exc) from exc
+            except DBAPIError as exc:
+                # SQLAlchemy's asyncpg adapter surfaces PostgreSQL
+                # serialization/deadlock aborts (40001/40P01) as plain
+                # DBAPIError, not OperationalError — classify those too
+                # so the industrial profile retries the whole batch.
+                # IntegrityError is a DBAPIError subclass, hence its
+                # clause sits above this one.
+                if not is_retryable_contention(exc):
+                    raise
+                self.busy_retries += 1
+                last_error = exc
             await asyncio.sleep(_retry_delay(self._busy_retry_base_delay, attempt))
         if last_error is not None:
             raise KernelBusyError(

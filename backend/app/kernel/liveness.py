@@ -51,13 +51,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import update
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.kernel.dialects import dialect_insert, run_with_contention_retry
 from app.kernel.errors import (
     InvalidChallengeError,
     InvalidEventError,
-    KernelBusyError,
     ProgressNotAdvancingError,
     RequestNotActiveError,
     StaleFenceError,
@@ -89,53 +88,16 @@ __all__ = [
 EVENT_RENEWED = "lease.renewed"
 EVENT_CANCEL_REQUESTED = "work.cancel_requested"
 
-DEFAULT_BUSY_RETRY_ATTEMPTS = 8
-DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
-_MAX_RETRY_DELAY = 0.5
-
-
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
 def _naive(value: datetime) -> datetime:
-    """Normalize to naive-UTC for comparison against SQLite values."""
+    """Normalize to naive-UTC for comparison against database values
+    (SQLite reads back tz-naive; PostgreSQL reads back tz-aware)."""
     if value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
     return value
-
-
-def _is_busy(exc: OperationalError) -> bool:
-    text = str(exc).lower()
-    return any(
-        marker in text
-        for marker in (
-            "database is locked",
-            "database table is locked",
-            "database is busy",
-        )
-    )
-
-
-def _retry_delay(base: float, attempt: int) -> float:
-    return min(base * (2**attempt), _MAX_RETRY_DELAY)
-
-
-async def _run_with_busy_retry(operation, *, busy_retry_attempts, busy_retry_base_delay):
-    attempts = busy_retry_attempts or DEFAULT_BUSY_RETRY_ATTEMPTS
-    base_delay = busy_retry_base_delay or DEFAULT_BUSY_RETRY_BASE_DELAY
-    last_error: OperationalError | None = None
-    for attempt in range(attempts):
-        try:
-            return await operation()
-        except OperationalError as exc:
-            if not _is_busy(exc):
-                raise
-            last_error = exc
-            await asyncio.sleep(_retry_delay(base_delay, attempt))
-    raise KernelBusyError(
-        f"liveness operation still busy after {attempts} attempts: {last_error}"
-    )
 
 
 def new_challenge_nonce() -> str:
@@ -205,14 +167,12 @@ async def seed_challenge_in_session(
     replaces the nonce, zeroes the progress high-water mark and renewal
     count, clears cancellation and the request binding, and rebinds the
     topology generation to the claiming worker's declaration."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.kernel.models import KernelLiveness
 
     nonce = new_challenge_nonce()
     now = _utcnow()
     stmt = (
-        sqlite_insert(KernelLiveness)
+        dialect_insert(session.bind, KernelLiveness)
         .values(
             work_id=work_id,
             challenge_nonce=nonce,
@@ -421,10 +381,11 @@ async def renew_lease(
                     progress_high_water=progress,
                 )
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="liveness operation",
     )
 
 
@@ -461,8 +422,6 @@ async def report_cancellation(
     transaction. Idempotent: a second report changes nothing and writes
     no second event (returns False). Executing the actual cancellation
     remains the runtime's job; this records the observation."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
     from app.kernel.models import KernelLiveness, KernelWorkLease
 
     validate_owner_id(owner_id)
@@ -492,7 +451,7 @@ async def report_cancellation(
                     # Fence exists but evidence seeding was lost to a crash;
                     # record the observation on a fresh evidence row.
                     await session.execute(
-                        sqlite_insert(KernelLiveness)
+                        dialect_insert(session.bind, KernelLiveness)
                         .values(
                             work_id=work_id,
                             challenge_nonce=new_challenge_nonce(),
@@ -535,10 +494,11 @@ async def report_cancellation(
                 )
                 return True
 
-    return await _run_with_busy_retry(
+    return await run_with_contention_retry(
         _operation,
-        busy_retry_attempts=busy_retry_attempts,
-        busy_retry_base_delay=busy_retry_base_delay,
+        attempts=busy_retry_attempts,
+        base_delay=busy_retry_base_delay,
+        operation_name="liveness operation",
     )
 
 
