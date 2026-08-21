@@ -1,0 +1,76 @@
+{
+  "schema": "marker.pr83b2_industrial_lexical_query_serving_evidence.v1",
+  "generated": "2026-08-21",
+  "session": "PR83B2 — industrial PublicationSet + lexical query-serving parity (physical PG lexical generations, typed query compilation, deterministic keyset continuation, authorization isolation, proof-closed retirement, strict conformance)",
+  "implementation_start_sha": "4af4751a310d06f5ad14423fd699ea8b2eb00d6b (PR83B1 head)",
+  "evidence_head": "this evidence commit is the final PR83B2 head — every result above was produced at commit 1622257 plus these evidence files only (no code delta between 1622257 and the evidence head)",
+  "commits": [
+    "dda848a feat(kernel): backend-portable lexical physical layer (WS A/C)",
+    "2e26e01 feat(kernel): dual-backend lexical publication serving (WS B/D)",
+    "e7b6e6a feat(kernel): real PostgreSQL lexical retirement (WS F)",
+    "9b3fae6 test(kernel): dual-backend lexical publication conformance (WS B-G)",
+    "62ae840 test(context): dual-backend context-runtime lexical conformance (WS E)",
+    "1622257 feat(ci): industrial lexical query-serving targets in strict runner + CI (WS G)"
+  ],
+  "design_decisions": {
+    "physical_model": "one immutable plain table per generation: kernel_fts_<digest-40> (63-byte identifier limit leaves room for the _tsv_ix GIN index suffix; SQLite keeps the historical full-digest FTS5 name) with a STORED tsvector generated under the pinned 'simple' config + GIN index, created inside the staging transaction — PostgreSQL DDL is transactional, so failed/crashed builds leave zero physical residue and no INVALID-index state exists (no CREATE INDEX CONCURRENTLY anywhere)",
+    "text_search_config": "simple (lowercase, no stemming, no stop words) — closest native match to unicode61 minimalism; pinned explicitly in every to_tsvector/phraseto_tsquery call and in generation identity; deliberate documented divergence: unicode61 folds Latin diacritics, simple does not (asserted per backend)",
+    "identity": "SQLite keeps byte-identical marker.kernel.lexical.fts5.v1; PostgreSQL generations carry marker.kernel.lexical.pg_tsvector.v1 with tokenizer pg_tsvector + config {text_search_config: simple}; identity embeds backend index id so cross-backend reuse is structurally impossible",
+    "query_compilation": "reader takes typed logical (text, mode); PG tsquery expressions composed only from bound parameters via phraseto_tsquery (parses document text, never query grammar) — operator injection structurally impossible; FTS5 MATCH compilation moved out of context_runtime.contract into app.kernel.lexical (contract re-exports for compat)",
+    "ranking_contract": "deterministic within-backend best-first only: FTS5 bm25 ASC vs ts_rank DESC, row_index ASC tie-break; no raw cross-backend score comparisons; neither backend uses corpus-global statistics (FTS5 bm25 per-table, ts_rank document-local) preserving high-assurance isolation",
+    "continuation_key": "query_hash = hash of logical form (marker.lexical.query.v1 schema tag + mode + canonical tokens), backend-independent; rank stays a backend-native float with backend-owned direction; pre-PR83B2 cursors fail closed as query-binding mismatches (60s TTL makes this non-disruptive; tested)",
+    "retirement": "DROP TABLE portable; both PG fail-closed guards and LexicalRetirementUnsupportedError removed; set/pin/staging-grace protections unchanged and proven on real PG with catalog verification",
+    "migrations": "none required — physical artifact is runtime-managed under the already-excluded kernel_fts_ prefix on both backends; manifest columns (fts_table/tokenizer/tokenizer_config_json) already model the projection identity"
+  },
+  "environment": {
+    "host_os": "Windows 10.0.26200 x64",
+    "python": "3.11.9",
+    "sqlalchemy": "2.0.36",
+    "alembic": "1.14.0",
+    "asyncpg": "0.30.0 (requirements.txt pin)",
+    "aiosqlite": "0.20.0",
+    "pytest": "8.3.4 (requirements-dev pin)",
+    "pytest_asyncio": "0.24.0 (requirements-dev pin)",
+    "postgresql_server": "PostgreSQL 16.14 on x86_64-pc-linux-musl (Docker postgres:16-alpine, 127.0.0.1:55445)",
+    "object_store": "MinIO (minio/minio image, endpoint 127.0.0.1:55446)",
+    "docker": "Docker 29.1.3"
+  },
+  "reproduction": {
+    "industrial_matrix": "python backend/scripts/run_industrial_conformance.py (strict; reuses/starts real PostgreSQL 16 + MinIO; zero-skip enforced)",
+    "lexical_suites": "cd backend && pytest tests/test_kernel_publication_lexical_conformance.py tests/test_context_runtime_lexical_conformance.py -q (with MARKER_TEST_POSTGRES_ADMIN_URL)",
+    "unit_layer": "cd backend && pytest tests/test_kernel_lexical.py -q (pure functions, no services)",
+    "full_backend_regression": "cd backend && python -m pytest tests conformance -q (no service env — documented fast path; PG/S3 params skip with actionable reasons)"
+  },
+  "gates": {
+    "A_start_state": "branch markerui-v2; start 4af4751 (PR83B1 evidence head); final head recorded above; environment as listed; selected config 'simple'; physical model per-generation immutable table; cursor schema unchanged with logical query_hash (documented invalidation of pre-PR83B2 hashes); no new migrations",
+    "B_local_regression": "pass — all SQLite publication/partition/fault/GC/concurrency/search-after suites plus every adjacent context-runtime suite green under the locked dev environment (pytest 8.3.4 / pytest-asyncio 0.24.0); FTS5 behavior preserved with byte-identical generation identities",
+    "C_strict_industrial": "pass — one-command runner green against real PostgreSQL 16.14 + real MinIO with zero skips; exact count in results.industrial_one_command",
+    "D_mixed_generation_falsification": "pass — test_readers_churning_across_activation_never_blend (both backends): concurrent readers during second publication, every page exactly one set identity, fresh reader resolves new set; plus test_continuation_survives_activation_under_pin: pinned traversal completes on old generation across activation",
+    "E_cursor_traversal": "pass — test_keyset_traversal_invariant_to_page_size (both backends): canonical order == page sizes 1/2/3/7 concatenation, no duplicates, no gaps, tie-heavy corpus; binding matrix rejects cross-query/mode/legacy-hash/cross-generation continuations",
+    "F_security": "pass — test_high_assurance_partition_isolates_forbidden_corpus (kernel) + test_high_assurance_partition_isolation_on_real_backend (service): forbidden highly-relevant corpus structurally outside the partition generation on real PG; rank basis byte-stable under forbidden growth; live deny between pages invalidates cursor with no leakage; missing partition fails closed",
+    "G_failed_build_gc": "pass — test_failed_build_leaves_no_physical_residue (zero kernel_fts_* tables after injected in-transaction failure, retry converges) + test_gc_retires_real_artifact_proof_closed (pin rescues, unpinned retires with table gone from pg_tables/sqlite_master, current artifact survives, idempotent second pass) + staged-residue resume + pre-activate rollback convergence",
+    "H_full_regression": "pass — 3134 passed / 0 failed / 137 skipped (python -m pytest tests conformance -q, documented fast path, locked env). Delta vs PR83B1 baseline (3083/0/115): +51 passed = 27 lexical unit tests + 24 lexical-conformance SQLite params (18 kernel + 5 context, plus the plan/artifact sanity case) exactly as added; +22 skips = 23 new PostgreSQL-provisioning params from the two dual-backend lexical suites (18 + 5) minus 1 pre-existing environment-conditional skip that does not reproduce on this host (PR83B1 recorded 4 local-environment skips; the optional unstructured/xlwt dependencies import here, so their importorskip tests run instead of skipping). Every new skip is actionable and executed for real by the strict industrial runner and the CI industrial job.",
+    "I_evidence_bundle": "this file + docs/reference/pr83b2-industrial-lexical-query-serving.md, bound to the final evidence SHA",
+    "J_end_state_audit": "diff vs start SHA touches only: kernel lexical layer (new), publications.py, gc.py, context_runtime contract/executor/paging, eval lane call-site, the two new conformance suites, updated lifecycle/contract/publication tests, industrial runner, CI workflow, evidence docs; no second search authority; no temporary debug paths; migration chain untouched"
+  },
+  "results": {
+    "lexical_unit_layer": "27 passed (identities, tokenizer acceptance, logical validation/hashing, FTS5 compilation, PG expression rendering, page/keyset/anchor SQL, identifier limits)",
+    "kernel_lexical_conformance": "36 passed / 0 failed / 0 skipped across both backends (18 cases x sqlite+postgresql)",
+    "context_lexical_conformance": "10 passed / 0 failed / 0 skipped across both backends (5 cases x sqlite+postgresql)",
+    "industrial_one_command_first_run": "321 passed / 0 failed / 0 skipped in 689.56s (env had asyncpg 0.31.0 drift; superseded by the locked-env rerun below)",
+    "industrial_one_command": "321 passed / 0 failed / 0 skipped in 544.81s under the locked environment (pytest 8.3.4 / pytest-asyncio 0.24.0 / asyncpg 0.30.0), real PostgreSQL 16.14 + real MinIO, zero skips enforced",
+    "full_backend_regression": "3134 passed / 0 failed / 137 skipped (locked env; delta accounting in gates.H_full_regression)"
+  },
+  "known_deviations_and_nonclaims": [
+    "ranking scores are not comparable across backends (by design): deterministic within-backend ordering contracts only",
+    "diacritics: 'cafe' matches 'cafe-acute' on SQLite unicode61, not on PostgreSQL simple — deliberate, asserted per backend, stable",
+    "query-plan note: at small corpus sizes PostgreSQL prefers Seq Scan (no tsvector MCV statistics); with enable_seqscan=off the planner produces a Bitmap Index Scan over the generation's GIN index — the served predicate provably matches the indexed column; no latency claims",
+    "vector index industrialization, source-artifact topology, HA/failover/reconnect, backup/restore/RPO/RTO (PR83C), PR69 dynamic admission, PR84 readiness — untouched, still open",
+    "no frontend/UI changes (out of scope by plan)"
+  ],
+  "handoff": [
+    "industrial source-artifact topology if stateless replicas are required",
+    "PR83C durability/failover: recovery drills can now target a real queryable generation system (build→publish→pin→continue→retire) instead of only control-plane rows",
+    "vector industrialization at its master-plan seam, then PR84 readiness"
+  ]
+}
