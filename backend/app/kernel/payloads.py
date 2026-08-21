@@ -194,7 +194,13 @@ class LocalPayloadStore:
     to share across tasks. All durable paths are derived exclusively
     from validated hex digests — record ids and caller strings never
     reach path construction.
+
+    ``KernelPayloadStore`` implementations declare their persisted
+    profile name via this attribute so the registry records where the
+    bytes actually live (the local store's value, for reference).
     """
+
+    store_profile = LOCAL_STORE_PROFILE
 
     def __init__(
         self,

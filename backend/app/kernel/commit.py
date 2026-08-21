@@ -708,6 +708,11 @@ class KernelCommitService:
                 #     transaction began; the registry row is what makes
                 #     the reference "available" — and it appears or
                 #     disappears together with the records above.
+                # Store-profile is owned by the store implementation, not
+                # assumed: the registry must record where bytes really live.
+                store_profile = getattr(
+                    self._payload_store, "store_profile", LOCAL_STORE_PROFILE
+                )
                 for blob_key in sorted(staged_payloads):
                     length, locator = staged_payloads[blob_key]
                     await session.execute(
@@ -715,7 +720,7 @@ class KernelCommitService:
                         .values(
                             blob_key=blob_key,
                             payload_length=length,
-                            store_profile=LOCAL_STORE_PROFILE,
+                            store_profile=store_profile,
                             storage_locator=locator,
                         )
                         .on_conflict_do_nothing(index_elements=[KernelPayloadObject.blob_key])
