@@ -26,6 +26,7 @@ from app.kernel.payloads import (
     LocalPayloadStore,
 )
 from app.utils.canonical import payload_byte_hash
+from tests.s3_provisioning import maybe_s3_store_factory
 
 pytestmark = pytest.mark.asyncio
 
@@ -40,6 +41,10 @@ def _local_factory(root: pathlib.Path) -> LocalPayloadStore:
 STORE_FACTORIES = {
     "local_file": _local_factory,
 }
+
+_s3_factory = maybe_s3_store_factory()
+if _s3_factory is not None:
+    STORE_FACTORIES["s3_minio"] = _s3_factory
 
 
 @pytest.fixture(params=sorted(STORE_FACTORIES), ids=sorted(STORE_FACTORIES))
