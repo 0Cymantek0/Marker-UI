@@ -139,6 +139,28 @@ async def _pg_ping(host: str, port: int, user: str, password: str, database: str
         await conn.close()
 
 
+def _pg_banner(
+    host: str, port: int, user: str, password: str, database: str = "postgres"
+) -> str:
+    """Server version banner for evidence provenance (shared with the
+    industrial conformance runner)."""
+    import asyncio
+
+    return asyncio.run(_pg_version(host, port, user, password, database))
+
+
+async def _pg_version(host, port, user, password, database) -> str:
+    import asyncpg
+
+    conn = await asyncpg.connect(
+        host=host, port=port, user=user, password=password, database=database
+    )
+    try:
+        return str(await conn.fetchval("SELECT version()"))
+    finally:
+        await conn.close()
+
+
 def _parse_admin_url(url: str) -> tuple[str, int, str, str]:
     from sqlalchemy.engine import make_url
 
