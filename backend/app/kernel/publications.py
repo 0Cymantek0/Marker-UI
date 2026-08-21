@@ -1643,9 +1643,11 @@ class PublicationService:
                         .where(
                             KernelPublicationHead.workspace_id == row.workspace_id,
                             KernelPublicationHead.profile == row.profile,
-                            KernelPublicationHead.current_publication_set_id.is_(
-                                observed
-                            ),
+                            # == (not IS): PostgreSQL rejects
+                            # ``IS <parameter>``; observed is a real
+                            # value in this branch, never NULL.
+                            KernelPublicationHead.current_publication_set_id
+                            == observed,
                         )
                         .values(
                             current_publication_set_id=publication_set_id,

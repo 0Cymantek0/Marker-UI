@@ -53,8 +53,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.kernel.errors import (
@@ -63,6 +62,11 @@ from app.kernel.errors import (
     InjectedFaultError,
     KernelError,
     UnknownGenerationError,
+)
+from app.kernel.dialects import (
+    dialect_insert,
+    integrity_constraint_name,
+    is_retryable_contention,
 )
 from app.kernel.models import (
     KernelGeneration,
@@ -166,8 +170,6 @@ DEFAULT_BUSY_RETRY_ATTEMPTS = 8
 DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
 MAX_RETRY_DELAY = 0.5
 
-_BUSY_MARKERS = ("database is locked", "database table is locked", "database is busy")
-
 # Phases honored by build() alone; build_and_activate() additionally
 # honors the validate→activate boundary and the activation phases.
 _BUILD_PHASES = frozenset(
@@ -186,11 +188,6 @@ _ACTIVATE_PHASES = frozenset(
 
 class _ConcurrentPointerMove(Exception):
     """Internal retry signal: the current-generation pointer moved."""
-
-
-def _is_busy(exc: OperationalError) -> bool:
-    text = str(exc).lower()
-    return any(marker in text for marker in _BUSY_MARKERS)
 
 
 def _retry_delay(base: float, attempt: int) -> float:
@@ -992,7 +989,7 @@ class GenerationService:
                         )
                 if observed is None:
                     await session.execute(
-                        sqlite_insert(KernelGenerationHead)
+                        dialect_insert(session.bind, KernelGenerationHead)
                         .values(
                             workspace_id=gen.workspace_id,
                             current_generation_id=generation_id,
@@ -1016,7 +1013,11 @@ class GenerationService:
                         update(KernelGenerationHead)
                         .where(
                             KernelGenerationHead.workspace_id == gen.workspace_id,
-                            KernelGenerationHead.current_generation_id.is_(observed),
+                            # == (not IS): PostgreSQL rejects
+                            # ``IS <parameter>``; observed is a real
+                            # value in this branch, never NULL.
+                            KernelGenerationHead.current_generation_id
+                            == observed,
                         )
                         .values(
                             current_generation_id=generation_id,
@@ -1085,15 +1086,21 @@ class GenerationService:
                 return await operation()
             except _ConcurrentPointerMove:
                 last_error = None
-            except OperationalError as exc:
-                if not _is_busy(exc):
+            except DBAPIError as exc:
+                # Covers both SQLite lock/busy text and the asyncpg
+                # serialization/deadlock SQLSTATEs (surfaced as plain
+                # DBAPIError) through the shared dialect vocabulary.
+                if not is_retryable_contention(exc):
                     raise
                 last_error = exc
             except IntegrityError as exc:
                 # Concurrent build/activation of the same identity: the
-                # winner's rows are durable; re-reading resolves idempotently.
+                # winner's rows are durable; re-reading resolves
+                # idempotently. PostgreSQL names the violated constraint;
+                # SQLite's text names the table, so match either form.
+                constraint = (integrity_constraint_name(exc) or "").lower()
                 text = str(exc).lower()
-                if "kernel_generation" not in text:
+                if "kernel_generation" not in constraint and "kernel_generation" not in text:
                     raise
                 last_error = exc
             await asyncio.sleep(_retry_delay(self._busy_retry_base_delay, attempt))

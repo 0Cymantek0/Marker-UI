@@ -42,9 +42,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.kernel.dialects import dialect_insert
 from app.kernel.commit import validate_workspace_id
 from app.kernel.errors import (
     RetentionContractError,
@@ -295,7 +295,7 @@ async def declare_hold(
     async with session_factory() as session:
         async with session.begin():
             await session.execute(
-                sqlite_insert(KernelRetentionRoot)
+                dialect_insert(session.bind, KernelRetentionRoot)
                 .values(
                     root_id=root_id,
                     workspace_id=workspace_id,
