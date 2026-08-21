@@ -58,7 +58,7 @@ from app.kernel.records import (
 )
 from app.kernel.source_store import (
     IncoherentSourceError,
-    LocalSourceStore,
+    SourceArtifactStore,
     SourceStoreError,
 )
 from app.services.policy import (
@@ -175,7 +175,7 @@ class SourceAcquisitionService:
         self,
         session_factory: Callable[[], Any],
         commit_service: KernelCommitService,
-        store: LocalSourceStore,
+        store: SourceArtifactStore,
         *,
         workspace_id: str = "local",
     ) -> None:
@@ -362,11 +362,8 @@ class SourceAcquisitionService:
 
         if not await self.store.artifact_exists(candidate.blob_key, candidate.suffix):
             return None
-        try:
-            path = self.store.artifact_path(candidate.blob_key, candidate.suffix)
-            if path.stat().st_size != candidate.byte_length:
-                return None
-        except (SourceStoreError, OSError):
+        length = await self.store.available_length(candidate.blob_key, candidate.suffix)
+        if length is None or length != candidate.byte_length:
             return None
         return candidate
 
@@ -634,20 +631,23 @@ def default_source_acquisition_service() -> SourceAcquisitionService:
     """Process-wide service bound to the production engine.
 
     Commits fail closed until the kernel schema is verified ready; the
-    artifact store is rooted at ``MARKER_SOURCE_STORE_ROOT`` (default
-    ``<data>/source_store``). Shares the kernel runtime's workspace so
-    revisions acquired at ingress resolve inside authorization.
+    artifact store is the one selected by ``MARKER_SOURCE_STORE_PROFILE``
+    (``local`` roots at ``MARKER_SOURCE_STORE_ROOT``, default
+    ``<data>/source_store``; ``s3`` is the PR83B3 industrial profile).
+    Shares the kernel runtime's workspace so revisions acquired at
+    ingress resolve inside authorization.
     """
     global _default_service
     if _default_service is None:
-        from app.core.config import KERNEL_RUNTIME_WORKSPACE, SOURCE_STORE_ROOT
+        from app.core.config import KERNEL_RUNTIME_WORKSPACE
         from app.database import async_session_factory
         from app.kernel.commit import default_commit_service
+        from app.kernel.source_store import build_source_store
 
         _default_service = SourceAcquisitionService(
             async_session_factory,
             default_commit_service(),
-            LocalSourceStore(SOURCE_STORE_ROOT),
+            build_source_store(),
             workspace_id=KERNEL_RUNTIME_WORKSPACE,
         )
     return _default_service

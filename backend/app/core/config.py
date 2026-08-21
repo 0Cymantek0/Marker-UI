@@ -40,13 +40,41 @@ KERNEL_PAYLOAD_ROOT: Path = Path(
     os.getenv("MARKER_KERNEL_PAYLOAD_ROOT", str(DATA_DIR / "kernel_payloads"))
 )
 
-# Source truth artifact store (PR70/71 local slice): content-addressed
-# immutable copies of acquired local/uploaded/URL source documents. A
-# committed ContentRevisionRecord references the blob key; probe/routing
-# and conversion consume the artifact instead of re-trusting the
-# external source path.
+# Source truth artifact store (PR70/71 local slice; PR83B3 industrial
+# profile): content-addressed immutable copies of acquired
+# local/uploaded/URL source documents. A committed ContentRevisionRecord
+# references the blob key; probe/routing and conversion consume the
+# artifact instead of re-trusting the external source path.
+#
+# ``MARKER_SOURCE_STORE_PROFILE`` selects the physical topology:
+# * ``local`` — LocalSourceStore under ``MARKER_SOURCE_STORE_ROOT``
+#   (the PR70/71 node-local profile, default for compatibility);
+# * ``s3``    — S3SourceStore over an S3-compatible service (PR83B3
+#   industrial profile). Requires the four ``MARKER_SOURCE_S3_*``
+#   settings; selection fails closed rather than silently degrading
+#   to the local profile.
 SOURCE_STORE_ROOT: Path = Path(
     os.getenv("MARKER_SOURCE_STORE_ROOT", str(DATA_DIR / "source_store"))
+)
+SOURCE_STORE_PROFILE: str = os.getenv("MARKER_SOURCE_STORE_PROFILE", "local").strip().lower()
+
+# Industrial source-artifact object store. The prefix deliberately
+# differs from the kernel payload namespace (``kernel-payloads``) so
+# source artifacts and kernel payloads can share a bucket while keeping
+# ownership, listing, and deletion scopes disjoint.
+SOURCE_S3_ENDPOINT: str = os.getenv("MARKER_SOURCE_S3_ENDPOINT", "").strip()
+SOURCE_S3_BUCKET: str = os.getenv("MARKER_SOURCE_S3_BUCKET", "").strip()
+SOURCE_S3_ACCESS_KEY: str = os.getenv("MARKER_SOURCE_S3_ACCESS_KEY", "").strip()
+SOURCE_S3_SECRET_KEY: str = os.getenv("MARKER_SOURCE_S3_SECRET_KEY", "").strip()
+SOURCE_S3_REGION: str = os.getenv("MARKER_SOURCE_S3_REGION", "us-east-1").strip()
+SOURCE_S3_PREFIX: str = os.getenv("MARKER_SOURCE_S3_PREFIX", "kernel-sources").strip()
+
+# Node-local verified materialization cache for non-local source
+# profiles (PR83B3): converter-facing working copies rebuilt on demand
+# from durable shared truth. A cache hit is only ever reused after full
+# content verification; the cache is never a second source authority.
+SOURCE_CACHE_ROOT: Path = Path(
+    os.getenv("MARKER_SOURCE_CACHE_ROOT", str(DATA_DIR / "source_cache"))
 )
 
 # Kernel runtime authority (PR67B): conversions are authorized as kernel

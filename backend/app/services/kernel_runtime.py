@@ -75,7 +75,7 @@ from app.kernel.errors import (
     InvalidChallengeError,
 )
 from app.kernel.records import NativeObjectRecord, KernelEdge
-from app.kernel.source_store import LocalSourceStore, SourceStoreError
+from app.kernel.source_store import SourceArtifactStore, SourceStoreError
 from app.models.job import ConversionJob
 from app.services.source_acquisition import (
     SOURCE_CONFIG_KEY,
@@ -167,7 +167,7 @@ class KernelRuntimeCoordinator:
         *,
         session_factory: Callable[[], Any] | None = None,
         commit_service: KernelCommitService | None = None,
-        source_store: LocalSourceStore | None = None,
+        source_store: SourceArtifactStore | None = None,
         workspace_id: str = "local",
         owner_id: str = "marker-runtime",
         lease_seconds: float = 900.0,
@@ -212,9 +212,9 @@ class KernelRuntimeCoordinator:
 
     def _source_service(self) -> SourceAcquisitionService:
         if self._source_service_ref is None:
-            from app.core.config import SOURCE_STORE_ROOT
+            from app.kernel.source_store import build_source_store
 
-            store = self._source_store or LocalSourceStore(SOURCE_STORE_ROOT)
+            store = self._source_store or build_source_store()
             self._source_service_ref = SourceAcquisitionService(
                 self._sf,
                 self._commit_service(),

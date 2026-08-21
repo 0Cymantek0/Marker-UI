@@ -1,4 +1,5 @@
-"""Content-addressed immutable source artifact store (V3.2 PR70/71 local slice).
+"""Content-addressed immutable source artifact store (V3.2 PR70/71 local
+slice; PR83B3 store-neutral capability boundary).
 
 Companion to :mod:`app.kernel.payloads`: the same crash-safe
 publish discipline (tmp -> fsync -> atomic replace -> read-back verify ->
@@ -14,7 +15,16 @@ kernel payload bytes. Two differences are deliberate:
   state (:class:`~app.kernel.records.ContentRevisionRecord`), so GC
   cannot sweep bytes that committed history still references.
 
-TOCTOU contract for :meth:`LocalSourceStore.stage_from_path`:
+PR83B3 splits the capability from the physical topology:
+:class:`SourceArtifactStore` is the store-neutral protocol the
+acquisition service and runtime consume. :class:`LocalSourceStore`
+implements it for the node-local PR70/71 profile;
+:class:`~app.kernel.source_object_store.S3SourceStore` implements it for
+the industrial shared object-store profile. ``build_source_store()``
+constructs the configured profile — fail-closed: an unresolvable
+industrial configuration raises rather than degrading to local.
+
+TOCTOU contract for ``stage_from_path``:
 
 1. the *resolved* (realpath) source path is what the caller's policy
    check applies to — an unexpected symlink cannot re-point the open;
@@ -47,7 +57,7 @@ import stat
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Protocol
 
 from app.kernel.errors import InjectedFaultError, KernelError
 from app.utils.canonical import payload_byte_hash
@@ -58,8 +68,10 @@ __all__ = [
     "LOCAL_SOURCE_STORE_PROFILE",
     "LocalSourceStore",
     "SOURCE_FAULT_PHASES",
+    "SourceArtifactStore",
     "SourceStatEvidence",
     "StagedSource",
+    "build_source_store",
 ]
 
 #: Profile name for source artifacts staged by this store.
@@ -119,15 +131,71 @@ def _stat_evidence(st: os.stat_result) -> dict[str, int]:
 
 @dataclass(frozen=True)
 class StagedSource:
-    """Result of one coherent acquisition into the store."""
+    """Result of one coherent acquisition into the store.
+
+    ``artifact_path`` is meaningful only for filesystem-backed stores;
+    shared object-store profiles publish through their locator instead
+    and set it to ``None``.
+    """
 
     blob_key: str
     byte_length: int
     locator: str
-    artifact_path: Path
+    artifact_path: Path | None
     already_present: bool
     pre_stat: dict[str, int]
     post_stat: dict[str, int]
+
+
+class SourceArtifactStore(Protocol):
+    """Store-neutral source-artifact capability (PR83B3).
+
+    The acquisition service, authorization, and dispatch consume this
+    boundary; the physical topology (node-local filesystem or shared
+    object store) stays behind it. ``blob_key`` semantics —
+    ``sha256:<hex>`` of the exact acquired bytes — are profile-neutral:
+    both profiles produce the same blob key for the same bytes, so a
+    committed ``ContentRevisionRecord`` never needs migration when the
+    topology changes; only resolution availability differs.
+    """
+
+    #: Declared physical-store profile identity (e.g.
+    #: ``LOCAL_SOURCE_STORE_PROFILE``). Persisted with committed
+    #: revisions so resolution can prove which topology holds the bytes.
+    profile: str
+
+    def validate_blob_key(self, blob_key: str) -> str: ...
+
+    def validate_suffix(self, suffix: str) -> str: ...
+
+    def locator_for(self, blob_key: str, suffix: str) -> str:
+        """Credential-free locator for one artifact (identity, not URL)."""
+        ...
+
+    async def stage_from_path(
+        self,
+        source: Path,
+        *,
+        suffix: str,
+        hooks: Mapping[str, Callable[[], None]] | None = None,
+    ) -> StagedSource: ...
+
+    async def artifact_exists(self, blob_key: str, suffix: str) -> bool: ...
+
+    async def available_length(self, blob_key: str, suffix: str) -> int | None:
+        """Byte length if the artifact is present, else ``None``.
+
+        Presence + length only — a cheap availability gate mirroring a
+        filesystem ``stat``. Full content verification is
+        :meth:`verify_artifact` / consumption-time verification.
+        """
+        ...
+
+    async def verify_artifact(
+        self, blob_key: str, suffix: str, expected_length: int | None = None
+    ) -> bool:
+        """Full re-hash verification of one artifact (availability truth)."""
+        ...
 
 
 class LocalSourceStore:
@@ -138,6 +206,8 @@ class LocalSourceStore:
     final paths derive exclusively from a validated hex digest and a
     validated suffix — caller strings never reach path construction.
     """
+
+    profile = LOCAL_SOURCE_STORE_PROFILE
 
     def __init__(
         self,
@@ -384,6 +454,20 @@ class LocalSourceStore:
             return False
         return await asyncio.to_thread(path.is_file)
 
+    async def available_length(self, blob_key: str, suffix: str) -> int | None:
+        try:
+            path = self.artifact_path(blob_key, suffix)
+        except SourceStoreError:
+            return None
+
+        def _size() -> int | None:
+            try:
+                return path.stat().st_size
+            except OSError:
+                return None
+
+        return await asyncio.to_thread(_size)
+
     async def list_artifacts(self) -> list[str]:
         """All blob keys physically present under ``objects/``."""
 
@@ -474,3 +558,31 @@ class LocalSourceStore:
 def errno_eLOOP() -> int:
     """ELOOP value for the current platform (Windows has none)."""
     return getattr(os, "ELOOP", -1)
+
+
+def build_source_store():
+    """Construct the configured source-artifact store (fail-closed).
+
+    Profile selection is explicit and inspectable: ``local`` builds the
+    PR70/71 node-local store; ``s3`` builds the PR83B3 industrial
+    shared object-store profile and *requires* its full configuration.
+    A missing or ambiguous industrial configuration raises — industrial
+    source truth must never be an accidental side effect of a local
+    default.
+    """
+    from app.core.config import SOURCE_STORE_PROFILE, SOURCE_STORE_ROOT
+
+    profile = SOURCE_STORE_PROFILE.strip().lower()
+    if profile in ("", "local", "local_file"):
+        return LocalSourceStore(SOURCE_STORE_ROOT)
+    if profile in ("s3", "object_store"):
+        # The industrial implementation lands with the PR83B3 store
+        # module; until then the profile is a declared, fail-closed
+        # selection rather than a silent local fallback.
+        raise SourceStoreError(
+            "source store profile 's3' is not available in this build"
+        )
+    raise SourceStoreError(
+        f"unknown MARKER_SOURCE_STORE_PROFILE {SOURCE_STORE_PROFILE!r}; "
+        "expected 'local' or 's3'"
+    )
