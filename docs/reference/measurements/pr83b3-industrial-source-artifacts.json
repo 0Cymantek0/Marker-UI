@@ -1,0 +1,97 @@
+{
+  "schema": "marker.pr83b3_industrial_source_artifact_evidence.v1",
+  "generated": "2026-08-22",
+  "session": "PR83B3 - Industrial Source-Artifact Topology and Stable Source Availability",
+  "implementation_start_sha": "4b29850907e8e3e5ef8907affce30f1c78273dca",
+  "evidence_head": "cd522b8 (final code head; this evidence bundle is the only commit beyond it)",
+  "commits": [
+    "011940e refactor(kernel): SourceArtifactStore protocol boundary for source truth (PR83B3 WS A)",
+    "18e3dd9 feat(kernel): S3SourceStore industrial source-artifact profile (PR83B3 WS B)",
+    "3ec47e5 feat(services): topology-honest source resolution + verified materialization (PR83B3 WS C+D)",
+    "dc8000b test(kernel): dual-profile source-store conformance matrix (PR83B3 WS F)",
+    "40e344b feat(runtime): industrial source topology through authorization + dispatch (PR83B3 WS C+D+E)",
+    "1ed42b7 test(kernel): process-boundary source topology acceptance proofs (PR83B3 WS D+E+F)",
+    "cd522b8 feat(ci): industrial source-artifact targets in strict runner + CI (PR83B3 WS G)"
+  ],
+  "design_decisions": {
+    "capability_boundary": "SourceArtifactStore protocol in kernel/source_store.py; unchanged LocalSourceStore behind it; sibling S3SourceStore in kernel/source_object_store.py. Wrapping S3PayloadStore was rejected: payload ownership/GC semantics differ (suffix keys, no payload registry, no GC surface). Kernel records and migrations untouched.",
+    "s3_client": "PR83B1 SigV4 machinery reused (s3_request_headers gained optional precomputed content_sha256; S3StoreConfig; path-style; httpx only). Source namespace prefix kernel-sources is disjoint from kernel-payloads in a shareable bucket.",
+    "staging_discipline": "Single-open two-pass staging: pass 1 streamed hash + pre/post fstat identity evidence; pass 2 streamed conditional PUT (If-None-Match: *) from the same fd signed with pass 1's SHA-256 (server verifies body end to end), re-hashed during upload; post-identity check; streamed read-back verification. Truncation/append/in-place mutation/between-pass mutation are IncoherentSourceError - never staged.",
+    "dedup_and_convergence": "Dedup confirmed by full read-back hash (never presence); 412 conditional-create losers verify the winner's bytes; wrong bytes at a claimed content identity fail closed and are never overwritten; ambiguous PUT outcomes converge by re-observation with verified dedup.",
+    "availability_model": "resolve() gates on HEAD presence + Content-Length (the local profile's stat analogue); acceptance and consumption are always content-verified (stage read-back, verify_artifact, materialize-to hash-while-write). Same-size tampering is caught by content hash, not length.",
+    "materialization_bridge": "consumable_path_for(): local profile consumes the owned artifact path (zero behavior change); industrial profile consumes VerifiedSourceMaterializer working copies under MARKER_SOURCE_CACHE_ROOT - every hit re-verified by full hash, corruption forces rebuild from durable truth, deletion of cache files cannot affect the shared object.",
+    "profile_selection": "AcquiredSourceRevision carries store_profile; resolve() refuses cross-profile blocks before kernel lookup; pre-PR83B3 blocks without the field are local-by-construction. MARKER_SOURCE_STORE_PROFILE + MARKER_SOURCE_S3_* + MARKER_SOURCE_CACHE_ROOT; missing industrial configuration raises (no silent local fallback).",
+    "fail_closure": "legacy_submit_fallback is local-profile-only: industrial submissions propagate acquisition failures, reject missing source files, refuse path-trust authorization without a committed revision, and restart adoption logs per-row refusals instead of adopting unowned-path work.",
+    "ownership_separation": "kernel-sources prefix disjoint from kernel-payloads; payload listing/deletion cannot see or remove source objects; source acquisition commits exactly the five source record classes - no payload rows exist that could authorize payload GC against source bytes."
+  },
+  "environment": {
+    "host_os": "Windows 10.0.26200 x64 (Git Bash)",
+    "python": "3.11.9",
+    "sqlalchemy": "2.0.36",
+    "alembic": "1.14.0",
+    "httpx": "0.28.1",
+    "asyncpg": "0.30.0",
+    "aiosqlite": "installed (per PR83B2 environment)",
+    "pytest": "8.3.4",
+    "pytest_asyncio": "0.24.0",
+    "postgresql_server": "PostgreSQL 16.14 (postgres:16-alpine container, port 55445)",
+    "object_store": "MinIO minio/minio:latest container (port 55446, path-style, unversioned buckets)",
+    "docker": "Docker Desktop on Windows"
+  },
+  "reproduction": {
+    "industrial_matrix": "cd backend && python scripts/run_industrial_conformance.py",
+    "focused_industrial_source": "python -m pytest tests/test_source_store_conformance.py tests/test_source_store_s3.py tests/test_kernel_source_acquisition_s3.py tests/test_kernel_source_runtime_s3.py tests/test_kernel_source_industrial_topology.py -q (with MARKER_TEST_S3_* env; strict inside the runner)",
+    "pr7071_local_suites": "python -m pytest tests/test_kernel_source_store.py tests/test_kernel_source_records.py tests/test_kernel_source_acquisition.py tests/test_kernel_source_runtime.py tests/test_kernel_source_snapshot.py tests/test_kernel_source_ingress.py -q",
+    "full_backend_regression": "python -m pytest tests conformance -q"
+  },
+  "gates": {
+    "A_start_state": "Branch head 4b29850 (PR83B2 evidence) matched the plan's research cut; tree clean; no source-store protocol seam existed (service typed to LocalSourceStore, resolve() used local stat, _launch() reached into store.artifact_path).",
+    "B_protocol_refactor": "74/74 PR70/71 source tests green after protocol extraction + factory + retype (commit 011940e), zero behavior change.",
+    "C_s3_store": "24 adversarial tests vs real MinIO incl. TOCTOU truncation/append/between-pass mutation, independent-writer convergence, corrupt-occupant refusal, ambiguous-PUT convergence, tamper/truncate/missing fail-closure, 4-way concurrency, unreachable endpoint, payload namespace isolation, fresh-process store-level reopen (commit 18e3dd9).",
+    "D_dual_profile_conformance": "24 tests (12 cases x {local_file, s3_minio}); strict mode fails at collection when S3 env missing (commit dc8000b).",
+    "E_service_integration": "11 tests: profiled commit + resolve, cross-profile refusal (s3->local, legacy->s3, forged profile), missing/truncated unresolvable, identity semantics survival + dedup, verified materialization reuse/corruption-rebuild, fail-closed consumption on missing/tampered shared bytes, locator duality (commit 3ec47e5).",
+    "F_runtime_integration": "10 coordinator tests: end-to-end shared-revision dispatch from cache-root materialization, external mutation/deletion survival, missing/tampered object terminal failure, corrupt cache rebuilt end-to-end, fresh-coordinator restart from shared truth with original source deleted, path-trust authorize refusal, missing-source submission refusal, non-adoption of legacy rows; 103 kernel/source runtime + 89 convert/agent regression green (commit 40e344b).",
+    "G_process_boundary": "Real OS process boundary, dual-backend database: process A acquires+commits via env-driven build_source_store, exits, node-local world destroyed (external source deleted, source-store root + cache removed); process B (different empty dirs, durable config only) resolves + verifies + consumes exact committed bytes. Crash windows profile-symmetric (staged-not-committed leaves zero content_revision truth; retry converges by verified dedup). Payload ownership separation proven at kernel-truth level (commit 1ed42b7).",
+    "H_strict_industrial": "One command, real PostgreSQL 16.14 + real MinIO, strict env, zero tolerated skips: 395 passed / 0 failed / 0 skipped (PR83B2 baseline 321 + 74 new industrial source tests) in 704.10 s (commit cd522b8).",
+    "I_full_regression": "3150 passed / 0 failed / 183 skipped (PR83B2 baseline 3134/0/137). Delta +16 passed = env-free new tests (dual-store conformance local params, local crash-window proof, factory/unreachable-endpoint guards); +46 skipped = new industrial-service-gated tests skipping without MARKER_TEST_S3_* exactly like the pre-existing payload-S3 skips; every one executed and passed in the strict industrial run (395/0/0).",
+    "J_evidence_bundle": "This bundle + docs/reference/pr83b3-industrial-source-artifacts.md; every claim maps to a test in the strict matrix; non-claims enumerated."
+  },
+  "results": {
+    "protocol_refactor_regression": "74 passed / 0 failed / 0 skipped (PR70/71 suites)",
+    "s3_store_adversarial": "24 passed vs real MinIO",
+    "dual_profile_conformance": "24 passed (12 x 2 profiles)",
+    "industrial_acquisition_service": "11 passed vs real MinIO",
+    "industrial_runtime": "10 passed vs real MinIO",
+    "topology_proofs": "process boundary (sqlite + PostgreSQL params), crash windows (s3 + local), ownership separation",
+    "industrial_one_command": "395 passed / 0 failed / 0 skipped vs PostgreSQL 16.14 + real MinIO (704.10 s)",
+    "full_backend_regression": "3150 passed / 0 failed / 183 skipped (delta from PR83B2 3134/0/137 explained in gates.I)"
+  },
+  "measurements": {
+    "small_stage_fresh_s": 0.0064,
+    "small_stage_dedup_s": 0.006,
+    "small_verify_s": 0.0029,
+    "large_17mib_stage_fresh_s": 0.1431,
+    "large_17mib_stage_dedup_s": 0.1375,
+    "large_17mib_verify_s": 0.1717,
+    "large_17mib_materialize_fresh_s": 0.1536,
+    "large_17mib_materialize_cache_hit_s": 0.0245,
+    "fresh_stage_transfer_amplification": "3x logical bytes (hash-pass read + PUT write + read-back verify), streamed 1 MiB chunks, no full-body buffering",
+    "dedup_transfer": "1x logical read (HEAD + full GET hash), 0 writes",
+    "execution_reuse": "verified local working copy reused after full re-hash; no remote download per attempt",
+    "traffic_distinguishability": "kernel-sources vs kernel-payloads bucket prefixes"
+  },
+  "known_deviations_and_nonclaims": [
+    "No HA/failover, leader election, or multi-node scheduler claims (PR83C); the process-boundary proof shows a replacement process recovering committed truth, not orchestrated failover.",
+    "No backup/restore or measured RPO/RTO across database + object store.",
+    "Single-PUT unversioned-bucket profile; MinIO-tested; no multipart; no universal S3 vendor certification.",
+    "Source-artifact retention/GC remains unclaimed: artifacts accumulate; a source-specific tombstone authority is future work. Payload GC provably cannot touch them.",
+    "Node-local materialization cache has no eviction policy; it is rebuildable and safe to delete at any time.",
+    "Vector-index industrialization, PR69 dynamic admission, PR84 readiness remain open (unchanged from PR83B2).",
+    "The industrial profile refuses legacy path-trust submissions and does not adopt pre-PR83B3 local rows; blocks without store_profile are local-by-construction and never resolved as shared-available."
+  ],
+  "handoff": [
+    "PR83C HA/failover + backup/restore + measured RPO/RTO can now test replacement processes against shared database AND shared source/payload artifacts.",
+    "Vector-index industrialization remains the alternative next slice.",
+    "A source-artifact retention/tombstone authority is the natural follow-up if source accumulation becomes operational."
+  ]
+}
