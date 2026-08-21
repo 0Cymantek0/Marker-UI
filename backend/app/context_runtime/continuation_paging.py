@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.context_runtime.authorization import EffectiveAuthorization
-from app.context_runtime.contract import LexicalSearchOp, QueryRequest, compile_lexical_match, normalized_query
+from app.context_runtime.contract import LexicalSearchOp, QueryRequest, normalized_query
 from app.context_runtime.executor import (
     build_record_candidate,
     resolve_source_ref,
@@ -22,8 +22,8 @@ from app.context_runtime.packets import (
     candidate_unit_cost,
 )
 from app.context_runtime.continuation_state import after_from_storage, after_storage, locator_key
+from app.kernel.lexical import lexical_query_hash
 from app.kernel.publications import LexicalSearchAfter, PublicationReader
-from app.utils.canonical import payload_byte_hash
 
 
 # Preserve PR78's authorized-recall behavior while bounding forbidden-heavy
@@ -214,8 +214,7 @@ class ContinuationPager:
         page_considered: int,
         stopped_for_page: bool,
     ) -> tuple[int, int, int, bool]:
-        match = compile_lexical_match(operation.text, operation.mode)
-        query_hash = payload_byte_hash(match.encode("utf-8"))
+        query_hash = lexical_query_hash(operation.text, operation.mode)
         while not op_state["exhausted"] and not stopped_for_page:
             remaining_work = max_work_units(request) - totals["work_units"]
             if remaining_work <= 0:
@@ -234,7 +233,8 @@ class ContinuationPager:
             if op_state["after"] is not None:
                 after = after_from_storage(op_state["after"])
             page = await reader.search_after(
-                match,
+                operation.text,
+                operation.mode,
                 limit=min(64, remaining_work),
                 after=after,
             )

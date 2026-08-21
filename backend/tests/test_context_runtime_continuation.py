@@ -280,7 +280,8 @@ class _DedupeReader:
 
     async def search_after(
         self,
-        query: str,
+        text: str,
+        mode: str = "all_terms",
         *,
         limit: int,
         after: object | None = None,

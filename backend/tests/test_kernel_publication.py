@@ -853,10 +853,15 @@ async def test_reader_search_rejects_malformed_query(payload_env: tuple) -> None
     reader = await open_published_reader(factory, "ws-a")
     assert reader is not None
     try:
-        with pytest.raises(LexicalQueryError):
-            await reader.search('"unbalanced OR AND (')
+        # Since PR83B2 the reader takes typed logical (text, mode) input,
+        # so operator-bearing strings are literal content — they can never
+        # be parsed as backend grammar and never raise a syntax rejection.
+        hits = await reader.search('"unbalanced OR AND (')
+        assert hits == ()
         with pytest.raises(LexicalQueryError):
             await reader.search("   ")
+        with pytest.raises(LexicalQueryError):
+            await reader.search("needle", "bogus_mode")
     finally:
         await reader.close()
 

@@ -33,7 +33,6 @@ from app.context_runtime.authorization import (
 )
 from app.context_runtime.contract import (
     QueryRequest,
-    compile_lexical_match,
     normalized_query,
 )
 from app.context_runtime.errors import QueryAuthorizationError, QueryBudgetError
@@ -232,7 +231,8 @@ async def _execute_pinned(
                 reader,
                 auth,
                 lineage_cache,
-                compile_lexical_match(op.text, op.mode),
+                op.text,
+                op.mode,
                 probe_limit,
             )
             operations_executed += 1
@@ -368,7 +368,8 @@ async def _authorized_lexical_hits(
     reader: PublicationReader,
     auth: EffectiveAuthorization,
     lineage_cache: dict[str, str | None],
-    match: str,
+    text: str,
+    mode: str,
     target: int,
 ) -> tuple[list[LexicalHit], bool]:
     """Walk the pinned generation's deterministic rank order and keep
@@ -384,7 +385,7 @@ async def _authorized_lexical_hits(
     offset = 0
     while len(authorized) < target and offset < _LEXICAL_TRAVERSAL_MAX_ROWS:
         fetch = min(_LEXICAL_TRAVERSAL_WINDOW, _LEXICAL_TRAVERSAL_MAX_ROWS - offset)
-        hits = await reader.search(match, limit=fetch, offset=offset)
+        hits = await reader.search(text, mode, limit=fetch, offset=offset)
         if not hits:
             return authorized, False
         for hit in hits:

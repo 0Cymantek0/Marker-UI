@@ -234,7 +234,6 @@ async def _pinned_lexical_pages(
     ctx: LaneContext, query: CorpusQuery, *, limit: int
 ) -> tuple[list[tuple[str, int]], str | None]:
     """Lexical page ranking against a pinned (superseded) publication."""
-    from app.context_runtime.contract import compile_lexical_match
     from app.kernel.publications import open_pinned_publication
 
     if ctx.pinned_publication_id is None:
@@ -243,8 +242,10 @@ async def _pinned_lexical_pages(
         ctx.workspace.factory, ctx.pinned_publication_id
     )
     try:
-        match = compile_lexical_match(query.text, "any_term")
-        hits = await reader.search(match, limit=32)
+        # Logical (text, mode) query; the kernel compiles per backend.
+        # Rank comparison below assumes the SQLite FTS5 profile this
+        # eval lane runs on (lower bm25 = better).
+        hits = await reader.search(query.text, "any_term", limit=32)
     finally:
         await reader.close()
     page_best: dict[tuple[str, int], float] = {}

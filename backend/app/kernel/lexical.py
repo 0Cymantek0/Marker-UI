@@ -260,7 +260,7 @@ def postgres_query_expression(text: str, mode: str) -> tuple[str, dict[str, Any]
 # -- physical staging -------------------------------------------------------
 
 
-def stage_physical(
+async def stage_physical(
     session: Any,
     *,
     backend: str,
@@ -280,7 +280,7 @@ def stage_physical(
                 f"the SQLite lexical profile requires tokenizer "
                 f"{SQLITE_LEXICAL_TOKENIZER!r}, got {tokenizer!r}"
             )
-        session.execute(
+        await session.execute(
             text(
                 'CREATE VIRTUAL TABLE "{table}" USING fts5('
                 "record_id UNINDEXED, view_id UNINDEXED, node_id UNINDEXED, "
@@ -297,7 +297,7 @@ def stage_physical(
                 f"the PostgreSQL lexical profile requires tokenizer "
                 f"{POSTGRES_LEXICAL_TOKENIZER!r}, got {tokenizer!r}"
             )
-        session.execute(
+        await session.execute(
             text(
                 'CREATE TABLE "{table}" (\n'
                 "    row_index BIGINT PRIMARY KEY,\n"
@@ -310,7 +310,7 @@ def stage_physical(
                 ")".format(table=table, cfg=POSTGRES_TEXT_SEARCH_CONFIG)
             )
         )
-        session.execute(
+        await session.execute(
             text(
                 'CREATE INDEX "{ix}" ON "{table}" USING GIN (tsv)'.format(
                     ix=pg_index_name(table), table=table
@@ -327,7 +327,7 @@ def stage_physical(
             "supported backends: sqlite, postgresql"
         )
     if rows:
-        session.execute(
+        await session.execute(
             text(insert_sql),
             [dict(row) for row in rows],
         )

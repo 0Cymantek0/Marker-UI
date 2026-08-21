@@ -72,7 +72,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import delete, func, select, text, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import text as sa_text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -102,6 +102,29 @@ from app.kernel.models import (
     KernelPublicationSet,
 )
 from app.kernel.retention import DEFAULT_PIN_LEASE_SECONDS
+from app.kernel.dialects import (
+    POSTGRESQL,
+    SQLITE,
+    backend_name,
+    dialect_insert,
+)
+from app.kernel.lexical import (
+    POSTGRES_LEXICAL_TOKENIZER,
+    POSTGRES_TOKENIZER_CONFIG_KEY,
+    POSTGRES_TEXT_SEARCH_CONFIG,
+    anchor_query,
+    default_tokenizer,
+    drop_physical_sql,
+    index_identity,
+    lexical_query_hash,
+    page_query,
+    physical_integrity_problems,
+    read_back_sql,
+    stage_physical,
+    supported_tokenizer_config_keys,
+    supported_tokenizers,
+    validate_logical_query,
+)
 from app.utils.canonical import (
     CanonicalValueError,
     canonical_json_bytes,
@@ -173,17 +196,20 @@ LEXICAL_ID_SCHEMA_VERSION = "1.0.0"
 PUBLICATION_SET_RECORD_TYPE = "marker.kernel.publication_set.v1"
 PUBLICATION_SET_ID_SCHEMA_VERSION = "1.0.0"
 
-#: Identity of the PR76 lexical index projection.
+#: Identity of the PR76 lexical index projection (SQLite profile).
+#: The physical layer (:mod:`app.kernel.lexical`) owns the per-backend
+#: identity map; these remain the SQLite names so existing generation
+#: identities stay byte-identical.
 LEXICAL_INDEX_ID = "marker.kernel.lexical.fts5.v1"
 LEXICAL_INDEX_VERSION = "1.0.0"
 LEXICAL_SCHEMA_VERSION = "1.0.0"
 
-#: The one tokenizer v1 supports. A generation's identity carries the
-#: tokenizer and config, so a future tokenizer change can only ever
-#: produce a new generation — never a rewrite of an accepted one.
+#: The SQLite tokenizer (PR76 v1). The PostgreSQL profile uses
+#: ``pg_tsvector`` under the explicit ``simple`` text-search
+#: configuration; a generation's identity carries the tokenizer and
+#: config, so a tokenizer change can only ever produce a new
+#: generation — never a rewrite of an accepted one.
 LEXICAL_TOKENIZER = "unicode61"
-_SUPPORTED_TOKENIZERS = frozenset({LEXICAL_TOKENIZER})
-_SUPPORTED_TOKENIZER_CONFIG_KEYS = frozenset()
 
 #: FTS5 virtual tables created by this module share this prefix; the
 #: migration contract comparison excludes it symmetrically.
@@ -326,20 +352,25 @@ def compute_lexical_identity(
     tokenizer: str = LEXICAL_TOKENIZER,
     tokenizer_config_json: str = "{}",
     partition_key: str = "",
+    index_id: str = LEXICAL_INDEX_ID,
+    index_version: str = LEXICAL_INDEX_VERSION,
 ) -> str:
     """Deterministic lexical generation identity over declared inputs.
 
     ``partition_key`` is included only when set, so unpartitioned
     identities are byte-identical to their pre-PR78 form and a
     partitioned build over the same source generation can never collide
-    with (or borrow rows from) the shared one.
+    with (or borrow rows from) the shared one. The index identity is
+    backend-specific (FTS5 on SQLite, pg_tsvector on PostgreSQL), so a
+    generation can never be mistaken for one built under different
+    physical semantics.
     """
     payload: dict[str, Any] = {
         "workspace_id": workspace_id,
         "kernel_commit_id": kernel_commit_id,
         "snapshot_id": snapshot_id,
         "source_generation_id": source_generation_id,
-        "index": {"id": LEXICAL_INDEX_ID, "version": LEXICAL_INDEX_VERSION},
+        "index": {"id": index_id, "version": index_version},
         "tokenizer": tokenizer,
         "tokenizer_config": json.loads(tokenizer_config_json),
     }
@@ -385,9 +416,18 @@ def compute_publication_set_identity(
     )
 
 
-def fts_table_name(lexical_generation_id: str) -> str:
-    """Deterministic FTS5 virtual table name for one lexical generation."""
+def fts_table_name(lexical_generation_id: str, *, backend: str = SQLITE) -> str:
+    """Deterministic physical table name for one lexical generation.
+
+    SQLite keeps the historical full-digest name (FTS5 virtual table).
+    PostgreSQL truncates the digest to 40 hex characters so the table
+    and its ``_tsv_ix`` GIN index stay under the 63-byte identifier
+    limit (collision odds ~2^-160, and identity still pins the full
+    generation id in the manifest).
+    """
     digest = lexical_generation_id.removeprefix("sha256:")
+    if backend == POSTGRESQL:
+        digest = digest[:40]
     return f"{FTS_TABLE_PREFIX}{digest}"
 
 
@@ -810,17 +850,6 @@ def _corpus_rows(corpus: Sequence[LexicalSourceRow]) -> list[LexicalRowRef]:
     ]
 
 
-_FTS_DDL = (
-    'CREATE VIRTUAL TABLE "{table}" USING fts5('
-    "record_id UNINDEXED, view_id UNINDEXED, node_id UNINDEXED, text, "
-    "tokenize='{tokenizer}')"
-)
-_FTS_INSERT = (
-    'INSERT INTO "{table}"(rowid, record_id, view_id, node_id, text) '
-    "VALUES (:row_index, :record_id, :view_id, :node_id, :text)"
-)
-
-
 # ---------------------------------------------------------------------------
 # Publication service (lexical construction in this section)
 # ---------------------------------------------------------------------------
@@ -863,21 +892,25 @@ class PublicationService:
         self,
         source_generation_id: str,
         *,
-        tokenizer: str = LEXICAL_TOKENIZER,
+        tokenizer: str | None = None,
         tokenizer_config: Mapping[str, Any] | None = None,
         partition_domains: frozenset[str] | set[str] | None = None,
         _inject_fault_at: str | None = None,
     ) -> LexicalGenerationRef:
         """Build one immutable lexical generation from a pinned source.
 
-        With ``partition_domains`` the corpus is restricted to view
-        documents whose committed source lineage (view → content
-        revision → source → latest in-generation domain assignment)
-        resolves to one of those security domains; unattributed or
-        unresolvably-lineaged records are excluded, never guessed in.
-        The partition becomes part of the generation identity, so the
-        partitioned corpus is physically separate FTS5 statistics from
-        the shared build over the same source generation.
+        ``tokenizer=None`` (the default) resolves to the backend's
+        pinned projection — ``unicode61`` FTS5 on SQLite, ``pg_tsvector``
+        under the explicit ``simple`` text-search configuration on
+        PostgreSQL — so callers never need backend knowledge. With
+        ``partition_domains`` the corpus is restricted to view documents
+        whose committed source lineage (view → content revision →
+        source → latest in-generation domain assignment) resolves to one
+        of those security domains; unattributed or unresolvably-lineaged
+        records are excluded, never guessed in. The partition becomes
+        part of the generation identity, so the partitioned corpus is
+        physically separate index statistics from the shared build over
+        the same source generation.
 
         Returns the generation in state ``validated`` (or its existing
         immutable row for an idempotent rebuild). The result is staging
@@ -900,7 +933,7 @@ class PublicationService:
         self,
         source_generation_id: str,
         *,
-        tokenizer: str,
+        tokenizer: str | None,
         tokenizer_config: Mapping[str, Any] | None,
         partition_domains: frozenset[str] | None,
         fault: str | None,
@@ -911,30 +944,48 @@ class PublicationService:
 
         maybe_inject(PHASE_PUB_LEXICAL_BEGIN)
 
-        if tokenizer not in _SUPPORTED_TOKENIZERS:
+        async with self._session_factory() as session:
+            source = await session.get(KernelGeneration, source_generation_id)
+            backend = backend_name(session.bind)
+        if source is None:
+            raise UnknownGenerationError(
+                f"generation={source_generation_id}: no such generation"
+            )
+
+        if tokenizer is None:
+            tokenizer = default_tokenizer(backend)
+        if tokenizer not in supported_tokenizers(backend):
             raise KernelError(
-                f"unsupported tokenizer {tokenizer!r}; v1 supports only "
-                f"{sorted(_SUPPORTED_TOKENIZERS)} — a tokenizer change must "
-                "arrive as a new projection version, never a silent reindex"
+                f"unsupported tokenizer {tokenizer!r} on backend "
+                f"{backend!r}; supported: "
+                f"{sorted(supported_tokenizers(backend))} — a tokenizer "
+                "change must arrive as a new projection version, never a "
+                "silent reindex"
             )
         config = dict(tokenizer_config or {})
-        unknown_keys = sorted(set(config) - _SUPPORTED_TOKENIZER_CONFIG_KEYS)
+        if backend == POSTGRESQL and tokenizer_config is None:
+            config = {POSTGRES_TOKENIZER_CONFIG_KEY: POSTGRES_TEXT_SEARCH_CONFIG}
+        if (
+            tokenizer == POSTGRES_LEXICAL_TOKENIZER
+            and config.get(POSTGRES_TOKENIZER_CONFIG_KEY, POSTGRES_TEXT_SEARCH_CONFIG)
+            != POSTGRES_TEXT_SEARCH_CONFIG
+        ):
+            raise KernelError(
+                f"the pg_tsvector projection is pinned to text-search "
+                f"config {POSTGRES_TEXT_SEARCH_CONFIG!r}; refusing an "
+                "unstoppable configuration change"
+            )
+        unknown_keys = sorted(set(config) - supported_tokenizer_config_keys(tokenizer))
         if unknown_keys:
             raise KernelError(
-                f"unsupported tokenizer config keys {unknown_keys}; v1 "
-                f"supports only {sorted(_SUPPORTED_TOKENIZER_CONFIG_KEYS)}"
+                f"unsupported tokenizer config keys {unknown_keys}; "
+                f"{tokenizer!r} supports only "
+                f"{sorted(supported_tokenizer_config_keys(tokenizer))}"
             )
         try:
             tokenizer_config_json = canonical_json_str(to_json_ready(config))
         except CanonicalValueError as exc:
             raise KernelError(f"tokenizer config rejected: {exc}") from exc
-
-        async with self._session_factory() as session:
-            source = await session.get(KernelGeneration, source_generation_id)
-        if source is None:
-            raise UnknownGenerationError(
-                f"generation={source_generation_id}: no such generation"
-            )
 
         view_rows = await _read_view_documents(
             self._session_factory, source_generation_id
@@ -963,6 +1014,7 @@ class PublicationService:
             row_entries=[_lexical_row_entry(row) for row in rows],
         )
 
+        index_id, index_version = index_identity(backend)
         lexical_generation_id = compute_lexical_identity(
             workspace_id=source.workspace_id,
             kernel_commit_id=source.kernel_commit_id,
@@ -971,6 +1023,8 @@ class PublicationService:
             tokenizer=tokenizer,
             tokenizer_config_json=tokenizer_config_json,
             partition_key=partition_key,
+            index_id=index_id,
+            index_version=index_version,
         )
 
         existing = await _load_lexical(self._session_factory, lexical_generation_id)
@@ -991,6 +1045,7 @@ class PublicationService:
             lambda: self._stage_lexical_transaction(
                 lexical_generation_id,
                 source=source,
+                backend=backend,
                 tokenizer=tokenizer,
                 tokenizer_config_json=tokenizer_config_json,
                 digest=digest,
@@ -1013,6 +1068,7 @@ class PublicationService:
         lexical_generation_id: str,
         *,
         source: KernelGeneration,
+        backend: str,
         tokenizer: str,
         tokenizer_config_json: str,
         digest: str,
@@ -1022,7 +1078,7 @@ class PublicationService:
         rows: Sequence[LexicalRowRef],
         maybe_inject: Any,
     ) -> None:
-        fts_table = fts_table_name(lexical_generation_id)
+        fts_table = fts_table_name(lexical_generation_id, backend=backend)
         async with self._session_factory() as session:
             async with session.begin():
                 existing = await session.get(
@@ -1072,29 +1128,24 @@ class PublicationService:
                         ),
                     )
                 )
-                await session.execute(
-                    text(f'DROP TABLE IF EXISTS "{fts_table}"')
-                )
+                await session.execute(text(drop_physical_sql(fts_table)))
 
-                await session.execute(
-                    text(
-                        _FTS_DDL.format(table=fts_table, tokenizer=tokenizer)
-                    )
+                await stage_physical(
+                    session,
+                    backend=backend,
+                    table=fts_table,
+                    tokenizer=tokenizer,
+                    rows=[
+                        {
+                            "row_index": row.row_index,
+                            "record_id": row.record_id,
+                            "view_id": row.view_id,
+                            "node_id": row.node_id,
+                            "text": corpus[row.row_index].text,
+                        }
+                        for row in rows
+                    ],
                 )
-                if rows:
-                    await session.execute(
-                        text(_FTS_INSERT.format(table=fts_table)),
-                        [
-                            {
-                                "row_index": row.row_index,
-                                "record_id": row.record_id,
-                                "view_id": row.view_id,
-                                "node_id": row.node_id,
-                                "text": corpus[row.row_index].text,
-                            }
-                            for row in rows
-                        ],
-                    )
                 maybe_inject(PHASE_PUB_LEXICAL_ROWS_MATERIALIZED)
                 session.add(
                     KernelLexicalGeneration(
@@ -1278,7 +1329,7 @@ class PublicationService:
         if lexical_generation_id is None:
             lexical = await self._build_lexical_validated(
                 materialized_generation_id,
-                tokenizer=LEXICAL_TOKENIZER,
+                tokenizer=None,
                 tokenizer_config=None,
                 partition_domains=None,
                 fault=_inject_fault_at
@@ -1611,7 +1662,7 @@ class PublicationService:
                         )
                 if observed is None:
                     await session.execute(
-                        sqlite_insert(KernelPublicationHead)
+                        dialect_insert(session.bind, KernelPublicationHead)
                         .values(
                             workspace_id=row.workspace_id,
                             profile=row.profile,
@@ -1964,7 +2015,7 @@ def _lineage_domain(
 async def _lexical_integrity_problems(
     session_factory: async_sessionmaker, lexical_generation_id: str
 ) -> list[str]:
-    """Cross-check manifest, locator rows, and the FTS table itself."""
+    """Cross-check manifest, locator rows, and the physical index itself."""
     async with session_factory() as session:
         manifest = await session.get(KernelLexicalGeneration, lexical_generation_id)
         if manifest is None:
@@ -1972,6 +2023,7 @@ async def _lexical_integrity_problems(
                 f"lexical generation={lexical_generation_id}: no such lexical "
                 "generation"
             )
+        backend = backend_name(session.bind)
         if manifest.state == LEXICAL_STATE_STAGED:
             pass  # the state under validation
         stored_rows = (
@@ -1990,10 +2042,7 @@ async def _lexical_integrity_problems(
         fts_rows = (
             (
                 await session.execute(
-                    text(
-                        'SELECT rowid, record_id, view_id, node_id, text FROM '
-                        f'"{manifest.fts_table}" ORDER BY rowid'
-                    )
+                    text(read_back_sql(backend, manifest.fts_table))
                 )
             )
             .all()
@@ -2038,14 +2087,14 @@ async def _lexical_integrity_problems(
 
     if len(fts_rows) != row_count:
         problems.append(
-            f"FTS row count mismatch: locators {row_count}, index "
+            f"index row count mismatch: locators {row_count}, index "
             f"{len(fts_rows)}"
         )
     for locator, fts_row in zip(stored_rows, fts_rows, strict=False):
-        rowid, record_id, view_id, node_id, node_text = fts_row
-        if rowid != locator.row_index:
+        row_index, record_id, view_id, node_id, node_text = fts_row
+        if row_index != locator.row_index:
             problems.append(
-                f"FTS rowid {rowid} misaligned with locator row "
+                f"index row {row_index} misaligned with locator row "
                 f"{locator.row_index}"
             )
             continue
@@ -2055,7 +2104,7 @@ async def _lexical_integrity_problems(
             locator.node_id,
         ):
             problems.append(
-                f"FTS row {rowid} locator mismatch: index "
+                f"index row {row_index} locator mismatch: index "
                 f"({record_id!r}, {view_id!r}, {node_id!r}) vs stored "
                 f"({locator.record_id!r}, {locator.view_id!r}, "
                 f"{locator.node_id!r})"
@@ -2063,20 +2112,17 @@ async def _lexical_integrity_problems(
         text_hash = payload_byte_hash((node_text or "").encode("utf-8"))
         if text_hash != locator.text_hash or len(node_text or "") != locator.text_chars:
             problems.append(
-                f"FTS row {rowid} text diverges from stored hash for "
+                f"index row {row_index} text diverges from stored hash for "
                 f"record {locator.record_id!r}"
             )
 
-    # FTS5's own structural integrity check (self-contained table: the
-    # index is verified against its stored content).
+    # Backend-native structural check of the physical artifact itself
+    # (FTS5 ``integrity-check`` on SQLite; GIN validity plus tsvector
+    # regeneration equality on PostgreSQL).
     async with session_factory() as session:
-        try:
-            await session.execute(
-                text(f'INSERT INTO "{manifest.fts_table}"("{manifest.fts_table}") '
-                     "VALUES('integrity-check')")
-            )
-        except Exception as exc:
-            problems.append(f"FTS integrity-check rejected: {exc}")
+        problems.extend(
+            await physical_integrity_problems(session, backend, manifest.fts_table)
+        )
     return problems
 
 
@@ -2579,120 +2625,133 @@ class PublicationReader:
         )
 
     async def search(
-        self, query: str, *, limit: int = 100, offset: int = 0
+        self,
+        text: str,
+        mode: str = "all_terms",
+        *,
+        limit: int = 100,
+        offset: int = 0,
     ) -> tuple[LexicalHit, ...]:
-        """Query the pinned lexical generation only.
+        """Query the pinned lexical generation only, with logical intent.
 
-        The query must be a valid FTS5 MATCH expression; malformed
-        syntax raises :class:`LexicalQueryError` rather than being
-        guessed at. Results are ordered by bm25 rank with row-index
-        tie-breaking for determinism. ``offset`` pages through that
-        deterministic order — safe exactly because the generation (and
-        therefore the ranked sequence) is immutable.
+        ``text``/``mode`` are the typed lexical query (never backend
+        grammar): the kernel lexical layer compiles them per the
+        generation's physical backend, so user-controlled material can
+        never become raw SQL or MATCH syntax. Results are ordered
+        best-first by the backend's documented ranking contract
+        (FTS5 ``bm25`` ascending on SQLite, ``ts_rank`` descending on
+        PostgreSQL) with row-index tie-breaking for determinism.
+        ``offset`` pages through that deterministic order — safe exactly
+        because the generation (and therefore the ranked sequence) is
+        immutable.
         """
-        if not isinstance(query, str) or not query.strip():
-            raise LexicalQueryError("lexical query must be a non-empty string")
+        validate_logical_query(text, mode)
         if limit <= 0:
             raise KernelError("limit must be positive")
         if offset < 0:
             raise KernelError("offset must be non-negative")
-        fts = self._lexical.fts_table
         try:
             async with self._session_factory() as session:
-                fts_rows = (
-                    (
-                        await session.execute(
-                            text(
-                                f'SELECT rowid, record_id, view_id, node_id, text, '
-                                f'bm25("{fts}") AS bm25_rank FROM "{fts}" '
-                                f'WHERE "{fts}" MATCH :query '
-                                "ORDER BY bm25_rank, rowid LIMIT :limit OFFSET :offset"
-                            ),
-                            {"query": query, "limit": limit, "offset": offset},
-                        )
-                    )
-                    .mappings()
-                    .all()
+                backend = backend_name(session.bind)
+                sql, params = page_query(
+                    backend,
+                    self._lexical.fts_table,
+                    text=text,
+                    mode=mode,
+                    limit=limit,
+                    offset=offset,
                 )
-                if fts_rows:
-                    locators = {
-                        row.row_index: row
-                        for row in (
-                            (
-                                await session.execute(
-                                    select(KernelLexicalRow).where(
-                                        KernelLexicalRow.lexical_generation_id
-                                        == self._lexical.lexical_generation_id,
-                                        KernelLexicalRow.row_index.in_(
-                                            [int(r["rowid"]) for r in fts_rows]
-                                        ),
-                                    )
-                                )
-                            )
-                            .scalars()
-                            .all()
-                        )
-                    }
-                else:
-                    locators = {}
+                fts_rows = (
+                    (await session.execute(sa_text(sql), params)).mappings().all()
+                )
+                locators = await self._load_locators(session, fts_rows)
         except OperationalError as exc:
-            # The statement is parameterized and the table provably exists
-            # (the reader was built from a validated manifest), so a
-            # non-busy operational failure here is the FTS5 engine
-            # rejecting the MATCH expression itself ("syntax error",
-            # "unterminated string", "malformed MATCH expression", ...).
+            # Typed, fully parameterized statements against a table that
+            # provably exists (the reader was built from a validated
+            # manifest) leave non-busy operational failures meaning one
+            # thing: the backend rejected the compiled query itself.
             # Surface that as a typed query rejection, never as a raw
             # database error and never as a partial result.
             if not _is_busy(exc):
                 raise LexicalQueryError(f"lexical query rejected: {exc}") from exc
             raise
+        return tuple(self._checked_hit(row, locators) for row in fts_rows)
 
-        hits: list[LexicalHit] = []
-        for fts_row in fts_rows:
-            row_index = int(fts_row["rowid"])
-            node_text = fts_row["text"] or ""
-            text_hash = payload_byte_hash(node_text.encode("utf-8"))
-            locator = locators.get(row_index)
-            if locator is None:
-                raise PublicationIntegrityError(
-                    f"lexical hit row {row_index} has no locator in generation "
-                    f"{self._lexical.lexical_generation_id}; refusing to serve "
-                    "an orphan hit"
-                )
-            if (
-                locator.record_id != fts_row["record_id"]
-                or locator.view_id != fts_row["view_id"]
-                or locator.node_id != fts_row["node_id"]
-            ):
-                raise PublicationIntegrityError(
-                    f"lexical hit row {row_index} locator mismatch between "
-                    "index and stored rows"
-                )
-            if text_hash != locator.text_hash or len(node_text) != locator.text_chars:
-                raise PublicationIntegrityError(
-                    f"lexical hit row {row_index} text hash mismatch "
-                    f"(stored {locator.text_hash}, indexed {text_hash}); the "
-                    "pinned lexical generation was tampered with"
-                )
-            hits.append(
-                LexicalHit(
-                    publication_set_id=self._set.publication_set_id,
-                    lexical_generation_id=self._lexical.lexical_generation_id,
-                    row_index=row_index,
-                    record_id=locator.record_id,
-                    view_id=locator.view_id,
-                    node_id=locator.node_id,
-                    revision_ref=locator.revision_ref,
-                    text_hash=locator.text_hash,
-                    rank=float(fts_row["bm25_rank"]),
-                    text=node_text,
+    async def _load_locators(
+        self, session: Any, rows: Sequence[Mapping[str, Any]]
+    ) -> dict[int, KernelLexicalRow]:
+        """Locator rows for the given index rows, keyed by row index."""
+        row_indexes = [int(row["row_index"]) for row in rows]
+        if not row_indexes:
+            return {}
+        found = (
+            (
+                await session.execute(
+                    select(KernelLexicalRow).where(
+                        KernelLexicalRow.lexical_generation_id
+                        == self._lexical.lexical_generation_id,
+                        KernelLexicalRow.row_index.in_(row_indexes),
+                    )
                 )
             )
-        return tuple(hits)
+            .scalars()
+            .all()
+        )
+        return {row.row_index: row for row in found}
+
+    def _checked_hit(
+        self,
+        fts_row: Mapping[str, Any],
+        locators: Mapping[int, KernelLexicalRow],
+    ) -> LexicalHit:
+        """Convert one physical index row into a verified hit.
+
+        Every hit is re-verified against the durable locator (identity
+        columns and text hash), so an orphaned or tampered index row
+        fails closed instead of being served.
+        """
+        row_index = int(fts_row["row_index"])
+        node_text = fts_row["text"] or ""
+        text_hash = payload_byte_hash(node_text.encode("utf-8"))
+        locator = locators.get(row_index)
+        if locator is None:
+            raise PublicationIntegrityError(
+                f"lexical hit row {row_index} has no locator in generation "
+                f"{self._lexical.lexical_generation_id}; refusing to serve "
+                "an orphan hit"
+            )
+        if (
+            locator.record_id != fts_row["record_id"]
+            or locator.view_id != fts_row["view_id"]
+            or locator.node_id != fts_row["node_id"]
+        ):
+            raise PublicationIntegrityError(
+                f"lexical hit row {row_index} locator mismatch between "
+                "index and stored rows"
+            )
+        if text_hash != locator.text_hash or len(node_text) != locator.text_chars:
+            raise PublicationIntegrityError(
+                f"lexical hit row {row_index} text hash mismatch "
+                f"(stored {locator.text_hash}, indexed {text_hash}); the "
+                "pinned lexical generation was tampered with"
+            )
+        return LexicalHit(
+            publication_set_id=self._set.publication_set_id,
+            lexical_generation_id=self._lexical.lexical_generation_id,
+            row_index=row_index,
+            record_id=locator.record_id,
+            view_id=locator.view_id,
+            node_id=locator.node_id,
+            revision_ref=locator.revision_ref,
+            text_hash=locator.text_hash,
+            rank=float(fts_row["rank_value"]),
+            text=node_text,
+        )
 
     async def search_after(
         self,
-        query: str,
+        text: str,
+        mode: str = "all_terms",
         *,
         limit: int = 100,
         after: LexicalSearchAfter | None = None,
@@ -2700,24 +2759,26 @@ class PublicationReader:
         """Read one deterministic keyset page from the pinned index.
 
         ``after`` is an immutable continuation key, never an offset. The
-        canonical order is ``(bm25 rank ASC, row_index ASC)``; the SQL
-        predicate therefore resumes with ``rank > last_rank`` or the equal
-        rank tie-break ``row_index > last_row_index``. Continuations carry
-        both pinned member identities and an exact query digest. Any
-        cross-generation, malformed, stale, or tampered continuation fails
-        closed with :class:`PublicationIntegrityError`.
+        canonical order is backend-owned best-first rank — FTS5 ``bm25``
+        ascending on SQLite, ``ts_rank`` descending on PostgreSQL — with
+        ``row_index ASC`` as the deterministic tie-break; the keyset
+        predicate mirrors that direction and resumes strictly after
+        ``(last_rank, last_row_index)``. ``query_hash`` binds the page
+        to the exact *logical* query (text + mode) that produced it.
+        Any cross-query, cross-generation, malformed, stale, or tampered
+        continuation fails closed with
+        :class:`PublicationIntegrityError`.
 
         The returned page fetches one look-ahead row, exposing ``has_more``
         and ``next_after`` without putting mutable paging state in the
         continuation itself. Existing :meth:`search` offset paging remains
         unchanged for compatibility callers.
         """
-        if not isinstance(query, str) or not query.strip():
-            raise LexicalQueryError("lexical query must be a non-empty string")
+        validate_logical_query(text, mode)
         if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
             raise KernelError("limit must be positive")
 
-        query_hash = payload_byte_hash(query.encode("utf-8"))
+        query_hash = lexical_query_hash(text, mode)
         continuation: LexicalSearchAfter | None
         if after is None:
             continuation = None
@@ -2755,147 +2816,63 @@ class PublicationReader:
                     "lexical continuation key is malformed; refusing to serve"
                 )
 
-        fts = self._lexical.fts_table
-        query_params: dict[str, Any] = {
-            "query": query,
-            "limit": limit + 1,
-        }
         try:
             async with self._session_factory() as session:
+                backend = backend_name(session.bind)
                 anchor: Mapping[str, Any] | None = None
                 if continuation is not None:
+                    sql, params = anchor_query(
+                        backend,
+                        self._lexical.fts_table,
+                        text=text,
+                        mode=mode,
+                        after_row_index=continuation.row_index,
+                    )
                     anchor = (
-                        (
-                            await session.execute(
-                                text(
-                                    f'SELECT rowid, record_id, view_id, node_id, '
-                                    f'text, bm25("{fts}") AS bm25_rank '
-                                    f'FROM "{fts}" WHERE "{fts}" MATCH :query '
-                                    "AND rowid = :after_row_index LIMIT 1"
-                                ),
-                                {
-                                    "query": query,
-                                    "after_row_index": continuation.row_index,
-                                },
-                            )
-                        )
-                        .mappings()
-                        .first()
+                        (await session.execute(sa_text(sql), params)).mappings().first()
                     )
                     if anchor is None:
                         raise PublicationIntegrityError(
                             "lexical continuation anchor is absent from the "
                             "pinned query generation; refusing to serve"
                         )
-                    anchor_rank = float(anchor["bm25_rank"])
-                    if anchor_rank != float(continuation.rank):
+                    if float(anchor["rank_value"]) != float(continuation.rank):
                         raise PublicationIntegrityError(
                             "lexical continuation anchor rank diverges from "
                             "the pinned generation; refusing to serve"
                         )
-
-                where = f'WHERE "{fts}" MATCH :query'
+                keyset_args: dict[str, Any] = {}
                 if continuation is not None:
-                    where += (
-                        f' AND (bm25("{fts}") > :after_rank OR '
-                        f'(bm25("{fts}") = :after_rank AND rowid > '
-                        ":after_row_index))"
-                    )
-                    query_params.update(
-                        {
-                            "after_rank": float(continuation.rank),
-                            "after_row_index": continuation.row_index,
-                        }
-                    )
-                fts_rows = (
-                    (
-                        await session.execute(
-                            text(
-                                f'SELECT rowid, record_id, view_id, node_id, text, '
-                                f'bm25("{fts}") AS bm25_rank FROM "{fts}" '
-                                f"{where} ORDER BY bm25_rank ASC, rowid ASC "
-                                "LIMIT :limit"
-                            ),
-                            query_params,
-                        )
-                    )
-                    .mappings()
-                    .all()
-                )
-                locator_ids = [int(row["rowid"]) for row in fts_rows]
-                if anchor is not None:
-                    locator_ids.append(int(anchor["rowid"]))
-                if locator_ids:
-                    locators = {
-                        row.row_index: row
-                        for row in (
-                            (
-                                await session.execute(
-                                    select(KernelLexicalRow).where(
-                                        KernelLexicalRow.lexical_generation_id
-                                        == self._lexical.lexical_generation_id,
-                                        KernelLexicalRow.row_index.in_(locator_ids),
-                                    )
-                                )
-                            )
-                            .scalars()
-                            .all()
-                        )
+                    keyset_args = {
+                        "after_rank": float(continuation.rank),
+                        "after_row_index": continuation.row_index,
                     }
-                else:
-                    locators = {}
+                sql, params = page_query(
+                    backend,
+                    self._lexical.fts_table,
+                    text=text,
+                    mode=mode,
+                    limit=limit + 1,
+                    **keyset_args,
+                )
+                fts_rows = (
+                    (await session.execute(sa_text(sql), params)).mappings().all()
+                )
+                anchor_rows = [anchor] if anchor is not None else []
+                locators = await self._load_locators(session, [*fts_rows, *anchor_rows])
         except OperationalError as exc:
             if not _is_busy(exc):
                 raise LexicalQueryError(f"lexical query rejected: {exc}") from exc
             raise
 
-        def checked_hit(fts_row: Mapping[str, Any]) -> LexicalHit:
-            row_index = int(fts_row["rowid"])
-            node_text = fts_row["text"] or ""
-            text_hash = payload_byte_hash(node_text.encode("utf-8"))
-            locator = locators.get(row_index)
-            if locator is None:
-                raise PublicationIntegrityError(
-                    f"lexical hit row {row_index} has no locator in generation "
-                    f"{self._lexical.lexical_generation_id}; refusing to serve "
-                    "an orphan hit"
-                )
-            if (
-                locator.record_id != fts_row["record_id"]
-                or locator.view_id != fts_row["view_id"]
-                or locator.node_id != fts_row["node_id"]
-            ):
-                raise PublicationIntegrityError(
-                    f"lexical hit row {row_index} locator mismatch between "
-                    "index and stored rows"
-                )
-            if text_hash != locator.text_hash or len(node_text) != locator.text_chars:
-                raise PublicationIntegrityError(
-                    f"lexical hit row {row_index} text hash mismatch "
-                    f"(stored {locator.text_hash}, indexed {text_hash}); the "
-                    "pinned lexical generation was tampered with"
-                )
-            return LexicalHit(
-                publication_set_id=self._set.publication_set_id,
-                lexical_generation_id=self._lexical.lexical_generation_id,
-                row_index=row_index,
-                record_id=locator.record_id,
-                view_id=locator.view_id,
-                node_id=locator.node_id,
-                revision_ref=locator.revision_ref,
-                text_hash=locator.text_hash,
-                rank=float(fts_row["bm25_rank"]),
-                text=node_text,
-            )
-
         if anchor is not None:
             # Validate anchor locator/index bytes too. Otherwise an index row
             # could be altered between pages and silently steer the keyset.
-            checked_hit(anchor)
+            self._checked_hit(anchor, locators)
 
         has_more = len(fts_rows) > limit
         page_rows = fts_rows[:limit]
-        hits = tuple(checked_hit(row) for row in page_rows)
+        hits = tuple(self._checked_hit(row, locators) for row in page_rows)
         next_after = None
         if has_more and hits:
             last = hits[-1]
