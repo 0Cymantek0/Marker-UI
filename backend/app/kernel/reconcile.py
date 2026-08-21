@@ -58,7 +58,7 @@ from app.kernel.outbox import (
     list_outbox,
     reset_in_flight,
 )
-from app.kernel.payloads import LocalPayloadStore, ObjectCheck
+from app.kernel.payloads import ObjectCheck, PayloadMaintenanceStore
 
 __all__ = [
     "BlobState",
@@ -158,12 +158,19 @@ class ReconcileReport:
 
 async def verify_payload_availability(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     *,
     workspace_id: str | None = None,
     verify_hashes: bool = True,
 ) -> PayloadAvailabilityResult:
-    """Classify payload truth for one workspace (or the whole database)."""
+    """Classify payload truth for one workspace (or the whole database).
+
+    Store-neutral since PR83B1 WS6: verification and enumeration run
+    through the ``PayloadMaintenanceStore`` capability, so the same
+    classification holds on the local-file and S3 profiles. Staging
+    scratch residue is a local-profile concept — stores that cannot
+    create scratch (the S3 single-PUT profile) report none.
+    """
     if workspace_id is not None:
         validate_workspace_id(workspace_id)
 
@@ -239,7 +246,8 @@ async def verify_payload_availability(
     registry_keys = {row.blob_key for row in registry_rows}
     orphans = tuple(key for key in physical if key not in registry_keys)
 
-    tmp = await store.list_tmp()
+    list_tmp = getattr(store, "list_tmp", None)
+    tmp = await list_tmp() if list_tmp is not None else []
 
     return PayloadAvailabilityResult(
         workspace_id=workspace_id,
@@ -251,7 +259,7 @@ async def verify_payload_availability(
 
 
 async def _check_blob(
-    store: LocalPayloadStore, row: KernelPayloadObject, *, verify_hashes: bool
+    store: PayloadMaintenanceStore, row: KernelPayloadObject, *, verify_hashes: bool
 ) -> BlobState:
     check: ObjectCheck = await store.check_object(
         row.blob_key, expected_length=row.payload_length
@@ -269,7 +277,7 @@ async def _check_blob(
 
 async def reconcile(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     *,
     workspace_id: str | None = None,
     tmp_older_than_seconds: float | None = None,
@@ -279,9 +287,10 @@ async def reconcile(
 
     ``tmp_older_than_seconds`` deletes staging scratch at least that old
     (live publishers hold scratch for milliseconds; an explicit age keeps
-    concurrent staging safe). ``reset_outbox`` returns stuck in-flight
-    outbox items to pending — at-least-once redelivery, never erasure:
-    pending rows stay pending, done rows stay done.
+    concurrent staging safe) — a capability only stores that can create
+    scratch offer. ``reset_outbox`` returns stuck in-flight outbox items
+    to pending — at-least-once redelivery, never erasure: pending rows
+    stay pending, done rows stay done.
     """
     availability = await verify_payload_availability(
         session_factory, store, workspace_id=workspace_id
@@ -289,8 +298,9 @@ async def reconcile(
     pending = await list_outbox(session_factory, state=OUTBOX_STATE_PENDING)
     in_flight_reset = await reset_in_flight(session_factory) if reset_outbox else 0
     tmp_removed: tuple[str, ...] = ()
-    if tmp_older_than_seconds is not None:
-        removed = await store.cleanup_tmp(older_than_seconds=tmp_older_than_seconds)
+    cleanup_tmp = getattr(store, "cleanup_tmp", None)
+    if tmp_older_than_seconds is not None and cleanup_tmp is not None:
+        removed = await cleanup_tmp(older_than_seconds=tmp_older_than_seconds)
         tmp_removed = tuple(str(p.name) for p in removed)
     return ReconcileReport(
         availability=availability,
@@ -302,7 +312,7 @@ async def reconcile(
 
 async def reconcile_after_restart(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     *,
     tmp_older_than_seconds: float = 3600.0,
 ) -> ReconcileReport:

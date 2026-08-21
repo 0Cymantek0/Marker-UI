@@ -25,9 +25,11 @@ requirement:
   is coherent (manifest chain present, member counts agree);
 * ``inspectable`` / ``replayable`` — complete only when every
   payload-bearing record in the cut verifies as ``available`` in the
-  local content-addressed store. Missing, corrupt, and metadata-only
-  payload references keep the snapshot **degraded**; nothing upgrades
-  degraded bytes to completeness.
+  configured content-addressed store (local file or S3-compatible
+  profile — the ``KernelPayloadStore`` capability, PR83B1 WS6).
+  Missing, corrupt, and metadata-only payload references keep the
+  snapshot **degraded**; nothing upgrades degraded bytes to
+  completeness.
 
 The local topology does not yet distinguish inspectable from replayable
 byte sets; both map to "all declared payload bytes verified available".
@@ -57,7 +59,7 @@ from app.kernel.models import (
     KernelRecord,
     KernelRecordEdge,
 )
-from app.kernel.payloads import LocalPayloadStore
+from app.kernel.payloads import KernelPayloadStore
 from app.kernel.reconcile import (
     PAYLOAD_STATE_AVAILABLE,
     PAYLOAD_STATE_CORRUPT,
@@ -187,7 +189,7 @@ async def resolve_snapshot(
     *,
     at_commit: int | None = None,
     required_payload_state: str = PAYLOAD_REQUIREMENT_METADATA_ONLY,
-    payload_store: LocalPayloadStore | None = None,
+    payload_store: KernelPayloadStore | None = None,
     verify_payload_hashes: bool = True,
 ) -> KernelSnapshot:
     """Pin one committed cut and classify its completeness honestly.
@@ -394,7 +396,7 @@ async def resolve_snapshot(
 
 async def _classify_cut_payloads(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: KernelPayloadStore,
     *,
     workspace_id: str,
     cut: int,
@@ -410,6 +412,10 @@ async def _classify_cut_payloads(
     degraded for inspectable/replayable requirements, and never
     advertised as available. Re-supplied bytes that verify win over
     retirement history.
+
+    Store-neutral since PR83B1 WS6: verification runs through the
+    ``KernelPayloadStore`` capability (``check_object``), so the same
+    classification holds on the local-file and S3 profiles.
     """
     async with session_factory() as session:
         payload_rows = (
