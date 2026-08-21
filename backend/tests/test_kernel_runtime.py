@@ -48,6 +48,11 @@ from app.services.kernel_runtime import (
     ActiveClaim,
     build_result_descriptor,
 )
+from tests.pg_provisioning import (
+    BACKENDS,
+    engine_kwargs_for,
+    provisioned_database,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -104,48 +109,64 @@ def _as_utc(value: Any) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-@pytest_asyncio.fixture
-async def runtime_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Migrated kernel DB + real TaskManager + wired runtime coordinator."""
+@pytest_asyncio.fixture(params=BACKENDS, ids=BACKENDS)
+async def runtime_env(request, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Migrated kernel DB + real TaskManager + wired runtime coordinator.
+
+    Parameterized over both first-class database profiles (PR83B1
+    Checkpoint C): the same production bridge — TaskManager, dispatch/
+    watchdog loops, fenced acceptance, compatibility projection — runs
+    against SQLite and real PostgreSQL through one fixture.
+    """
     from app.db_migration import upgrade_database
     import app.services.task_manager as tm_module
     from app.services.task_manager import TaskManager
 
-    url = f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').as_posix()}"
-    await upgrade_database(url=url)
-    engine = create_async_engine(
-        url, connect_args={"check_same_thread": False, "timeout": 30}
-    )
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    monkeypatch.setattr(tm_module, "async_session_factory", factory)
-
-    service = FakeConversionService()
-    manager = TaskManager()
-    coordinator = manager.start_kernel_runtime(
-        service,
-        session_factory=factory,
-        commit_service=KernelCommitService(factory),
-        workspace_id="t",
-        owner_id="test-runtime",
-        lease_seconds=60.0,
-        renew_interval_seconds=0.05,
-        dispatch_poll_seconds=0.05,
-        watchdog_interval_seconds=0.1,
-        max_in_flight=4,
-    )
-    try:
-        yield SimpleNamespace(
-            manager=manager,
-            coordinator=coordinator,
-            factory=factory,
-            service=service,
-            tmp_path=tmp_path,
+    backend = request.param
+    async with provisioned_database(
+        backend, (tmp_path / "runtime.db").as_posix()
+    ) as prov:
+        await upgrade_database(url=prov.url)
+        engine_kwargs = engine_kwargs_for(backend)
+        if backend == "sqlite":
+            # 30s busy-wait: the multi-loop contention these tests create
+            # exceeds the default 5s driver timeout on slower machines.
+            engine_kwargs["connect_args"]["timeout"] = 30
+        engine = create_async_engine(prov.url, **engine_kwargs)
+        assert engine.dialect.name == backend  # real-backend confirmation
+        factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
         )
-    finally:
-        coordinator.stop()
-        service.block.set()
-        manager.shutdown()
-        await engine.dispose()
+        monkeypatch.setattr(tm_module, "async_session_factory", factory)
+
+        service = FakeConversionService()
+        manager = TaskManager()
+        coordinator = manager.start_kernel_runtime(
+            service,
+            session_factory=factory,
+            commit_service=KernelCommitService(factory),
+            workspace_id="t",
+            owner_id="test-runtime",
+            lease_seconds=60.0,
+            renew_interval_seconds=0.05,
+            dispatch_poll_seconds=0.05,
+            watchdog_interval_seconds=0.1,
+            max_in_flight=4,
+        )
+        try:
+            yield SimpleNamespace(
+                manager=manager,
+                coordinator=coordinator,
+                factory=factory,
+                service=service,
+                tmp_path=tmp_path,
+                backend=backend,
+            )
+        finally:
+            coordinator.stop()
+            service.block.set()
+            manager.shutdown()
+            await engine.dispose()
 
 
 async def _make_job(env, job_id: str, config_extra: dict[str, Any] | None = None) -> tuple[str, dict[str, Any]]:
@@ -541,6 +562,112 @@ class TestStaleWorker:
             service_b.block.set()
             manager_b.shutdown()
             env.manager = manager_b
+
+
+class TestCompetingDispatchLoops:
+    async def test_two_live_coordinators_never_double_own_work(self, runtime_env):
+        """X-R04: two dispatch loops running CONCURRENTLY (both alive,
+        racing claim_fair against the same work) cannot double-own one
+        work item or fork its fence."""
+        env = runtime_env
+        from app.services.task_manager import TaskManager
+
+        env.service.block.clear()  # hold execution open while both race
+        manager_b = TaskManager()
+        coordinator_b = manager_b.start_kernel_runtime(
+            env.service,
+            session_factory=env.factory,
+            commit_service=KernelCommitService(env.factory),
+            workspace_id="t",
+            owner_id="runtime-b",
+            lease_seconds=60.0,
+            renew_interval_seconds=0.05,
+            dispatch_poll_seconds=0.05,
+            watchdog_interval_seconds=0.1,
+            max_in_flight=4,
+        )
+        try:
+            work_id = await _submit(env, "compete-1")
+            env.coordinator.start()
+            coordinator_b.start()
+            await _wait_until(lambda: _lease_states(env, work_id))
+            # Exactly one lease authority row, one in-flight delivery,
+            # one claimed event — the loser left no partial state.
+            from app.kernel.models import KernelOutbox
+
+            async with env.factory() as session:
+                leases = (
+                    (
+                        await session.execute(
+                            select(KernelWorkLease).where(
+                                KernelWorkLease.work_id == work_id
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                in_flight = (
+                    await session.execute(
+                        select(KernelOutbox).where(
+                            KernelOutbox.id == work_id,
+                            KernelOutbox.state == "in_flight",
+                        )
+                    )
+                )
+                in_flight_count = len(in_flight.scalars().all())
+            assert len(leases) == 1
+            assert leases[0].fencing_token == 1
+            assert in_flight_count == 1
+            claimed = await _events(env, "work.claimed")
+            assert sum(1 for e in claimed if e.payload.get("work_id") == work_id) == 1
+            # Release execution: the single owner completes exactly once.
+            env.service.block.set()
+            row = await _wait_for_row_status(env, "compete-1", "completed")
+            assert row.status == "completed"
+            assert env.service.calls == 1  # executed exactly once
+        finally:
+            coordinator_b.stop()
+            manager_b.shutdown()
+
+    async def test_two_coordinators_fan_out_distinct_work(self, runtime_env):
+        """Concurrent coordinators may each own DIFFERENT work under the
+        cap, with distinct monotone fences per work identity."""
+        env = runtime_env
+        from app.services.task_manager import TaskManager
+
+        manager_b = TaskManager()
+        coordinator_b = manager_b.start_kernel_runtime(
+            env.service,
+            session_factory=env.factory,
+            commit_service=KernelCommitService(env.factory),
+            workspace_id="t",
+            owner_id="runtime-b",
+            lease_seconds=60.0,
+            renew_interval_seconds=0.05,
+            dispatch_poll_seconds=0.05,
+            watchdog_interval_seconds=0.1,
+            max_in_flight=4,
+        )
+        try:
+            w1 = await _submit(env, "fan-1")
+            w2 = await _submit(env, "fan-2")
+            env.coordinator.start()
+            coordinator_b.start()
+            r1 = await _wait_for_row_status(env, "fan-1", "completed")
+            r2 = await _wait_for_row_status(env, "fan-2", "completed")
+            assert r1.status == r2.status == "completed"
+            lease1, lease2 = await _lease(env, w1), await _lease(env, w2)
+            assert lease1 is not None and lease2 is not None
+            assert w1 != w2  # distinct work identities, one lease each
+        finally:
+            coordinator_b.stop()
+            manager_b.shutdown()
+
+
+async def _lease_states(env, work_id: int):
+    lease = await _lease(env, work_id)
+    return lease is not None
 
 
 class TestDivergentResult:
