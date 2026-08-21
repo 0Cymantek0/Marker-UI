@@ -64,6 +64,7 @@ from app.kernel.errors import (
     UnknownGenerationError,
 )
 from app.kernel.dialects import (
+    advisory_xact_lock,
     dialect_insert,
     integrity_constraint_name,
     is_retryable_contention,
@@ -76,6 +77,7 @@ from app.kernel.models import (
     KernelRecord,
     KernelRecordEdge,
 )
+from app.kernel.payloads import PAYLOAD_DECISION_LOCK_SCOPE
 from app.kernel.retention import (
     DEFAULT_PIN_LEASE_SECONDS,
     acquire_reader_pin,
@@ -707,9 +709,15 @@ class GenerationService:
                     )
                 )
                 if referenced:
-                    raise GenerationStateError(
-                        f"generation={generation_id}: refusing to purge a "
-                        "generation referenced as current"
+                    # A sibling builder activated this exact identity
+                    # between the staged-state read above and this
+                    # transaction: the purge above rolls back and the
+                    # retry re-reads the now-durable generation
+                    # idempotently (digest-checked) instead of surfacing
+                    # a spurious state error for identical inputs.
+                    raise _ConcurrentPointerMove(
+                        f"generation={generation_id}: concurrently "
+                        "activated while staging; retrying convergence"
                     )
                 await session.execute(
                     delete(KernelGeneration).where(
@@ -944,6 +952,12 @@ class GenerationService:
 
         async with self._session_factory() as session:
             async with session.begin():
+                # A new current generation is a live retention root: join
+                # the payload-decision scope so activation and a GC
+                # deletion decision linearize on both profiles instead of
+                # interleaving (the collector's root reads must see this
+                # head movement, or happen entirely before it).
+                await advisory_xact_lock(session, *PAYLOAD_DECISION_LOCK_SCOPE)
                 gen = await session.get(KernelGeneration, generation_id)
                 if gen is None:
                     raise UnknownGenerationError(

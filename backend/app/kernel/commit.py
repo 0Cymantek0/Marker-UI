@@ -63,6 +63,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.kernel.dialects import (
+    advisory_xact_lock,
     dialect_insert,
     integrity_constraint_name,
     is_retryable_contention,
@@ -115,7 +116,12 @@ from app.kernel.patches import (
     ViewFlip,
     check_view_advancement,
 )
-from app.kernel.payloads import LOCAL_STORE_PROFILE, KernelPayloadStore, LocalPayloadStore
+from app.kernel.payloads import (
+    LOCAL_STORE_PROFILE,
+    PAYLOAD_DECISION_LOCK_SCOPE,
+    KernelPayloadStore,
+    LocalPayloadStore,
+)
 from app.kernel.proofs import ProofBatchRecord, check_batch_proof_integrity
 from app.kernel.records import KernelEdge, KernelRecord as RecordInput
 from app.kernel.verification_risk import check_batch_verification_risk
@@ -526,6 +532,22 @@ class KernelCommitService:
         async with self._session_factory() as session:
             async with session.begin():
                 maybe_inject(PHASE_BEGIN)
+
+                # 0. Payload-carrying commits join the payload-decision
+                #    scope BEFORE taking the head row lock. GC deletion
+                #    decisions, retention roots/pins, and generation
+                #    activation all serialize on this scope (SQLite:
+                #    writer lock; PostgreSQL: advisory transaction
+                #    lock), so a commit's registry adoption/tombstone
+                #    rescue and a collector's liveness reads cannot
+                #    interleave. Acquiring it before the head row keeps
+                #    one global lock order (advisory -> head row) shared
+                #    with generation activation, which would otherwise
+                #    deadlock against a commit holding the head row.
+                if staged_payloads:
+                    await advisory_xact_lock(
+                        session, *PAYLOAD_DECISION_LOCK_SCOPE
+                    )
 
                 # 1. Write-first head upsert + locked re-read. On SQLite
                 #    the write-first upsert acquires the database writer

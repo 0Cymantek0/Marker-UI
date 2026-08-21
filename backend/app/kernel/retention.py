@@ -44,7 +44,7 @@ from typing import Mapping
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.kernel.dialects import dialect_insert
+from app.kernel.dialects import advisory_xact_lock, dialect_insert
 from app.kernel.commit import validate_workspace_id
 from app.kernel.errors import (
     RetentionContractError,
@@ -57,6 +57,7 @@ from app.kernel.models import (
     KernelReaderPin,
     KernelRetentionRoot,
 )
+from app.kernel.payloads import PAYLOAD_DECISION_LOCK_SCOPE
 from app.kernel.snapshots import (
     PAYLOAD_REQUIREMENTS,
     PAYLOAD_REQUIREMENT_METADATA_ONLY,
@@ -294,6 +295,10 @@ async def declare_hold(
     )
     async with session_factory() as session:
         async with session.begin():
+            # Join the payload-decision scope so a hold declared here and
+            # a GC deletion decision linearize on both profiles (SQLite
+            # writer lock / PostgreSQL advisory transaction lock).
+            await advisory_xact_lock(session, *PAYLOAD_DECISION_LOCK_SCOPE)
             await session.execute(
                 dialect_insert(session.bind, KernelRetentionRoot)
                 .values(
@@ -392,6 +397,9 @@ async def acquire_reader_pin(
     expires = now + timedelta(seconds=lease_seconds)
     async with session_factory() as session:
         async with session.begin():
+            # Same linearization scope as hold declaration: a pin acquired
+            # here and a concurrent GC decision serialize on both profiles.
+            await advisory_xact_lock(session, *PAYLOAD_DECISION_LOCK_SCOPE)
             gen = await session.get(KernelGeneration, generation_id)
             if gen is None:
                 raise UnknownGenerationError(
@@ -419,6 +427,12 @@ async def renew_reader_pin(
         raise RetentionContractError("lease_seconds must be positive")
     async with session_factory() as session:
         async with session.begin():
+            # Renewal races collection: join the payload-decision scope so
+            # an extension and a GC protection read linearize instead of
+            # interleaving (a renewal committing between the collector's
+            # pin reads and its retirement deletes would otherwise delete
+            # a freshly protected generation).
+            await advisory_xact_lock(session, *PAYLOAD_DECISION_LOCK_SCOPE)
             row = await session.get(KernelReaderPin, pin_id)
             if row is None or not _pin_view(row).active:
                 raise UnknownReaderPinError(

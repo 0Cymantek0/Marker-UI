@@ -12,7 +12,10 @@ three things:
   staged/validated) publication sets that no publication head and no
   unexpired publication pin protects, plus lexical generations no
   surviving set row references (dropping their runtime-managed FTS5
-  tables transactionally);
+  tables transactionally — SQLite only; the PostgreSQL profile fails
+  closed on lexical retirement because FTS5 generations are a
+  local-profile physical artifact this session deliberately does not
+  reimplement);
 * **physical payload bytes** — content-addressed objects whose hashes
   no live retention root requires, plus pre-commit orphan objects the
   registry never accepted.
@@ -23,23 +26,30 @@ Lifecycle (mark → recheck → tombstone → sweep), linearization honesty:
    current root set. Pure reads; nothing durable. A plan is evidence,
    never authorization.
 2. **Recheck + tombstone** (:func:`execute_collection`) opens ONE write
-   transaction, acquires the SQLite writer lock with a write-first
-   statement, recomputes the live closure from freshly read roots, and
-   inserts tombstones for whatever is still unreachable. That
+   transaction, recomputes the live closure from freshly read roots,
+   and inserts tombstones for whatever is still unreachable. That
    transaction's commit is **the deletion linearization point**: every
    root, pin, or hold committed before it is honored; every one
    committed after it is a post-decision root that sees honest
    ``retired``/degraded availability and may heal by re-staging exact
-   bytes through the normal publish path.
-3. **Sweep** unlinks one object per short write transaction. Each sweep
-   transaction write-first bumps the tombstone row, re-checks it is
+   bytes through the normal publish path. On SQLite the transaction
+   opens write-first so the single writer lock serializes it against
+   every root/pin writer; on PostgreSQL the transaction instead takes
+   ``pg_advisory_xact_lock`` on ``PAYLOAD_DECISION_LOCK_SCOPE``, the
+   same scope retention roots, reader pins, generation activation, and
+   payload-carrying commits acquire — root-creating transactions and
+   deletion decisions therefore linearize on both profiles.
+3. **Sweep** retires one object per short write transaction. Each sweep
+   transaction write-first claims the tombstone row, re-checks it is
    still pending/failed (a concurrent commit's rescue may have deleted
-   it), unlinks, then records the outcome. Already-absent objects
-   converge idempotently; ``OSError`` failures are recorded as
-   retryable ``failed`` state, never as success.
+   it), deletes the bytes through the store's maintenance capability,
+   then records the outcome. Already-absent objects converge
+   idempotently; deletion failures are recorded as retryable
+   ``failed`` state, never as success.
 4. **Restart reconciliation** (:func:`reconcile_retirements`) resumes
-   pending/failed tombstones with no process memory: pending + file
-   present → unlink; pending + file absent → deleted; failed → retry.
+   pending/failed tombstones with no process memory: pending + object
+   present → delete; pending + object absent → deleted; failed →
+   retry.
 
 Safety boundaries this module refuses to cross:
 
@@ -51,7 +61,15 @@ Safety boundaries this module refuses to cross:
 * ``staged``/``validated`` generations are only collectible once their
   staging age exceeds a grace threshold, so in-flight builds never race
   the collector;
-* current generations are structurally never candidates.
+* current generations are structurally never candidates;
+* the PostgreSQL profile never executes SQLite FTS5 DDL: lexical
+  retirement raises :class:`LexicalRetirementUnsupportedError` before
+  any write, leaving dormant migrated metadata inspectable for the
+  future industrial lexical-index slice.
+
+Store-neutral since PR83B1 WS6: physical accounting (orphan age/size)
+and deletion run through ``PayloadMaintenanceStore`` — the local
+filesystem and S3-compatible profiles prove the same semantics.
 """
 
 from __future__ import annotations
@@ -60,13 +78,18 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Sequence
+from typing import Any, Awaitable, Callable, Sequence
 
 from sqlalchemy import delete, func, select, text, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.kernel.dialects import (
+    POSTGRESQL,
+    advisory_xact_lock,
+    backend_name,
+    dialect_insert,
+    run_with_contention_retry,
+)
 from app.kernel.errors import (
     InjectedFaultError,
     KernelError,
@@ -94,7 +117,10 @@ from app.kernel.models import (
     KernelRecord,
     KernelRetentionRoot,
 )
-from app.kernel.payloads import LocalPayloadStore
+from app.kernel.payloads import (
+    PAYLOAD_DECISION_LOCK_SCOPE,
+    PayloadMaintenanceStore,
+)
 from app.kernel.publications import (
     LEXICAL_STATE_FAILED,
     LEXICAL_STATE_STAGED,
@@ -110,9 +136,11 @@ from app.kernel.snapshots import PAYLOAD_REQUIREMENT_METADATA_ONLY
 __all__ = [
     "DEFAULT_STALE_STAGING_SECONDS",
     "GC_FAULT_PHASES",
+    "GC_PAUSE_PHASES",
     "GenerationCandidate",
     "CollectionPlan",
     "CollectionReport",
+    "LexicalRetirementUnsupportedError",
     "PHASE_GC_AFTER_GENERATIONS",
     "PHASE_GC_AFTER_MARK",
     "PHASE_GC_AFTER_RECHECK",
@@ -160,41 +188,52 @@ GC_FAULT_PHASES = frozenset(
     }
 )
 
+#: Deterministic barrier hooks (test-only parameter ``_test_pause``).
+#: Unlike faults, a pause does not fail the collector: it suspends the
+#: recheck transaction at a named point so tests can force true overlap
+#: with a concurrent root/pin/commit writer and then release it.
+PHASE_GC_PAUSE_BEFORE_LOCK = "recheck-before-lock"
+PHASE_GC_PAUSE_AFTER_ROOTS = "recheck-after-roots"
+GC_PAUSE_PHASES = frozenset({PHASE_GC_PAUSE_BEFORE_LOCK, PHASE_GC_PAUSE_AFTER_ROOTS})
+
 #: ``staged``/``validated`` generations younger than this are retained:
 #: they may be an in-flight or resumable build. Crash residue older
 #: than the threshold is collectible through the normal recheck path.
 DEFAULT_STALE_STAGING_SECONDS = 3600.0
 
-DEFAULT_BUSY_RETRY_ATTEMPTS = 8
-DEFAULT_BUSY_RETRY_BASE_DELAY = 0.02
-_MAX_RETRY_DELAY = 0.5
-_BUSY_MARKERS = ("database is locked", "database table is locked", "database is busy")
+
+class LexicalRetirementUnsupportedError(KernelError):
+    """Lexical-generation retirement is a SQLite-FTS5 physical artifact.
+
+    The runtime-managed FTS5 virtual table behind a lexical generation
+    cannot be dropped on the PostgreSQL profile, and this session
+    deliberately does not fabricate an industrial lexical index. Any
+    attempt to retire lexical metadata on PostgreSQL fails closed
+    before writing: dormant migrated rows stay inspectable until the
+    industrial lexical publication slice owns them.
+    """
 
 
-class _BusyRetry:
-    """Caller-side busy/serialization retry with observability."""
+class _GcRetry:
+    """The shared contention budget with GC-level retry observability.
 
-    def __init__(self) -> None:
+    Delegates to :func:`app.kernel.dialects.run_with_contention_retry`
+    (one vocabulary, one bounded envelope — SQLite busy text and
+    PostgreSQL 40001/40P01/55P03 alike) and counts the retries the
+    collection report surfaces.
+    """
+
+    def __init__(self, operation_name: str = "gc operation") -> None:
         self.busy_retries = 0
+        self._operation_name = operation_name
 
     async def run(self, operation: Callable[[], Any]) -> Any:
-        last_error: Exception | None = None
-        for attempt in range(DEFAULT_BUSY_RETRY_ATTEMPTS):
-            try:
-                return await operation()
-            except OperationalError as exc:
-                text = str(exc).lower()
-                if not any(marker in text for marker in _BUSY_MARKERS):
-                    raise
-                last_error = exc
-                self.busy_retries += 1
-            await asyncio.sleep(
-                min(DEFAULT_BUSY_RETRY_BASE_DELAY * (2**attempt), _MAX_RETRY_DELAY)
-            )
-        raise KernelError(
-            f"GC operation did not converge after {DEFAULT_BUSY_RETRY_ATTEMPTS} "
-            f"attempts: {last_error or 'database busy'}"
-        ) from last_error
+        def _count(_n: int, _exc: BaseException) -> None:
+            self.busy_retries += 1
+
+        return await run_with_contention_retry(
+            operation, on_retry=_count, operation_name=self._operation_name
+        )
 
 
 def _utcnow() -> datetime:
@@ -400,7 +439,7 @@ async def _publication_live_set_ids(session: Any) -> set[str]:
 
 async def plan_collection(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     *,
     workspace_id: str | None = None,
     stale_staging_seconds: float = DEFAULT_STALE_STAGING_SECONDS,
@@ -500,18 +539,15 @@ async def plan_collection(
     for key in physical:
         if key in registry_keys:
             continue
+        stat = await store.stat_object(key)
+        if stat is None:
+            continue  # vanished mid-scan; the next pass will see truth
         if orphan_min_age_seconds > 0:
-            try:
-                age = now_ts - store.object_path(key).stat().st_mtime
-            except OSError:
-                continue  # vanished mid-scan; the next pass will see truth
+            age = now_ts - stat.last_modified_epoch
             if age < orphan_min_age_seconds:
                 continue
         orphan_candidates.append(key)
-        try:
-            orphan_bytes += store.object_path(key).stat().st_size
-        except OSError:
-            pass
+        orphan_bytes += stat.length
 
     stale_horizon = _utcnow() - timedelta(seconds=stale_staging_seconds)
     eligible: list[GenerationCandidate] = []
@@ -733,37 +769,76 @@ def _validate_fault_phase(phase: str | None) -> None:
         raise KernelError(f"unknown fault phase {phase!r}")
 
 
+def _validate_pause_hook(pause: Callable[[str], Awaitable[None]] | None) -> None:
+    if pause is not None and not asyncio.iscoroutinefunction(pause):
+        raise KernelError("_test_pause must be an async callable")
+
+
+async def _maybe_pause(
+    pause: Callable[[str], Awaitable[None]] | None, phase: str
+) -> None:
+    if pause is not None:
+        await pause(phase)
+
+
 async def execute_collection(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     plan: CollectionPlan,
     *,
     dry_run: bool = False,
     stale_staging_seconds: float = DEFAULT_STALE_STAGING_SECONDS,
     _inject_fault_at: str | None = None,
+    _test_pause: Callable[[str], Awaitable[None]] | None = None,
 ) -> CollectionReport:
     """Recheck the plan against fresh authority; retire what survives.
 
     The recheck + tombstone transaction is the deletion linearization
     point. ``dry_run`` performs the recheck diff and reports what would
-    happen without writing anything.
+    happen without writing anything. ``_test_pause`` is a deterministic
+    barrier hook for concurrency tests: an async callable receiving
+    ``GC_PAUSE_PHASES`` names, suspending the recheck transaction so a
+    concurrent root/pin/commit writer can be forced into a true overlap
+    before the decision commits.
     """
     _validate_fault_phase(_inject_fault_at)
-    retry = _BusyRetry()
+    _validate_pause_hook(_test_pause)
+    retry = _GcRetry("gc recheck")
     t0 = time.perf_counter()
     state = _ExecutionState()
 
-    # ---- recheck + tombstone (ONE transaction; write-first) ---------
+    # ---- fail closed before any write: lexical retirement is a
+    # SQLite-FTS5 physical artifact and cannot run on PostgreSQL.
+    if plan.eligible_lexical_generations:
+        async with session_factory() as session:
+            is_postgresql = backend_name(session.bind) == POSTGRESQL
+        if is_postgresql:
+            raise LexicalRetirementUnsupportedError(
+                "lexical-generation retirement requires the SQLite FTS5 "
+                "profile; the PostgreSQL profile fails closed and leaves "
+                f"the {len(plan.eligible_lexical_generations)} dormant "
+                "lexical rows inspectable (industrial lexical publication "
+                "is a later slice)"
+            )
+
+    # ---- recheck + tombstone (ONE transaction; serialized) -----------
     candidate_keys = sorted(set(plan.candidate_registry_keys))
 
     async def recheck_transaction() -> None:
         async with session_factory() as session:
             async with session.begin():
+                await _maybe_pause(_test_pause, PHASE_GC_PAUSE_BEFORE_LOCK)
                 if not dry_run:
-                    # Write-first: the expired-pin purge is a DELETE, so
-                    # the SQLite writer lock is taken before any read and
-                    # no root/pin/hold can commit between the liveness
-                    # reads and the tombstone inserts below.
+                    # Linearization serialization: on SQLite the expired-
+                    # pin purge below is write-first and takes the single
+                    # writer lock before any read; on PostgreSQL the
+                    # advisory transaction lock serializes this decision
+                    # with every root/pin/head writer that acquires the
+                    # same scope (retention, generation activation,
+                    # payload-carrying commits). Either way no root, pin,
+                    # or hold can commit between the liveness reads and
+                    # the tombstone inserts below.
+                    await advisory_xact_lock(session, *PAYLOAD_DECISION_LOCK_SCOPE)
                     purge = await session.execute(
                         delete(KernelReaderPin).where(
                             KernelReaderPin.expires_at <= _utcnow()
@@ -821,10 +896,11 @@ async def execute_collection(
                 state.orphan_still = orphan_still
                 state.orphan_rescued = orphan_rescued
 
+                await _maybe_pause(_test_pause, PHASE_GC_PAUSE_AFTER_ROOTS)
                 if not dry_run:
                     for key in still:
                         await session.execute(
-                            sqlite_insert(KernelPayloadRetirement)
+                            dialect_insert(session.bind, KernelPayloadRetirement)
                             .values(
                                 blob_key=key,
                                 state=RETIRE_STATE_PENDING,
@@ -838,7 +914,7 @@ async def execute_collection(
                         )
                     for key in orphan_still:
                         await session.execute(
-                            sqlite_insert(KernelPayloadRetirement)
+                            dialect_insert(session.bind, KernelPayloadRetirement)
                             .values(
                                 blob_key=key,
                                 state=RETIRE_STATE_PENDING,
@@ -971,21 +1047,23 @@ async def execute_collection(
 async def _retire_generation(
     session_factory: async_sessionmaker,
     candidate: GenerationCandidate,
-    retry: _BusyRetry,
+    retry: _GcRetry,
     stale_staging_seconds: float,
 ) -> bool:
     """Delete one generation's derived rows; True when rescued instead.
 
-    The transaction write-first touches the generation row (writer
-    lock), then re-verifies every protection inside the same
-    transaction — current pointer, active pin, active hold, and state
-    freshness for staged/validated residue. Any protection commits the
-    rescue; the deletes are all-or-nothing with the checks.
+    The transaction joins the payload-decision advisory scope (SQLite:
+    already serialized by the writer lock it takes with the row touch),
+    then re-verifies every protection inside the same transaction —
+    current pointer, active pin, active hold, and state freshness for
+    staged/validated residue. Any protection commits the rescue; the
+    deletes are all-or-nothing with the checks.
     """
 
     async def retire_tx() -> bool:
         async with session_factory() as session:
             async with session.begin():
+                await advisory_xact_lock(session, *PAYLOAD_DECISION_LOCK_SCOPE)
                 # Write-first: row touch acquires the writer lock so the
                 # protection reads below cannot interleave with a pin or
                 # hold declared concurrently.
@@ -1076,21 +1154,23 @@ async def _retire_generation(
 async def _retire_publication_set(
     session_factory: async_sessionmaker,
     publication_set_id: str,
-    retry: _BusyRetry,
+    retry: _GcRetry,
     stale_staging_seconds: float,
 ) -> bool:
     """Delete one publication set row; True when rescued instead.
 
-    Same posture as generation retirement: write-first row touch under
-    the writer lock, then re-verify every protection inside the same
-    transaction — head currency, unexpired publication pin, and state
-    freshness for staged/validated candidates. Expired leftover pins of
-    a retiring set are deleted with it.
+    Same posture as generation retirement: join the payload-decision
+    advisory scope, write-first row touch under the writer lock, then
+    re-verify every protection inside the same transaction — head
+    currency, unexpired publication pin, and state freshness for
+    staged/validated candidates. Expired leftover pins of a retiring
+    set are deleted with it.
     """
 
     async def retire_tx() -> bool:
         async with session_factory() as session:
             async with session.begin():
+                await advisory_xact_lock(session, *PAYLOAD_DECISION_LOCK_SCOPE)
                 touched = await session.execute(
                     update(KernelPublicationSet)
                     .where(
@@ -1155,21 +1235,33 @@ async def _retire_publication_set(
 async def _retire_lexical_generation(
     session_factory: async_sessionmaker,
     lexical_generation_id: str,
-    retry: _BusyRetry,
+    retry: _GcRetry,
     stale_staging_seconds: float,
 ) -> bool:
     """Delete one lexical generation and its FTS5 table; True if rescued.
 
+    SQLite profile only: the runtime-managed FTS5 virtual table is a
+    physical SQLite artifact, so on PostgreSQL this fails closed with
+    :class:`LexicalRetirementUnsupportedError` before touching
+    anything (``execute_collection`` pre-checks the same boundary for
+    the no-partial-state guarantee; this guard covers any other
+    caller).
+
     A lexical generation survives while ANY publication set row still
     references it (sets retire first, releasing their references);
     staged/validated residue obeys the same staleness grace as
-    generations. The runtime-managed FTS5 virtual table is dropped in
-    the same transaction as its manifest and locator rows.
+    generations. The FTS5 virtual table is dropped in the same
+    transaction as its manifest and locator rows.
     """
 
     async def retire_tx() -> bool:
         async with session_factory() as session:
             async with session.begin():
+                if backend_name(session.bind) == POSTGRESQL:
+                    raise LexicalRetirementUnsupportedError(
+                        "lexical-generation retirement requires the SQLite "
+                        "FTS5 profile; refusing on PostgreSQL"
+                    )
                 touched = await session.execute(
                     update(KernelLexicalGeneration)
                     .where(
@@ -1236,21 +1328,22 @@ class _SweepOutcomes:
 
 async def _sweep_keys(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     keys: Sequence[str],
-    retry: _BusyRetry,
+    retry: _GcRetry,
     *,
     registry_keys: set[str] | None = None,
     _inject_fault_at: str | None = None,
 ) -> _SweepOutcomes:
-    """Unlink tombstoned objects one short transaction per object.
+    """Retire tombstoned objects one short transaction per object.
 
     Each transaction write-first claims the tombstone (bumping
     ``attempts``), so a concurrent commit's tombstone rescue — which
     deletes the row — either wins before this transaction starts (the
-    sweep then sees no row and rescues) or waits for it. The unlink and
-    its outcome recording therefore cannot interleave with a commit
-    adopting the same bytes.
+    sweep then sees no row and rescues) or waits for it. The physical
+    deletion through the store's maintenance capability and its outcome
+    recording therefore cannot interleave with a commit adopting the
+    same bytes.
     """
     outcomes = _SweepOutcomes()
     known = registry_keys if registry_keys is not None else set()
@@ -1278,10 +1371,8 @@ async def _sweep_keys(
                     _check_fault(_inject_fault_at, PHASE_GC_BEFORE_UNLINK)
                     orphan_size = 0
                     if key not in known:
-                        try:
-                            orphan_size = store.object_path(key).stat().st_size
-                        except OSError:
-                            orphan_size = 0
+                        stat = await store.stat_object(key)
+                        orphan_size = stat.length if stat is not None else 0
                     try:
                         result = await store.delete_object(key)
                     except PayloadStageError as exc:
@@ -1320,18 +1411,18 @@ async def _sweep_keys(
 
 async def reconcile_retirements(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     *,
     _inject_fault_at: str | None = None,
 ) -> CollectionReport:
     """Resume unfinished tombstones from durable state alone.
 
-    After any crash: ``pending`` + file present → unlink; ``pending`` +
-    file absent → record deleted (idempotent convergence); ``failed`` →
-    retry. Never resurrects bytes and never fabricates availability.
+    After any crash: ``pending`` + object present → delete; ``pending``
+    + object absent → record deleted (idempotent convergence); ``failed``
+    → retry. Never resurrects bytes and never fabricates availability.
     """
     _validate_fault_phase(_inject_fault_at)
-    retry = _BusyRetry()
+    retry = _GcRetry("gc reconcile")
     t0 = time.perf_counter()
     async with session_factory() as session:
         keys = [
@@ -1398,7 +1489,7 @@ async def reconcile_retirements(
 
 async def collect(
     session_factory: async_sessionmaker,
-    store: LocalPayloadStore,
+    store: PayloadMaintenanceStore,
     *,
     workspace_id: str | None = None,
     grace_seconds: float = 0.0,
