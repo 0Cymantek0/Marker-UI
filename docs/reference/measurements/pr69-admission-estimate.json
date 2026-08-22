@@ -1,0 +1,347 @@
+{
+  "schema": "marker.pr69.admission.characterization.v1",
+  "mode": "estimate",
+  "generated_at": "2026-08-22T16:04:19+00:00",
+  "git_head": "01daa043c9a85bc712ccd2d7b174b13f37fad91b",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "profile": {
+    "family": "marker-gpu",
+    "device": "characterization",
+    "dtype": "auto",
+    "batches": {
+      "recognition": 256,
+      "layout": 32,
+      "detection": 32
+    },
+    "versions": {
+      "torch": "2.7.0+cpu",
+      "surya": "0.17.1",
+      "marker": "1.10.0"
+    },
+    "fingerprint": "434d25806526814b"
+  },
+  "preprocessor_facts": {
+    "lowres_dpi": 96,
+    "highres_dpi": 192,
+    "detection_chunk_height_px": 1400,
+    "layout_slice_min_px": 1500,
+    "layout_slice_size_px": 1200,
+    "layout_image_size_px": 768,
+    "foundation_task_img_sizes": [
+      [
+        1024,
+        512
+      ],
+      [
+        1024,
+        1024
+      ],
+      [
+        1024,
+        512
+      ]
+    ],
+    "ocr_task_img_size": [
+      1024,
+      512
+    ],
+    "scale_min_px": [
+      168,
+      168
+    ],
+    "patch_size": 14,
+    "merge_size": 2,
+    "recognition_batch": 256,
+    "layout_batch": 32,
+    "detection_batch": 32
+  },
+  "coefficient_sources": {
+    "weights_resident_bytes": "declared conservative default (unmeasured)",
+    "per_layout_slice_bytes": "declared conservative default (unmeasured)",
+    "per_detection_chunk_mp_bytes": "declared conservative default (unmeasured)",
+    "per_recognition_token_bytes": "declared conservative default (unmeasured)",
+    "crops_per_megapixel": "declared conservative default (unmeasured)"
+  },
+  "matrix": [
+    {
+      "name": "a4-portrait",
+      "width_pt": 595.0,
+      "height_pt": 842.0,
+      "lowres_px": [
+        794,
+        1123
+      ],
+      "highres_px": [
+        1587,
+        2246
+      ],
+      "lowres_megapixels": 0.892,
+      "demand_class": "normal",
+      "layout_slices": 1,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 892,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4565050275,
+      "notes": []
+    },
+    {
+      "name": "a4-landscape",
+      "width_pt": 842.0,
+      "height_pt": 595.0,
+      "lowres_px": [
+        1123,
+        794
+      ],
+      "highres_px": [
+        2246,
+        1587
+      ],
+      "lowres_megapixels": 0.892,
+      "demand_class": "normal",
+      "layout_slices": 1,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 892,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4580505446,
+      "notes": []
+    },
+    {
+      "name": "letter",
+      "width_pt": 612.0,
+      "height_pt": 792.0,
+      "lowres_px": [
+        816,
+        1056
+      ],
+      "highres_px": [
+        1632,
+        2112
+      ],
+      "lowres_megapixels": 0.862,
+      "demand_class": "normal",
+      "layout_slices": 1,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 862,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4566083752,
+      "notes": []
+    },
+    {
+      "name": "a3",
+      "width_pt": 842.0,
+      "height_pt": 1191.0,
+      "lowres_px": [
+        1123,
+        1588
+      ],
+      "highres_px": [
+        2246,
+        3176
+      ],
+      "lowres_megapixels": 1.783,
+      "demand_class": "normal",
+      "layout_slices": 2,
+      "detection_chunks": 2,
+      "recognition_crop_bound": 1784,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4738117324,
+      "notes": []
+    },
+    {
+      "name": "tabloid-wide",
+      "width_pt": 1224.0,
+      "height_pt": 792.0,
+      "lowres_px": [
+        1632,
+        1056
+      ],
+      "highres_px": [
+        3264,
+        2112
+      ],
+      "lowres_megapixels": 1.723,
+      "demand_class": "normal",
+      "layout_slices": 2,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 1724,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4709273935,
+      "notes": []
+    },
+    {
+      "name": "slide-16x9",
+      "width_pt": 960.0,
+      "height_pt": 540.0,
+      "lowres_px": [
+        1280,
+        720
+      ],
+      "highres_px": [
+        2560,
+        1440
+      ],
+      "lowres_megapixels": 0.922,
+      "demand_class": "normal",
+      "layout_slices": 1,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 922,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4587880711,
+      "notes": []
+    },
+    {
+      "name": "square-small",
+      "width_pt": 300.0,
+      "height_pt": 300.0,
+      "lowres_px": [
+        400,
+        400
+      ],
+      "highres_px": [
+        800,
+        800
+      ],
+      "lowres_megapixels": 0.16,
+      "demand_class": "normal",
+      "layout_slices": 1,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 160,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 160,
+      "envelope_bytes": 2887956562,
+      "notes": []
+    },
+    {
+      "name": "dense-scan-a4",
+      "width_pt": 595.0,
+      "height_pt": 842.0,
+      "lowres_px": [
+        794,
+        1123
+      ],
+      "highres_px": [
+        1587,
+        2246
+      ],
+      "lowres_megapixels": 0.892,
+      "demand_class": "normal",
+      "layout_slices": 1,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 892,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4565050275,
+      "notes": []
+    },
+    {
+      "name": "engineer-c1",
+      "width_pt": 1830.0,
+      "height_pt": 649.0,
+      "lowres_px": [
+        2440,
+        866
+      ],
+      "highres_px": [
+        4880,
+        1731
+      ],
+      "lowres_megapixels": 2.113,
+      "demand_class": "normal",
+      "layout_slices": 3,
+      "detection_chunks": 1,
+      "recognition_crop_bound": 2112,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 4852088308,
+      "notes": []
+    },
+    {
+      "name": "poster-a0",
+      "width_pt": 2384.0,
+      "height_pt": 3370.0,
+      "lowres_px": [
+        3179,
+        4494
+      ],
+      "highres_px": [
+        6358,
+        8987
+      ],
+      "lowres_megapixels": 14.286,
+      "demand_class": "normal",
+      "layout_slices": 12,
+      "detection_chunks": 4,
+      "recognition_crop_bound": 14285,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 6278534189,
+      "notes": []
+    },
+    {
+      "name": "ood-banner",
+      "width_pt": 15875.0,
+      "height_pt": 1122.0,
+      "lowres_px": [
+        21167,
+        1496
+      ],
+      "highres_px": [
+        42334,
+        2992
+      ],
+      "lowres_megapixels": 31.666,
+      "demand_class": "out_of_distribution",
+      "layout_slices": 36,
+      "detection_chunks": 2,
+      "recognition_crop_bound": 31666,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 10186457823,
+      "notes": [
+        "page pixels 31665832 exceed characterized bound 30000000"
+      ]
+    },
+    {
+      "name": "ood-poster",
+      "width_pt": 20000.0,
+      "height_pt": 16000.0,
+      "lowres_px": [
+        26667,
+        21334
+      ],
+      "highres_px": [
+        53334,
+        42667
+      ],
+      "lowres_megapixels": 568.914,
+      "demand_class": "out_of_distribution",
+      "layout_slices": 414,
+      "detection_chunks": 16,
+      "recognition_crop_bound": 568901,
+      "recognition_tokens_per_crop": 703,
+      "peak_recognition_batch": 256,
+      "envelope_bytes": 67877371223,
+      "notes": [
+        "page pixels 568913778 exceed characterized bound 30000000"
+      ]
+    }
+  ],
+  "checks": {
+    "envelope_matches_component_arithmetic": true,
+    "crop_bound_monotone_in_highres_area": true,
+    "ood_cases_present_when_matrix_exceeds_bound": true,
+    "tokens_per_crop_equals_pinned_foundation_math": true
+  },
+  "unclaimed": [
+    "no CUDA hardware was exercised by this mode",
+    "the OOM-envelope conservatism of the coefficients is declared, not measured; --mode cuda plus real marker model residency is required before invariant 30 can claim full coverage"
+  ],
+  "elapsed_seconds": 0.105
+}
