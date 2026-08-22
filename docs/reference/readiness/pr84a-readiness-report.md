@@ -2,7 +2,7 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `38feb448ccb000f71d69fe9e70ab78f558849d30`
+- Audited source head: `00b3e8458ddf986eb2a3319164594d828678610c`
 - Invariants proven: **37 / 62**
 - Failed: **0**
 - No acceptable evidence: **25**

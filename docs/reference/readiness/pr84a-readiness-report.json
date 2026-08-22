@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "38feb448ccb000f71d69fe9e70ab78f558849d30"
+    "git_head": "00b3e8458ddf986eb2a3319164594d828678610c"
   },
   "verdict": "NOT_READY",
   "counts": {

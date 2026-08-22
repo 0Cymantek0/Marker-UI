@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-22T16:12:35+00:00",
-  "git_head": "38feb448ccb000f71d69fe9e70ab78f558849d30",
+  "generated_at": "2026-08-22T17:06:44+00:00",
+  "git_head": "00b3e8458ddf986eb2a3319164594d828678610c",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
