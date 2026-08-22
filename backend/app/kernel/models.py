@@ -1437,6 +1437,9 @@ class KernelContextDisclosure(Base):
         String(MAX_PACKET_ID_LENGTH), nullable=False
     )
     packet_json: Mapped[str] = mapped_column(Text, nullable=False)
+    delivery_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="complete"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -71,6 +71,7 @@ def upgrade() -> None:
             sa.Column("principal_id", sa.String(length=128), nullable=True),
             sa.Column("packet_id", sa.String(length=128), nullable=False),
             sa.Column("packet_json", sa.Text(), nullable=False),
+            sa.Column("delivery_status", sa.String(length=16), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
             sa.PrimaryKeyConstraint("disclosure_id"),
             sa.UniqueConstraint(

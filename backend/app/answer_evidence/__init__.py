@@ -26,7 +26,7 @@ from .errors import (
     AssessmentConflictError,
     DisclosureReferenceError,
 )
-from .service import AnswerEvidenceService
+from .service import AnswerEvidenceService, DELIVERY_STATUSES
 from .store import AnswerEvidenceStore
 
 __all__ = [
@@ -35,6 +35,7 @@ __all__ = [
     "ASSESSMENT_SCHEMA_VERSION",
     "ASSESSMENT_VERDICTS",
     "ASSESSOR_KINDS",
+    "DELIVERY_STATUSES",
     "UNASSESSED",
     "AnswerEvidenceContractError",
     "AnswerEvidenceError",

@@ -233,6 +233,7 @@ async def run_agent_query(
                     query["workspace_id"] if query is not None else workspace_id
                 ),
                 principal_id=principal_id,
+                delivery_status=outcome.status,
             )
     envelope = _outcome_envelope(outcome)
     if disclose:

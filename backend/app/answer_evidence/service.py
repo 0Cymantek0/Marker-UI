@@ -66,6 +66,9 @@ _MAX_RATIONALE_CHARS = domain.MAX_RATIONALE_CHARS
 _MAX_ASSESSMENT_KEY_LENGTH = domain.MAX_ASSESSMENT_KEY_LENGTH
 _MAX_ID_LENGTH = domain.MAX_ID_LENGTH
 
+#: Page-level outcome statuses that constitute a disclosure event.
+DELIVERY_STATUSES = frozenset({"complete", "partial", "loop_limit"})
+
 
 def _utc_now_iso(value: Any) -> str:
     # Model timestamps are timezone-aware UTC datetimes; render stably.
@@ -87,16 +90,25 @@ class AnswerEvidenceService:
         packet: Mapping[str, Any],
         workspace_id: str,
         principal_id: str | None = None,
+        delivery_status: str,
     ) -> dict[str, Any]:
         """Durably record one delivered EvidencePacket page.
 
         ``packet`` is the packet's own serializable view
-        (``packets.to_json``). The row is written before the caller can
-        see the page: if this write fails, the page was not delivered as
-        a disclosable result and the failure propagates.
+        (``packets.to_json``); ``delivery_status`` is the page-level
+        outcome status at delivery (``complete`` / ``partial`` /
+        ``loop_limit``), which is answer-time truth the packet body alone
+        does not carry. The row is written before the caller can see the
+        page: if this write fails, the page was not delivered as a
+        disclosable result and the failure propagates.
         """
 
         validate_workspace_id(workspace_id)
+        if delivery_status not in DELIVERY_STATUSES:
+            raise AnswerEvidenceContractError(
+                "delivery_status must be one of "
+                f"{sorted(DELIVERY_STATUSES)}"
+            )
         if principal_id is not None and (
             not isinstance(principal_id, str)
             or not 1 <= len(principal_id) <= domain.MAX_WORKSPACE_ID_LENGTH
@@ -117,10 +129,12 @@ class AnswerEvidenceService:
             principal_id=principal_id,
             packet_id=packet_id,
             packet_json=packet_json,
+            delivery_status=delivery_status,
         )
         return {
             "disclosure_id": row.disclosure_id,
             "packet_id": row.packet_id,
+            "delivery_status": row.delivery_status,
             "created_at": _utc_now_iso(row.created_at),
         }
 
@@ -392,6 +406,9 @@ class AnswerEvidenceService:
             {
                 "disclosure_id": link.disclosure_id,
                 "packet_id": disclosure_rows[link.disclosure_id].packet_id,
+                "delivery_status": disclosure_rows[
+                    link.disclosure_id
+                ].delivery_status,
                 "packet": json.loads(
                     disclosure_rows[link.disclosure_id].packet_json
                 ),
@@ -472,11 +489,25 @@ class AnswerEvidenceService:
 
 
 def _canonical(packet: Mapping[str, Any]) -> str:
-    from app.utils.canonical import canonical_json_str, to_json_ready
+    """Stable storage serialization of one delivered packet view.
+
+    Deliberately not the JCS identity profile: packet views carry
+    finite float ranks, which the canonical identity contract rejects
+    (and which the packet's own ``identity_id`` already excludes). The
+    packet identity is stored separately as ``packet_id``; this JSON
+    only needs deterministic bytes (sorted keys, fixed separators, no
+    NaN/Infinity) for lossless answer-time reconstruction.
+    """
 
     try:
-        return canonical_json_str(to_json_ready(dict(packet)))
-    except Exception as exc:  # noqa: BLE001 - normalize canonical failures
+        return json.dumps(
+            dict(packet),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
         raise AnswerEvidenceContractError(
-            f"packet view is not canonical JSON: {exc}"
+            f"packet view is not serializable JSON: {exc}"
         ) from exc

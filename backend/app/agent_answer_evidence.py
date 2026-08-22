@@ -79,16 +79,25 @@ def _service_instance() -> AnswerEvidenceService:
 
 
 def _envelope(payload: Mapping[str, Any]) -> dict[str, Any]:
-    return {
+    """Transport envelope: one schema_version for the seam, the record's
+    own schema preserved as ``record_schema_version``."""
+
+    body = dict(payload)
+    record_schema = body.pop("schema_version", None)
+    envelope: dict[str, Any] = {
         "schema_version": ANSWER_EVIDENCE_SCHEMA_VERSION,
-        **dict(payload),
+        **body,
     }
+    if record_schema is not None:
+        envelope["record_schema_version"] = record_schema
+    return envelope
 
 
 async def record_agent_disclosure(
     *,
     packet: Mapping[str, Any],
     workspace_id: str,
+    delivery_status: str,
     principal_id: str | None = None,
 ) -> str:
     """Durably record one delivered packet page; return its disclosure id.
@@ -104,6 +113,7 @@ async def record_agent_disclosure(
             packet=packet,
             workspace_id=workspace_id,
             principal_id=principal_id,
+            delivery_status=delivery_status,
         )
     except AnswerEvidenceError as exc:
         raise UsageError(str(exc)) from exc

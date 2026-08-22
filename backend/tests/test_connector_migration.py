@@ -227,7 +227,7 @@ class TestUpgradeFromPreConnectorSchema:
 
         # Canonical head upgrade.
         result = await upgrade_database(url=url)
-        assert result.to_revision == "20260823_0014"
+        assert result.to_revision == "20260823_0015"
 
         engine = create_engine(_sync_url(tmp_path, "mig.db"))
         try:

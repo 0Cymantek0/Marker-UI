@@ -41,6 +41,7 @@ class AnswerEvidenceStore:
         principal_id: str | None,
         packet_id: str,
         packet_json: str,
+        delivery_status: str,
     ) -> KernelContextDisclosure:
         row = KernelContextDisclosure(
             disclosure_id=disclosure_id,
@@ -48,6 +49,7 @@ class AnswerEvidenceStore:
             principal_id=principal_id,
             packet_id=packet_id,
             packet_json=packet_json,
+            delivery_status=delivery_status,
         )
         async with self.session_factory() as session:
             async with session.begin():
