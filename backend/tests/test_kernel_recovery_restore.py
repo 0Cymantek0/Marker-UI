@@ -285,6 +285,127 @@ async def test_corrupt_restored_source_object_fails_closed(
             await target.close()
 
 
+async def test_ownership_oracle_catches_corrupt_ownership_states(
+    tmp_path: Path,
+) -> None:
+    """The ownership component must flag the states a real crash or a
+    corrupted row can leave behind: in-flight work under a vacated
+    (released) lease, and an accepted publication whose recorded token
+    no longer matches its accepted lease."""
+    from sqlalchemy import update as sa_update
+
+    from app.kernel.models import KernelOutbox, KernelWorkLease
+
+    async with recovery_workspace(tmp_path) as ws:
+        manifest = await _capture(ws, tmp_path / "backups")
+        leased = ws.leased[0]
+
+        # baseline: the fixture's live ownership is healthy
+        report = await verify_recovery(
+            ws.session_factory,
+            database_url=ws.database_url,
+            workspace_id=ws.workspace_id,
+            manifest=manifest,
+            payload_store=ws.payload_store,
+            source_store=ws.source_store,
+            expected_query=ws.query_expectation,
+        )
+        assert report.check("ownership").ok
+
+        # flip the outbox to in_flight while the lease is released:
+        # a vacated owner must not count as actively owning work
+        async with ws.session_factory() as session:
+            await session.execute(
+                sa_update(KernelOutbox)
+                .where(KernelOutbox.id == leased.work_id)
+                .values(state="in_flight")
+                .execution_options(synchronize_session=False)
+            )
+            await session.execute(
+                sa_update(KernelWorkLease)
+                .where(KernelWorkLease.work_id == leased.work_id)
+                .values(state="released")
+                .execution_options(synchronize_session=False)
+            )
+            await session.commit()
+        report = await verify_recovery(
+            ws.session_factory,
+            database_url=ws.database_url,
+            workspace_id=ws.workspace_id,
+            manifest=manifest,
+            payload_store=ws.payload_store,
+            source_store=ws.source_store,
+        )
+        assert not report.check("ownership").ok
+        assert "vacated" in report.check("ownership").detail
+
+        # accepted publication whose lease token diverged: re-take the
+        # vacated lease, accept consistently, then corrupt the stored
+        # lease token and require the oracle to catch the divergence
+        from app.kernel.fencing import acquire as acquire_lease
+        from app.kernel.scheduler import accept_work
+
+        lease = await acquire_lease(
+            ws.session_factory,
+            work_id=leased.work_id,
+            owner_id=leased.owner_id,
+            lease_seconds=60.0,
+        )
+        assert lease is not None and lease.fencing_token > leased.fencing_token
+        await accept_work(
+            ws.session_factory,
+            work_id=leased.work_id,
+            fencing_token=lease.fencing_token,
+            result=leased.result,
+        )
+        async with ws.session_factory() as session:
+            await session.execute(
+                sa_update(KernelWorkLease)
+                .where(KernelWorkLease.work_id == leased.work_id)
+                .values(fencing_token=lease.fencing_token + 5)
+                .execution_options(synchronize_session=False)
+            )
+            await session.commit()
+        report = await verify_recovery(
+            ws.session_factory,
+            database_url=ws.database_url,
+            workspace_id=ws.workspace_id,
+            manifest=manifest,
+            payload_store=ws.payload_store,
+            source_store=ws.source_store,
+        )
+        assert not report.check("ownership").ok
+        assert "token_mismatch" in report.check("ownership").detail
+
+
+async def test_oracle_converts_payload_store_refusal_to_failed_check(
+    tmp_path: Path,
+) -> None:
+    """A payload store that raises during closure verification must
+    produce a failed component, never an aborted oracle."""
+
+    class _ExplodingStore:
+        async def check_object(self, blob_key, *, expected_length=None):
+            raise RuntimeError("store refused")
+
+    async with recovery_workspace(tmp_path) as ws:
+        manifest = await _capture(ws, tmp_path / "backups")
+        report = await verify_recovery(
+            ws.session_factory,
+            database_url=ws.database_url,
+            workspace_id=ws.workspace_id,
+            manifest=manifest,
+            payload_store=_ExplodingStore(),
+            source_store=ws.source_store,
+        )
+        assert not report.ready
+        payload_check = report.check("payload_closure")
+        assert not payload_check.ok
+        assert "store refused" in payload_check.detail
+        # every other component still reported
+        assert report.check("database").ok
+
+
 async def test_missing_lexical_physical_state_holds_readiness(
     tmp_path: Path,
 ) -> None:

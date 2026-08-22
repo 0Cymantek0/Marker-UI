@@ -1,0 +1,133 @@
+{
+  "capture_restore": {
+    "capture_durations": {
+      "dump_bytes": 75059,
+      "dump_seconds": 0.843,
+      "payload_bytes_copied": 205,
+      "payload_copy_seconds": 0.047,
+      "payload_object_count": 2,
+      "quiesce_seconds": 1.656,
+      "source_bytes_copied": 125,
+      "source_copy_seconds": 0.078,
+      "source_object_count": 2,
+      "total_seconds": 1.656
+    },
+    "capture_idempotent": true,
+    "capture_verification": {
+      "checks": [
+        {
+          "detail": "2 objects verified",
+          "name": "payload_closure",
+          "ok": true
+        },
+        {
+          "detail": "2 artifacts verified",
+          "name": "source_closure",
+          "ok": true
+        }
+      ],
+      "problems": [],
+      "ready": true
+    },
+    "capture_verified": true,
+    "capture_wall_seconds": 1.655999999999949,
+    "damaged_backup_refused": true,
+    "last_committed_pre_disaster_cut": 8,
+    "oracle_seconds": 0.4070000000001528,
+    "recovery_point_id": "sha256:f054acb50fb0b4d5e1bf2c1d8c88f4d5e3ac480241b128ab647e37725aa46e1e",
+    "restore_oracle": {
+      "checks": [
+        {
+          "detail": "head=20260819_0013",
+          "name": "database",
+          "ok": true
+        },
+        {
+          "detail": "cut=6 snapshot=sha256:bff829f9e56fdfc34523233c462c7756346ba194e70a2648e9a7e470f1dc8245 completeness=complete",
+          "name": "cut",
+          "ok": true
+        },
+        {
+          "detail": "2 objects verified",
+          "name": "payload_closure",
+          "ok": true
+        },
+        {
+          "detail": "2 artifacts verified",
+          "name": "source_closure",
+          "ok": true
+        },
+        {
+          "detail": "profile 'default': query determinism verified (2 hits)",
+          "name": "publication",
+          "ok": true
+        },
+        {
+          "detail": "in_flight=0 publications=0 no ownership problems",
+          "name": "ownership",
+          "ok": true
+        }
+      ],
+      "problems": [],
+      "ready": true
+    },
+    "restore_oracle_ready": true,
+    "restore_tail_exact": true,
+    "restore_wall_seconds": 2.1710000000002765,
+    "restored_head_cut": 6,
+    "rpo_commit_delta_lost": 2,
+    "rpo_source_objects_lost": 1,
+    "tail_write_seconds": 0.125
+  },
+  "dump_sidecar_image": "postgres:16-alpine",
+  "failover": {
+    "exactly_one_publication": true,
+    "failover_rto_ready": true,
+    "post_failover_new_commit": true,
+    "recovered_cut": 6,
+    "recovery_fence_token": 2,
+    "rto_components_seconds": {
+      "boot": 1.34956,
+      "query_ready": 1.506331,
+      "semantic_ready": 1.448974,
+      "source_ready": 1.470565,
+      "work_ready": 1.558331,
+      "write_ready": 1.595786
+    },
+    "stale_owner_rejected": true,
+    "takeover_advanced_fence": true
+  },
+  "generated_at": "2026-08-22T06:58:15.411620+00:00",
+  "git_head": "845bd13338daccb7ea451ee1650eba0b18e6558a",
+  "non_claims": [
+    "single-host CI-grade drill measurements, not a production SLO",
+    "logical per-point pg_dump backup, no PITR/WAL archiving",
+    "no standby promotion or multi-region topology tested",
+    "application-level failover only; database HA is out of scope"
+  ],
+  "object_store_banner": "MinIO",
+  "object_store_endpoint": "http://127.0.0.1:55446",
+  "postgres_banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+  "regression": {
+    "failed": 0,
+    "passed": 3150,
+    "skipped": 199
+  },
+  "schema": "marker.pr83c1_recovery_measurement.v1",
+  "strict_matrix": {
+    "failed": 0,
+    "passed": 411,
+    "skipped": 0
+  },
+  "structural_acceptance": {
+    "capture_idempotent": true,
+    "capture_verified": true,
+    "damaged_backup_refused": true,
+    "exactly_one_publication": true,
+    "failover_rto_ready": true,
+    "post_failover_new_commit": true,
+    "restore_oracle_ready": true,
+    "restore_tail_exact": true,
+    "stale_owner_rejected": true
+  }
+}
