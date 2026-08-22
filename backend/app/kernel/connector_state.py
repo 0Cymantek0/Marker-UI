@@ -416,25 +416,12 @@ async def apply_connector_effects(
 
     Both under the writer lock the commit already holds and validated by
     :func:`check_connector_effects` in the same transaction, so the
-    compare-and-set below cannot lose an update silently.
+    compare-and-set below cannot lose an update silently. The stream
+    row lands first: the inbox's foreign key must be satisfiable inside
+    this transaction on dialects that enforce constraints immediately
+    (PostgreSQL), not only on deferred-check or FK-disabled lanes.
     """
     from datetime import datetime, timezone
-
-    for entry in effects.inbox:
-        session.add(
-            KernelConnectorInbox(
-                workspace_id=effects.workspace_id,
-                stream_id=effects.stream_id,
-                provider_event_id=entry.provider_event_id,
-                event_kind=entry.event_kind,
-                provider_item_id=entry.provider_item_id,
-                provider_revision=entry.provider_revision,
-                provider_seq=entry.provider_seq,
-                applied_state=entry.applied_state,
-                applied_kernel_commit_id=next_commit_id,
-                result_json=canonical_json_str(to_json_ready(dict(entry.result))),
-            )
-        )
 
     if flip.kind == "insert":
         session.add(
@@ -448,6 +435,12 @@ async def apply_connector_effects(
                 applied_kernel_commit_id=next_commit_id,
             )
         )
+        # The inbox foreign key must be satisfiable inside this
+        # transaction on dialects that enforce constraints immediately
+        # (PostgreSQL). Without an ORM relationship the unit-of-work
+        # cannot infer the table order, so the stream row is flushed
+        # explicitly before any inbox row exists.
+        await session.flush()
     elif flip.kind == "update":
         conditions = [KernelConnectorStream.stream_id == flip.stream_id]
         if flip.expected_cursor_token is not None:
@@ -471,3 +464,19 @@ async def apply_connector_effects(
                 expected_cursor_token=flip.expected_cursor_token,
                 observed_cursor=None,
             )
+
+    for entry in effects.inbox:
+        session.add(
+            KernelConnectorInbox(
+                workspace_id=effects.workspace_id,
+                stream_id=effects.stream_id,
+                provider_event_id=entry.provider_event_id,
+                event_kind=entry.event_kind,
+                provider_item_id=entry.provider_item_id,
+                provider_revision=entry.provider_revision,
+                provider_seq=entry.provider_seq,
+                applied_state=entry.applied_state,
+                applied_kernel_commit_id=next_commit_id,
+                result_json=canonical_json_str(to_json_ready(dict(entry.result))),
+            )
+        )

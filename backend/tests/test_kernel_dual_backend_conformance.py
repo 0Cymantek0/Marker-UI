@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db_migration import DatabaseState, upgrade_database, verify_database_ready
 from app.kernel.commit import (
+    PHASE_CONNECTOR_APPLIED,
     PHASE_HEAD_ADVANCED,
     PHASE_MANIFEST_INSERTED,
     PHASE_OUTBOX_INSERTED,
@@ -40,17 +41,29 @@ from app.kernel.commit import (
     KernelCommitBatch,
     KernelCommitService,
 )
-from app.kernel.errors import DuplicateRecordIdentityError
+from app.kernel.connector_state import (
+    ConnectorCursorAdvancement,
+    ConnectorEffects,
+    ConnectorInboxEntry,
+)
+from app.kernel.errors import (
+    DuplicateConnectorEventError,
+    DuplicateRecordIdentityError,
+    InjectedFaultError,
+    StaleCursorError,
+)
 from app.kernel.models import (
     KernelCommitHead,
     KernelCommitManifest,
+    KernelConnectorInbox,
+    KernelConnectorStream,
     KernelOutbox,
     KernelPayloadObject,
     KernelRecord,
 )
 from app.kernel.outbox import OutboxIntent
 from app.kernel.payloads import LocalPayloadStore
-from app.kernel.records import ObservationRecord
+from app.kernel.records import ObservationRecord, SourceObservationRecord
 from tests.pg_provisioning import (
     BACKENDS,
     engine_kwargs_for,
@@ -455,3 +468,238 @@ async def test_declared_hash_reuses_verified_object(commit_env) -> None:
     assert third.payload_blob_keys == (key,)  # declared hash reused the object
     registry = await _count(commit_env.session_factory, KernelPayloadObject)
     assert registry == 1
+
+
+# ---------------------------------------------------------------------------
+# Matrix row: PR71B connector convergence effects (T29 dual-backend lane)
+# ---------------------------------------------------------------------------
+
+
+class TestConnectorConvergenceDualBackend:
+    """Connector checkpoint/inbox effects over both database profiles.
+
+    The extension must behave identically on the local SQLite profile
+    and the industrial PostgreSQL profile: the kernel owns one
+    transaction protocol, and the conditional cursor flip relies only
+    on rowcount-verified compare-and-set updates that both dialects
+    execute inside the commit transaction.
+    """
+
+    async def test_connector_unit_commits_atomically(self, commit_env) -> None:
+        service = commit_env.service
+        record = SourceObservationRecord(
+            observer="connector",
+            source_ref="src.db.1",
+            outcome="policy_updated",
+        )
+        receipt = await service.commit(
+            KernelCommitBatch(
+                workspace_id="conn",
+                records=(record,),
+                outbox=(
+                    OutboxIntent(
+                        work_kind="source.invalidated",
+                        payload={"source_key": "connector:p:a:i1"},
+                    ),
+                ),
+                connector=ConnectorEffects(
+                    workspace_id="conn",
+                    stream_id="drive:a:root",
+                    inbox=(
+                        ConnectorInboxEntry(
+                            provider_event_id="evt-1",
+                            event_kind="policy_changed",
+                            applied_state="applied",
+                            provider_item_id="i1",
+                            provider_seq=1,
+                            result={"note": "dual-backend"},
+                        ),
+                    ),
+                    cursor=ConnectorCursorAdvancement(
+                        expected_cursor_token=None,
+                        new_cursor_token="tok-1",
+                        new_cursor_seq=1,
+                    ),
+                ),
+            )
+        )
+        assert receipt.kernel_commit_id == 1
+
+        async with commit_env.session_factory() as session:
+            stream = await session.get(KernelConnectorStream, "drive:a:root")
+            inbox = (
+                (
+                    await session.execute(
+                        select(KernelConnectorInbox).where(
+                            KernelConnectorInbox.stream_id == "drive:a:root"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            outbox = (
+                (
+                    await session.execute(
+                        select(KernelOutbox).where(
+                            KernelOutbox.workspace_id == "conn"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert stream is not None
+        assert stream.cursor_token == "tok-1"
+        assert stream.cursor_seq == 1
+        assert stream.applied_kernel_commit_id == receipt.kernel_commit_id
+        assert len(inbox) == 1
+        assert inbox[0].provider_event_id == "evt-1"
+        assert inbox[0].applied_kernel_commit_id == receipt.kernel_commit_id
+        assert len(outbox) == 1
+        assert outbox[0].kernel_commit_id == receipt.kernel_commit_id
+
+    async def test_stale_cursor_and_duplicate_event_refusals_roll_back(
+        self, commit_env
+    ) -> None:
+        service = commit_env.service
+
+        async def make_record(tag: str) -> SourceObservationRecord:
+            return SourceObservationRecord(
+                observer="connector",
+                source_ref=f"src.db.{tag}",
+                outcome="policy_updated",
+            )
+
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="conn2",
+                records=(await make_record("base"),),
+                connector=ConnectorEffects(
+                    workspace_id="conn2",
+                    stream_id="drive:b:root",
+                    cursor=ConnectorCursorAdvancement(
+                        expected_cursor_token=None,
+                        new_cursor_token="tok-1",
+                    ),
+                ),
+            )
+        )
+        # Deliver one event so a later batch can redeliver its identity.
+        await service.commit(
+            KernelCommitBatch(
+                workspace_id="conn2",
+                records=(await make_record("evt"),),
+                connector=ConnectorEffects(
+                    workspace_id="conn2",
+                    stream_id="drive:b:root",
+                    inbox=(
+                        ConnectorInboxEntry(
+                            provider_event_id="evt-dup",
+                            event_kind="content_changed",
+                            applied_state="applied",
+                        ),
+                    ),
+                    cursor=ConnectorCursorAdvancement(
+                        expected_cursor_token="tok-1",
+                        new_cursor_token="tok-2",
+                    ),
+                ),
+            )
+        )
+        manifests_before = await _count(
+            commit_env.session_factory, KernelCommitManifest
+        )
+
+        # Stale cursor: an advancement based on a token that is no
+        # longer current rolls the entire batch back on both backends.
+        with pytest.raises(StaleCursorError):
+            await service.commit(
+                KernelCommitBatch(
+                    workspace_id="conn2",
+                    records=(await make_record("stale"),),
+                    connector=ConnectorEffects(
+                        workspace_id="conn2",
+                        stream_id="drive:b:root",
+                        cursor=ConnectorCursorAdvancement(
+                            expected_cursor_token="wrong-token",
+                            new_cursor_token="tok-3",
+                        ),
+                    ),
+                )
+            )
+        # Duplicate event: the inbox unique authority refuses a batch
+        # redelivering a recorded event identity.
+        with pytest.raises(DuplicateConnectorEventError):
+            await service.commit(
+                KernelCommitBatch(
+                    workspace_id="conn2",
+                    records=(await make_record("dup"),),
+                    connector=ConnectorEffects(
+                        workspace_id="conn2",
+                        stream_id="drive:b:root",
+                        inbox=(
+                            ConnectorInboxEntry(
+                                provider_event_id="evt-dup",
+                                event_kind="content_changed",
+                                applied_state="applied",
+                            ),
+                        ),
+                        cursor=ConnectorCursorAdvancement(
+                            expected_cursor_token="tok-2",
+                            new_cursor_token="tok-3",
+                        ),
+                    ),
+                )
+            )
+        manifests_after = await _count(
+            commit_env.session_factory, KernelCommitManifest
+        )
+        assert manifests_before == manifests_after  # nothing from refused batches
+
+    async def test_connector_fault_rolls_back_and_retry_converges(
+        self, commit_env
+    ) -> None:
+        service = commit_env.service
+
+        def batch() -> KernelCommitBatch:
+            return KernelCommitBatch(
+                workspace_id="conn3",
+                records=(
+                    SourceObservationRecord(
+                        observer="connector",
+                        source_ref="src.db.3",
+                        outcome="policy_updated",
+                    ),
+                ),
+                connector=ConnectorEffects(
+                    workspace_id="conn3",
+                    stream_id="drive:c:root",
+                    inbox=(
+                        ConnectorInboxEntry(
+                            provider_event_id="evt-1",
+                            event_kind="content_changed",
+                            applied_state="applied",
+                            provider_seq=1,
+                        ),
+                    ),
+                    cursor=ConnectorCursorAdvancement(
+                        expected_cursor_token=None,
+                        new_cursor_token="tok-1",
+                        new_cursor_seq=1,
+                    ),
+                ),
+            )
+
+        with pytest.raises(InjectedFaultError):
+            await service.commit(batch(), _inject_fault_at=PHASE_CONNECTOR_APPLIED)
+
+        async with commit_env.session_factory() as session:
+            assert await session.get(KernelConnectorStream, "drive:c:root") is None
+            inbox = (
+                (await session.execute(select(KernelConnectorInbox))).scalars().all()
+            )
+        assert inbox == []
+
+        receipt = await service.commit(batch())
+        assert receipt.kernel_commit_id == 1  # retry converged cleanly
