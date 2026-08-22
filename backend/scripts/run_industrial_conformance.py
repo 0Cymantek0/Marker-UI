@@ -57,6 +57,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 #: PR83B2 adds real-backend lexical publication + query serving.
 #: PR83B3 adds the industrial source-artifact topology (store,
 #: acquisition, runtime, and process-boundary proofs).
+#: PR83C1 adds the industrial recovery boundary (recovery-point capture,
+#: destructive restore + oracle, and OS-process failover drills).
 TEST_TARGETS = (
     "tests/test_kernel_dual_backend_conformance.py",
     "tests/test_kernel_control_plane_conformance.py",
@@ -73,6 +75,9 @@ TEST_TARGETS = (
     "tests/test_kernel_source_acquisition_s3.py",
     "tests/test_kernel_source_runtime_s3.py",
     "tests/test_kernel_source_industrial_topology.py",
+    "tests/test_kernel_recovery_point.py",
+    "tests/test_kernel_recovery_restore.py",
+    "tests/test_kernel_recovery_failover.py",
 )
 
 S3_ENDPOINT_ENV = "MARKER_TEST_S3_ENDPOINT"

@@ -210,6 +210,9 @@ jobs:
             tests/test_kernel_source_acquisition_s3.py \
             tests/test_kernel_source_runtime_s3.py \
             tests/test_kernel_source_industrial_topology.py \
+            tests/test_kernel_recovery_point.py \
+            tests/test_kernel_recovery_restore.py \
+            tests/test_kernel_recovery_failover.py \
             -q -rs --no-header | tee pytest-industrial.out
 
       - name: "Guard: fail on any skip in the industrial matrix"

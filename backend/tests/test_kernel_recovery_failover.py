@@ -40,9 +40,44 @@ from tests.s3_provisioning import unique_bucket
 pytestmark = pytest.mark.asyncio
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
-PG_CONTAINER = os.environ.get("MARKER_TEST_PG_CONTAINER", "marker-pg-industrial")
-S3_CONTAINER = os.environ.get("MARKER_TEST_S3_CONTAINER", "marker-minio-industrial")
 PROBE_LEASE_SECONDS = 1.5
+
+
+def _port_from_url(url: str, default: int) -> int:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    return parsed.port or default
+
+
+def _pg_port() -> int:
+    return _port_from_url(os.environ["MARKER_TEST_POSTGRES_ADMIN_URL"], 5432)
+
+
+def _s3_port() -> int:
+    return _port_from_url(os.environ["MARKER_TEST_S3_ENDPOINT"], 9000)
+
+
+def _container_by_port(host_port: int) -> str:
+    """Find the container publishing host_port — works for locally
+    provisioned containers and CI service containers alike (their names
+    are generated, their published ports are not)."""
+    import subprocess as sync_subprocess
+
+    output = sync_subprocess.run(
+        ["docker", "ps", "--format", "{{.ID}} {{.Names}} {{.Ports}}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and f"{host_port}->" in parts[2]:
+            return parts[1]
+    raise AssertionError(
+        f"no container publishes host port {host_port}; the outage drills "
+        "need docker control over the real services"
+    )
 
 
 class DrillHarness:
@@ -80,10 +115,12 @@ class DrillHarness:
         return env
 
     async def spawn(self, mode: str, env: dict[str, str]) -> asyncio.subprocess.Process:
+        import sys as _sys
+
         merged = dict(env)
         merged["PROBE_MODE"] = mode
         return await asyncio.create_subprocess_exec(
-            os.environ.get("PROBE_PYTHON", "python"),
+            os.environ.get("PROBE_PYTHON", _sys.executable),
             "-X",
             "utf8",
             "-m",
@@ -214,7 +251,7 @@ async def test_replacement_process_takeover_with_stale_owner_rejection(
     completion is fenced out, exactly one publication remains, and the
     RTO from kill to verified post-recovery write is measured."""
     async with full_drill(tmp_path) as drill:
-        setup, claim, milestones = drill["setup"], drill["claim"], drill["milestones"]
+        claim, milestones = drill["claim"], drill["milestones"]
         recovered = drill["recovered"]
         work_id = drill["work_id"]
         factory = drill["factory"]
@@ -344,13 +381,14 @@ async def test_database_outage_during_takeover_fails_honestly(
         recover_env["PROBE_KILL_EPOCH"] = str(time.time())
 
         # -- PostgreSQL goes down mid-recovery -----------------------------
-        sync_subprocess.run(["docker", "stop", PG_CONTAINER], check=True)
+        pg_container = _container_by_port(_pg_port())
+        sync_subprocess.run(["docker", "stop", pg_container], check=True)
         try:
             code, events, err = await harness.run_probe("recover", recover_env)
             assert code != 0, "recovery must not succeed without the database"
             assert "RECOVERED" not in err and "recovered" not in events
         finally:
-            sync_subprocess.run(["docker", "start", PG_CONTAINER], check=True)
+            sync_subprocess.run(["docker", "start", pg_container], check=True)
         await _wait_postgres_ready(admin_url)
 
         # -- authority returns: recovery completes -------------------------
@@ -427,12 +465,13 @@ async def test_s3_outage_during_source_recovery_fails_honestly(
         recover_env["PROBE_OWNER"] = "worker-b"
         recover_env["PROBE_KILL_EPOCH"] = str(time.time())
 
-        sync_subprocess.run(["docker", "stop", S3_CONTAINER], check=True)
+        s3_container = _container_by_port(_s3_port())
+        sync_subprocess.run(["docker", "stop", s3_container], check=True)
         try:
             code, events, err = await harness.run_probe("recover", recover_env)
             assert code != 0, "recovery must not succeed without the object store"
         finally:
-            sync_subprocess.run(["docker", "start", S3_CONTAINER], check=True)
+            sync_subprocess.run(["docker", "start", s3_container], check=True)
         await _wait_s3_ready(endpoint)
 
         code, events, err = await harness.run_probe("recover", recover_env)
