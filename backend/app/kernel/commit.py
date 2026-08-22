@@ -62,6 +62,11 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.kernel.connector_state import (
+    ConnectorEffects,
+    apply_connector_effects,
+    check_connector_effects,
+)
 from app.kernel.dialects import (
     advisory_xact_lock,
     dialect_insert,
@@ -140,6 +145,8 @@ __all__ = [
     "KernelCommitReceipt",
     "KernelCommitService",
     "PHASE_BEGIN",
+    "PHASE_CONNECTOR_APPLIED",
+    "PHASE_CONNECTOR_CHECKED",
     "PHASE_EDGES_INSERTED",
     "PHASE_HEAD_ADVANCED",
     "PHASE_HEAD_READ",
@@ -159,6 +166,7 @@ __all__ = [
 PHASE_BEGIN = "begin"
 PHASE_HEAD_READ = "head-read"
 PHASE_VIEW_CHECKED = "view-checked"
+PHASE_CONNECTOR_CHECKED = "connector-checked"
 PHASE_PROOF_CHECKED = "proof-checked"
 PHASE_RISK_CHECKED = "risk-checked"
 PHASE_RECORDS_INSERTED = "records-inserted"
@@ -166,6 +174,7 @@ PHASE_PAYLOADS_REGISTERED = "payloads-registered"
 PHASE_EDGES_INSERTED = "edges-inserted"
 PHASE_MANIFEST_INSERTED = "manifest-inserted"
 PHASE_OUTBOX_INSERTED = "outbox-inserted"
+PHASE_CONNECTOR_APPLIED = "connector-applied"
 PHASE_VIEW_ADVANCED = "view-advanced"
 PHASE_HEAD_ADVANCED = "head-advanced"
 PHASE_PRE_COMMIT = "pre-commit"
@@ -175,6 +184,7 @@ FAULT_PHASES = frozenset(
         PHASE_BEGIN,
         PHASE_HEAD_READ,
         PHASE_VIEW_CHECKED,
+        PHASE_CONNECTOR_CHECKED,
         PHASE_PROOF_CHECKED,
         PHASE_RISK_CHECKED,
         PHASE_RECORDS_INSERTED,
@@ -182,6 +192,7 @@ FAULT_PHASES = frozenset(
         PHASE_EDGES_INSERTED,
         PHASE_MANIFEST_INSERTED,
         PHASE_OUTBOX_INSERTED,
+        PHASE_CONNECTOR_APPLIED,
         PHASE_VIEW_ADVANCED,
         PHASE_HEAD_ADVANCED,
         PHASE_PRE_COMMIT,
@@ -229,6 +240,11 @@ class KernelCommitBatch:
     #: conditional view-revision movement evaluated and flipped inside
     #: this commit's transaction (PR73); None for non-advancing batches
     view_advancement: ViewAdvancement | None = None
+    #: connector convergence effects (PR71B, amendment 16B.7): durable
+    #: inbox receipts and/or the conditional stream-checkpoint movement
+    #: that must share this commit's transaction with the source truth
+    #: being applied; None for non-connector batches
+    connector: ConnectorEffects | None = None
 
 
 @dataclass(frozen=True)
@@ -317,9 +333,15 @@ class KernelCommitService:
         workspace_id = validate_workspace_id(batch.workspace_id)
         records = tuple(batch.records)
         edges = tuple(batch.edges)
-        if not records and not edges:
+        if (
+            not records
+            and not edges
+            and batch.connector is None
+            and batch.view_advancement is None
+        ):
             raise EmptyBatchError(
-                f"workspace={workspace_id!r}: batch contains neither records nor edges"
+                f"workspace={workspace_id!r}: batch contains neither records nor edges "
+                "nor connector effects"
             )
         if len(records) > self._max_batch_records:
             raise BatchTooLargeError(
@@ -471,6 +493,7 @@ class KernelCommitService:
                     prepared_outbox,
                     staged_payloads,
                     batch.view_advancement,
+                    batch.connector,
                     _inject_fault_at,
                 )
             except _PayloadVanishedMidCommit:
@@ -523,6 +546,7 @@ class KernelCommitService:
         prepared_outbox: Sequence[tuple[OutboxIntent, str]],
         staged_payloads: Mapping[str, tuple[int, str]],
         view_advancement: ViewAdvancement | None,
+        connector_effects: ConnectorEffects | None,
         inject_fault_at: str | None,
     ) -> KernelCommitReceipt:
         def maybe_inject(phase: str) -> None:
@@ -707,6 +731,22 @@ class KernelCommitService:
                 )
                 maybe_inject(PHASE_RISK_CHECKED)
 
+                # 2.95. PR71B connector effects. Still before any insert
+                #      and still under the writer lock: stream state,
+                #      cursor expectations, and durable event dedupe are
+                #      validated against current authoritative stream
+                #      state, so a stale cursor or a redelivered provider
+                #      event rolls the whole batch back before anything
+                #      becomes visible.
+                connector_flip = None
+                if connector_effects is not None:
+                    connector_flip = await check_connector_effects(
+                        session,
+                        workspace_id=workspace_id,
+                        effects=connector_effects,
+                    )
+                maybe_inject(PHASE_CONNECTOR_CHECKED)
+
                 # 3. Insert logical records.
                 session.add_all(
                     KernelRecord(
@@ -832,6 +872,22 @@ class KernelCommitService:
                     if result.rowcount == 1:
                         inserted_outbox_keys.append(dedupe_key)
                 maybe_inject(PHASE_OUTBOX_INSERTED)
+
+                # 5.6. PR71B connector effects: durable inbox receipts
+                #      and the conditional stream-checkpoint flip. Same
+                #      transaction, same writer lock, same all-or-nothing
+                #      boundary as everything above — the checkpoint that
+                #      names consumed provider progress cannot survive a
+                #      rollback, and committed source truth cannot lose
+                #      its receipt evidence.
+                if connector_flip is not None:
+                    await apply_connector_effects(
+                        session,
+                        flip=connector_flip,
+                        effects=connector_effects,
+                        next_commit_id=next_commit_id,
+                    )
+                maybe_inject(PHASE_CONNECTOR_APPLIED)
 
                 # 5.7. PR73 view head movement. Conditional on the exact
                 #      base observed during the check above (still under

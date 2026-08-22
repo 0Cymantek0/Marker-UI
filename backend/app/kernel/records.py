@@ -451,11 +451,22 @@ SOURCE_CONSISTENCY_CLASSES = frozenset(
 
 #: Logical source kinds for this slice. ``upload`` is an immutable
 #: Marker-UI-owned upload occurrence; ``local_path`` is a permitted-root
-#: path; ``url`` is a fetched remote origin (best-effort consistency).
+#: path; ``url`` is a fetched remote origin (best-effort consistency);
+#: ``connector`` is a remote provider item ingested through the connector
+#: convergence core, whose logical key is provider-qualified identity
+#: (never a path, URL, or content hash).
 SOURCE_KIND_LOCAL_PATH = "local_path"
 SOURCE_KIND_UPLOAD = "upload"
 SOURCE_KIND_URL = "url"
-SOURCE_KINDS = frozenset({SOURCE_KIND_LOCAL_PATH, SOURCE_KIND_UPLOAD, SOURCE_KIND_URL})
+SOURCE_KIND_CONNECTOR = "connector"
+SOURCE_KINDS = frozenset(
+    {
+        SOURCE_KIND_LOCAL_PATH,
+        SOURCE_KIND_UPLOAD,
+        SOURCE_KIND_URL,
+        SOURCE_KIND_CONNECTOR,
+    }
+)
 
 _SOURCE_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/\\@-]{0,511}$")
 _BLOB_KEY_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -636,6 +647,13 @@ class SourceObservationRecord(KernelRecord):
     Rejected incoherent acquisitions record ``outcome=rejected_incoherent``
     with ``content_revision_ref=None`` — the failure is inspectable
     without having minted a revision.
+
+    Connector lifecycle outcomes (PR71B amendment 16B.7) also leave the
+    content-revision reference empty: ``policy_updated`` records a
+    policy/ACL-only transition, ``access_lost`` records deletion or
+    loss-of-access (the live-deny consequence is the paired
+    AccessDenialRecord), and ``restored`` records reappearance under the
+    same provider identity.
     """
 
     record_class: ClassVar[str] = _RECORD_CLASS_SOURCE_OBSERVATION
@@ -649,6 +667,19 @@ class SourceObservationRecord(KernelRecord):
     authorization_epoch: int = 0
     evidence: Mapping[str, Any] = field(default_factory=dict)
 
+    #: acquisition outcomes (PR70/71) plus connector lifecycle outcomes
+    SOURCE_OBSERVATION_OUTCOMES = frozenset(
+        {
+            "accepted",
+            "rejected_incoherent",
+            "downgraded",
+            "policy_updated",
+            "access_lost",
+            "restored",
+            "metadata_updated",
+        }
+    )
+
     def __post_init__(self) -> None:
         super().__post_init__()
         validate_record_ref(self.source_ref, field_name="source_ref")
@@ -658,14 +689,10 @@ class SourceObservationRecord(KernelRecord):
             )
         if self.access_policy_ref is not None:
             validate_record_ref(self.access_policy_ref, field_name="access_policy_ref")
-        allowed = {
-            "accepted",
-            "rejected_incoherent",
-            "downgraded",
-        }
-        if self.outcome not in allowed:
+        if self.outcome not in self.SOURCE_OBSERVATION_OUTCOMES:
             raise KernelError(
-                f"invalid outcome: {self.outcome!r}; allowed: {sorted(allowed)}"
+                f"invalid outcome: {self.outcome!r}; allowed: "
+                f"{sorted(self.SOURCE_OBSERVATION_OUTCOMES)}"
             )
         if self.outcome == "accepted" and self.content_revision_ref is None:
             raise KernelError(

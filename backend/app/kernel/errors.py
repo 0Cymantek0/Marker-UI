@@ -437,3 +437,55 @@ class ClaimPreconditionUnmetError(KernelError):
     def __init__(self, detail: str) -> None:
         self.detail = detail
         super().__init__(f"claim precondition unmet: {detail}")
+
+
+# --- PR71B: connector convergence core (amendment 16B.7) -------------------
+
+
+class InvalidConnectorEffectsError(KernelError):
+    """A connector batch effect failed structural validation at the kernel
+    boundary (stream/cursor grammar, event vocabulary, or a cursor
+    advancement inconsistent with its inbox rows).
+
+    Fail-closed: the commit seam never guesses which stream state was
+    meant."""
+
+
+class StaleCursorError(KernelError):
+    """The connector stream advancement targeted a cursor token that is
+    not the current durably-applied checkpoint of its stream.
+
+    Attributes carry both tokens, so callers can distinguish "checkpoint
+    moved underneath me" (``observed_cursor`` set) from "stream never
+    initialized / targeted unknown state" (``observed_cursor`` is
+    ``None``). A stale advancement never partially applies; the whole
+    commit rolls back."""
+
+    def __init__(
+        self,
+        *,
+        expected_cursor_token: str | None,
+        observed_cursor: str | None,
+    ) -> None:
+        self.expected_cursor_token = expected_cursor_token
+        self.observed_cursor = observed_cursor
+        super().__init__(
+            "stale connector cursor: advancement based on "
+            f"{expected_cursor_token!r} but the current checkpoint is "
+            f"{observed_cursor!r}"
+        )
+
+
+class DuplicateConnectorEventError(KernelError):
+    """A connector batch carried a provider event identity that is already
+    durably recorded in the stream's inbox.
+
+    Duplicate delivery is expected provider behavior, not an error in
+    the caller's logic: the caller re-reads the inbox, marks the redelivery,
+    and converges onto the already-committed application state."""
+
+
+class ConnectorStreamStateError(KernelError):
+    """The requested operation conflicts with the connector stream's
+    durable lifecycle state (e.g. advancing a checkpoint while the stream
+    awaits reconciliation, or reconciling a healthy stream)."""

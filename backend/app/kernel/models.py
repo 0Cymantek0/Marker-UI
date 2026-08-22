@@ -148,6 +148,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    BigInteger,
     DateTime,
     Float,
     ForeignKey,
@@ -1262,3 +1263,119 @@ class KernelQueryCursor(Base):
 # Short alias keeps generic kernel callers ergonomic while the canonical class
 # name distinguishes query continuation rows from future event cursors.
 KernelCursor = KernelQueryCursor
+
+
+# --- PR71B: connector convergence core (amendment 16B.7) --------------------
+
+
+class KernelConnectorStream(Base):
+    """Durable checkpoint + lifecycle state for one connector stream.
+
+    One row per provider synchronization stream (provider account /
+    source collection). ``cursor_token`` is the opaque provider
+    checkpoint that was last **durably applied** — never merely fetched:
+    it moves ONLY inside a kernel commit transaction together with the
+    source truth that consumed it (see ``app.kernel.commit``), so a
+    visible cursor always implies the state it names was accepted.
+    ``cursor_seq`` carries the provider's comparable sequence number at
+    that checkpoint when the provider exposes one (gap detection).
+
+    ``state`` is the explicit health vocabulary: ``consuming`` streams
+    may advance; ``reconciliation_required`` streams refuse checkpoint
+    advancement until a reconciliation scan has been durably completed.
+    ``reconciliation_reason`` records why the stream entered that state
+    (token expiry/invalidity, provider reset, detected sequence gap, or
+    adapter-declared inability to prove continuity).
+    """
+
+    __tablename__ = "kernel_connector_streams"
+
+    stream_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    cursor_token: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    cursor_seq: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="consuming")
+    reconciliation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    applied_kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelConnectorStream(stream={self.stream_id!r}, "
+            f"cursor={self.cursor_token!r}, seq={self.cursor_seq}, state={self.state!r})>"
+        )
+
+
+class KernelConnectorInbox(Base):
+    """Append-only receipt + application evidence for one provider event.
+
+    One row per (stream, provider event identity) — the unique key is
+    the durable dedupe authority for redelivery: an event applied once
+    can never be semantically applied twice through a second commit,
+    because the commit transaction re-checks the key under the writer
+    lock and refuses the duplicate batch (``DuplicateConnectorEventError``).
+    Rows are never updated after their committing transaction except for
+    nothing at all: ``applied_state`` is written once, inside the commit
+    that applied (or explicitly classified) the event.
+
+    ``applied_state`` vocabulary: ``applied`` (source truth transitioned),
+    ``duplicate`` (redelivery converged onto existing truth), ``stale``
+    (older provider revision than already-known state; never regresses
+    truth), ``deferred_reconciliation`` (stream entered reconciliation
+    before the event could be proven applicable), ``rejected`` (event
+    structurally unusable — inspectability without applying it).
+    """
+
+    __tablename__ = "kernel_connector_inbox"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    stream_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("kernel_connector_streams.stream_id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+    )
+    provider_event_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    event_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_item_id: Mapped[str] = mapped_column(String(256), nullable=True)
+    provider_revision: Mapped[str] = mapped_column(String(256), nullable=True)
+    provider_seq: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    applied_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    applied_kernel_commit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "stream_id",
+            "provider_event_id",
+            name="uq_kernel_connector_inbox_event",
+        ),
+        Index(
+            "ix_kernel_connector_inbox_stream_state",
+            "stream_id",
+            "applied_state",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelConnectorInbox(stream={self.stream_id!r}, "
+            f"event={self.provider_event_id!r}, kind={self.event_kind!r}, "
+            f"applied={self.applied_state!r})>"
+        )
