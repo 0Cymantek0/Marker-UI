@@ -497,14 +497,19 @@ def _resolved_batch_vector(
 ) -> tuple[tuple[str, int], ...]:
     """Snapshot the current resolved surya batch sizes as a profile vector.
 
-    Keys are stable model_dict entry names; values are the resolved
-    ``batch_size`` ints (post-OOM halvings included), so a mutation changes
-    the runtime profile identity instead of hiding as a global side effect.
+    Keys are stable model_dict entry names (plus ``.foundation`` for the
+    wrapped foundation predictor, which carries the memory-dominant
+    recognition batch); values are the resolved ``batch_size`` ints
+    (post-OOM halvings included), so a mutation changes the runtime
+    profile identity instead of hiding as a global side effect.
     """
     vector: dict[str, int] = {}
     for name, predictor in (model_dict or {}).items():
-        holders = [predictor, getattr(predictor, "foundation_predictor", None)]
-        for holder in holders:
+        holders = [
+            (str(name), predictor),
+            (f"{name}.foundation", getattr(predictor, "foundation_predictor", None)),
+        ]
+        for label, holder in holders:
             if holder is None:
                 continue
             current = getattr(holder, "batch_size", None)
@@ -516,8 +521,7 @@ def _resolved_batch_vector(
                     except Exception:  # noqa: BLE001 - profile stays best effort
                         current = None
             if isinstance(current, int):
-                vector[str(name)] = current
-                break
+                vector[label] = current
     return tuple(sorted(vector.items()))
 
 
