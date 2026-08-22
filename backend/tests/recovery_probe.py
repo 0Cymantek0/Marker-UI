@@ -9,10 +9,13 @@ process boundary.
 
 Output protocol (one JSON line per event, stdout only):
 ``SETUP:{...}`` after fixture build; ``CLAIM:{...}`` once work is held;
-``MILESTONE:<name> <epoch>`` recovery milestones; ``RECOVERED:{...}``
-full-takeover summary; ``STALE_REJECTED``/``STALE_ACCEPTED:{...}`` for
-late stale-owner completions. Any honest failure exits non-zero with the
-error on stderr — the parent asserts both directions.
+``RENEWED:{...}``/``TERMINAL:{...}`` for pre-fault lease renewal and
+terminal completion (PR83C2); ``COMMITS:{...}`` for timed durability-
+class commit probes; ``MILESTONE:<name> <epoch>`` recovery milestones;
+``RECOVERED:{...}`` full-takeover summary; ``STALE_REJECTED``/
+``STALE_ACCEPTED:{...}`` for late stale-owner completions. Any honest
+failure exits non-zero with the error on stderr — the parent asserts
+both directions.
 """
 
 from __future__ import annotations
@@ -352,12 +355,189 @@ async def mode_oracle() -> None:
         await engine.dispose()
 
 
+async def mode_terminal() -> None:
+    """Pre-fault terminal completion on the PRIMARY authority (PR83C2).
+
+    Renew the lease held by the parking owner (renewal keeps the fence
+    token), accept + complete the work under it (the terminal commit),
+    and register one more pending work item so the post-promotion
+    replacement has fresh work to claim through the real dispatch path.
+    Every acknowledgement here is the commit return on the primary.
+    """
+    from app.kernel.commit import KernelCommitBatch, KernelCommitService
+    from app.kernel.fencing import acquire as acquire_lease
+    from app.kernel.fencing import complete_work
+    from app.kernel.outbox import OutboxIntent
+    from app.kernel.records import KernelEdge, NativeObjectRecord
+    from app.kernel.scheduler import accept_work, register_work
+    from app.services.source_acquisition import SourceAcquisitionService
+
+    engine, factory, payload_store, source_store = await _build_engine_and_stores()
+    workspace = os.environ["PROBE_WORKSPACE"]
+    work_id = int(os.environ["PROBE_WORK_ID"])
+    owner = os.environ["PROBE_OWNER"]
+    block = json.loads(os.environ["PROBE_BLOCK"])
+    result = json.loads(os.environ.get("PROBE_RESULT", '{"status":"completed"}'))
+    try:
+        # 1. lease renewal under the same owner: acknowledged, token kept
+        lease = None
+        deadline = time.monotonic() + 30.0
+        while lease is None and time.monotonic() < deadline:
+            lease = await acquire_lease(
+                factory, work_id=work_id, owner_id=owner, lease_seconds=30.0
+            )
+            if lease is None:
+                await asyncio.sleep(0.25)
+        assert lease is not None, "terminal probe never renewed the lease"
+        _emit("RENEWED:" + json.dumps({"work_id": work_id, "fencing_token": lease.fencing_token, "owner": owner}))
+
+        # 2. terminal transition: accept + complete under the renewed fence
+        outcome, _appended = await accept_work(
+            factory, work_id=work_id, fencing_token=lease.fencing_token, result=result
+        )
+        completed = await complete_work(
+            factory, work_id=work_id, fencing_token=lease.fencing_token
+        )
+        assert completed, "terminal probe must ack the outbox behind its fence"
+
+        # 3. one more pending work item for the post-promotion replacement
+        acquisition = SourceAcquisitionService(
+            factory,
+            KernelCommitService(factory),
+            source_store,
+            workspace_id=workspace,
+            cache_root=Path(os.environ["MARKER_SOURCE_CACHE_ROOT"]),
+        )
+        revision = await acquisition.resolve(block)
+        assert revision is not None, "terminal probe source revision must resolve"
+        record = NativeObjectRecord(
+            record_id="conversion-request.drill-job-b",
+            source_uri=revision.source_id,
+            locator=revision.blob_key,
+            media_type=revision.media_type,
+            extractor_name="failover-drill",
+            extractor_version="1",
+        )
+        receipt = await KernelCommitService(factory, payload_store=payload_store).commit(
+            KernelCommitBatch(
+                workspace_id=workspace,
+                records=(record,),
+                edges=(
+                    KernelEdge(
+                        edge_kind="depends_on",
+                        source_ref=record.record_id,
+                        target_ref=revision.content_revision_id,
+                    ),
+                ),
+                outbox=(OutboxIntent(work_kind="conversion.execute", payload={"job_id": "drill-job-b"}),),
+            )
+        )
+        work_id_b = receipt.outbox_ids[0]
+        await register_work(factory, work_id=work_id_b, resource_class="conversion")
+
+        _emit(
+            "TERMINAL:"
+            + json.dumps(
+                {
+                    "work_id": work_id,
+                    "fencing_token": lease.fencing_token,
+                    "owner": owner,
+                    "already_accepted": bool(getattr(outcome, "already_accepted", False)),
+                    "completed": bool(completed),
+                    "work_id_b": work_id_b,
+                }
+            )
+        )
+    finally:
+        await engine.dispose()
+        close = getattr(source_store, "close", None)
+        if close is not None:
+            await close()
+
+
+async def mode_commit_probe() -> None:
+    """Timed durability-class commits with honest blocking observation.
+
+    Used against a synchronous primary: when the required standby is
+    unavailable, a commit in the declared durable class must never
+    acknowledge success — the probe records the blocked observation and
+    exits 0 (an honest measurement, not a failure); the parent decides
+    what the observation must prove.
+    """
+    from app.kernel.commit import KernelCommitBatch, KernelCommitService
+    from app.kernel.records import ObservationRecord
+
+    engine, factory, payload_store, _source = await _build_engine_and_stores()
+    workspace = os.environ["PROBE_WORKSPACE"]
+    requested = int(os.environ.get("PROBE_COMMITS", "8"))
+    timeout = float(os.environ.get("PROBE_COMMIT_TIMEOUT", "30"))
+    label = os.environ.get("PROBE_COMMIT_LABEL", "commit-probe")
+    service = KernelCommitService(factory, payload_store=payload_store)
+    latencies_ms: list[float] = []
+    try:
+        for index in range(requested):
+            started = time.monotonic()
+            try:
+                await asyncio.wait_for(
+                    service.commit(
+                        KernelCommitBatch(
+                            workspace_id=workspace,
+                            records=(
+                                ObservationRecord(
+                                    observer=f"drill.{label}",
+                                    derivation={"step": label, "index": index},
+                                    payload_bytes=f"FAILOVER-COMMIT-{label}-".encode()
+                                    + bytes([48 + (index % 10)]) * 24,
+                                ),
+                            ),
+                        )
+                    ),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                _emit(
+                    "COMMITS:"
+                    + json.dumps(
+                        {
+                            "label": label,
+                            "requested": requested,
+                            "completed": len(latencies_ms),
+                            "blocked": True,
+                            "blocked_epoch": time.time(),
+                            "blocked_after_seconds": time.monotonic() - started,
+                            "latencies_ms": latencies_ms,
+                        }
+                    )
+                )
+                return
+            latencies_ms.append(round((time.monotonic() - started) * 1000.0, 3))
+        _emit(
+            "COMMITS:"
+            + json.dumps(
+                {
+                    "label": label,
+                    "requested": requested,
+                    "completed": len(latencies_ms),
+                    "blocked": False,
+                    "latencies_ms": latencies_ms,
+                }
+            )
+        )
+    finally:
+        try:
+            await asyncio.wait_for(engine.dispose(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pass
+
+
 MODES = {
     "setup": mode_setup,
     "hold": mode_hold,
     "recover": mode_recover,
     "stale": mode_stale,
     "oracle": mode_oracle,
+    "terminal": mode_terminal,
+    "commit_probe": mode_commit_probe,
 }
 
 
