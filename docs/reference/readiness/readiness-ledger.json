@@ -849,18 +849,84 @@
     {
       "id": 30,
       "status_claim": "no_evidence",
-      "gap_type": "A",
-      "gap_note": "No admission subsystem keyed to a pinned preprocessor's visual-token/memory envelope exists (no admission-envelope symbols anywhere in backend/); dynamic-resolution OOM stress is untested.",
-      "bindings": [],
-      "context_docs": []
+      "gap_type": "B",
+      "gap_note": "PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial.",
+      "bindings": [
+        {
+          "kind": "test",
+          "coverage": "partial",
+          "environment": "cpu-test-env (deterministic fake capacity/preprocessor facts; no CUDA)",
+          "rationale": "Proves the demand path is pinned to the real preprocessor math, capacity reservation cannot overcommit, refusals never enter the converter, unknown/OOD inputs take the declared safe path, and unexpected OOM is contained with profile feedback; the real-CUDA dynamic-resolution stress half of the wording remains unexecuted.",
+          "nodes": [
+            "backend/tests/test_runtime_capacity.py",
+            "backend/tests/test_runtime_capacity_races.py",
+            "backend/tests/test_runtime_admission_integration.py"
+          ],
+          "scope_files": [
+            "backend/app/services/gpu_worker.py",
+            "backend/app/services/job_transport.py",
+            "backend/app/services/marker_service.py",
+            "backend/app/services/runtime_capacity.py",
+            "backend/app/services/task_manager.py",
+            "backend/tests/test_runtime_admission_integration.py",
+            "backend/tests/test_runtime_capacity.py",
+            "backend/tests/test_runtime_capacity_races.py"
+          ]
+        },
+        {
+          "kind": "measurement",
+          "coverage": "partial",
+          "environment": "cpu-characterization (deterministic geometry matrix, no CUDA)",
+          "rationale": "Committed machine-readable artifact proving the envelope arithmetic equals its independently recomputed per-model components, the crop bound is linear in its defining driver, OOD classification engages, and per-crop tokens equal the pinned foundation grid math; coefficient conservatism is declared, not measured.",
+          "nodes": [],
+          "scope_files": [
+            "backend/app/services/runtime_capacity.py",
+            "backend/scripts/runtime_admission_characterize.py",
+            "docs/reference/measurements/pr69-admission-estimate.json"
+          ],
+          "artifact": "docs/reference/measurements/pr69-admission-estimate.json",
+          "artifact_expect": {
+            "schema": "marker.pr69.admission.characterization.v1",
+            "checks.envelope_matches_component_arithmetic": true,
+            "checks.crop_bound_monotone_in_highres_area": true,
+            "checks.ood_cases_present_when_matrix_exceeds_bound": true,
+            "checks.tokens_per_crop_equals_pinned_foundation_math": true
+          }
+        }
+      ],
+      "context_docs": [
+        "docs/reference/pr69-runtime-admission.md"
+      ]
     },
     {
       "id": 31,
-      "status_claim": "no_evidence",
-      "gap_type": "A",
-      "gap_note": "No model-lease/anti-eviction mechanism exists (no ModelLease symbols); cold-start/queue/load cost does not surface in routing or user-visible outcomes.",
-      "bindings": [],
-      "context_docs": []
+      "status_claim": "proven",
+      "bindings": [
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "cpu-test-env (real threads/locks/conditions; the lease semantics are process-level and make no VRAM claim)",
+          "rationale": "Proves the full wording: active model leases block unload mid-request (drain waits or refuses on timeout, never evicts), draining blocks new execution leases, the last release permits unload, failure/cancel/exception/load-failure paths never leak reservations or leases, volunteer self-eviction spares other borrowers, and cold-load/warm-reuse/queue/admission cost reaches caller-visible status and events (runtime channel, get_status, status text).",
+          "nodes": [
+            "backend/tests/test_runtime_capacity.py",
+            "backend/tests/test_runtime_capacity_races.py",
+            "backend/tests/test_runtime_admission_integration.py"
+          ],
+          "scope_files": [
+            "backend/app/services/gpu_worker.py",
+            "backend/app/services/job_transport.py",
+            "backend/app/services/marker_service.py",
+            "backend/app/services/runtime_capacity.py",
+            "backend/app/services/task_manager.py",
+            "backend/tests/test_runtime_admission_integration.py",
+            "backend/tests/test_runtime_capacity.py",
+            "backend/tests/test_runtime_capacity_races.py"
+          ]
+        }
+      ],
+      "context_docs": [
+        "docs/reference/pr69-runtime-admission.md"
+      ]
     },
     {
       "id": 32,

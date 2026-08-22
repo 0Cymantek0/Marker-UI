@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `31464e7121b1dcdf217159504c9faf3cd9c66350`
-- Invariants proven: **36 / 62**
+- Audited source head: `38feb448ccb000f71d69fe9e70ab78f558849d30`
+- Invariants proven: **37 / 62**
 - Failed: **0**
-- No acceptable evidence: **26**
+- No acceptable evidence: **25**
 
 ## Group summary
 
@@ -14,7 +14,7 @@
 | 23C.1 | Truth and persistence | 5 | 0 | 4 |
 | 23C.2 | Geometry, patches, and incrementality | 7 | 0 | 2 |
 | 23C.3 | Verification and routing | 4 | 0 | 5 |
-| 23C.4 | Runtime and jobs | 7 | 0 | 4 |
+| 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 7 | 0 | 3 |
 | 23C.6 | Agent and product behavior | 5 | 0 | 3 |
 | 23C.7 | Economics and claim language | 1 | 0 | 5 |
@@ -52,8 +52,8 @@
 | 27 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
 | 28 | 23C.4 | proven | sqlite-dev, offline-artifact (PR68A measured comparison, frozen) |
 | 29 | 23C.4 | proven | sqlite-dev |
-| 30 | 23C.4 | no-evidence | no executable evidence bound |
-| 31 | 23C.4 | no-evidence | no executable evidence bound |
+| 30 | 23C.4 | no-evidence | executed proof covers only part of the invariant wording |
+| 31 | 23C.4 | proven | cpu-test-env (real threads/locks/conditions; the lease semantics are process-level and make no VRAM claim) |
 | 32 | 23C.4 | proven | sqlite-dev |
 | 33 | 23C.4 | proven | sqlite-dev |
 | 34 | 23C.4 | proven | sqlite-dev |
@@ -92,8 +92,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 
 ### Type A — implementation missing
 
-- **Inv 30** (23C.4, admission-memory-envelope): No admission subsystem keyed to a pinned preprocessor's visual-token/memory envelope exists (no admission-envelope symbols anywhere in backend/); dynamic-resolution OOM stress is untested. Reason: no executable evidence bound.
-- **Inv 31** (23C.4, model-lease-anti-eviction): No model-lease/anti-eviction mechanism exists (no ModelLease symbols); cold-start/queue/load cost does not surface in routing or user-visible outcomes. Reason: no executable evidence bound.
 - **Inv 42** (23C.5, connector-idempotency-cursor-atomicity): No connector event ingestion subsystem exists: no idempotent/gap-aware connector event handling, no source-state+cursor local atomic commit, no token-expiry/reset reconciliation. (Byte-staging dedup in source_store is a different concern.) Reason: no executable evidence bound.
 - **Inv 48** (23C.5, disclosed-context-non-revocability-doc): The required documentation statement — already disclosed external-agent context cannot be revoked — appears nowhere in Marker UI docs and no test links or checks it. Reason: no executable evidence bound.
 - **Inv 54** (23C.6, trace-not-entailment-proof): AnswerContextTrace does not exist in the codebase; no entailment-representation separation or material-answer-claim assessment path is implemented or tested (the EvidencePacket docstring disclaims entailment, but that is prose). Reason: no executable evidence bound.
@@ -108,6 +106,7 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 23** (23C.3, calibration-artifact-discipline): Calibration artifact schema carries method/version/sample/support/CI/shift but not named population/assumptions/expiry fields; zero observed catastrophic failures are reported as counts only. Reason: executed proof covers only part of the invariant wording.
 - **Inv 26** (23C.3, review-policy-operational): Verification-policy operational usability (review coverage, queue time, bypass rate) is an acknowledged open follow-up in docs/reference/verification-risk.md; only the extraction review lane is tested. Reason: executed proof covers only part of the invariant wording.
 - **Inv 27** (23C.3, no-training-routing-transparency): Displacement comparison is measurement-only; routing of trained specialists as non-authoritative candidates is a declared condition, not an executed behavior. Reason: executed proof covers only part of the invariant wording.
+- **Inv 30** (23C.4, admission-memory-envelope): PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial. Reason: executed proof covers only part of the invariant wording.
 - **Inv 37** (23C.4, external-effect-semantics-declared): Local exactly-once acceptance and truthful refusal/reconciliation are proven; the per-destination external-effect semantics declaration driven by real destination primitives is absent. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 43** (23C.5, revocation-slo): Revocation effectiveness without content events is proven and measured; a declared numeric SLO (bound/latency) is neither declared nor asserted. Reason: executed proof covers only part of the invariant wording.
 - **Inv 53** (23C.6, packet-reuse-invalidation): Most named triggers are explicit identity dimensions with tests; 'citation change' has no identity dimension and renderer/tokenizer rotation is covered only via serialization_profile + publication tokenizer fields. Reason: executed proof covers only part of the invariant wording.
@@ -133,7 +132,7 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - 23C.3 Verification and routing: 5 non-proven
 - 23C.7 Economics and claim language: 5 non-proven
 - 23C.1 Truth and persistence: 4 non-proven
-- 23C.4 Runtime and jobs: 4 non-proven
+- 23C.4 Runtime and jobs: 3 non-proven
 - 23C.5 Source, authorization, and retrieval: 3 non-proven
 - 23C.6 Agent and product behavior: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 2 non-proven

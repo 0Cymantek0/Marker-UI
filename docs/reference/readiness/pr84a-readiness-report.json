@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "31464e7121b1dcdf217159504c9faf3cd9c66350"
+    "git_head": "38feb448ccb000f71d69fe9e70ab78f558849d30"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 36,
+    "proven": 37,
     "failed": 0,
-    "no_evidence": 26
+    "no_evidence": 25
   },
   "group_counts": {
     "23C.1": {
@@ -29,9 +29,9 @@
       "total": 9
     },
     "23C.4": {
-      "proven": 7,
+      "proven": 8,
       "failed": 0,
-      "no_evidence": 4,
+      "no_evidence": 3,
       "total": 11
     },
     "23C.5": {
@@ -54,8 +54,8 @@
     }
   },
   "gap_type_counts": {
-    "A": 5,
-    "B": 11,
+    "A": 3,
+    "B": 12,
     "D": 5,
     "F": 5
   },
@@ -402,20 +402,22 @@
       "group": "23C.4",
       "label": "admission-memory-envelope",
       "status": "no_evidence",
-      "reason": "none_bound",
+      "reason": "partial_coverage_only",
       "environments": [],
-      "gap_type": "A",
-      "gap_note": "No admission subsystem keyed to a pinned preprocessor's visual-token/memory envelope exists (no admission-envelope symbols anywhere in backend/); dynamic-resolution OOM stress is untested."
+      "gap_type": "B",
+      "gap_note": "PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial."
     },
     {
       "id": 31,
       "group": "23C.4",
       "label": "model-lease-anti-eviction",
-      "status": "no_evidence",
-      "reason": "none_bound",
-      "environments": [],
-      "gap_type": "A",
-      "gap_note": "No model-lease/anti-eviction mechanism exists (no ModelLease symbols); cold-start/queue/load cost does not surface in routing or user-visible outcomes."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "cpu-test-env (real threads/locks/conditions; the lease semantics are process-level and make no VRAM claim)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 32,
