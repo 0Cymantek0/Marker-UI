@@ -1,0 +1,390 @@
+{
+  "schema": "marker.pr84a_readiness_inventory.v1",
+  "source_anchor": {
+    "file": "planning/v2/marker-ui-v2-Masterplan.md",
+    "section": "V3.2 amendment 23C - Adversarially hardened readiness definition"
+  },
+  "groups": {
+    "23C.1": "Truth and persistence",
+    "23C.2": "Geometry, patches, and incrementality",
+    "23C.3": "Verification and routing",
+    "23C.4": "Runtime and jobs",
+    "23C.5": "Source, authorization, and retrieval",
+    "23C.6": "Agent and product behavior",
+    "23C.7": "Economics and claim language"
+  },
+  "invariants": [
+    {
+      "id": 1,
+      "group": "23C.1",
+      "label": "single-transactional-commit-authority",
+      "text": "One transactional commit authority defines every live kernel mutation in each topology; per-document JSONL files are not the serving authority."
+    },
+    {
+      "id": 2,
+      "group": "23C.1",
+      "label": "snapshot-sequence-boundary-identity",
+      "text": "Every KernelSnapshot is identified by a committed sequence boundary and required payload state; timestamps alone do not establish membership or causality."
+    },
+    {
+      "id": 3,
+      "group": "23C.1",
+      "label": "crash-injection-no-partial-state",
+      "text": "Multi-record mutations, decisions, publication pointers, source cursors, and effects survive crash injection without partial state masquerading as complete."
+    },
+    {
+      "id": 4,
+      "group": "23C.1",
+      "label": "blob-vs-observation-identity",
+      "text": "Blob identity and Observation/evidence identity remain separate under deduplication."
+    },
+    {
+      "id": 5,
+      "group": "23C.1",
+      "label": "core-record-semantics-versioned",
+      "text": "ClaimAssertion, ClaimAssessment, NativeObject/NativeFact, Decision, Invalidation, Patch, and ArtifactRevision semantics are implemented and versioned."
+    },
+    {
+      "id": 6,
+      "group": "23C.1",
+      "label": "canonical-id-cross-platform",
+      "text": "Canonical IDs pass cross-language/x86_64/ARM64 fixtures; raw Unicode, semantic normalization, decimal precision, and fixed-point geometry are not conflated."
+    },
+    {
+      "id": 7,
+      "group": "23C.1",
+      "label": "materialized-reads-rebuild-from-pin",
+      "text": "Materialized reads meet the local SLA without replaying raw logical streams; every generation can be rebuilt from its pinned snapshot."
+    },
+    {
+      "id": 8,
+      "group": "23C.1",
+      "label": "gc-retention-holds",
+      "text": "Proof-closure GC cannot delete inspectable/replayable dependencies required by live proofs, legal hold, audit, or active readers."
+    },
+    {
+      "id": 9,
+      "group": "23C.1",
+      "label": "schema-evolution-no-self-heal",
+      "text": "Schema evolution preserves historical field meaning and old-record readability; production startup performs no opportunistic schema self-heal."
+    },
+    {
+      "id": 10,
+      "group": "23C.2",
+      "label": "layered-anchor-selectors-honest",
+      "text": "Source anchors use layered native/text/structure/geometry/state selectors and report exact, deterministic/reviewed mapped, semantic candidate, stale, or unresolved honestly."
+    },
+    {
+      "id": 11,
+      "group": "23C.2",
+      "label": "similarity-never-exact-identity",
+      "text": "Semantic similarity alone never establishes exact identity for a paraphrased/moved source."
+    },
+    {
+      "id": 12,
+      "group": "23C.2",
+      "label": "reading-order-partial-graph",
+      "text": "Reading order is a partial-order graph with bounded contextual re-evaluation; specialist crop output cannot be inserted blindly."
+    },
+    {
+      "id": 13,
+      "group": "23C.2",
+      "label": "cross-page-fragment-preservation",
+      "text": "Cross-page continuations and multi-page tables preserve all source fragments, alternatives, and provenance."
+    },
+    {
+      "id": 14,
+      "group": "23C.2",
+      "label": "patch-conflict-rule",
+      "text": "Non-commutative concurrent patches conflict or rebase under a tested rule; patch order cannot silently choose truth."
+    },
+    {
+      "id": 15,
+      "group": "23C.2",
+      "label": "reversal-reconstructs-prior",
+      "text": "Reversal reconstructs a prior derived revision; no claim is made that a lossy view recreates discarded source information."
+    },
+    {
+      "id": 16,
+      "group": "23C.2",
+      "label": "dependency-completeness-declared",
+      "text": "Dependency completeness is declared. Unknown semantic dependencies widen invalidation scope."
+    },
+    {
+      "id": 17,
+      "group": "23C.2",
+      "label": "incremental-equals-clean-rebuild",
+      "text": "Randomized incremental updates produce the same declared outputs as clean rebuilds, or incrementality is disabled for that format/operator."
+    },
+    {
+      "id": 18,
+      "group": "23C.2",
+      "label": "redaction-all-paths",
+      "text": "Redaction removes or denies every affected text, image, cache, index, visual vector, export, and cursor path required by policy."
+    },
+    {
+      "id": 19,
+      "group": "23C.3",
+      "label": "dependency-risk-disclosure-only",
+      "text": "`dependency_risk_profile` is treated as disclosure/risk metadata, not proof of model independence; unknown lineage is not counted as independent."
+    },
+    {
+      "id": 20,
+      "group": "23C.3",
+      "label": "model-agreement-never-high-risk",
+      "text": "High-risk verification cannot be established by model agreement alone."
+    },
+    {
+      "id": 21,
+      "group": "23C.3",
+      "label": "proof-graph-cycle-integrity",
+      "text": "Proof graphs reject cycles/self-support and verify source/crop/topology integrity before accepting downstream validators."
+    },
+    {
+      "id": 22,
+      "group": "23C.3",
+      "label": "verification-status-relative",
+      "text": "Verification status is claim/region/workflow/policy/snapshot-relative and does not make an entire document unusable because one region is unresolved."
+    },
+    {
+      "id": 23,
+      "group": "23C.3",
+      "label": "calibration-artifact-discipline",
+      "text": "Calibration/risk artifacts name their population, sample, assumptions, confidence interval, shift tests, and expiry; zero observed catastrophic failures are not reported as zero risk."
+    },
+    {
+      "id": 24,
+      "group": "23C.3",
+      "label": "bounded-continuation-termination",
+      "text": "Bounded continuation terminates under cycles, budget exhaustion, or repeated failure and emits a deterministic outcome."
+    },
+    {
+      "id": 25,
+      "group": "23C.3",
+      "label": "routing-stays-shadow-until-proven",
+      "text": "EVC-style routing remains shadow/offline until it beats fixed rules and best-single-engine baselines under held-out shift and catastrophic utility."
+    },
+    {
+      "id": 26,
+      "group": "23C.3",
+      "label": "review-policy-operational",
+      "text": "Review coverage, queue time, and bypass behavior demonstrate that the verification policy is operationally usable."
+    },
+    {
+      "id": 27,
+      "group": "23C.3",
+      "label": "no-training-routing-transparency",
+      "text": "The no-training constraint does not block transparent routing to user-supplied or managed trained specialists; the extraction displacement report compares direct specialist use."
+    },
+    {
+      "id": 28,
+      "group": "23C.4",
+      "label": "runtime-isolation-measured",
+      "text": "Isolation occurs at runtime-family boundaries and passes a measured locality/copy/latency comparison against the monolithic baseline."
+    },
+    {
+      "id": 29,
+      "group": "23C.4",
+      "label": "artifact-handle-data-plane",
+      "text": "Large page/tensor data moves through verified artifact handles or an equally efficient fallback, not repeated JSON/gRPC serialization."
+    },
+    {
+      "id": 30,
+      "group": "23C.4",
+      "label": "admission-memory-envelope",
+      "text": "Admission uses the pinned preprocessor's actual/upper-bound visual-token and memory envelope; dynamic-resolution stress does not create uncontrolled OOM cascades."
+    },
+    {
+      "id": 31,
+      "group": "23C.4",
+      "label": "model-lease-anti-eviction",
+      "text": "Active model leases prevent eviction; cold-start/queue/load cost appears in routing and user-visible outcomes."
+    },
+    {
+      "id": 32,
+      "group": "23C.4",
+      "label": "exactly-one-fenced-publication",
+      "text": "At-least-once duplicate execution is safe; exactly one fenced accepted publication occurs."
+    },
+    {
+      "id": 33,
+      "group": "23C.4",
+      "label": "heartbeat-renewal-evidence",
+      "text": "Heartbeat renewal requires a responsive control loop and active request evidence, not a blind detached timestamp updater."
+    },
+    {
+      "id": 34,
+      "group": "23C.4",
+      "label": "no-scarce-child-slots-fairness",
+      "text": "Parent coordinators hold no scarce child slots; mixed large/small workloads meet fairness and bounded-fan-out gates."
+    },
+    {
+      "id": 35,
+      "group": "23C.4",
+      "label": "slow-client-nonblocking-events",
+      "text": "Slow/disconnected event clients cannot block execution or terminal state; durable semantic events replay by authoritative sequence."
+    },
+    {
+      "id": 36,
+      "group": "23C.4",
+      "label": "publication-set-atomicity",
+      "text": "Progressive artifacts are provisional until a complete PublicationSet passes required gates; a late failure cannot expose a mixed stable generation."
+    },
+    {
+      "id": 37,
+      "group": "23C.4",
+      "label": "external-effect-semantics-declared",
+      "text": "External-effect semantics are declared as exactly-once, at-least-once, at-most-once, or reconciliation-required based on real destination primitives."
+    },
+    {
+      "id": 38,
+      "group": "23C.4",
+      "label": "failure-injection-truthful-outcomes",
+      "text": "Cancellation, failover, disk/WAL/shared-memory pressure, database outage, and model-service crash produce truthful terminal/recovery outcomes."
+    },
+    {
+      "id": 39,
+      "group": "23C.5",
+      "label": "content-vs-policy-revision-separation",
+      "text": "ContentRevision and AccessPolicyRevision are separate; ACL-only changes preserve content/citation identity."
+    },
+    {
+      "id": 40,
+      "group": "23C.5",
+      "label": "source-consistency-class-declared",
+      "text": "Every source revision declares `native_atomic`, `version_pinned`, `stable_handle`, `best_effort_consistent`, or rejected consistency."
+    },
+    {
+      "id": 41,
+      "group": "23C.5",
+      "label": "toctou-stable-handle",
+      "text": "Probe/hash/parse use the same stable handle or staged immutable copy; local path/URL/object TOCTOU tests pass."
+    },
+    {
+      "id": 42,
+      "group": "23C.5",
+      "label": "connector-idempotency-cursor-atomicity",
+      "text": "Connector events are idempotent and gap-aware; source state and cursor advancement commit together locally; token expiry/reset triggers reconciliation."
+    },
+    {
+      "id": 43,
+      "group": "23C.5",
+      "label": "revocation-slo",
+      "text": "AuthorizationEpoch/group/inheritance changes meet the declared revocation SLO even without a document content event."
+    },
+    {
+      "id": 44,
+      "group": "23C.5",
+      "label": "high-assurance-ranking-isolation",
+      "text": "High-assurance search does not rank over forbidden lexical/vector/visual content; standard profiles disclose their weaker leakage boundary."
+    },
+    {
+      "id": 45,
+      "group": "23C.5",
+      "label": "query-pinned-to-publication-set",
+      "text": "Every query is pinned to one PublicationSet and compatible index/claim generations."
+    },
+    {
+      "id": 46,
+      "group": "23C.5",
+      "label": "auth-recheck-on-continuation",
+      "text": "Authorization is rechecked on every cursor/stream/asset delivery; epoch change invalidates continuation before protected output."
+    },
+    {
+      "id": 47,
+      "group": "23C.5",
+      "label": "no-side-channel-leakage",
+      "text": "Unauthorized resources do not leak through counts, ranks, errors, diagnostic traces, or unsupported timing assumptions in the declared profile."
+    },
+    {
+      "id": 48,
+      "group": "23C.5",
+      "label": "disclosed-context-non-revocability-doc",
+      "text": "Marker UI documentation states that already disclosed external-agent context cannot be revoked."
+    },
+    {
+      "id": 49,
+      "group": "23C.6",
+      "label": "bounded-server-side-planning",
+      "text": "`marker_query`/EvidencePacket completes priority tasks through bounded server-side planning; cursor traversal is a short inspection mechanism."
+    },
+    {
+      "id": 50,
+      "group": "23C.6",
+      "label": "outcome-state-preservation",
+      "text": "Tool outcomes preserve partial, review-required, abstained, policy-denied, stale, cursor-invalidated, and failed states across supported clients."
+    },
+    {
+      "id": 51,
+      "group": "23C.6",
+      "label": "nl-planning-validation",
+      "text": "Natural-language query planning is schema/policy/budget validated and cannot create authorization, identity, joins, or effects."
+    },
+    {
+      "id": 52,
+      "group": "23C.6",
+      "label": "whole-unit-token-limits",
+      "text": "Structural token limits never emit malformed tables, JSON, formulas, or code units."
+    },
+    {
+      "id": 53,
+      "group": "23C.6",
+      "label": "packet-reuse-invalidation",
+      "text": "EvidencePacket reuse is invalidated by source, ACL, policy, verification, redaction, citation, or renderer/tokenizer changes."
+    },
+    {
+      "id": 54,
+      "group": "23C.6",
+      "label": "trace-not-entailment-proof",
+      "text": "AnswerContextTrace is not represented as proof that the answer is entailed; material answer claims can be assessed separately."
+    },
+    {
+      "id": 55,
+      "group": "23C.6",
+      "label": "mid-task-invalidation-honesty",
+      "text": "Revocation, revision change, and late contradiction during an agent task invalidate Marker UI state/cursors without falsely promising deletion from external context."
+    },
+    {
+      "id": 56,
+      "group": "23C.6",
+      "label": "stale-review-rejection",
+      "text": "UI screens, approvals, exports, and operational status expose their as-of revision/policy/completeness and reject stale review commits."
+    },
+    {
+      "id": 57,
+      "group": "23C.7",
+      "label": "scale-envelope-economics",
+      "text": "Local/industrial scale envelopes report database rows, payload/object count, WAL/write amplification, retained generations, FTS/vector/visual storage, copy bytes, cold starts, review, and reprocessing—not inference alone."
+    },
+    {
+      "id": 58,
+      "group": "23C.7",
+      "label": "visual-retrieval-selective-economics",
+      "text": "Visual retrieval is selective and can be disabled; its downstream gain pays measured storage/update/ACL complexity."
+    },
+    {
+      "id": 59,
+      "group": "23C.7",
+      "label": "subsystem-owner-rollback-kill",
+      "text": "Every model/capability and architecture subsystem passes complexity-adjusted utility and has a support owner, rollback, expiry, and kill condition."
+    },
+    {
+      "id": 60,
+      "group": "23C.7",
+      "label": "leadership-claim-discipline",
+      "text": "Every leadership claim names workflow, source/policy/hardware profile, competitors, date, catastrophic budget, review burden, and unresolved limits."
+    },
+    {
+      "id": 61,
+      "group": "23C.7",
+      "label": "negative-result-accepted",
+      "text": "A negative result that removes routing, marketplace, visual, or generalized-language complexity is accepted as successful research."
+    },
+    {
+      "id": 62,
+      "group": "23C.7",
+      "label": "final-displacement-test",
+      "text": "The final displacement test asks whether a rational user can achieve a better accepted end-to-end outcome by leaving Marker UI; any remaining reason is integrated, measured, or explicitly conceded."
+    }
+  ]
+}
