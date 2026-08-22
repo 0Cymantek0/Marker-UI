@@ -381,17 +381,12 @@ _MIN_BATCH_SIZE = 1
 def _is_cuda_oom(exc: BaseException) -> bool:
     """True if ``exc`` is a CUDA out-of-memory error.
 
-    ``torch.cuda.OutOfMemoryError`` is the typed case, but some code paths raise
-    a plain ``RuntimeError('CUDA out of memory ...')``, so we match the message
-    too. Importing torch lazily keeps this usable in a torch-less test env.
+    ``torch.cuda.OutOfMemoryError`` subclasses RuntimeError and always says
+    "CUDA out of memory", so the message check catches both the typed case
+    and plain ``RuntimeError('CUDA out of memory ...')`` raisers. Deliberately
+    never imports torch: this runs on terminal paths where a multi-second
+    import (or touching CUDA in the parent) would be its own failure mode.
     """
-    try:
-        import torch
-
-        if isinstance(exc, torch.cuda.OutOfMemoryError):
-            return True
-    except Exception:  # noqa: BLE001 - torch missing / no cuda attr
-        pass
     return isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower()
 
 
@@ -450,6 +445,7 @@ def run_with_oom_retry(
     model_dict: dict[str, Any] | None,
     *,
     limit: int = _OOM_RETRY_LIMIT,
+    oom_feedback: Any = None,
 ) -> Any:
     """Call ``convert()``; on CUDA OOM, free cache + halve batches + retry.
 
@@ -457,6 +453,10 @@ def run_with_oom_retry(
     OOM once batches can't shrink further or ``limit`` attempts are exhausted,
     so a genuinely-too-big job still surfaces instead of looping forever. Any
     non-OOM exception propagates immediately.
+
+    ``oom_feedback(attempt, exc)`` (PR69), when provided, runs after a batch
+    halving that will be retried — the explicit runtime-profile transition
+    hook. It must never raise: feedback is observability, not control flow.
     """
     attempt = 0
     while True:
@@ -485,6 +485,40 @@ def run_with_oom_retry(
                 attempt,
                 limit,
             )
+            if oom_feedback is not None:
+                try:
+                    oom_feedback(attempt, exc)
+                except Exception:  # noqa: BLE001 - feedback must not break retry
+                    logger.exception("OOM feedback hook failed")
+
+
+def _resolved_batch_vector(
+    model_dict: dict[str, Any] | None,
+) -> tuple[tuple[str, int], ...]:
+    """Snapshot the current resolved surya batch sizes as a profile vector.
+
+    Keys are stable model_dict entry names; values are the resolved
+    ``batch_size`` ints (post-OOM halvings included), so a mutation changes
+    the runtime profile identity instead of hiding as a global side effect.
+    """
+    vector: dict[str, int] = {}
+    for name, predictor in (model_dict or {}).items():
+        holders = [predictor, getattr(predictor, "foundation_predictor", None)]
+        for holder in holders:
+            if holder is None:
+                continue
+            current = getattr(holder, "batch_size", None)
+            if not isinstance(current, int):
+                getter = getattr(holder, "get_batch_size", None)
+                if callable(getter):
+                    try:
+                        current = getter()
+                    except Exception:  # noqa: BLE001 - profile stays best effort
+                        current = None
+            if isinstance(current, int):
+                vector[str(name)] = current
+                break
+    return tuple(sorted(vector.items()))
 
 
 class MarkerService:
@@ -496,6 +530,53 @@ class MarkerService:
         self._lock = threading.Lock()
         self._conversion_lock = threading.Lock()
         self._hybrid_ocr_orchestrator: Any | None = None
+        # PR69 runtime capacity integration: optional coordinator + the job
+        # id whose lease this service's executions run under. Attached by the
+        # GPU worker / task manager; None keeps pure legacy behavior.
+        self._capacity: Any | None = None
+        self._volunteer_job: str | None = None
+        self._runtime_notifier: Any | None = None
+
+    def attach_capacity(
+        self,
+        capacity: Any,
+        *,
+        volunteer_job: str | None,
+        runtime_notifier: Any = None,
+    ) -> None:
+        """Bind this service instance to a runtime capacity coordinator.
+
+        ``volunteer_job`` names the execution whose lease may be voluntarily
+        surrendered by :meth:`release_models` (the explicit self-eviction
+        protocol used by the hybrid-OCR low-VRAM phase).
+        ``runtime_notifier(transition, elapsed_seconds)`` optionally carries
+        residency observations to a caller-owned sink (the worker's event
+        queue) so cold loads are user-visible, not log-only.
+        """
+        self._capacity = capacity
+        self._volunteer_job = volunteer_job
+        self._runtime_notifier = runtime_notifier
+
+    def _residency_event(self, transition: str, elapsed_seconds: float = 0.0) -> None:
+        if self._runtime_notifier is not None:
+            try:
+                self._runtime_notifier(transition, elapsed_seconds)
+            except Exception:  # noqa: BLE001 - notifications must never break loads
+                logger.exception("runtime notification failed")
+        if self._capacity is None:
+            return
+        try:
+            if transition == "loading":
+                self._capacity.note_residency_states(loading=True)
+            elif transition == "warm_reuse":
+                self._capacity.note_residency_states(warm=True)
+                self._capacity.observe_warm_reuse(elapsed_seconds)
+            elif transition == "cold_load":
+                self._capacity.observe_cold_load(elapsed_seconds)
+            elif transition == "unload":
+                self._capacity.observe_unload(elapsed_seconds)
+        except Exception:  # noqa: BLE001 - observations must never break loads
+            logger.exception("residency observation failed")
 
     def initialize(self, device: str | None = None) -> None:
         from app.services.gpu_service import gpu_service
@@ -513,8 +594,10 @@ class MarkerService:
 
         with self._lock:
             if self._initialized:
+                self._residency_event("warm_reuse")
                 return
 
+            self._residency_event("loading")
             import sys
             is_pytest = "pytest" in sys.modules
             from app.services.model_tracker import check_models_downloaded, download_all_models_parallel
@@ -532,19 +615,49 @@ class MarkerService:
             # global TORCH_DEVICE_MODEL). A GPU worker passes its pinned device
             # (e.g. "cuda:1") so its models load onto exactly that GPU.
             logger.info("Loading marker model dict (device=%s) ...", device or "auto")
-            self._model_dict = create_model_dict(device=device) if device else create_model_dict()
+            try:
+                self._model_dict = create_model_dict(device=device) if device else create_model_dict()
+            except BaseException:
+                # A failed cold load must not leave a half-open residency
+                # generation: the registry stays cold, observations stay
+                # truthful, and the lease/reservation cleanup happens at the
+                # worker's terminal path.
+                tracker.set_initialized(False)
+                raise
             elapsed = time.perf_counter() - t0
             logger.info("Marker models loaded in %.1f s", elapsed)
             self._initialized = True
             tracker.set_initialized(True)
+            self._residency_event("cold_load", elapsed)
 
     def release_models(self) -> None:
-        """Release Marker model references for low-VRAM specialist phases."""
+        """Release Marker model references for low-VRAM specialist phases.
+
+        PR69: when a capacity coordinator is attached, this is the safe
+        unload transition — stop new leases for the generation, release the
+        volunteer's own lease (self-eviction only), wait for other active
+        leases to drain, then free. If other borrowers still hold the
+        generation when the bounded drain times out, the unload is refused
+        rather than evicting them mid-request.
+        """
+        if self._capacity is not None:
+            from app.core.config import ADMISSION_DRAIN_TIMEOUT_SECONDS
+
+            drained = self._capacity.request_unload(
+                timeout=ADMISSION_DRAIN_TIMEOUT_SECONDS,
+                volunteer_job=self._volunteer_job,
+            )
+            if not drained:
+                raise RuntimeError(
+                    "release_models refused: active execution leases still hold "
+                    "the model generation (anti-eviction, PR69)"
+                )
         with self._lock:
             self._model_dict = None
             self._initialized = False
             tracker.set_initialized(False)
         _empty_cuda_cache()
+        self._residency_event("unload")
 
     def convert_file(
         self,
@@ -706,6 +819,30 @@ class MarkerService:
         return run_with_oom_retry(
             lambda: build_document(str(filepath)),
             self._model_dict,
+            oom_feedback=self._oom_profile_feedback if self._capacity is not None else None,
+        )
+
+    def _oom_profile_feedback(self, attempt: int, exc: BaseException) -> None:
+        """Tell the coordinator an OOM happened and a retry is starting.
+
+        The batch halving that precedes this hook is an explicit runtime
+        profile transition: the coordinator adopts the new batch vector as
+        its profile identity, so lowered memory/throughput behavior is
+        visible and old envelopes are not silently reused.
+        """
+        coordinator = self._capacity
+        if coordinator is None:
+            return
+        new_profile = coordinator.profile.with_batches(
+            _resolved_batch_vector(self._model_dict)
+        )
+        coordinator.note_profile_transition(new_profile)
+        logger.warning(
+            "runtime profile transition after OOM (attempt %d): batches -> %s "
+            "(profile %s)",
+            attempt,
+            dict(new_profile.batch_vector),
+            new_profile.fingerprint(),
         )
 
     def _render_document_format(

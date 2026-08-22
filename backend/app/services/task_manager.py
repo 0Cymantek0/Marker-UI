@@ -519,6 +519,15 @@ class TaskManager:
         # running yet. This lets status APIs report honest queue/wait messages.
         self._job_started: dict[str, bool] = {}
         self._job_queued_message: dict[str, str] = {}
+        # PR69: latest structured runtime-capacity observation per job
+        # (admission decision, cold load vs warm reuse, containment) so
+        # status callers can see WHY work waits and what residency cost.
+        self._job_runtime: dict[str, dict[str, Any]] = {}
+        # PR69: live admission tickets this manager owns (thread backend).
+        # Tracked so every terminal path — done, cancelled, failure, or a
+        # whole-manager shutdown — settles its reservation + lease instead
+        # of leaking capacity on the shared per-device coordinator.
+        self._job_tickets: dict[str, Any] = {}
         # Jobs run via the process backend: terminal status recorded by the drain
         # thread so get_status() can resolve them without an asyncio future.
         self._proc_jobs: dict[str, str] = {}
@@ -891,6 +900,30 @@ class TaskManager:
             self._kernel_note_activity(job_id)
             return
 
+        if event.type is WorkerEventType.runtime:
+            runtime = dict(event.runtime or {})
+            self._job_runtime[job_id] = runtime
+            phase = str(runtime.get("phase", ""))
+            if phase == "admitted" and runtime.get("demand"):
+                demand = runtime["demand"]
+                self._job_status_text[job_id] = (
+                    f"Admitted by runtime capacity "
+                    f"(class {demand.get('demand_class')}, envelope "
+                    f"{int(demand.get('envelope_bytes', 0)) >> 20} MiB)"
+                )
+            elif phase == "admission_refused":
+                self._job_status_text[job_id] = (
+                    f"Runtime admission refused: {runtime.get('reason', 'unknown')}"
+                )
+            elif phase == "residency":
+                self._job_status_text[job_id] = (
+                    "Cold model load in progress..."
+                    if runtime.get("transition") == "cold_load"
+                    else f"Model residency: {runtime.get('transition', 'unknown')}"
+                )
+            self._kernel_note_activity(job_id)
+            return
+
         if event.type is WorkerEventType.result:
             self._finalize_proc_job(job_id, event.payload)
             return
@@ -1078,6 +1111,10 @@ class TaskManager:
         "_job_start_time",
         "_job_has_real_progress",
         "_job_providers",
+        "_job_runtime",
+        # Tickets are settled at terminal paths; this pop only guards the
+        # pathological case of a settle raising mid-way.
+        "_job_tickets",
     )
 
     def _purge_job_memory(self, job_id: str) -> None:
@@ -1183,6 +1220,9 @@ class TaskManager:
 
             def _on_done(fut: asyncio.Future[Any]) -> None:
                 if fut.cancelled():
+                    # The execution never completed normally; any admission
+                    # ticket it held must not outlive the future.
+                    self._settle_runtime_ticket(job_id, "abandoned")
                     self._tasks.pop(job_id, None)
                     self._job_backends.pop(job_id, None)
                     self._job_started.pop(job_id, None)
@@ -1198,6 +1238,10 @@ class TaskManager:
                 exc = fut.exception()
                 if exc:
                     logger.error("Job %s failed: %s", job_id, exc)
+                # Terminal safety net: conversions settle their own tickets,
+                # but a thread that died between admit and any return path
+                # must not leak the reservation.
+                self._settle_runtime_ticket(job_id, "failed" if exc else "abandoned")
                 self._tasks.pop(job_id, None)
                 self._job_backends.pop(job_id, None)
                 self._job_started.pop(job_id, None)
@@ -1317,6 +1361,7 @@ class TaskManager:
                 "logs": logs,
                 "elapsed": elapsed,
                 "eta": 0,
+                "runtime": self._job_runtime.get(job_id),
             }
 
         message = self._job_status_text.get(job_id, "Processing document...")
@@ -1352,7 +1397,8 @@ class TaskManager:
             "message": message,
             "logs": logs,
             "elapsed": elapsed,
-            "eta": eta
+            "eta": eta,
+            "runtime": self._job_runtime.get(job_id),
         }
 
     async def cancel_job(self, job_id: str) -> bool:
@@ -1425,6 +1471,11 @@ class TaskManager:
 
     def shutdown(self, wait: bool = False) -> None:
         """Stop the drain thread and release the executor/pool."""
+        # Settle any admission tickets this manager still owns (PR69): a
+        # test or lifespan teardown mid-conversion must not leak capacity
+        # on the shared per-device coordinator.
+        for job_id in list(self._job_tickets):
+            self._settle_runtime_ticket(job_id, "abandoned")
         if self._kernel_runtime is not None:
             try:
                 self._kernel_runtime.stop()
@@ -1525,6 +1576,23 @@ class TaskManager:
     # Internal
     # ------------------------------------------------------------------
 
+    def _settle_runtime_ticket(self, job_id: str, outcome: str, detail: str = "") -> None:
+        """Settle this manager's admission ticket for *job_id*, if any.
+
+        Idempotent and safe when no ticket exists (admission skipped or
+        already settled). The coordinator's own finish() double-guard makes
+        a stale settle harmless.
+        """
+        ticket = self._job_tickets.pop(job_id, None)
+        if ticket is None:
+            return
+        try:
+            ticket_coordinator = getattr(ticket, "coordinator", None)
+            if ticket_coordinator is not None:
+                ticket_coordinator.finish(ticket, outcome=outcome, detail=detail)
+        except Exception:  # noqa: BLE001 - settle must never mask a terminal path
+            logger.exception("runtime ticket settle failed for job %s", job_id)
+
     def _run_conversion(
         self,
         job_id: str,
@@ -1553,6 +1621,46 @@ class TaskManager:
             self._progress[job_id] = 10
             self._job_status_text[job_id] = "Starting conversion..."
 
+            # PR69 pre-execution admission for the thread backend: same
+            # coordinator/lease lifecycle as the process workers, resolved
+            # for the parent's implicit marker device. A refusal raises and
+            # lands in the honest failure path below — the converter is
+            # never entered for work the runtime cannot safely fit.
+            ticket = None
+            capacity = None
+            from app.core.config import ADMISSION_ENABLED
+
+            if ADMISSION_ENABLED:
+                from app.services.runtime_capacity import (
+                    AdmissionError,
+                    default_coordinator,
+                )
+
+                capacity = default_coordinator(None)
+                ocr_enabled = not bool(config.get("disable_ocr", False))
+                try:
+                    ticket = capacity.admit(job_id, filepath, ocr_enabled=ocr_enabled)
+                except AdmissionError as exc:
+                    self._job_runtime[job_id] = {
+                        "phase": "admission_refused",
+                        "reason": str(exc),
+                    }
+                    raise RuntimeError(f"runtime admission refused: {exc}")
+                if ticket is not None:
+                    self._job_tickets[job_id] = ticket
+                    self._job_runtime[job_id] = {
+                        "phase": "admitted",
+                        "demand": ticket.estimate.summary(),
+                        "capacity": capacity.ledger.snapshot(),
+                    }
+            marker_service = getattr(conversion_service, "marker_service", None)
+            if ticket is not None and marker_service is not None and hasattr(
+                marker_service, "attach_capacity"
+            ):
+                marker_service.attach_capacity(
+                    capacity, volunteer_job=job_id
+                )
+
             # Multi-format output: when the user selected more than one format
             # and the resolved engine can render them from one parse, render all
             # requested formats now (single document parse -> N renders). The
@@ -1574,6 +1682,7 @@ class TaskManager:
                 result = conversion_service.convert_file(filepath, dict(config))
 
             if job_id in self._cancel_requested:
+                self._settle_runtime_ticket(job_id, "cancelled")
                 self._progress[job_id] = 0
                 self._job_status_text[job_id] = "Conversion cancelled."
                 self._run_async(self._update_job_status(job_id, "cancelled", only_if_active=True))
@@ -1604,15 +1713,28 @@ class TaskManager:
             if not projected:
                 # Acceptance was rejected (stale/conflict/cancelled): the
                 # in-memory success view must not claim completion either.
+                self._settle_runtime_ticket(job_id, "cancelled")
                 return result
             if job_id in self._cancel_requested:
+                self._settle_runtime_ticket(job_id, "cancelled")
                 self._progress[job_id] = 0
                 self._job_status_text[job_id] = "Conversion cancelled."
                 return {"cancelled": True}
+            self._settle_runtime_ticket(job_id, "success")
+            if ticket is not None:
+                capacity.note_successful_execution()
             self._progress[job_id] = 100
             self._job_status_text[job_id] = "Conversion completed successfully."
             return result
         except Exception as exc:
+            if ticket is not None:
+                try:
+                    from app.services.marker_service import _is_cuda_oom
+
+                    outcome = "oom" if _is_cuda_oom(exc) else "failed"
+                except Exception:  # noqa: BLE001 - outcome classification is best effort
+                    outcome = "failed"
+                self._settle_runtime_ticket(job_id, outcome, detail=str(exc))
             if job_id in self._cancel_requested:
                 self._progress[job_id] = 0
                 self._job_status_text[job_id] = "Conversion cancelled."

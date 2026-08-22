@@ -24,6 +24,7 @@ def _reset_globals():
     gpu_worker._worker_id = -1
     gpu_worker._model_dict = None
     gpu_worker._current_job_id = None
+    gpu_worker._capacity = None
 
 
 class TestInitializer:

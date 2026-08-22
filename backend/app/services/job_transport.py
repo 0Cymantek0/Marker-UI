@@ -53,6 +53,11 @@ class WorkerEventType(str, Enum):
     result = "result"
     error = "error"
     heartbeat = "heartbeat"
+    # PR69 runtime capacity: structured admission/residency observations
+    # (cold load, warm reuse, queue reason, admission decision, OOM
+    # containment feedback) so callers can see WHY work waits and what it
+    # cost, instead of everything being generic "processing".
+    runtime = "runtime"
 
 
 @dataclass
@@ -82,6 +87,10 @@ class WorkerEvent:
     # result / error
     payload: dict[str, Any] = field(default_factory=dict)
     error_message: str = ""
+
+    # runtime (PR69): the structured observation payload. Phase marker in
+    # runtime["phase"]; see gpu_worker._emit_runtime for the schema.
+    runtime: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------

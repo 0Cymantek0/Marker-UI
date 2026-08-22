@@ -192,6 +192,38 @@ class DemandEstimate:
         }
 
 
+# Extensions whose conversion consumes the marker model residency and whose
+# geometry the estimator can read cheaply. Everything else (office docs,
+# archives, media) runs on converters that never touch surya — admission
+# has no scarce resource to protect there.
+_ADMITTED_SUFFIXES = frozenset({".pdf"})
+_ADMITTED_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"})
+
+
+def read_image_geometry(filepath: str | Path) -> list[PageGeometry]:
+    """Read pixel geometry for a single-image input at its native size.
+
+    Image inputs enter the marker OCR pipeline as one page; the estimator
+    treats native pixels as BOTH the lowres and highres geometry (marker
+    renders PDFs at two DPIs but consumes images as-is).
+    """
+    from PIL import Image
+
+    with Image.open(filepath) as img:
+        width, height = img.size
+    # Express the native pixel size as the equivalent PDF point size so
+    # PageGeometry's DPI math reproduces it exactly for the lowres class
+    # (and proportionally for highres).
+    points_per_lowres_pixel = 72.0 / DEFAULT_PREPROCESSOR_FACTS.lowres_dpi
+    return [
+        PageGeometry(
+            page_number=0,
+            width_pt=width * points_per_lowres_pixel,
+            height_pt=height * points_per_lowres_pixel,
+        )
+    ]
+
+
 def read_pdf_page_geometries(filepath: str | Path, max_pages: int = 10_000) -> list[PageGeometry]:
     """Read page sizes from PDF metadata without rendering or models.
 
@@ -338,22 +370,44 @@ class DemandEstimator:
         *,
         profile_id: str,
         ocr_enabled: bool = True,
-    ) -> DemandEstimate:
+    ) -> Optional[DemandEstimate]:
         """Estimate demand for one input document.
 
-        Any failure to read geometry degrades to the declared UNKNOWN class
-        (handled conservatively by admission) — never to optimistic NORMAL.
+        Returns None when admission does not apply:
+
+        * the input does not exist (kernel/submit validation owns that
+          failure — there is no execution to admit);
+        * its kind never touches the marker model residency (office/media
+          converters);
+        * its geometry cannot be read (a document pypdfium2/PIL cannot
+          open will fail inside the converter before any GPU allocation —
+          admission has no scarce execution to protect, and the
+          converter's own truthful failure is the correct outcome).
+
+        A document that parses but sits outside the characterized bounds
+        degrades to the declared UNKNOWN/OOD safe path — never to
+        optimistic NORMAL admission.
         """
+        path = Path(filepath)
+        if not path.is_file():
+            return None
+        suffix = path.suffix.lower()
+        if suffix in _ADMITTED_IMAGE_SUFFIXES:
+            try:
+                geometries = read_image_geometry(path)
+            except Exception as exc:  # noqa: BLE001 - not admission's failure to own
+                logger.info("image geometry unreadable, admission skipped: %s: %r", path, exc)
+                return None
+            return self.estimate_for_geometries(
+                geometries, profile_id=profile_id, ocr_enabled=ocr_enabled
+            )
+        if suffix not in _ADMITTED_SUFFIXES:
+            return None
         try:
-            geometries = read_pdf_page_geometries(filepath)
-        except Exception as exc:  # noqa: BLE001 - unknown demand, not a crash
-            logger.warning("demand geometry read failed for %s: %r", filepath, exc)
-            estimate = self.estimate_for_geometries(
-                [], profile_id=profile_id, ocr_enabled=ocr_enabled
-            )
-            return replace(
-                estimate, notes=estimate.notes + (f"geometry read failed: {exc}",)
-            )
+            geometries = read_pdf_page_geometries(path)
+        except Exception as exc:  # noqa: BLE001 - not admission's failure to own
+            logger.info("pdf geometry unreadable, admission skipped: %s: %r", path, exc)
+            return None
         return self.estimate_for_geometries(
             geometries, profile_id=profile_id, ocr_enabled=ocr_enabled
         )
@@ -364,22 +418,21 @@ class DemandEstimator:
 # ---------------------------------------------------------------------------
 
 def runtime_versions() -> dict[str, str]:
-    """Best-effort pinned-runtime versions; part of profile identity."""
+    """Pinned-runtime versions from distribution metadata; profile identity.
+
+    Deliberately never imports torch/marker/surya: the parent process must
+    not pay those imports to describe a profile, and importlib.metadata is
+    both faster and stable regardless of import order (so a fingerprint
+    does not change just because torch happened to load first).
+    """
     versions: dict[str, str] = {}
-    try:
-        import torch
+    from importlib.metadata import PackageNotFoundError, version
 
-        versions["torch"] = torch.__version__
-    except Exception:  # noqa: BLE001 - absent torch is a profile fact too
-        versions["torch"] = "absent"
-    try:
-        from importlib.metadata import version
-
-        versions["surya"] = version("surya-ocr")
-        versions["marker"] = version("marker-pdf")
-    except Exception:  # noqa: BLE001
-        versions.setdefault("surya", "unknown")
-        versions.setdefault("marker", "unknown")
+    for key, dist in (("torch", "torch"), ("surya", "surya-ocr"), ("marker", "marker-pdf")):
+        try:
+            versions[key] = version(dist)
+        except PackageNotFoundError:
+            versions[key] = "absent"
     return versions
 
 
@@ -711,6 +764,9 @@ class AdmissionTicket:
     estimate: DemandEstimate
     admitted_at: float
     completed: bool = False
+    # Owning coordinator so terminal paths can settle without also holding
+    # the reference that granted the ticket (single owner, explicit cleanup).
+    coordinator: Any = None
 
 
 @dataclass
@@ -730,12 +786,25 @@ def probe_device_capacity(device_str: str | None) -> dict[str, Any]:
     Reports allocator-visible AND device-level numbers separately (they are
     related but not interchangeable); failures degrade to ``available=False``
     rather than pretending CUDA facts exist.
+
+    Never IMPORTS torch for a CPU/absent device: the parent process must not
+    pay a multi-second torch import (or touch CUDA at all) just to learn
+    there is no CUDA envelope to declare. A CUDA device probe uses torch
+    only where torch is the runtime that will own the device.
     """
     info: dict[str, Any] = {"device": device_str or "cpu", "available": False}
-    try:
-        import torch
+    if not (device_str or "").startswith("cuda"):
+        return info
+    import sys
 
-        if device_str and device_str.startswith("cuda") and torch.cuda.is_available():
+    torch = sys.modules.get("torch")
+    if torch is None:
+        # CUDA target without torch loaded: this process has no CUDA runtime
+        # to interrogate; the declared envelope governs.
+        info["error"] = "torch not loaded in this process"
+        return info
+    try:
+        if torch.cuda.is_available():
             index = 0
             if ":" in device_str:
                 index = int(device_str.split(":", 1)[1])
@@ -793,16 +862,20 @@ class RuntimeCapacityCoordinator:
         filepath: str | Path,
         *,
         ocr_enabled: bool = True,
-    ) -> AdmissionTicket:
+    ) -> Optional[AdmissionTicket]:
         """Estimate demand and atomically reserve capacity + model lease.
 
-        Raises :class:`AdmissionError` when the request must not enter the
-        dangerous converter path — callers treat that as a truthful refusal,
-        never as an excuse to run anyway.
+        Returns None when admission does not apply to this input (missing
+        file, or a converter kind that never touches the marker model
+        residency). Raises :class:`AdmissionError` when the request must
+        not enter the dangerous converter path — callers treat that as a
+        truthful refusal, never as an excuse to run anyway.
         """
         estimate = self.estimator.estimate(
             filepath, profile_id=self.profile.fingerprint(), ocr_enabled=ocr_enabled
         )
+        if estimate is None:
+            return None
         return self.admit_estimate(job_id, estimate)
 
     def admit_estimate(self, job_id: str, estimate: DemandEstimate) -> AdmissionTicket:
@@ -838,6 +911,7 @@ class RuntimeCapacityCoordinator:
             lease=lease,
             estimate=estimate,
             admitted_at=self._clock(),
+            coordinator=self,
         )
         with self._lock:
             self._tickets[job_id] = ticket
@@ -903,13 +977,24 @@ class RuntimeCapacityCoordinator:
 
     # -- unload / drain protocol ---------------------------------------------
 
-    def request_unload(self, timeout: float = 30.0) -> bool:
+    def request_unload(self, timeout: float = 30.0, volunteer_job: str | None = None) -> bool:
         """Safe unload transition: stop new leases, drain, publish state.
+
+        ``volunteer_job`` names the borrower that is itself requesting the
+        unload (the hybrid-OCR low-VRAM path: the executing job voluntarily
+        surrenders its own lease before freeing models). Its leases are
+        released first — a borrower may evict itself, never others — and
+        the drain then waits for any remaining borrowers.
 
         Returns True when models may be released; False means active
         borrowers still hold the generation and the caller must NOT unload
         (choose an explicit cancellation policy instead).
         """
+        if volunteer_job is not None:
+            with self._lock:
+                ticket = self._tickets.get(volunteer_job)
+            if ticket is not None and not ticket.completed:
+                self.leases.release(ticket.lease.lease_id)
         drained = self.leases.request_drain(timeout=timeout)
         if drained:
             self.observe_unload(0.0)
@@ -1078,3 +1163,34 @@ def coordinator_for_device(
         ),
         unknown_policy=str(getattr(config, "ADMISSION_UNKNOWN_POLICY", "safe_profile")),
     )
+
+
+# ---------------------------------------------------------------------------
+# Per-context default coordinator
+# ---------------------------------------------------------------------------
+
+_DEFAULT_COORDINATORS: dict[str, RuntimeCapacityCoordinator] = {}
+_DEFAULT_COORDINATOR_LOCK = threading.Lock()
+
+
+def default_coordinator(device_str: str | None) -> RuntimeCapacityCoordinator:
+    """Process-local coordinator cache, one per pinned device label.
+
+    A GPU worker resolves its coordinator from its pinned device string on
+    first use; the parent thread backend resolves one for the implicit
+    marker device. One coordinator per device per process is exactly the
+    cardinality of the capacity contention it arbitrates.
+    """
+    key = device_str or "cpu"
+    with _DEFAULT_COORDINATOR_LOCK:
+        coordinator = _DEFAULT_COORDINATORS.get(key)
+        if coordinator is None:
+            coordinator = coordinator_for_device(device_str)
+            _DEFAULT_COORDINATORS[key] = coordinator
+        return coordinator
+
+
+def reset_default_coordinators() -> None:
+    """Test hook: drop cached coordinators (fresh envelopes per test)."""
+    with _DEFAULT_COORDINATOR_LOCK:
+        _DEFAULT_COORDINATORS.clear()

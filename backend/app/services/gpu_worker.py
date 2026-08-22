@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any, Optional
 
 from app.services.job_transport import JobEnvelope, WorkerEvent, WorkerEventType
@@ -33,6 +34,9 @@ _device_str: str = "cpu"
 _worker_id: int = -1
 _model_dict: dict[str, Any] | None = None
 _current_job_id: str | None = None
+# PR69 runtime admission coordinator for THIS process's pinned device; None
+# when admission is disabled via MARKER_ADMISSION=false.
+_capacity: Any | None = None
 
 
 def _requested_formats(config: dict[str, Any]) -> list[str]:
@@ -89,6 +93,27 @@ def _emit_log(message: str, levelname: str) -> None:
     )
 
 
+def _emit_runtime(job_id: str, phase: str, data: dict[str, Any] | None = None) -> None:
+    """Push one structured runtime-capacity observation (PR69).
+
+    Phases: admission_refused, admitted, residency (cold_load / warm_reuse /
+    unload), oom_contained, finished. The payload is a plain dict so the
+    parent can surface why work waited and what residency cost, without
+    parsing logs.
+    """
+    runtime = {"phase": phase, "device": _device_str, "worker_id": _worker_id}
+    if data:
+        runtime.update(data)
+    _emit(
+        WorkerEvent(
+            type=WorkerEventType.runtime,
+            job_id=job_id,
+            worker_id=_worker_id,
+            runtime=runtime,
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Logging handler that routes log records to the event queue
 # ---------------------------------------------------------------------------
@@ -114,6 +139,17 @@ class _QueueLogHandler(logging.Handler):
 def _worker_progress_reporter(job_id: str, percent: int, label: str) -> None:
     """Sink handed to ``progress_tracker`` so tqdm taps become queue events."""
     _emit_progress(percent, label)
+
+
+def _residency_notifier(transition: str, elapsed_seconds: float) -> None:
+    """Forward a MarkerService residency transition to the parent (PR69)."""
+    if _current_job_id is None:
+        return
+    _emit_runtime(
+        _current_job_id,
+        "residency",
+        {"transition": transition, "elapsed_seconds": elapsed_seconds},
+    )
 
 
 def _stage_payload_handles(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -186,14 +222,29 @@ def worker_initializer(
 
     Order matters: install the httpx monkeypatch first, seed the secrets cache
     from the parent's snapshot (no DB round-trip), wire progress/log routing to
-    the queue, then load the marker model dict onto the pinned device. CUDA must
-    only be touched here, inside the spawned process — never in the parent.
+    the queue, resolve this process's runtime-capacity coordinator for its
+    pinned device, then load the marker model dict onto the pinned device.
+    CUDA must only be touched here, inside the spawned process — never in the
+    parent.
     """
-    global _event_queue, _device_str, _worker_id
+    global _event_queue, _device_str, _worker_id, _capacity
 
     _event_queue = event_queue
     _device_str = device_str
     _worker_id = worker_id
+
+    # 0. Runtime admission coordinator for this pinned device (PR69). Cheap
+    # (device probe only; no model imports), disabled entirely by kill switch.
+    try:
+        from app.core.config import ADMISSION_ENABLED
+
+        if ADMISSION_ENABLED:
+            from app.services.runtime_capacity import default_coordinator
+
+            _capacity = default_coordinator(device_str)
+    except Exception:  # noqa: BLE001 - admission must never kill a worker
+        logger.exception("worker %d: capacity coordinator setup failed", worker_id)
+        _capacity = None
 
     # 1. Re-install the live httpx interceptor (process-local globals).
     try:
@@ -234,6 +285,8 @@ def worker_initializer(
             )
             return
         svc = MarkerService()
+        if _capacity is not None:
+            svc.attach_capacity(_capacity, volunteer_job=None)
         device = None if device_str == "cpu" else device_str
         svc.initialize(device=device)
         _model_dict = svc._model_dict
@@ -254,6 +307,11 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
     all real data — progress, logs, the final document — flows over the queue,
     which decouples result delivery from the future and is what a future
     multi-node transport will reuse.
+
+    PR69: when admission is enabled the converter is only entered AFTER the
+    runtime coordinator reserves capacity and issues a model lease. A refused
+    request never reaches the dangerous allocation path — it fails truthfully
+    with a structured reason instead.
     """
     global _current_job_id, _model_dict
     _current_job_id = envelope.job_id
@@ -269,6 +327,40 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
         )
     )
 
+    # Pre-execution admission (invariant 30): estimate demand from the
+    # pinned preprocessor and reserve capacity + a model lease atomically.
+    ticket = None
+    if _capacity is not None:
+        from app.services.runtime_capacity import AdmissionError
+
+        ocr_enabled = not bool(envelope.config.get("disable_ocr", False))
+        try:
+            ticket = _capacity.admit(envelope.job_id, envelope.filepath, ocr_enabled=ocr_enabled)
+        except AdmissionError as exc:
+            _emit_runtime(
+                envelope.job_id,
+                "admission_refused",
+                {"reason": str(exc)},
+            )
+            _emit(
+                WorkerEvent(
+                    type=WorkerEventType.error,
+                    job_id=envelope.job_id,
+                    worker_id=_worker_id,
+                    error_message=f"runtime admission refused: {exc}",
+                )
+            )
+            _current_job_id = None
+            return None
+        _emit_runtime(
+            envelope.job_id,
+            "admitted",
+            {
+                "demand": ticket.estimate.summary(),
+                "capacity": _capacity.ledger.snapshot(),
+            },
+        )
+
     try:
         from app.services.marker_service import MarkerService
         from app.services.conversion_service import ConversionService
@@ -279,6 +371,12 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
         if _model_dict is not None:
             svc._model_dict = _model_dict
             svc._initialized = True
+        if _capacity is not None:
+            svc.attach_capacity(
+                _capacity,
+                volunteer_job=envelope.job_id,
+                runtime_notifier=_residency_notifier,
+            )
 
         conversion_svc = ConversionService(svc)
         device = None if _device_str == "cpu" else _device_str
@@ -314,6 +412,15 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
 
         payload = _stage_payload_handles(envelope.job_id, payload)
 
+        if ticket is not None:
+            _capacity.finish(ticket, outcome="success")
+            _capacity.note_successful_execution()
+            _emit_runtime(
+                envelope.job_id,
+                "finished",
+                {"outcome": "success", "elapsed_seconds": time.time() - ticket.admitted_at},
+            )
+
         _emit(
             WorkerEvent(
                 type=WorkerEventType.result,
@@ -325,6 +432,19 @@ def worker_run_job(envelope: JobEnvelope) -> Optional[str]:
         return envelope.job_id
     except Exception as exc:  # noqa: BLE001 - report, never crash the worker process
         logger.exception("worker %d: conversion failed for job %s", _worker_id, envelope.job_id)
+        if ticket is not None:
+            from app.services.marker_service import _is_cuda_oom
+
+            outcome = "oom" if _is_cuda_oom(exc) else "failed"
+            _capacity.finish(ticket, outcome=outcome, detail=str(exc))
+            if outcome == "oom":
+                _emit_runtime(
+                    envelope.job_id,
+                    "oom_contained",
+                    {"detail": str(exc), "capacity": _capacity.ledger.snapshot()},
+                )
+            else:
+                _emit_runtime(envelope.job_id, "finished", {"outcome": "failed"})
         _emit(
             WorkerEvent(
                 type=WorkerEventType.error,
