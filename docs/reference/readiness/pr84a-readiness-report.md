@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `00b3e8458ddf986eb2a3319164594d828678610c`
-- Invariants proven: **37 / 62**
+- Audited source head: `a20a02f467494293828328285c7f1680a875812c`
+- Invariants proven: **38 / 62**
 - Failed: **0**
-- No acceptable evidence: **25**
+- No acceptable evidence: **24**
 
 ## Group summary
 
@@ -15,7 +15,7 @@
 | 23C.2 | Geometry, patches, and incrementality | 7 | 0 | 2 |
 | 23C.3 | Verification and routing | 4 | 0 | 5 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
-| 23C.5 | Source, authorization, and retrieval | 7 | 0 | 3 |
+| 23C.5 | Source, authorization, and retrieval | 8 | 0 | 2 |
 | 23C.6 | Agent and product behavior | 5 | 0 | 3 |
 | 23C.7 | Economics and claim language | 1 | 0 | 5 |
 
@@ -64,7 +64,7 @@
 | 39 | 23C.5 | proven | sqlite-dev |
 | 40 | 23C.5 | proven | sqlite-dev |
 | 41 | 23C.5 | proven | sqlite-dev |
-| 42 | 23C.5 | no-evidence | no executable evidence bound |
+| 42 | 23C.5 | proven | deterministic local sqlite lane (migrated file DB, real kernel commit spine, real content-addressed store, real authorization overlay; scripted provider) |
 | 43 | 23C.5 | no-evidence | executed proof covers only part of the invariant wording |
 | 44 | 23C.5 | proven | sqlite-dev |
 | 45 | 23C.5 | proven | sqlite-dev |
@@ -92,7 +92,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 
 ### Type A — implementation missing
 
-- **Inv 42** (23C.5, connector-idempotency-cursor-atomicity): No connector event ingestion subsystem exists: no idempotent/gap-aware connector event handling, no source-state+cursor local atomic commit, no token-expiry/reset reconciliation. (Byte-staging dedup in source_store is a different concern.) Reason: no executable evidence bound.
 - **Inv 48** (23C.5, disclosed-context-non-revocability-doc): The required documentation statement — already disclosed external-agent context cannot be revoked — appears nowhere in Marker UI docs and no test links or checks it. Reason: no executable evidence bound.
 - **Inv 54** (23C.6, trace-not-entailment-proof): AnswerContextTrace does not exist in the codebase; no entailment-representation separation or material-answer-claim assessment path is implemented or tested (the EvidencePacket docstring disclaims entailment, but that is prose). Reason: no executable evidence bound.
 
@@ -133,9 +132,9 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - 23C.7 Economics and claim language: 5 non-proven
 - 23C.1 Truth and persistence: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
-- 23C.5 Source, authorization, and retrieval: 3 non-proven
 - 23C.6 Agent and product behavior: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 2 non-proven
+- 23C.5 Source, authorization, and retrieval: 2 non-proven
 
 ## Reproduction
 

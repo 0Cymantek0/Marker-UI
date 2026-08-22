@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-22T17:06:44+00:00",
-  "git_head": "00b3e8458ddf986eb2a3319164594d828678610c",
+  "generated_at": "2026-08-22T21:58:29+00:00",
+  "git_head": "a20a02f467494293828328285c7f1680a875812c",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -538,7 +538,7 @@
       "binding_key": "28:test:backend/tests/test_kernel_dual_backend_conformance.py::test_commit_visible_result[sqlite]",
       "kind": "test",
       "scope_blobs": {
-        "backend/tests/test_kernel_dual_backend_conformance.py": "af07779c418f3b79e1d9d9f60b5d0e0bff94438a"
+        "backend/tests/test_kernel_dual_backend_conformance.py": "7f66f2cc5d1e2792d597bf61df42579f570409bb"
       },
       "nodes": [
         "backend/tests/test_kernel_dual_backend_conformance.py::test_commit_visible_result[sqlite]"
@@ -1023,7 +1023,7 @@
         "backend/tests/test_kernel_pg_failover_promotion.py::test_acknowledged_truth_survives_primary_loss_and_promotion": "skipped_env_gated"
       },
       "outcome": "skipped_env_gated",
-      "detail": "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically; backend/tests/test_kernel_pg_failover_promotion.py::test_acknowledged_truth_survives_primary_loss_and_promotion: S3 payload-store conformance needs MARKER_TEST_S3_ENDPOINT (object-store base URL) plus MARKER_TEST_S3_ACCESS_KEY and MARKER_TEST_S3_SECRET_KEY credentials; point them at a real S3-compatible s"
+      "detail": "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically; backend/tests/test_kernel_pg_failover_promotion.py::test_acknowledged_truth_survives_primary_loss_and_promotion: PR83C2 failover drills need a reachable Docker daemon to provision the two-node PostgreSQL topology (docker info exited 1)"
     },
     {
       "binding_key": "38:test:backend/tests/test_kernel_runtime.py::TestCancellation::test_cancel_during_execution_beats_late_result[sqlite]",
@@ -1180,6 +1180,76 @@
         "backend/tests/test_kernel_source_store.py::test_inplace_mutation_during_read_is_incoherent": "passed",
         "backend/tests/test_kernel_source_store.py::test_replacement_after_resolve_acquires_current_content_coherently": "passed",
         "backend/tests/test_kernel_source_store.py::test_mutation_after_read_completes_does_not_affect_acquired_bytes": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "42:test:backend/tests/test_connector_state.py",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/alembic/versions/20260823_0014_add_connector_convergence.py": "58b08469d93ce9a6288fa2d334d8ccb66782f090",
+        "backend/app/kernel/commit.py": "ed42da77f3bde0b4dfeb613a1d5d44b7f65719d8",
+        "backend/app/kernel/connector_state.py": "ef8416239cc18a831d827e8eb727ff241bacf21b",
+        "backend/app/kernel/errors.py": "2106a0d55137a52c7933a03a915348749bec89c0",
+        "backend/app/kernel/models.py": "589ccce97d0258e88d6dc49b34f89831fab40e0e",
+        "backend/app/kernel/records.py": "1036890ec23a1b375a65a20677d872f3c68cd925",
+        "backend/app/kernel/source_object_store.py": "93a3ed15eaacd04adacb46e7a0d563eda01eb5a7",
+        "backend/app/kernel/source_store.py": "d1f3466ca89f45a075251fe85f7029735292a5de",
+        "backend/app/services/connector_adapter.py": "6f93d33f7face6ad6fef764c802d045586836d2d",
+        "backend/app/services/connector_ingestion.py": "060e018bc0ffab858ec7c8f527eb612d07a51196",
+        "backend/app/services/source_acquisition.py": "71afeb65644369b60a29da43f7bf40ebe9da7584",
+        "backend/tests/test_connector_ingestion.py": "5723792157ad784f3d57994d31cc1d24d021dc79",
+        "backend/tests/test_connector_migration.py": "8e016fd8e66473331a18ea68207eb25255d6fae5",
+        "backend/tests/test_connector_state.py": "cf692d959182d82d761e7f645b553ccebf05e5da"
+      },
+      "nodes": [
+        "backend/tests/test_connector_state.py",
+        "backend/tests/test_connector_ingestion.py",
+        "backend/tests/test_connector_migration.py"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_connector_state.py::TestStreamCreationInboxVisibility::test_create_stream_with_applied_inbox": "passed",
+        "backend/tests/test_connector_state.py::TestStaleCursorRefusal::test_stale_expected_token_rolls_back": "passed",
+        "backend/tests/test_connector_state.py::TestDuplicateEventRefusal::test_duplicate_provider_event_rolls_back": "passed",
+        "backend/tests/test_connector_state.py::TestFaultInjectionRollback::test_fault_injection_rolls_back_everything[connector-checked]": "passed",
+        "backend/tests/test_connector_state.py::TestFaultInjectionRollback::test_fault_injection_rolls_back_everything[connector-applied]": "passed",
+        "backend/tests/test_connector_state.py::TestReconciliationGuard::test_reconciliation_transitions": "passed",
+        "backend/tests/test_connector_state.py::TestConnectorOnlyBatch::test_connector_only_batch_advances_checkpoint": "passed",
+        "backend/tests/test_connector_state.py::TestConcurrentAdvancement::test_exactly_one_wins_cas": "passed",
+        "backend/tests/test_connector_state.py::TestInboxOnlyOnMissingStream::test_inbox_only_without_stream_rejected": "passed",
+        "backend/tests/test_connector_ingestion.py::TestIdempotencyAndReplay::test_t1_duplicate_event_converges": "passed",
+        "backend/tests/test_connector_ingestion.py::TestIdempotencyAndReplay::test_t2_distinct_notifications_same_state_converge": "passed",
+        "backend/tests/test_connector_ingestion.py::TestIdempotencyAndReplay::test_t3_replay_after_restart_identical": "passed",
+        "backend/tests/test_connector_ingestion.py::TestOutOfOrderDelivery::test_t4_older_revision_after_newer_never_regresses": "passed",
+        "backend/tests/test_connector_ingestion.py::TestOutOfOrderDelivery::test_t5_same_entity_twice_in_one_page_converges_deterministically": "passed",
+        "backend/tests/test_connector_ingestion.py::TestOutOfOrderDelivery::test_t6_ordering_free_provider_resolves_via_authoritative_query": "passed",
+        "backend/tests/test_connector_ingestion.py::TestAtomicityFaultInjection::test_t7_fault_before_transaction_rolls_back_everything": "passed",
+        "backend/tests/test_connector_ingestion.py::TestAtomicityFaultInjection::test_t8_bytes_staged_fault_before_truth_commit": "passed",
+        "backend/tests/test_connector_ingestion.py::TestAtomicityFaultInjection::test_t9_fault_after_outbox_insert_rolls_back_all": "passed",
+        "backend/tests/test_connector_ingestion.py::TestAtomicityFaultInjection::test_t10_fault_immediately_before_commit": "passed",
+        "backend/tests/test_connector_ingestion.py::TestAtomicityFaultInjection::test_t11_crash_after_commit_replay_converges": "passed",
+        "backend/tests/test_connector_ingestion.py::TestAtomicityFaultInjection::test_t12_invalidation_intent_atomic_with_source_truth": "passed",
+        "backend/tests/test_connector_ingestion.py::TestCheckpointLifecycle::test_t13_multi_page_only_completed_progress_becomes_checkpoint": "passed",
+        "backend/tests/test_connector_ingestion.py::TestCheckpointLifecycle::test_t14_expired_token_parks_stream_in_reconciliation": "passed",
+        "backend/tests/test_connector_ingestion.py::TestCheckpointLifecycle::test_t15_provider_reset_requires_completed_reconciliation": "passed",
+        "backend/tests/test_connector_ingestion.py::TestCheckpointLifecycle::test_t16_sequence_gap_refuses_unsafe_progression": "passed",
+        "backend/tests/test_connector_ingestion.py::TestCheckpointLifecycle::test_t17_crash_mid_reconciliation_resumes_and_completes": "passed",
+        "backend/tests/test_connector_ingestion.py::TestCheckpointLifecycle::test_t18_repeated_reconciliation_is_idempotent": "passed",
+        "backend/tests/test_connector_ingestion.py::TestSourceLifecycleSemantics::test_t19_content_update_same_source_new_revision": "passed",
+        "backend/tests/test_connector_ingestion.py::TestSourceLifecycleSemantics::test_t20_policy_only_change_never_mints_content_revision": "passed",
+        "backend/tests/test_connector_ingestion.py::TestSourceLifecycleSemantics::test_t21_deletion_denies_live_reads_preserves_history": "passed",
+        "backend/tests/test_connector_ingestion.py::TestSourceLifecycleSemantics::test_t22_loss_of_access_without_deletion_is_a_security_event": "passed",
+        "backend/tests/test_connector_ingestion.py::TestSourceLifecycleSemantics::test_t23_move_with_stable_identity_preserves_source": "passed",
+        "backend/tests/test_connector_ingestion.py::TestSourceLifecycleSemantics::test_t24_delete_create_equal_bytes_stay_distinct_sources": "passed",
+        "backend/tests/test_connector_ingestion.py::TestSourceLifecycleSemantics::test_restore_lifts_deny_and_reacquires": "passed",
+        "backend/tests/test_connector_ingestion.py::TestConcurrency::test_t25_concurrent_duplicate_delivery_converges": "passed",
+        "backend/tests/test_connector_ingestion.py::TestConcurrency::test_t26_overlapping_polls_cannot_fork_the_checkpoint": "passed",
+        "backend/tests/test_connector_migration.py::TestFreshUpgradeContract::test_fresh_upgrade_creates_connector_tables_with_contract": "passed",
+        "backend/tests/test_connector_migration.py::TestFreshUpgradeContract::test_duplicate_provider_event_rejected_by_database": "passed",
+        "backend/tests/test_connector_migration.py::TestUpgradeFromPreConnectorSchema::test_upgrade_from_20260819_0013_keeps_spine": "passed",
+        "backend/tests/test_connector_migration.py::TestDowngradeReUpgradeRoundTrip::test_downgrade_removes_tables_then_upgrade_restores": "passed",
+        "backend/tests/test_connector_migration.py::TestModelsMatchMigration::test_orm_columns_match_migrated_schema": "passed"
       },
       "outcome": "passed",
       "detail": ""
@@ -1924,8 +1994,8 @@
       "binding_key": "9:test:backend/tests/test_database_migration.py::test_no_production_self_heal_remains",
       "kind": "test",
       "scope_blobs": {
-        "backend/tests/test_context_runtime_cursor_migration.py": "56d5d8d15edac3faaa1684e61e0b763f48fa70c7",
-        "backend/tests/test_database_migration.py": "1c7bfe07cc02964e2caf2d1d6cea9f02d91487bd"
+        "backend/tests/test_context_runtime_cursor_migration.py": "696cb0c55db6324523be79f81d73142a68d515f2",
+        "backend/tests/test_database_migration.py": "33e28fa8bda8ad510d19a3ec3c805a7a455c50cb"
       },
       "nodes": [
         "backend/tests/test_database_migration.py::test_no_production_self_heal_remains",

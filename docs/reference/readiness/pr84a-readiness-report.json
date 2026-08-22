@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "00b3e8458ddf986eb2a3319164594d828678610c"
+    "git_head": "a20a02f467494293828328285c7f1680a875812c"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 37,
+    "proven": 38,
     "failed": 0,
-    "no_evidence": 25
+    "no_evidence": 24
   },
   "group_counts": {
     "23C.1": {
@@ -35,9 +35,9 @@
       "total": 11
     },
     "23C.5": {
-      "proven": 7,
+      "proven": 8,
       "failed": 0,
-      "no_evidence": 3,
+      "no_evidence": 2,
       "total": 10
     },
     "23C.6": {
@@ -54,7 +54,7 @@
     }
   },
   "gap_type_counts": {
-    "A": 3,
+    "A": 2,
     "B": 12,
     "D": 5,
     "F": 5
@@ -64,9 +64,9 @@
     "23C.7",
     "23C.1",
     "23C.4",
-    "23C.5",
     "23C.6",
-    "23C.2"
+    "23C.2",
+    "23C.5"
   ],
   "integrity_findings": [],
   "invariants": [
@@ -539,11 +539,13 @@
       "id": 42,
       "group": "23C.5",
       "label": "connector-idempotency-cursor-atomicity",
-      "status": "no_evidence",
-      "reason": "none_bound",
-      "environments": [],
-      "gap_type": "A",
-      "gap_note": "No connector event ingestion subsystem exists: no idempotent/gap-aware connector event handling, no source-state+cursor local atomic commit, no token-expiry/reset reconciliation. (Byte-staging dedup in source_store is a different concern.)"
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "deterministic local sqlite lane (migrated file DB, real kernel commit spine, real content-addressed store, real authorization overlay; scripted provider)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 43,

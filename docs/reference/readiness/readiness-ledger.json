@@ -1215,11 +1215,39 @@
     },
     {
       "id": 42,
-      "status_claim": "no_evidence",
-      "gap_type": "A",
-      "gap_note": "No connector event ingestion subsystem exists: no idempotent/gap-aware connector event handling, no source-state+cursor local atomic commit, no token-expiry/reset reconciliation. (Byte-staging dedup in source_store is a different concern.)",
-      "bindings": [],
-      "context_docs": []
+      "status_claim": "proven",
+      "bindings": [
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "deterministic local sqlite lane (migrated file DB, real kernel commit spine, real content-addressed store, real authorization overlay; scripted provider)",
+          "rationale": "Executes the full failure-mode envelope for the invariant's three clauses. Idempotency: duplicate/replayed events (incl. after restart and concurrent duplicate workers) converge with no duplicate truth, successor work, or checkpoint corruption, and distinct notification ids for one final state converge through source/revision identity. Gap awareness: detected sequence gaps, truncated pages, and unknown-ordering providers refuse unsafe progression (defer/reconcile/authoritative-query routes). Atomicity: deterministic fault injection at begin/records-inserted/outbox-inserted/connector-applied/pre-commit proves source truth, outbox intent, inbox receipts, and cursor movement commit together or not at all, with post-crash replay convergence. Token expiry/reset: explicit reconciliation_required parking with cursor frozen, restartable idempotent page-wise reconciliation that only blesses a completed scan, and provider-reset adoption of a fresh checkpoint after the final page.",
+          "nodes": [
+            "backend/tests/test_connector_state.py",
+            "backend/tests/test_connector_ingestion.py",
+            "backend/tests/test_connector_migration.py"
+          ],
+          "scope_files": [
+            "backend/alembic/versions/20260823_0014_add_connector_convergence.py",
+            "backend/app/kernel/commit.py",
+            "backend/app/kernel/connector_state.py",
+            "backend/app/kernel/errors.py",
+            "backend/app/kernel/models.py",
+            "backend/app/kernel/records.py",
+            "backend/app/kernel/source_object_store.py",
+            "backend/app/kernel/source_store.py",
+            "backend/app/services/connector_adapter.py",
+            "backend/app/services/connector_ingestion.py",
+            "backend/app/services/source_acquisition.py",
+            "backend/tests/test_connector_ingestion.py",
+            "backend/tests/test_connector_migration.py",
+            "backend/tests/test_connector_state.py"
+          ]
+        }
+      ],
+      "context_docs": [
+        "docs/reference/pr71b-connector-convergence.md"
+      ]
     },
     {
       "id": 43,
