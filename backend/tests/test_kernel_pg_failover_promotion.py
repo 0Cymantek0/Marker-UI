@@ -49,15 +49,17 @@ ASYNC_CLUSTER_PORTS = (55471, 55472)
 REPEAT_CLUSTER_PORTS = (55481, 55482)
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture
 async def sync_cluster():
-    """The synchronous-policy primary/standby pair, provisioned once.
+    """The synchronous-policy primary/standby pair, fresh per test.
 
     Provisioning is real and loud: no Docker daemon or object store
     means skip (or fail under MARKER_TEST_FAILOVER_STRICT) — never a
-    mock. The core promotion drill consumes this cluster's one
-    promotion; tests in this module therefore run in definition order
-    and ``promote()`` itself refuses a second promotion.
+    mock. A function-scoped async fixture keeps the suite inside the
+    repo's proven pytest-asyncio pattern (a module-scoped async fixture
+    poisons the session event loop for every later async fixture when
+    it skips); each cluster carries exactly one promotion, so per-test
+    clusters also remove any cross-test ordering coupling.
     """
     require_failover_docker()
     require_s3_env()
