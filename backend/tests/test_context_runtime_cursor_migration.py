@@ -28,6 +28,7 @@ from app.db_migration import DatabaseState, inspect_database, upgrade_database
 PR76_HEAD = "20260817_0011"
 PR79A_HEAD = "20260818_0012"
 PR79B_HEAD = "20260819_0013"
+PR71B_HEAD = "20260823_0014"
 CURSOR_TABLE = "kernel_query_cursors"
 CURSOR_COLUMNS = {
     "handle",
@@ -74,7 +75,7 @@ async def test_pr79a_upgrade_adds_empty_cursor_state_table(tmp_path: Path) -> No
         }
         row_count = conn.execute(f"SELECT COUNT(*) FROM {CURSOR_TABLE}").fetchone()[0]
 
-    assert version == PR79B_HEAD
+    assert version == PR71B_HEAD
     assert CURSOR_TABLE in tables
     assert columns == CURSOR_COLUMNS
     assert row_count == 0
@@ -130,7 +131,7 @@ async def test_pr79a_downgrade_discards_cursor_state_and_reupgrade_converges(
         assert conn.execute(
             "SELECT COUNT(*) FROM kernel_query_cursors"
         ).fetchone()[0] == 0
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == PR79B_HEAD
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == PR71B_HEAD
 
 
 @pytest.mark.asyncio
