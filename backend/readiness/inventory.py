@@ -17,7 +17,13 @@ from . import INVENTORY_SCHEMA
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INVENTORY_PATH = Path(__file__).resolve().parent / "readiness_invariants.json"
-DEFAULT_MASTERPLAN_PATH = REPO_ROOT / "planning" / "v2" / "marker-ui-v2-Masterplan.md"
+# The governing master plan lives in the gitignored planning/ tree, so audits
+# bind to the committed release-governing extract instead. Regenerate it from
+# a real master plan with backend/scripts/readiness_governing_extract.py;
+# hand edits surface as inventory drift in --mode integrity.
+DEFAULT_MASTERPLAN_PATH = (
+    Path(__file__).resolve().parent / "governing" / "masterplan-amendment-23c.md"
+)
 
 EXPECTED_COUNT = 62
 EXPECTED_IDS = frozenset(range(1, EXPECTED_COUNT + 1))

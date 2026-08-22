@@ -144,3 +144,45 @@ def test_drift_detection_reports_reworded_invariant(tmp_path: Path) -> None:
     drift = masterplan_drift(invariants, masterplan)
     assert any("text drifted" in problem for problem in drift)
     assert DEFAULT_MASTERPLAN_PATH.exists()
+
+
+def test_default_governing_source_is_committed_in_the_repository() -> None:
+    """Integrity audits must be hermetic from a clean checkout (PR69 preflight).
+
+    The governing source is the committed release-governing extract, not the
+    gitignored planning tree. If this path ever moves back under ``planning/``,
+    ``--mode integrity`` breaks on every fresh clone.
+    """
+    resolved = DEFAULT_MASTERPLAN_PATH.resolve()
+    repo_parts = resolved.parts
+    assert "planning" not in repo_parts
+    assert DEFAULT_MASTERPLAN_PATH.is_file()
+    # And it lives under backend/readiness/governing/, which is tracked.
+    assert resolved.parent.name == "governing"
+
+
+def test_governing_extract_is_parseable_and_complete() -> None:
+    """The committed extract itself yields exactly the 62 governing items."""
+    extracted = extract_masterplan_invariants(DEFAULT_MASTERPLAN_PATH)
+    assert set(extracted) == set(range(1, 63))
+
+
+def test_hand_edited_extract_fails_drift_loudly(tmp_path: Path) -> None:
+    """A tampered committed extract must not silently become the new truth.
+
+    Editing one invariant's wording in the extract makes the committed
+    inventory JSON drift from it — the exact anti-drift guarantee the
+    integrity mode exists to enforce.
+    """
+    text = DEFAULT_MASTERPLAN_PATH.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("30. "):
+            lines[i] = "30. Tampered admission wording."
+            break
+    else:
+        pytest.fail("invariant 30 not found in governing extract")
+    tampered = tmp_path / "tampered.md"
+    tampered.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    drift = masterplan_drift(load_inventory(), tampered)
+    assert any("30" in problem and "drifted" in problem for problem in drift)
