@@ -152,6 +152,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -1378,4 +1379,272 @@ class KernelConnectorInbox(Base):
             f"<KernelConnectorInbox(stream={self.stream_id!r}, "
             f"event={self.provider_event_id!r}, kind={self.event_kind!r}, "
             f"applied={self.applied_state!r})>"
+        )
+
+
+# --- PR85: answer-evidence boundary (masterplan §9C.11) ----------------------
+#
+# Three durable concepts keep retrieval provenance, answer-time disclosed
+# context, and post-answer support judgment from collapsing into one
+# mutable object. Rows are append-only: no historical record is ever
+# rewritten by a later policy, retrieval, or assessment change.
+
+
+MAX_DISCLOSURE_ID_LENGTH = 128
+MAX_PACKET_ID_LENGTH = 128
+MAX_TRACE_ID_LENGTH = 128
+MAX_ANSWER_REF_LENGTH = 256
+MAX_ASSESSMENT_ID_LENGTH = 128
+MAX_ASSESSMENT_KEY_LENGTH = 256
+MAX_ASSESSMENT_VERDICT_LENGTH = 16
+MAX_ASSESSOR_KIND_LENGTH = 16
+MAX_ASSESSOR_ID_LENGTH = 256
+MAX_ASSESSMENT_PROCEDURE_LENGTH = 256
+MAX_ASSESSMENT_PROCEDURE_VERSION_LENGTH = 64
+MAX_PRINCIPAL_ID_LENGTH = 128
+
+
+class KernelContextDisclosure(Base):
+    """Immutable record of one page of context Marker UI actually
+    delivered to the caller (PR85).
+
+    Answer generation is external, so the strongest disclosure fact this
+    architecture can observe is the boundary crossing at
+    ``run_agent_query`` return time. One row records the complete
+    answer-time truth of that page: the canonical EvidencePacket JSON
+    (ordered evidence, publication, authorization view, budget, partial /
+    complete status) plus its deterministic packet identity. The row is
+    written *before* the response is returned — if it cannot be durably
+    recorded, the page is not delivered as a disclosable result.
+
+    ``packet_id`` is the packet's deterministic ``identity_id``: two
+    disclosures of the same semantic packet are two delivery events with
+    one packet identity.
+    """
+
+    __tablename__ = "kernel_context_disclosures"
+
+    disclosure_id: Mapped[str] = mapped_column(
+        String(MAX_DISCLOSURE_ID_LENGTH), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    principal_id: Mapped[str | None] = mapped_column(
+        String(MAX_PRINCIPAL_ID_LENGTH), nullable=True
+    )
+    packet_id: Mapped[str] = mapped_column(
+        String(MAX_PACKET_ID_LENGTH), nullable=False
+    )
+    packet_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "disclosure_id",
+            name="uq_kernel_context_disclosures_tenant",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelContextDisclosure(disclosure={self.disclosure_id!r}, "
+            f"workspace={self.workspace_id!r}, packet={self.packet_id!r})>"
+        )
+
+
+class KernelAnswerTrace(Base):
+    """One immutable binding of an externally produced answer to the
+    ordered disclosed context it is claimed to rest on (PR85).
+
+    ``answer_ref`` is the caller's stable answer/turn identity; the
+    unique ``(workspace_id, answer_ref)`` scope makes a commit
+    idempotent: replaying the same answer content and the same ordered
+    disclosure set returns the same trace, while any different content
+    or context set is an explicit conflict — never a silent overwrite.
+
+    ``answer_digest`` plus ``context_fingerprint`` (deterministic over
+    answer digest + ordered disclosure ids and packet identities) are
+    stored beside the bounded answer body so the conflict decision never
+    depends on re-reading child rows. The row is never updated after
+    commit; corrections are new answer identities, not mutations.
+    """
+
+    __tablename__ = "kernel_answer_traces"
+
+    trace_id: Mapped[str] = mapped_column(
+        String(MAX_TRACE_ID_LENGTH), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    principal_id: Mapped[str | None] = mapped_column(
+        String(MAX_PRINCIPAL_ID_LENGTH), nullable=True
+    )
+    answer_ref: Mapped[str] = mapped_column(
+        String(MAX_ANSWER_REF_LENGTH), nullable=False
+    )
+    answer_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    answer_content: Mapped[str] = mapped_column(Text, nullable=False)
+    context_fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "answer_ref",
+            name="uq_kernel_answer_traces_ref",
+        ),
+        UniqueConstraint(
+            "workspace_id",
+            "trace_id",
+            name="uq_kernel_answer_traces_tenant",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelAnswerTrace(trace={self.trace_id!r}, "
+            f"workspace={self.workspace_id!r}, ref={self.answer_ref!r})>"
+        )
+
+
+class KernelAnswerTraceDisclosure(Base):
+    """Ordered membership: which disclosed pages one answer trace binds.
+
+    ``position`` preserves delivery order; the composite foreign key to
+    ``kernel_context_disclosures (workspace_id, disclosure_id)`` makes a
+    cross-workspace disclosure reference structurally unrepresentable in
+    PostgreSQL, and the service layer enforces the same rule on the
+    SQLite development lane.
+    """
+
+    __tablename__ = "kernel_answer_trace_disclosures"
+
+    trace_id: Mapped[str] = mapped_column(
+        String(MAX_TRACE_ID_LENGTH), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), nullable=False
+    )
+    disclosure_id: Mapped[str] = mapped_column(
+        String(MAX_DISCLOSURE_ID_LENGTH), nullable=False
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "trace_id"],
+            ["kernel_answer_traces.workspace_id", "kernel_answer_traces.trace_id"],
+            name="fk_kernel_answer_trace_disclosures_trace",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "disclosure_id"],
+            [
+                "kernel_context_disclosures.workspace_id",
+                "kernel_context_disclosures.disclosure_id",
+            ],
+            name="fk_kernel_answer_trace_disclosures_disclosure",
+        ),
+        Index(
+            "ix_kernel_answer_trace_disclosures_disclosure",
+            "disclosure_id",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelAnswerTraceDisclosure(trace={self.trace_id!r}, "
+            f"position={self.position}, disclosure={self.disclosure_id!r})>"
+        )
+
+
+class KernelAnswerSupportAssessment(Base):
+    """One append-only support judgment about one answer trace (PR85).
+
+    Assessments are separate durable records with their own provenance
+    (assessor kind/id, procedure, procedure version): a trace can exist
+    unassessed forever, and recording ``unsupported`` or ``uncertain``
+    never rewrites the answer body, the trace, or the disclosures. The
+    current judgment is derived (highest ``seq``), not stored on the
+    trace, so history and current status stay deterministic and
+    auditable.
+
+    ``(trace_id, assessment_key)`` gives caller retries idempotency:
+    the same key with an identical payload digest returns the stored
+    assessment; any different payload is an explicit conflict.
+    """
+
+    __tablename__ = "kernel_answer_support_assessments"
+
+    assessment_id: Mapped[str] = mapped_column(
+        String(MAX_ASSESSMENT_ID_LENGTH), primary_key=True
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        String(MAX_WORKSPACE_ID_LENGTH), index=True, nullable=False
+    )
+    trace_id: Mapped[str] = mapped_column(
+        String(MAX_TRACE_ID_LENGTH), nullable=False
+    )
+    assessment_key: Mapped[str] = mapped_column(
+        String(MAX_ASSESSMENT_KEY_LENGTH), nullable=False
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    verdict: Mapped[str] = mapped_column(
+        String(MAX_ASSESSMENT_VERDICT_LENGTH), nullable=False
+    )
+    payload_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    claims_json: Mapped[str] = mapped_column(Text, nullable=False)
+    assessor_kind: Mapped[str] = mapped_column(
+        String(MAX_ASSESSOR_KIND_LENGTH), nullable=False
+    )
+    assessor_id: Mapped[str] = mapped_column(
+        String(MAX_ASSESSOR_ID_LENGTH), nullable=False
+    )
+    procedure: Mapped[str] = mapped_column(
+        String(MAX_ASSESSMENT_PROCEDURE_LENGTH), nullable=False
+    )
+    procedure_version: Mapped[str] = mapped_column(
+        String(MAX_ASSESSMENT_PROCEDURE_VERSION_LENGTH), nullable=False
+    )
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "trace_id",
+            "assessment_key",
+            name="uq_kernel_answer_assessments_key",
+        ),
+        UniqueConstraint(
+            "trace_id",
+            "seq",
+            name="uq_kernel_answer_assessments_seq",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "trace_id"],
+            ["kernel_answer_traces.workspace_id", "kernel_answer_traces.trace_id"],
+            name="fk_kernel_answer_assessments_trace",
+        ),
+        Index(
+            "ix_kernel_answer_assessments_workspace_trace",
+            "workspace_id",
+            "trace_id",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<KernelAnswerSupportAssessment(assessment={self.assessment_id!r}, "
+            f"trace={self.trace_id!r}, seq={self.seq}, verdict={self.verdict!r})>"
         )
