@@ -33,6 +33,8 @@ def tm() -> TaskManager:
     manager._job_queued_message = {}
     manager._job_providers = {}
     manager._job_backends = {}
+    manager._job_runtime = {}
+    manager._job_tickets = {}
     manager._proc_jobs = {}
     manager._proc_configs = {}
     manager._cancel_requested = set()
@@ -49,6 +51,8 @@ def test_cleanup_job_memory_evicts_all_dicts(tm: TaskManager) -> None:
     tm._job_start_time[job_id] = 12345.0
     tm._job_has_real_progress[job_id] = True
     tm._job_providers[job_id] = "openai"
+    tm._job_runtime[job_id] = {"phase": "finished"}
+    tm._job_tickets[job_id] = object()
 
     tm._cleanup_job_memory(job_id, delay=0.0)
 
@@ -58,6 +62,8 @@ def test_cleanup_job_memory_evicts_all_dicts(tm: TaskManager) -> None:
     assert job_id not in tm._job_start_time
     assert job_id not in tm._job_has_real_progress
     assert job_id not in tm._job_providers
+    assert job_id not in tm._job_runtime
+    assert job_id not in tm._job_tickets
 
 
 def test_cleanup_job_memory_missing_job_is_noop(tm: TaskManager) -> None:
@@ -76,6 +82,8 @@ def test_cleanup_job_memory_does_not_evict_other_jobs(tm: TaskManager) -> None:
         tm._job_start_time[jid] = 1.0
         tm._job_has_real_progress[jid] = False
         tm._job_providers[jid] = None
+        tm._job_runtime[jid] = {"phase": "admitted"}
+        tm._job_tickets[jid] = object()
 
     tm._cleanup_job_memory(job_a, delay=0.0)
 
