@@ -1,0 +1,274 @@
+{
+  "async_lane": {
+    "commit_stats": {
+      "max_ms": 125.0,
+      "n": 6,
+      "p50_ms": 31.0,
+      "p95_ms": 125.0
+    },
+    "post_promotion_commit": 14,
+    "prefix_property_holds": true,
+    "promoted_head_cut": 13,
+    "promotion": {
+      "postmaster_start_time": "2026-08-22 09:49:28.563440+00:00",
+      "promote_completed_epoch": 1787392166.4856527,
+      "promote_started_epoch": 1787392164.812919,
+      "promote_wall_seconds": 1.6727337837219238,
+      "promoted_banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "promoted_writable": true,
+      "promotion_not_restart": true,
+      "timeline_after": 2,
+      "timeline_before": 1
+    },
+    "rpo_acknowledged_commits_lost": 3,
+    "tail_ack_cut_range": [
+      14,
+      16
+    ],
+    "tail_acknowledged_commits": 3,
+    "terminal_ack_cut": 13,
+    "terminal_truth_survived": true
+  },
+  "durability_policy": {
+    "acknowledgement_meaning": "a kernel acknowledgement is the commit return of its own transaction; under this policy the primary returns success only after the standby replayed the transition",
+    "covered_transitions": [
+      "lease/fence acquisition and renewal (master plan 11B.12)",
+      "accepted stable publication + terminal work state (11B.12/11B.13)",
+      "kernel document commits (KernelSnapshot cut truth)"
+    ],
+    "declared_lossy_lane": "the asynchronous comparison lane acknowledges on local WAL flush only; its acknowledged tail is NOT claimed durable across primary loss and the drill measures the actual loss",
+    "not_exercised_this_session": [
+      "source cursor advancement (connector lanes)",
+      "irreversible-effect authorization/acknowledgement lanes"
+    ],
+    "synchronous_commit": "remote_apply",
+    "synchronous_standby_names": "FIRST 1 (marker_standby)"
+  },
+  "failover_matrix": {
+    "failed": 0,
+    "passed": 4,
+    "skipped": 0
+  },
+  "generated_at": "2026-08-22T09:47:47.354580+00:00",
+  "git_head": "442c0c5b17769d1fb68e49c753124d597f9dd8ca",
+  "non_claims": [
+    "single-host CI-grade drill measurements, not a production SLO",
+    "no multi-region or multi-standby quorum topology",
+    "no Patroni/etcd or automated cluster-manager orchestration; promotion is deliberate test/control-plane action",
+    "no PITR/WAL archiving claim (streaming replication only)",
+    "no old-primary automated rejoin; the split-authority case is detected and fenced out, not healed",
+    "no object-store HA claim (single object store across the drill)",
+    "source cursor advancement and irreversible-effect lanes are not exercised by this drill (see durability_policy.not_exercised)",
+    "post-promotion writes run under the promoted node's local synchronous_commit default, not a re-established sync pair",
+    "failover RTO includes deliberate drill choreography between the kill and the recovery spawn (dead-primary negative probe, promotion CHECKPOINT): an honest upper bound, not a pure promotion latency"
+  ],
+  "object_store_banner": "MinIO",
+  "object_store_endpoint": "http://127.0.0.1:55463",
+  "regression": {
+    "failed": 0,
+    "passed": 3075,
+    "skipped": 205
+  },
+  "repetition": {
+    "cuts": {
+      "captured_cut": 7,
+      "post_promotion_commit": 8,
+      "pre_fail_head_cut": 7,
+      "promoted_head_cut": 8,
+      "recovered_cut": 7
+    },
+    "failover_rto_ready": 10.384656429290771,
+    "promotion": {
+      "postmaster_start_time": "2026-08-22 09:49:39.056365+00:00",
+      "promote_wall_seconds": 1.5634419918060303,
+      "promoted_banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "promoted_writable": true,
+      "promotion_not_restart": true,
+      "timeline_after": 2,
+      "timeline_before": 1
+    },
+    "rpo_acknowledged_commits_lost": 0,
+    "rto_spread_seconds": 0.1895589828491211
+  },
+  "schema": "marker.pr83c2_failover_measurement.v1",
+  "strict_matrix": {
+    "failed": 0,
+    "passed": 413,
+    "skipped": 0
+  },
+  "structural_acceptance": {
+    "async_lane_loss_recorded": true,
+    "async_prefix_property": true,
+    "dead_primary_probe_failed": true,
+    "duplicate_converged": true,
+    "durability_cost_measured": true,
+    "exactly_one_publication_per_work": true,
+    "failover_rto_ready_computed": true,
+    "fresh_process_recovered": true,
+    "object_outage_not_ready_then_recovers": true,
+    "pre_fault_replay_proven": true,
+    "promoted_oracle_ready": true,
+    "promoted_writable": true,
+    "promotion_not_restart": true,
+    "repeated_drill_zero_loss": true,
+    "stale_authority_detected": true,
+    "stale_owner_rejected": true,
+    "sync_standby_unavailable_blocked": true,
+    "timeline_advanced": true,
+    "zero_acknowledged_loss": true
+  },
+  "sync_lane": {
+    "commit_cost": {
+      "standby_unavailable": {
+        "acknowledged_before_block": 0,
+        "acknowledgements_resumed": true,
+        "blocked": true,
+        "blocking_window_seconds": 10.080742597579956,
+        "client_timeout_seconds": 8.0
+      },
+      "sync_commit_latencies_ms": [
+        125.0,
+        31.0,
+        31.0,
+        31.0,
+        16.0,
+        31.0,
+        32.0,
+        31.0,
+        31.0,
+        16.0
+      ],
+      "sync_commit_stats": {
+        "max_ms": 125.0,
+        "n": 10,
+        "p50_ms": 31.0,
+        "p95_ms": 125.0
+      }
+    },
+    "cuts": {
+      "captured_cut": 7,
+      "post_promotion_commit": 8,
+      "pre_fail_head_cut": 7,
+      "promoted_head_cut": 8,
+      "recovered_cut": 7
+    },
+    "dead_primary_probe_failed": true,
+    "failover_rto_ready": 10.574215412139893,
+    "fencing": {
+      "duplicate_a_converged": true,
+      "stale_owner_rejected": true,
+      "takeover_advanced_fence": true,
+      "takeover_work_id": 34
+    },
+    "object_outage_not_ready": true,
+    "object_outage_recovers": true,
+    "outbox_states": {
+      "a": "done",
+      "b": "done"
+    },
+    "pre_fault_replay": {
+      "primary_lsn_after_acks": "0/399AE90",
+      "standby_replay_lsn_before_fault": 60403344
+    },
+    "promoted_oracle": {
+      "checks": [
+        {
+          "detail": "head=20260819_0013",
+          "name": "database",
+          "ok": true
+        },
+        {
+          "detail": "cut=7 snapshot=sha256:ecaa3e49c70b22718f9c80d5ca720a713b91a3b55bbee4b736d0de7d053d182e completeness=complete",
+          "name": "cut",
+          "ok": true
+        },
+        {
+          "detail": "2 objects verified",
+          "name": "payload_closure",
+          "ok": true
+        },
+        {
+          "detail": "2 artifacts verified",
+          "name": "source_closure",
+          "ok": true
+        },
+        {
+          "detail": "profile 'default': query determinism verified (2 hits)",
+          "name": "publication",
+          "ok": true
+        },
+        {
+          "detail": "in_flight=1 publications=3 no ownership problems",
+          "name": "ownership",
+          "ok": true
+        }
+      ],
+      "problems": [],
+      "ready": true
+    },
+    "promoted_oracle_ready": true,
+    "promotion": {
+      "postmaster_start_time": "2026-08-22 09:48:11.652050+00:00",
+      "promote_wall_seconds": 1.5649454593658447,
+      "promoted_banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "promoted_writable": true,
+      "promotion_not_restart": true,
+      "timeline_after": 2,
+      "timeline_before": 1
+    },
+    "publications_per_work": {
+      "a": 1,
+      "b": 1
+    },
+    "recovery_point_id": "sha256:d9819888f09b371c0b868ed5cc79cf2cb5ff5adf847ad021219fa9cfbeceb62a",
+    "rpo_acknowledged_commits_lost": 0,
+    "rto_components_seconds": {
+      "boot": 10.24193,
+      "promote_completed": 8.264362,
+      "promote_started": 6.699417,
+      "query_ready": 10.436959,
+      "semantic_ready": 10.368911,
+      "source_ready": 10.395303,
+      "work_ready": 10.533186,
+      "write_ready": 10.574215
+    },
+    "stale_authority": {
+      "old_primary_facts": {
+        "banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+        "container": "marker-fo-primary",
+        "in_recovery": false,
+        "node": "primary",
+        "port": 55461,
+        "postmaster_start_time": "2026-08-22 09:49:03.431239+00:00",
+        "timeline_id": 1,
+        "wal_lsn": 60403464
+      },
+      "old_primary_head_cut": 7,
+      "promoted_head_cut": 8,
+      "staleness_detected": true
+    },
+    "topology": {
+      "policy": {
+        "synchronous_commit": "remote_apply",
+        "synchronous_standby_names": "FIRST 1 (marker_standby)"
+      },
+      "postgres_image": "postgres:16-alpine",
+      "pre_fault_primary_banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "pre_fault_standby_banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "primary_container": "marker-fo-primary",
+      "primary_port": 55461,
+      "replication": {
+        "application_name": "marker_standby",
+        "flush_lsn": "0/399AE90",
+        "replay_lsn": "0/399AE90",
+        "sent_lsn": "0/399AE90",
+        "state": "streaming",
+        "sync_state": "sync",
+        "write_lsn": "0/399AE90"
+      },
+      "standby_container": "marker-fo-standby",
+      "standby_port": 55462
+    },
+    "workspace": "failover-core"
+  }
+}
