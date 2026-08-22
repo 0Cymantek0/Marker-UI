@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.security.scopes import (
+    SCOPE_ANSWERS_WRITE,
     SCOPE_CAPABILITIES_READ,
     SCOPE_EVENTS_READ,
     SCOPE_JOBS_READ,
@@ -58,6 +59,14 @@ MCP_V2_TOOL_NAMES: tuple[str, ...] = (
     "marker_events",
 )
 
+#: Answer-evidence tools stay out of the minimal profile's bounded
+#: default surface: they serve the disclosure-audit workflow, so agents
+#: opt in through the full/admin profiles.
+MCP_ANSWER_TOOL_NAMES: tuple[str, ...] = (
+    "marker_answer_trace",
+    "marker_answer_assessment",
+)
+
 MCP_V1_TOOL_NAMES: tuple[str, ...] = (
     "marker_list_capabilities",
     "marker_get_capabilities",
@@ -89,7 +98,9 @@ MCP_V1_TOOL_NAMES: tuple[str, ...] = (
 )
 
 MCP_ALL_TOOL_NAMES: tuple[str, ...] = tuple(
-    dict.fromkeys((*MCP_V2_TOOL_NAMES, *MCP_V1_TOOL_NAMES))
+    dict.fromkeys(
+        (*MCP_V2_TOOL_NAMES, *MCP_ANSWER_TOOL_NAMES, *MCP_V1_TOOL_NAMES)
+    )
 )
 MCP_MINIMAL_TOOL_NAMES: tuple[str, ...] = MCP_V2_TOOL_NAMES
 
@@ -114,6 +125,8 @@ _TOOL_TITLES: dict[str, str] = {
     "marker_output_manifest": "Get Marker Output Manifest",
     "marker_query": "Query Marker Workspace",
     "marker_events": "Read Marker Workspace Events",
+    "marker_answer_trace": "Commit Answer Context Trace",
+    "marker_answer_assessment": "Record Answer Support Assessment",
     "marker_list_capabilities": "List Marker Capabilities",
     "marker_get_capabilities": "Get Marker Capabilities",
     "marker_self_test": "Self-Test Marker MCP",
@@ -157,6 +170,12 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
     "marker_events": (
         "Read the durable per-workspace semantic event log for disconnect-safe "
         "resume by authoritative sequence."
+    ),
+    "marker_answer_trace": (
+        "Commit one external answer bound to its disclosed context, or read it back."
+    ),
+    "marker_answer_assessment": (
+        "Append an independent support assessment for one committed answer trace."
     ),
     "marker_list_capabilities": "Return supported extensions, engines, output modes, and tool names.",
     "marker_get_capabilities": "Alias for marker_list_capabilities using v1 naming.",
@@ -266,6 +285,8 @@ _TOOL_ANNOTATIONS: dict[str, dict[str, bool]] = {
     )},
     "marker_set_setting": dict(_IDEMPOTENT_WRITE_ANNOTATIONS),
     "marker_delete_setting": dict(_IDEMPOTENT_DESTRUCTIVE_ANNOTATIONS),
+    "marker_answer_trace": dict(_IDEMPOTENT_WRITE_ANNOTATIONS),
+    "marker_answer_assessment": dict(_IDEMPOTENT_WRITE_ANNOTATIONS),
 }
 
 _CANONICAL_ALIASES: dict[str, tuple[str, ...]] = {
@@ -349,6 +370,8 @@ def _tool_scopes(name: str) -> tuple[str, ...]:
         return (SCOPE_QUERIES_READ,)
     if name == "marker_events":
         return (SCOPE_EVENTS_READ,)
+    if name in {"marker_answer_trace", "marker_answer_assessment"}:
+        return (SCOPE_ANSWERS_WRITE,)
     if name in {"marker_list_jobs", "marker_get_job_status", "marker_job_status"}:
         return (SCOPE_JOBS_READ,)
     if name in {"marker_list_settings", "marker_get_setting"}:

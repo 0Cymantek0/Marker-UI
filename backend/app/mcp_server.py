@@ -23,6 +23,12 @@ from app.agent_events import (
     MAX_EVENT_PAGE_LIMIT,
     read_agent_events,
 )
+from app.agent_answer_evidence import (
+    ANSWER_EVIDENCE_SCHEMA_VERSION,
+    read_agent_answer_trace,
+    record_agent_answer_assessment,
+    record_agent_answer_trace,
+)
 from app.agent_query import QUERY_RESULT_SCHEMA_VERSION, run_agent_query
 from app.agent_surface import (
     MCP_ALL_TOOL_NAMES as SURFACE_MCP_ALL_TOOL_NAMES,
@@ -65,6 +71,7 @@ from app.mcp_resources import register_mcp_resources
 from app.security.auth import ScopedStaticTokenVerifier, configured_static_tokens, require_mcp_scopes
 from app.security.scopes import (
     DEFAULT_MCP_SCOPES,
+    SCOPE_ANSWERS_WRITE,
     SCOPE_CAPABILITIES_READ,
     SCOPE_EVENTS_READ,
     SCOPE_JOBS_READ,
@@ -295,6 +302,47 @@ class QueryOutput(MarkerOutputModel):
         description="Stable error/reason class: cursor_invalid, cursor_expired, authorization_changed, pinned_state_unavailable, policy_fail_closed, execution_failure, continuation_available, or a budget stop code.",
         examples=["cursor_invalid"],
     )
+    disclosure_id: str | None = Field(
+        default=None,
+        description=(
+            "Opaque id of the durable disclosed-context record for this page. "
+            "Present only when the query was run with disclose=true and the "
+            "page carried a packet; collect these ids to bind an answer with "
+            "marker_answer_trace."
+        ),
+        examples=["dsc_x8yKh3nTBQ"],
+    )
+
+
+class AnswerTraceOutput(MarkerOutputModel):
+    schema_version: str = Field(
+        description="Answer-evidence envelope schema version.",
+        examples=[ANSWER_EVIDENCE_SCHEMA_VERSION],
+    )
+    trace_id: str = Field(description="Opaque id of the committed answer-context trace.", examples=["trc_Ab3dEf9"])
+    workspace_id: str = Field(description="Workspace owning the trace.", examples=["local"])
+    answer_ref: str = Field(description="Caller's stable answer/turn identity.", examples=["turn-42"])
+    answer_digest: str = Field(description="Digest of the committed answer text.", examples=["sha256:abc"])
+    answer: str = Field(description="The immutable committed answer text.", examples=["Revenue grew 12% in Q2."])
+    context_fingerprint: str = Field(description="Deterministic identity of answer + ordered disclosed context.", examples=["sha256:abc"])
+    disclosures: list[dict[str, Any]] = Field(
+        description="Ordered disclosed-context pages: disclosure_id, packet_id, and the full answer-time packet (ordered evidence, publication, authorization view, budget, status).",
+        examples=[{"disclosure_id": "dsc_x8yKh3nTBQ", "packet_id": "sha256:abc", "packet": {}}],
+    )
+    assessments: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Append-only support judgments ordered by seq.",
+        examples=[],
+    )
+    current_assessment: dict[str, Any] | None = Field(
+        default=None,
+        description="Highest-seq judgment, or null while the trace is unassessed.",
+        examples=[None],
+    )
+    assessment_state: str = Field(
+        description="supported, unsupported, uncertain, or unassessed (absence of judgment, never implicit support).",
+        examples=["unassessed"],
+    )
 
 
 class EventsOutput(MarkerOutputModel):
@@ -425,6 +473,79 @@ QueryWorkspaceParam = Annotated[
 QueryPageSizeParam = Annotated[
     int,
     Field(ge=1, le=100, description="Evidence units per page (server clamps chain and budget limits).", examples=[10]),
+]
+QueryDiscloseParam = Annotated[
+    bool,
+    Field(
+        description=(
+            "When true, durably record this page's packet as disclosed context "
+            "and return its disclosure_id. That id is the handle later bound "
+            "to an answer with marker_answer_trace; disclosure cannot be "
+            "revoked once delivered to an external agent."
+        ),
+        examples=[False],
+    ),
+]
+AnswerWorkspaceParam = Annotated[
+    str,
+    Field(description="Workspace that owns the disclosed context and the answer trace.", examples=["local"]),
+]
+AnswerRefParam = Annotated[
+    str,
+    Field(
+        description="Caller's stable answer/turn identity. Replays with identical content and context are idempotent; different content or context conflicts.",
+        examples=["turn-42"],
+    ),
+]
+AnswerContentParam = Annotated[
+    str,
+    Field(description="The answer text the external agent produced. Stored immutably (bounded to 65536 characters).", examples=["Revenue grew 12% in Q2."]),
+]
+DisclosureIdsParam = Annotated[
+    list[str],
+    Field(
+        description="Ordered disclosure ids from marker_query disclose=true pages; the order they were received is preserved in the trace.",
+        examples=[["dsc_x8yKh3nTBQ"]],
+    ),
+]
+TraceIdParam = Annotated[
+    str,
+    Field(description="Opaque trace id returned by marker_answer_trace.", examples=["trc_Ab3dEf9"]),
+]
+AssessmentVerdictParam = Annotated[
+    Literal["supported", "unsupported", "uncertain"],
+    Field(description="Overall judgment over the answer's material claims.", examples=["unsupported"]),
+]
+AssessmentClaimsParam = Annotated[
+    list[dict[str, Any]],
+    Field(
+        description=(
+            "Material claim judgments: objects with claim_id, span {start, end, quote_digest?} "
+            "character offsets into the committed answer, verdict, evidence list of "
+            "{disclosure_id, record_id, view_id, node_id?} citing delivered units, and optional note."
+        ),
+        examples=[{
+            "claim_id": "c1",
+            "span": {"start": 0, "end": 18},
+            "verdict": "unsupported",
+            "evidence": [{"disclosure_id": "dsc_x8yKh3nTBQ", "record_id": "r1", "view_id": "v1"}],
+        }],
+    ),
+]
+AssessorParam = Annotated[
+    dict[str, str],
+    Field(
+        description="Provenance of the judgment: {kind: human|model|tool|rule, assessor_id, procedure, procedure_version}. The lineage is itself evidence.",
+        examples=[{"kind": "human", "assessor_id": "reviewer-1", "procedure": "manual-review", "procedure_version": "1"}],
+    ),
+]
+AssessmentKeyParam = Annotated[
+    str,
+    Field(description="Idempotency key for this judgment on this trace; identical replays converge, different payloads conflict.", examples=["review-1"]),
+]
+AssessmentRationaleParam = Annotated[
+    str,
+    Field(description="Why this judgment was reached (bounded to 4096 characters).", examples=["Claim cites a number absent from delivered evidence."]),
 ]
 EventsWorkspaceParam = Annotated[
     str,
@@ -676,6 +797,7 @@ async def marker_query(
     continuation: ContinuationParam = None,
     workspace_id: QueryWorkspaceParam = None,
     page_size: QueryPageSizeParam = 10,
+    disclose: QueryDiscloseParam = False,
 ) -> QueryOutput:
     """Run one bounded typed snapshot query (marker.query.v1) against a published workspace and continue partial results with the server-issued cursor.
 
@@ -685,6 +807,9 @@ async def marker_query(
     complete, partial, invalidated, stale, loop_limit, policy_fail_closed,
     and execution_failure; next_cursor is present exactly when status is
     partial. On authenticated transports cursors are bound to the caller.
+    With disclose=true each delivered page is durably recorded as
+    disclosed context and returns its disclosure_id for later answer
+    binding; disclosure to an external agent cannot be revoked.
     """
 
     require_mcp_scopes(SCOPE_QUERIES_READ)
@@ -694,6 +819,7 @@ async def marker_query(
         workspace_id=workspace_id,
         page_size=page_size,
         principal_id=_mcp_caller_principal_id(),
+        disclose=disclose,
     )
     return QueryOutput(**envelope)
 
@@ -726,6 +852,83 @@ async def marker_events(
             limit=limit,
         )
     )
+
+
+@mcp.tool(
+    name="marker_answer_trace",
+    title=tool_title("marker_answer_trace"),
+    annotations=tool_annotations("marker_answer_trace"),
+)
+async def marker_answer_trace(
+    workspace_id: AnswerWorkspaceParam,
+    answer_ref: AnswerRefParam,
+    answer: AnswerContentParam,
+    disclosure_ids: DisclosureIdsParam,
+) -> AnswerTraceOutput:
+    """Commit one external answer bound to its disclosed context, or read it back.
+
+    Marker UI records exactly which disclosed context pages (from
+    marker_query disclose=true) an answer may be bound to; it cannot
+    observe the external model's internal attention, and the trace never
+    claims the answer is entailed by its context. Commits are idempotent
+    per (workspace, answer_ref): identical replays return the committed
+    trace; a different answer body or context set for the same answer_ref
+    is an explicit conflict. The committed answer is immutable —
+    corrected answers use a new answer_ref, and support assessments
+    (marker_answer_assessment) never rewrite it. Context already
+    disclosed to an external agent cannot be retroactively revoked;
+    revocation only stops future disclosure.
+    """
+
+    require_mcp_scopes(SCOPE_ANSWERS_WRITE)
+    envelope = await record_agent_answer_trace(
+        workspace_id=workspace_id,
+        answer_ref=answer_ref,
+        answer=answer,
+        disclosure_ids=disclosure_ids,
+        principal_id=_mcp_caller_principal_id(),
+    )
+    return AnswerTraceOutput(**envelope)
+
+
+@mcp.tool(
+    name="marker_answer_assessment",
+    title=tool_title("marker_answer_assessment"),
+    annotations=tool_annotations("marker_answer_assessment"),
+)
+async def marker_answer_assessment(
+    workspace_id: AnswerWorkspaceParam,
+    trace_id: TraceIdParam,
+    verdict: AssessmentVerdictParam,
+    claims: AssessmentClaimsParam,
+    assessor: AssessorParam,
+    assessment_key: AssessmentKeyParam,
+    rationale: AssessmentRationaleParam = "",
+) -> AnswerTraceOutput:
+    """Append an independent support assessment for one committed answer trace.
+
+    The judgment (supported, unsupported, or uncertain) is a separate
+    durable record with its own provenance; it validates against the
+    immutable committed answer (spans must cover it, quote digests must
+    match, cited evidence must have been delivered in the trace's
+    disclosures) and never modifies the answer. Assessments append
+    ordered versions per trace; the same assessment_key replays
+    idempotently, a reused key with different payload conflicts, and an
+    unassessed trace stays explicitly unassessed — retrieval provenance
+    is never treated as proof of support.
+    """
+
+    require_mcp_scopes(SCOPE_ANSWERS_WRITE)
+    envelope = await record_agent_answer_assessment(
+        workspace_id=workspace_id,
+        trace_id=trace_id,
+        verdict=verdict,
+        claims=claims,
+        assessor=assessor,
+        assessment_key=assessment_key,
+        rationale=rationale,
+    )
+    return AnswerTraceOutput(**envelope)
 
 
 @mcp.tool(

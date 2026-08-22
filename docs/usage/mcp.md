@@ -146,7 +146,9 @@ most coding agents:
 - `marker_events`
 
 Use `--tool-profile full` for legacy/source-specific convenience tools such as
-`marker_convert_file`, `marker_convert_url`, and `marker_submit_local_job`.
+`marker_convert_file`, `marker_convert_url`, and `marker_submit_local_job`,
+and for the answer-evidence tools `marker_answer_trace` and
+`marker_answer_assessment`.
 Use `--tool-profile admin` only when the agent needs destructive/admin tools
 such as `marker_delete_job` or `marker_purge_job_files`.
 
@@ -175,8 +177,10 @@ Canonical v2 tools use one source object:
 | `marker_submit` | Canonical v2 async submission with a `{kind, path|url}` source object. |
 | `marker_job_status` | Canonical v2 job status. |
 | `marker_output_manifest` | Canonical v2 output manifest reader. |
-| `marker_query` | Bounded typed snapshot query (`marker.query.v1`) over a published workspace, with cursor-based continuation. |
+| `marker_query` | Bounded typed snapshot query (`marker.query.v1`) over a published workspace, with cursor-based continuation. `disclose=true` durably records each delivered page and returns its `disclosure_id`. |
 | `marker_events` | Read the durable per-workspace semantic event log for disconnect-safe resume. |
+| `marker_answer_trace` | Commit an external answer bound to its ordered disclosed-context ids; idempotent per `answer_ref`, immutable once committed. |
+| `marker_answer_assessment` | Append an independent supported/unsupported/uncertain judgment with claim spans and cited disclosed evidence; never modifies the answer. |
 | `marker_list_capabilities` / `marker_get_capabilities` | Supported formats, engines, tools, resources, prompts, and options. |
 | `marker_get_health` | Lightweight MCP health check. |
 | `marker_get_version` | Version and contract schema version. |
@@ -266,6 +270,9 @@ MCP uses static bearer tokens for HTTP auth. The implemented scope names are:
 - `jobs:read`
 - `jobs:write`
 - `outputs:read`
+- `queries:read`
+- `events:read`
+- `answers:write`
 - `settings:read`
 - `settings:write`
 
@@ -278,6 +285,32 @@ $env:MARKER_MCP_AUTH_SCOPES="marker:mcp capabilities:read jobs:read jobs:write o
 
 Settings write/delete tools require `settings:write`. Output tools require
 `outputs:read`. Job mutation requires `jobs:write`.
+
+## Answer Evidence
+
+Available with `--tool-profile full` (or `admin`). `marker_query`,
+`marker_answer_trace`, and `marker_answer_assessment` together form the
+answer-evidence boundary:
+
+1. Run `marker_query` with `disclose=true`. Every delivered page is
+   durably recorded as disclosed context and returns a `disclosure_id`.
+2. Produce the answer externally, then commit it with
+   `marker_answer_trace` bound to the ordered `disclosure_id` list.
+   Commits are idempotent per `answer_ref`; a different body or context
+   set for the same `answer_ref` conflicts instead of overwriting.
+3. Judge the answer independently with `marker_answer_assessment`
+   (`supported` / `unsupported` / `uncertain`, per-claim spans, cited
+   delivered evidence). Assessments append ordered versions and never
+   modify the committed answer.
+
+A trace records what Marker UI delivered at the answer boundary — it is
+retrieval provenance, never proof that the answer is entailed by its
+context. **Disclosure is not revocable after delivery:** revoking access
+stops future queries, invalidates caches and cursors, and gates new
+disclosure, but context already transmitted to an external agent cannot
+be retroactively unseen, un-copied, or revoked by Marker UI. Local
+retention/deletion rules may remove Marker UI's own records; that is
+record hygiene, not remote revocation.
 
 ## Verification
 

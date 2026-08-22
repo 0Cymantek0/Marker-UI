@@ -171,6 +171,8 @@ def register_mcp_resources(
             "3. Convert sources with `marker_convert` or submit long work with `marker_submit`.\n"
             "4. Keep `allow_cloud_vlm=false` unless the user explicitly approves cloud image understanding.\n"
             "5. Read long outputs as bounded offset pages with `marker_read_output`; request `output_format='chunks'` when semantic RAG chunks are needed.\n"
+            "6. Bind answers to their disclosed context: query with `disclose=true`, commit with `marker_answer_trace`, judge with `marker_answer_assessment`.\n"
+            "7. Remember that context already disclosed to an external agent cannot be retroactively revoked; revocation only stops future disclosure.\n"
         )
 
     @mcp.resource(

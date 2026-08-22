@@ -18,6 +18,7 @@ from typing import Any, Mapping
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.agent_answer_evidence import record_agent_disclosure
 from app.context_runtime import (
     ContinuationService,
     CursorCodec,
@@ -46,6 +47,11 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 QUERY_RESULT_SCHEMA_VERSION = "marker.query_result.v1"
+
+#: Delivery statuses whose page actually carries disclosed context. A
+#: packet that reached the caller is disclosed — complete pages, partial
+#: pages awaiting continuation, and loop-limited final pages alike.
+_DISCLOSED_STATUSES = frozenset({"complete", "partial", "loop_limit"})
 
 _KEY_DERIVATION_LABEL = b"marker.query.cursor.v1"
 _DERIVED_KEY_ID = "derived"
@@ -153,6 +159,7 @@ async def run_agent_query(
     workspace_id: str | None = None,
     page_size: int | None = None,
     principal_id: str | None = None,
+    disclose: bool = False,
 ) -> dict[str, Any]:
     """Run one fresh or continued query and return the transport envelope.
 
@@ -162,6 +169,12 @@ async def run_agent_query(
     requests) raise ``UsageError``; operational and continuation states come
     back as structured ``marker.query_result.v1`` outcomes instead of
     exceptions.
+
+    With ``disclose=True`` a page that carries a packet is durably
+    recorded as disclosed context *before* it is returned, and the
+    envelope carries the minted ``disclosure_id``. That id is the only
+    packet-set handle an answer trace will later accept, so callers can
+    never forge a context set from arbitrary packet ids.
     """
 
     await _ensure_db_ready()
@@ -206,4 +219,22 @@ async def run_agent_query(
         QueryBudgetError,
     ) as exc:
         raise UsageError(str(exc)) from exc
-    return _outcome_envelope(outcome)
+    disclosure_id = None
+    if disclose and outcome.packet is not None:
+        if outcome.status not in _DISCLOSED_STATUSES:
+            logger.warning(
+                "packet present on non-delivery status %s; not disclosing",
+                outcome.status,
+            )
+        else:
+            disclosure_id = await record_agent_disclosure(
+                packet=packet_to_json(outcome.packet),
+                workspace_id=(
+                    query["workspace_id"] if query is not None else workspace_id
+                ),
+                principal_id=principal_id,
+            )
+    envelope = _outcome_envelope(outcome)
+    if disclose:
+        envelope["disclosure_id"] = disclosure_id
+    return envelope
