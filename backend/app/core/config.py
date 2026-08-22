@@ -132,5 +132,42 @@ ARTIFACT_HANDLE_MAX_BYTES: int = int(
     os.getenv("MARKER_ARTIFACT_HANDLE_MAX_BYTES", str(1 << 30))
 )
 
+# Runtime admission + model leases (PR69). Kill switch restores the legacy
+# enter-the-converter-directly behavior; every other knob is a conservative
+# default until a per-profile characterization artifact tightens it.
+ADMISSION_ENABLED: bool = os.getenv("MARKER_ADMISSION", "true").lower() in ("true", "1", "yes")
+# Fraction of probed device capacity withheld as a safety reserve (allocator
+# fragmentation, non-PyTorch-allocator allocations).
+ADMISSION_RESERVE_FRACTION: float = float(os.getenv("MARKER_ADMISSION_RESERVE_FRACTION", "0.10"))
+# 0 = derive usable capacity from the device probe; >0 pins it explicitly.
+ADMISSION_USABLE_BYTES: int = int(os.getenv("MARKER_ADMISSION_USABLE_BYTES", "0"))
+# Declared envelope when no CUDA device is probed (CPU worker / tests):
+# large enough that the shared model-residency base does not zero the
+# activation budget on ordinary CPU deployments.
+ADMISSION_CPU_USABLE_BYTES: int = int(os.getenv("MARKER_ADMISSION_CPU_USABLE_BYTES", str(8 << 30)))
+ADMISSION_DTYPE_LABEL: str = os.getenv("MARKER_ADMISSION_DTYPE_LABEL", "auto")
+# Conservative envelope coefficients (unmeasured defaults; characterization
+# replaces them with measured values per profile).
+ADMISSION_WEIGHTS_BOUND_BYTES: int = int(os.getenv("MARKER_ADMISSION_WEIGHTS_BOUND_BYTES", str(3 << 30)))
+ADMISSION_LAYOUT_BYTES_PER_SLICE: int = int(os.getenv("MARKER_ADMISSION_LAYOUT_BYTES_PER_SLICE", str(100 << 20)))
+ADMISSION_DETECTION_BYTES_PER_CHUNK_MP: int = int(os.getenv("MARKER_ADMISSION_DETECTION_BYTES_PER_CHUNK_MP", str(32 << 20)))
+ADMISSION_RECOGNITION_BYTES_PER_TOKEN: int = int(os.getenv("MARKER_ADMISSION_RECOGNITION_BYTES_PER_TOKEN", str(24 << 10)))
+# Conservative line-crop bound per highres megapixel (true count is the
+# detection model's output and cannot be known pre-execution).
+ADMISSION_CROPS_PER_MEGAPIXEL: float = float(os.getenv("MARKER_ADMISSION_CROPS_PER_MEGAPIXEL", "250"))
+# Pages whose lowres pixel area exceeds this are out-of-distribution: they
+# take the declared safe path (exclusive serialized admission), never the
+# normal high-throughput class.
+ADMISSION_MAX_PAGE_LOWRES_PIXELS: int = int(os.getenv("MARKER_ADMISSION_MAX_PAGE_LOWRES_PIXELS", str(30_000_000)))
+# Declared behavior for unknown/OOD demand: "safe_profile" (exclusive
+# serialized admission) or "reject".
+ADMISSION_UNKNOWN_POLICY: str = os.getenv("MARKER_ADMISSION_UNKNOWN_POLICY", "safe_profile")
+# Bounded protective cooldown after repeated unexpected OOMs on one profile.
+ADMISSION_OOM_COOLDOWN_SECONDS: float = float(os.getenv("MARKER_ADMISSION_OOM_COOLDOWN_SECONDS", "30"))
+ADMISSION_MAX_CONSECUTIVE_OOMS: int = int(os.getenv("MARKER_ADMISSION_MAX_CONSECUTIVE_OOMS", "3"))
+# Upper bound a safe unload waits for active execution leases before giving
+# up (callers must not unload on timeout; see PR69 anti-eviction contract).
+ADMISSION_DRAIN_TIMEOUT_SECONDS: float = float(os.getenv("MARKER_ADMISSION_DRAIN_TIMEOUT_SECONDS", "30"))
+
 # Encryption
 SECRET_KEY_PATH: Path = DATA_DIR / ".secret_key"
