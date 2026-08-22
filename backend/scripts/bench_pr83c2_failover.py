@@ -416,9 +416,10 @@ async def main(argv: list[str] | None = None) -> int:
         bundle["failover_matrix"] = _parse_test_log(args.failover_log)
     if args.regression_log is not None:
         bundle["regression"] = _parse_test_log(args.regression_log)
-    # an embedded matrix log with failures/skips must not ride inside a
-    # green evidence bundle
-    for section in ("strict_matrix", "failover_matrix", "regression"):
+    # matrix gates: the STRICT matrices must be perfectly green; the
+    # plain regression legitimately carries env-gated skips (services
+    # absent outside the strict env), so only failures are fatal there
+    for section in ("strict_matrix", "failover_matrix"):
         counts = bundle.get(section)
         if counts and (counts.get("failed") or counts.get("skipped")):
             print(
@@ -428,6 +429,14 @@ async def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+    regression = bundle.get("regression")
+    if regression and regression.get("failed"):
+        print(
+            f"ERROR: embedded regression log reports "
+            f"{regression['failed']} failed",
+            file=sys.stderr,
+        )
+        return 1
 
     def _lsn_int(lsn: str | int) -> int:
         if isinstance(lsn, int):
