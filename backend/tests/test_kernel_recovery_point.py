@@ -119,12 +119,9 @@ async def test_interrupted_capture_is_not_discoverable(tmp_path: Path) -> None:
             await _capture(ws, backup_root, _inject_fault_at=PHASE_CAP_PAYLOAD_COPIED)
         # nothing complete exists: capture cleanup removes its staging,
         # and whatever remains is never a discoverable recovery point
+        # (complete recovery points live in plain-hex-named directories)
         entries = [e.name for e in backup_root.iterdir()]
-        assert all(e.startswith(".staging-") for e in entries)
-        # a staging residue, if present, is not loadable under any identity
-        for entry in backup_root.iterdir():
-            with pytest.raises(RecoveryManifestError):
-                load_recovery_point(backup_root, f"sha256:{entry.name}")
+        assert all(e.startswith(".") for e in entries)
 
         # retry converges to a complete, verified recovery point — and
         # discards any hard-crash staging residue (kill -9 leaves it)
@@ -138,9 +135,26 @@ async def test_interrupted_capture_is_not_discoverable(tmp_path: Path) -> None:
             backup_source_store=ws._backup_source,
         )
         assert report.ready, report.problems
-        assert not any(
-            e.name.startswith(".staging-") for e in backup_root.iterdir()
-        )
+        assert not any(e.name.startswith(".") for e in backup_root.iterdir())
+
+        # staging invisibility is BY NAME, not by malformed-id rejection:
+        # a directory holding fully valid artifacts is still unloadable
+        # while it is not named by the recovery-point identity
+        import shutil as _shutil
+
+        final_dir = backup_root / manifest.recovery_point_id.split(":", 1)[1]
+        staged_copy = backup_root / ".staging-lookalike"
+        _shutil.copytree(final_dir, staged_copy)
+        _shutil.rmtree(final_dir)
+        try:
+            with pytest.raises(RecoveryManifestError):
+                load_recovery_point(backup_root, manifest.recovery_point_id)
+        finally:
+            _shutil.copytree(staged_copy, final_dir)
+        # and the restored final directory loads again
+        assert load_recovery_point(
+            backup_root, manifest.recovery_point_id
+        ).manifest.recovery_point_id == manifest.recovery_point_id
 
 
 async def test_gc_cannot_delete_closure_inside_quiescence(tmp_path: Path) -> None:

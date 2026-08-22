@@ -35,24 +35,26 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-_SUMMARY_RE = re.compile(
-    r"(\d+) passed(?:\s+(\d+) failed)?(?:[^\n]*?(\d+) skipped)?"
-)
+_COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped)\b")
 
 
 def _parse_test_log(path: Path) -> dict:
-    """Extract the pass/fail/skip counts from a pytest summary line."""
+    """Extract pass/fail/skip counts from a pytest summary.
+
+    Matches every ``N passed|failed|skipped`` occurrence (pytest orders
+    these differently depending on outcome — ``2 failed, 393 passed`` —
+    so the LAST occurrence per kind wins, which is the summary line).
+    """
     text = path.read_text(encoding="utf-8", errors="replace")
-    match = None
-    for match in _SUMMARY_RE.finditer(text):
-        pass  # keep the last summary-looking match
-    if match is None:
+    counts: dict[str, int] = {}
+    for match in _COUNT_RE.finditer(text):
+        counts[match.group(2)] = int(match.group(1))
+    if not counts:
         return {"unparsed": True}
-    passed, failed, skipped = match.groups()
     return {
-        "passed": int(passed),
-        "failed": int(failed or 0),
-        "skipped": int(skipped or 0),
+        "passed": counts.get("passed", 0),
+        "failed": counts.get("failed", 0),
+        "skipped": counts.get("skipped", 0),
     }
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent

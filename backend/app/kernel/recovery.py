@@ -51,7 +51,7 @@ import shutil
 import tempfile
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -1089,7 +1089,7 @@ async def _copy_source_objects(
         verified = await backup_store.verify_artifact(
             ref.blob_key, ref.suffix, expected_length=ref.byte_length
         )
-        if verified is not True and getattr(verified, "ok", True) is not True:
+        if verified is not True and getattr(verified, "ok", False) is not True:
             raise RecoveryCaptureError(
                 f"source copy of {ref.blob_key} failed backup-side verification"
             )
@@ -1330,19 +1330,28 @@ async def verify_recovery(
 
     # -- payload closure --------------------------------------------------
     missing: list[str] = []
-    for value in manifest.payload_store["objects"]:
-        ref = PayloadObjectRef.from_mapping(value)
-        check = await payload_store.check_object(ref.blob_key, expected_length=ref.length)
-        if not (check.available and check.hash_ok and check.length_ok):
-            missing.append(ref.blob_key)
+    payload_error = ""
+    try:
+        for value in manifest.payload_store["objects"]:
+            ref = PayloadObjectRef.from_mapping(value)
+            check = await payload_store.check_object(
+                ref.blob_key, expected_length=ref.length
+            )
+            if not (check.available and check.hash_ok and check.length_ok):
+                missing.append(ref.blob_key)
+    except Exception as exc:  # a store refusal is a failed closure, never a crash
+        payload_error = str(exc)
     checks.append(
         RecoveryCheck(
             name="payload_closure",
-            ok=not missing,
+            ok=not missing and not payload_error,
             detail=(
-                f"{len(manifest.payload_store['objects'])} objects verified"
-                if not missing
-                else f"unavailable/corrupt: {sorted(missing)}"
+                payload_error
+                or (
+                    f"{len(manifest.payload_store['objects'])} objects verified"
+                    if not missing
+                    else f"unavailable/corrupt: {sorted(missing)}"
+                )
             ),
         )
     )
@@ -1476,13 +1485,6 @@ async def _verify_publications(
     return ok, "; ".join(details) or "no publications declared"
 
 
-@dataclass
-class _OwnershipFacts:
-    in_flight_without_lease: int
-    duplicate_publications: int
-    accepted_without_lease: int
-
-
 async def _verify_ownership(
     session_factory: async_sessionmaker, workspace_id: str, manifest: RecoveryPointManifest
 ) -> RecoveryCheck:
@@ -1490,66 +1492,98 @@ async def _verify_ownership(
 
     Honest scope: the database cannot prove a lease's owner process is
     alive, so this check proves what durable truth *can* prove — every
-    in-flight delivery carries a lease (no orphans), every accepted
-    publication has exactly-one scope row backed by an accepted lease
-    lineage, and no work item accumulated two accepted publications.
-    Whether a dead owner's lease is reclaimable is exercised by the
-    failover drills, which take the lease over for real.
+    in-flight delivery carries a lease that still names an owner (no
+    orphans, no vacated-lease stragglers that reconcile must requeue),
+    every accepted publication has exactly-one scope row backed by an
+    accepted lease whose fencing token matches the accepting token, and
+    no work item accumulated two accepted publications. Whether a dead
+    owner's lease is reclaimable is exercised by the failover drills,
+    which take the lease over for real.
     """
     async with session_factory() as session:
-        in_flight = (
-            await session.execute(
-                select(KernelOutbox.id).where(
-                    KernelOutbox.workspace_id == workspace_id,
-                    KernelOutbox.state == "in_flight",
-                )
-            )
-        ).scalars().all()
-        lease_ids = set(
+        in_flight = set(
             (
                 await session.execute(
-                    select(KernelWorkLease.work_id).where(
-                        KernelWorkLease.workspace_id == workspace_id
+                    select(KernelOutbox.id).where(
+                        KernelOutbox.workspace_id == workspace_id,
+                        KernelOutbox.state == "in_flight",
                     )
                 )
             )
             .scalars()
             .all()
         )
-        orphaned = [work_id for work_id in in_flight if work_id not in lease_ids]
-
-        publication_rows = (
-            await session.execute(
-                select(KernelPublication.work_id).where(
-                    KernelPublication.workspace_id == workspace_id
+        leases = (
+            (
+                await session.execute(
+                    select(
+                        KernelWorkLease.work_id,
+                        KernelWorkLease.state,
+                    ).where(KernelWorkLease.workspace_id == workspace_id)
                 )
             )
-        ).scalars().all()
+            .all()
+        )
+        lease_states = {work_id: state for work_id, state in leases}
+        orphaned = sorted(work_id for work_id in in_flight if work_id not in lease_states)
+        vacated = sorted(
+            work_id
+            for work_id in in_flight
+            if lease_states.get(work_id) == "released"
+        )
+
+        publication_rows = (
+            (
+                await session.execute(
+                    select(
+                        KernelPublication.work_id, KernelPublication.fencing_token
+                    ).where(KernelPublication.workspace_id == workspace_id)
+                )
+            )
+            .all()
+        )
         seen: set[int] = set()
         duplicates = 0
-        for work_id in publication_rows:
+        for work_id, _token in publication_rows:
             if work_id in seen:
                 duplicates += 1
             seen.add(work_id)
 
-        accepted_leases = set(
-            (
-                await session.execute(
-                    select(KernelWorkLease.work_id).where(
-                        KernelWorkLease.workspace_id == workspace_id,
-                        KernelWorkLease.state == "accepted",
+        accepted_tokens = {
+            work_id: token
+            for work_id, token in (
+                (
+                    await session.execute(
+                        select(
+                            KernelWorkLease.work_id, KernelWorkLease.fencing_token
+                        ).where(
+                            KernelWorkLease.workspace_id == workspace_id,
+                            KernelWorkLease.state == "accepted",
+                        )
                     )
-                )
+                ).all()
             )
-            .scalars()
-            .all()
+        }
+        accepted_without_lease = len(seen - set(accepted_tokens))
+        token_mismatches = sorted(
+            work_id
+            for work_id, token in publication_rows
+            if work_id in accepted_tokens and accepted_tokens[work_id] != token
         )
-        accepted_without_lease = len(seen - accepted_leases)
 
-    ok = not orphaned and duplicates == 0 and accepted_without_lease == 0
+    problems = []
+    if orphaned:
+        problems.append(f"orphaned={orphaned}")
+    if vacated:
+        problems.append(f"in_flight_under_vacated_lease={vacated}")
+    if duplicates:
+        problems.append(f"duplicate_publications={duplicates}")
+    if accepted_without_lease:
+        problems.append(f"accepted_without_lease={accepted_without_lease}")
+    if token_mismatches:
+        problems.append(f"accepted_token_mismatch={token_mismatches}")
     detail = (
-        f"in_flight={len(in_flight)} orphaned={len(orphaned)} "
-        f"publications={len(seen)} duplicates={duplicates} "
-        f"accepted_without_lease={accepted_without_lease}"
+        f"in_flight={len(in_flight)} publications={len(seen)} "
+        + (" ".join(problems) if problems else "no ownership problems")
     )
-    return RecoveryCheck(name="ownership", ok=ok, detail=detail)
+    return RecoveryCheck(name="ownership", ok=not problems, detail=detail)

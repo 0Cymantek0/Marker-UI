@@ -234,11 +234,8 @@ async def mode_recover() -> None:
                 )
                 if claimed is not None and claimed.work_id == work_id:
                     lease = claimed.lease
-                elif claimed is not None:
-                    # someone else's work arrived mid-drill; not ours
-                    lease = None
-                    break
                 else:
+                    # not yet claimable (or another item appeared): keep polling
                     await asyncio.sleep(0.25)
         else:
             while lease is None and time.monotonic() < deadline:
@@ -247,7 +244,10 @@ async def mode_recover() -> None:
                 )
                 if lease is None:
                     await asyncio.sleep(0.25)
-        assert lease is not None, "replacement never took over the lapsed lease"
+        assert lease is not None, (
+            "replacement never acquired the work (claim pending or takeover "
+            "of the lapsed lease)"
+        )
         outcome, _appended = await accept_work(
             factory, work_id=work_id, fencing_token=lease.fencing_token, result=result
         )
