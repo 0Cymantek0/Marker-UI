@@ -29,6 +29,7 @@ class GitMeta:
             text=True,
             encoding="utf-8",
             check=False,
+            input=stdin,
         )
         if proc.returncode != 0:
             raise GitMetaError(f"git {' '.join(args[:2])} failed: {proc.stderr.strip()}")

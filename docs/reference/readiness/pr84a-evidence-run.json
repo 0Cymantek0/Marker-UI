@@ -1,0 +1,1718 @@
+{
+  "schema": "marker.pr84a_evidence_run.v1",
+  "generated_at": "2026-08-22T11:04:13+00:00",
+  "git_head": "31464e7121b1dcdf217159504c9faf3cd9c66350",
+  "runner": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0"
+  },
+  "results": [
+    {
+      "binding_key": "10:test:backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_all_four_families_coexist",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_anchor_mapping.py": "b33ad86c3693a3c19ad21cfd677f0f60eaffc8d0",
+        "backend/tests/test_kernel_source_anchors.py": "1e84b44a4af4b742430ef969f055252f1e97b9a9"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_all_four_families_coexist",
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_unknown_family_fails_closed",
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_unknown_selector_fields_fail_closed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_native_identity_carries_exact_across_text_edit",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_unique_byte_exact_quote_maps_deterministically",
+        "backend/tests/test_kernel_anchor_mapping.py::TestMappingDecisions::test_human_review_promotes_candidate_to_reviewed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_duplicate_identical_text_yields_ranked_candidates_not_a_pick",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_deleted_target_is_stale",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_positional_only_anchor_is_unresolved"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_all_four_families_coexist": "passed",
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_unknown_family_fails_closed": "passed",
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_unknown_selector_fields_fail_closed": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_native_identity_carries_exact_across_text_edit": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_unique_byte_exact_quote_maps_deterministically": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestMappingDecisions::test_human_review_promotes_candidate_to_reviewed": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_duplicate_identical_text_yields_ranked_candidates_not_a_pick": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_deleted_target_is_stale": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_positional_only_anchor_is_unresolved": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "11:test:backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_paraphrase_never_becomes_exact_or_deterministic",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_anchor_mapping.py": "b33ad86c3693a3c19ad21cfd677f0f60eaffc8d0"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_paraphrase_never_becomes_exact_or_deterministic",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_identical_geometry_is_candidate_never_exact",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_geometry_only_drift_stays_unresolved"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_paraphrase_never_becomes_exact_or_deterministic": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_identical_geometry_is_candidate_never_exact": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_geometry_only_drift_stays_unresolved": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "12:test:backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_two_columns_stay_partially_ordered",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_reading_order.py": "4d4f197a8b3a27fb7f19ec4467380ba5f76e5880"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_two_columns_stay_partially_ordered",
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_unresolved_side_note_is_representable_not_promoted",
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_continues_edge_is_a_hypothesis",
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_containment_is_not_ordering",
+        "backend/tests/test_kernel_reading_order.py::TestContradictions::test_asserted_cycle_rejected",
+        "backend/tests/test_kernel_reading_order.py::TestContradictions::test_both_directions_asserted_rejected",
+        "backend/tests/test_kernel_reading_order.py::TestSpecialistSplit::test_neighborhood_is_bounded_not_document_wide",
+        "backend/tests/test_kernel_reading_order.py::TestSpecialistSplit::test_sound_transfer_cannot_manufacture_a_cycle",
+        "backend/tests/test_kernel_reading_order.py::TestSpecialistSplit::test_failed_split_leaves_original_graph_unchanged"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_two_columns_stay_partially_ordered": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_unresolved_side_note_is_representable_not_promoted": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_continues_edge_is_a_hypothesis": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_containment_is_not_ordering": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestContradictions::test_asserted_cycle_rejected": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestContradictions::test_both_directions_asserted_rejected": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestSpecialistSplit::test_neighborhood_is_bounded_not_document_wide": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestSpecialistSplit::test_sound_transfer_cannot_manufacture_a_cycle": "passed",
+        "backend/tests/test_kernel_reading_order.py::TestSpecialistSplit::test_failed_split_leaves_original_graph_unchanged": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "13:test:backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_continues_edge_is_a_hypothesis",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_anchor_mapping.py": "b33ad86c3693a3c19ad21cfd677f0f60eaffc8d0",
+        "backend/tests/test_kernel_reading_order.py": "4d4f197a8b3a27fb7f19ec4467380ba5f76e5880",
+        "backend/tests/test_kernel_source_anchors.py": "1e84b44a4af4b742430ef969f055252f1e97b9a9"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_continues_edge_is_a_hypothesis",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_duplicate_identical_text_yields_ranked_candidates_not_a_pick",
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_identical_quote_twice_is_two_valid_distinct_anchors"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_reading_order.py::TestPartialOrderHonesty::test_continues_edge_is_a_hypothesis": "passed",
+        "backend/tests/test_kernel_anchor_mapping.py::TestCascade::test_duplicate_identical_text_yields_ranked_candidates_not_a_pick": "passed",
+        "backend/tests/test_kernel_source_anchors.py::TestSelectorPluralityAndHonesty::test_identical_quote_twice_is_two_valid_distinct_anchors": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "14:test:backend/tests/test_kernel_patch_conflicts.py::test_b4_overlapping_replaces_conflict_by_value_not_arrival",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_patch_conflicts.py": "9ff2faf04debd7e9600a7e8eb83a998d944ab80b",
+        "backend/tests/test_kernel_patches.py": "59b8576426257d9d8f6aa60a45d07e9c6a466d48"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_patch_conflicts.py::test_b4_overlapping_replaces_conflict_by_value_not_arrival",
+        "backend/tests/test_kernel_patch_conflicts.py::test_b5_split_vs_replace_real_concurrent_race",
+        "backend/tests/test_kernel_patch_conflicts.py::test_b7_disjoint_pair_is_order_independent",
+        "backend/tests/test_kernel_patch_conflicts.py::test_b7_overlapping_pair_is_not_order_independent_and_conflicts",
+        "backend/tests/test_kernel_patch_conflicts.py::test_concurrent_race_then_honest_rebase_lands_both_disjoint_changes",
+        "backend/tests/test_kernel_patches.py::test_proposal_operation_order_is_identity_bearing"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_patch_conflicts.py::test_b4_overlapping_replaces_conflict_by_value_not_arrival": "passed",
+        "backend/tests/test_kernel_patch_conflicts.py::test_b5_split_vs_replace_real_concurrent_race": "passed",
+        "backend/tests/test_kernel_patch_conflicts.py::test_b7_disjoint_pair_is_order_independent": "passed",
+        "backend/tests/test_kernel_patch_conflicts.py::test_b7_overlapping_pair_is_not_order_independent_and_conflicts": "passed",
+        "backend/tests/test_kernel_patch_conflicts.py::test_concurrent_race_then_honest_rebase_lands_both_disjoint_changes": "passed",
+        "backend/tests/test_kernel_patches.py::test_proposal_operation_order_is_identity_bearing": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "15:test:backend/tests/test_pr73_durability.py::test_reversal_restores_prior_revision_exactly_and_keeps_history",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_pr73_durability.py": "daad7ad2c995e2ffc4fed4ff3275f740c9d4b2af"
+      },
+      "nodes": [
+        "backend/tests/test_pr73_durability.py::test_reversal_restores_prior_revision_exactly_and_keeps_history",
+        "backend/tests/test_pr73_durability.py::test_reversal_after_intervening_change_conflicts",
+        "backend/tests/test_pr73_durability.py::test_split_is_not_declared_reversible",
+        "backend/tests/test_pr73_durability.py::test_accepted_lineage_and_reversal_survive_restart"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_pr73_durability.py::test_reversal_restores_prior_revision_exactly_and_keeps_history": "passed",
+        "backend/tests/test_pr73_durability.py::test_reversal_after_intervening_change_conflicts": "passed",
+        "backend/tests/test_pr73_durability.py::test_split_is_not_declared_reversible": "passed",
+        "backend/tests/test_pr73_durability.py::test_accepted_lineage_and_reversal_survive_restart": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "16:test:backend/tests/test_kernel_dependencies.py::test_exact_native_change_localizes_invalidation",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_dependencies.py": "98f34e9f517598e933d8e707783fa4b3ef6de6b3"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_dependencies.py::test_exact_native_change_localizes_invalidation",
+        "backend/tests/test_kernel_dependencies.py::test_multi_input_subject_pending_until_all_reconciled",
+        "backend/tests/test_kernel_dependencies.py::test_conservative_input_change_widens_whole_scope",
+        "backend/tests/test_kernel_dependencies.py::test_unknown_change_widens_every_conservative_boundary",
+        "backend/tests/test_kernel_dependencies.py::test_semantic_candidate_never_narrows_or_corrects",
+        "backend/tests/test_kernel_dependencies.py::test_declarations_are_durable_kernel_records"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_dependencies.py::test_exact_native_change_localizes_invalidation": "passed",
+        "backend/tests/test_kernel_dependencies.py::test_multi_input_subject_pending_until_all_reconciled": "passed",
+        "backend/tests/test_kernel_dependencies.py::test_conservative_input_change_widens_whole_scope": "passed",
+        "backend/tests/test_kernel_dependencies.py::test_unknown_change_widens_every_conservative_boundary": "passed",
+        "backend/tests/test_kernel_dependencies.py::test_semantic_candidate_never_narrows_or_corrects": "passed",
+        "backend/tests/test_kernel_dependencies.py::test_declarations_are_durable_kernel_records": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "17:test:backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_incremental_rebuild.py": "c0a27001ba97fdc37f4edc9b5479ef47f97e7c1f"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_local_edit_localized_rebuild_saves_work",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_conservative_knowledge_widens_to_full_derivation",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_unknown_change_widens_to_full",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_undeclared_structural_addition_falls_back_to_full",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_rebase_fault_injection_never_leaves_mixed_state"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[0]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[1]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[2]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[3]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[4]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[5]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[6]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[7]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[8]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[9]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[10]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[11]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[12]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[13]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[14]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_randomized_incremental_equals_clean[15]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_local_edit_localized_rebuild_saves_work": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_conservative_knowledge_widens_to_full_derivation": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_unknown_change_widens_to_full": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_undeclared_structural_addition_falls_back_to_full": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_rebase_fault_injection_never_leaves_mixed_state[view-checked]": "passed",
+        "backend/tests/test_kernel_incremental_rebuild.py::test_rebase_fault_injection_never_leaves_mixed_state[view-advanced]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "18:test:backend/tests/test_audit.py::test_settings_write_emits_redacted_audit_event",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_audit.py": "5cbe7d00a0b6768599c2ac2508f30f53b4a071c7",
+        "backend/tests/test_context_runtime_packets.py": "ac261e5a03183d5e75653eb4fe1114eae47dab1d"
+      },
+      "nodes": [
+        "backend/tests/test_audit.py::test_settings_write_emits_redacted_audit_event",
+        "backend/tests/test_audit.py::test_source_url_blocked_emits_redacted_audit_event",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_audit.py::test_settings_write_emits_redacted_audit_event": "passed",
+        "backend/tests/test_audit.py::test_source_url_blocked_emits_redacted_audit_event": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "19:test:backend/tests/test_kernel_verification_risk.py::test_dependency_classification_is_conservative_and_detects_shared_causes",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_verification_risk.py": "0c40b993be578ca855fc7855a35d7292e9f42858"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_verification_risk.py::test_dependency_classification_is_conservative_and_detects_shared_causes",
+        "backend/tests/test_kernel_verification_risk.py::test_complete_disclosure_with_empty_lineage_is_unknown",
+        "backend/tests/test_kernel_verification_risk.py::test_complete_disclosure_with_incomplete_lineage_is_unknown",
+        "backend/tests/test_kernel_verification_risk.py::test_mixed_evidence_cannot_self_declare_independence"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_verification_risk.py::test_dependency_classification_is_conservative_and_detects_shared_causes": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_complete_disclosure_with_empty_lineage_is_unknown": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_complete_disclosure_with_incomplete_lineage_is_unknown": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_mixed_evidence_cannot_self_declare_independence": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "1:test:backend/tests/test_kernel_faults.py::test_all_fault_phases_leave_no_partial_state",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_commit.py": "0debbcf8e2f9d572e6bded6bcc6414b30b58126e",
+        "backend/tests/test_kernel_faults.py": "c33653f42e135940c2a03295f7f0852880f97be0"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_faults.py::test_all_fault_phases_leave_no_partial_state",
+        "backend/tests/test_kernel_faults.py::test_fault_on_first_commit_ever_leaves_initial_state",
+        "backend/tests/test_kernel_commit.py::test_multi_record_batch_with_edges_atomic"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_faults.py::test_all_fault_phases_leave_no_partial_state": "passed",
+        "backend/tests/test_kernel_faults.py::test_fault_on_first_commit_ever_leaves_initial_state": "passed",
+        "backend/tests/test_kernel_commit.py::test_multi_record_batch_with_edges_atomic": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "20:test:backend/tests/test_kernel_verification_risk.py::test_model_consensus_alone_never_verifies_high_risk_claim",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_verification_risk.py": "0c40b993be578ca855fc7855a35d7292e9f42858",
+        "backend/tests/test_kernel_verification_risk_integration.py": "e2cd8076361a37691202edd05b98f62c09d6fd99"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_verification_risk.py::test_model_consensus_alone_never_verifies_high_risk_claim",
+        "backend/tests/test_kernel_verification_risk.py::test_mixed_model_only_consensus_is_rejected_like_model_evidence",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_model_only_consensus_rejected_atomically"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_verification_risk.py::test_model_consensus_alone_never_verifies_high_risk_claim": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_mixed_model_only_consensus_is_rejected_like_model_evidence": "passed",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_model_only_consensus_rejected_atomically": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "21:test:backend/tests/test_kernel_proofs.py::test_same_batch_three_node_cycle_rejected_atomically",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_extraction_proof_integrity.py": "28e8a84c6edc5bdb1a48b1b351f976e80d8274ac",
+        "backend/tests/test_kernel_proof_inputs.py": "ef79c68e1409de2d0acb44ee4ff8014fcc7de5f6",
+        "backend/tests/test_kernel_proof_randomized.py": "e0710a1f144b925e385bd3c4fbd73c98128a21ef",
+        "backend/tests/test_kernel_proofs.py": "e8b45375a1d72133794143f03151f1bd420f983e"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_proofs.py::test_same_batch_three_node_cycle_rejected_atomically",
+        "backend/tests/test_kernel_proofs.py::test_two_node_proof_cycle_via_derivation",
+        "backend/tests/test_kernel_proofs.py::test_cycle_closed_against_committed_history",
+        "backend/tests/test_kernel_proofs.py::test_self_supporting_derived_evidence_rejected",
+        "backend/tests/test_kernel_proofs.py::test_witness_reaching_another_claim_rejected",
+        "backend/tests/test_kernel_proof_inputs.py::test_derived_evidence_without_derivation_path_rejected",
+        "backend/tests/test_kernel_proof_inputs.py::test_derived_evidence_presented_as_independent_witness_rejected",
+        "backend/tests/test_extraction_proof_integrity.py::test_extraction_result_cannot_support_its_own_source_claim",
+        "backend/tests/test_kernel_proof_randomized.py::test_seeded_random_dag_growth_and_cycle_closure"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_proofs.py::test_same_batch_three_node_cycle_rejected_atomically": "passed",
+        "backend/tests/test_kernel_proofs.py::test_two_node_proof_cycle_via_derivation": "passed",
+        "backend/tests/test_kernel_proofs.py::test_cycle_closed_against_committed_history": "passed",
+        "backend/tests/test_kernel_proofs.py::test_self_supporting_derived_evidence_rejected": "passed",
+        "backend/tests/test_kernel_proofs.py::test_witness_reaching_another_claim_rejected": "passed",
+        "backend/tests/test_kernel_proof_inputs.py::test_derived_evidence_without_derivation_path_rejected": "passed",
+        "backend/tests/test_kernel_proof_inputs.py::test_derived_evidence_presented_as_independent_witness_rejected": "passed",
+        "backend/tests/test_extraction_proof_integrity.py::test_extraction_result_cannot_support_its_own_source_claim": "passed",
+        "backend/tests/test_kernel_proof_randomized.py::test_seeded_random_dag_growth_and_cycle_closure": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "22:test:backend/tests/test_kernel_verification_risk.py::test_valid_source_native_risk_evidence_can_verify_narrow_high_risk_claim",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_verification_risk.py": "0c40b993be578ca855fc7855a35d7292e9f42858",
+        "backend/tests/test_kernel_verification_risk_integration.py": "e2cd8076361a37691202edd05b98f62c09d6fd99"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_verification_risk.py::test_valid_source_native_risk_evidence_can_verify_narrow_high_risk_claim",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_claim_relative_native_fact_mismatch_is_rejected_atomically",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_native_binding_stays_outside_standard_workflow",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_verification_risk.py::test_valid_source_native_risk_evidence_can_verify_narrow_high_risk_claim": "passed",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_claim_relative_native_fact_mismatch_is_rejected_atomically[fact_changes0]": "passed",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_claim_relative_native_fact_mismatch_is_rejected_atomically[fact_changes1]": "passed",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_claim_relative_native_fact_mismatch_is_rejected_atomically[fact_changes2]": "passed",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_native_binding_stays_outside_standard_workflow": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes0-policy_changes0-2026-08-15-uncertain-insufficient_evidence]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes1-policy_changes1-2026-10-01-unavailable-evidence_expired]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes2-policy_changes2-2026-08-15-abstained-distribution_shift]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes3-policy_changes3-2026-08-15-abstained-risk_bound_failure]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes4-policy_changes4-2026-08-15-unavailable-evaluation_scope_mismatch]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "23:test:backend/tests/test_verification_risk_eval.py::test_calibration_reports_matched_shift_and_insufficient_support",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_verification_risk.py": "0c40b993be578ca855fc7855a35d7292e9f42858",
+        "backend/tests/test_verification_risk_eval.py": "f1cc050ac56c7733324ce913ec4c488cc9a65134"
+      },
+      "nodes": [
+        "backend/tests/test_verification_risk_eval.py::test_calibration_reports_matched_shift_and_insufficient_support",
+        "backend/tests/test_verification_risk_eval.py::test_pair_math_is_exact_and_symmetric",
+        "backend/tests/test_verification_risk_eval.py::test_zero_denominators_are_explicit",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_verification_risk_eval.py::test_calibration_reports_matched_shift_and_insufficient_support": "passed",
+        "backend/tests/test_verification_risk_eval.py::test_pair_math_is_exact_and_symmetric": "passed",
+        "backend/tests/test_verification_risk_eval.py::test_zero_denominators_are_explicit": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes0-policy_changes0-2026-08-15-uncertain-insufficient_evidence]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes1-policy_changes1-2026-10-01-unavailable-evidence_expired]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes2-policy_changes2-2026-08-15-abstained-distribution_shift]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes3-policy_changes3-2026-08-15-abstained-risk_bound_failure]": "passed",
+        "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes4-policy_changes4-2026-08-15-unavailable-evaluation_scope_mismatch]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "24:measurement:docs/reference/measurements/pr77-bounded-query.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr77-bounded-query.json": "9798ce54339e7daa9ed22fc7bbf311fea4f4355f"
+      },
+      "artifact": "docs/reference/measurements/pr77-bounded-query.json",
+      "artifact_sha256": "66f46380bb5682bee6f1461987d719bd76fa0a396c68ab9482a3337873bd461f",
+      "checks": {
+        "acceptance.server_operations_bounded_by_request": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "acceptance.single_set_attribution": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "24:test:backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_agent_query_adapter.py": "ec63e3be0df98b9b54a540cb2655e49474e579bd",
+        "backend/tests/test_context_runtime_continuation.py": "2837b9171c727a6b38e6a6db5117a002ebbb85de",
+        "backend/tests/test_context_runtime_service.py": "52d1d7dbc939d475f9789b5177aaccb2af724719"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue",
+        "backend/tests/test_context_runtime_service.py::test_cumulative_budgets_and_hard_chain_limit_stop_pagination",
+        "backend/tests/test_agent_query_adapter.py::test_continuation_chain_reaches_terminal_without_gaps"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[invalidated]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[stale]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[loop_limit]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[policy_fail_closed]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[execution_failure]": "passed",
+        "backend/tests/test_context_runtime_service.py::test_cumulative_budgets_and_hard_chain_limit_stop_pagination": "passed",
+        "backend/tests/test_agent_query_adapter.py::test_continuation_chain_reaches_terminal_without_gaps": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "25:measurement:docs/reference/measurements/pr75-verification-risk.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr75-verification-risk.json": "07cdd2054eb6097f604bc1d1ec53b78bbd76005a"
+      },
+      "artifact": "docs/reference/measurements/pr75-verification-risk.json",
+      "artifact_sha256": "f0234ce7e591ff2742ad1a4a6d77dcf0ad6a05869894b9bddd62660bcb34a3b5",
+      "checks": {
+        "slices.matched.promotion.decision": {
+          "expected": "shadow",
+          "actual": "shadow",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "25:test:backend/conformance/test_verification_risk_conformance.py::test_promotion_threshold_is_explicit_and_conservative",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/conformance/test_verification_risk_conformance.py": "fcd206f49b48228f0c9e76119a9b8b05153bebcf"
+      },
+      "nodes": [
+        "backend/conformance/test_verification_risk_conformance.py::test_promotion_threshold_is_explicit_and_conservative"
+      ],
+      "node_outcomes": {
+        "backend/conformance/test_verification_risk_conformance.py::test_promotion_threshold_is_explicit_and_conservative": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "26:test:backend/tests/test_extraction_review.py::test_review_accepts_grounded_unresolved_value_and_persist_audit",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_extraction_review.py": "79cbd8b7c21ba9a7075202afdf98df1a28bc1421"
+      },
+      "nodes": [
+        "backend/tests/test_extraction_review.py::test_review_accepts_grounded_unresolved_value_and_persist_audit"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_extraction_review.py::test_review_accepts_grounded_unresolved_value_and_persist_audit": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "27:measurement:docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr80b-direct-specialist-displacement.json": "068bd1e80140a0b2dcf03939ddb64983a082cc7e"
+      },
+      "artifact": "docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+      "artifact_sha256": "ef4f3f78cbc065f463da4369850ef8d94089e280de6283074de0e791d3ddbf66",
+      "checks": {
+        "decision.outcome": {
+          "expected": "hybrid_routing_condition",
+          "actual": "hybrid_routing_condition",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "28:measurement:docs/reference/measurements/pr68a-full-comparison.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr68a-full-comparison.json": "c269fd85ed641b6c463b2f218cff889d093b7c0a"
+      },
+      "artifact": "docs/reference/measurements/pr68a-full-comparison.json",
+      "artifact_sha256": "7f9cce9971af8fa93a46dae77ae42c9204fcf5609c14ea773c41ba446ea15ba1",
+      "checks": {
+        "schema": {
+          "expected": "marker.pr68a.dataplane.benchmark.v1",
+          "actual": "marker.pr68a.dataplane.benchmark.v1",
+          "ok": true
+        },
+        "summary.queue_inline.262144.per_result_p50_ms": {
+          "expected": 16.938,
+          "actual": 16.938,
+          "ok": true
+        },
+        "summary.file_handle.262144.per_result_p50_ms": {
+          "expected": 25.919,
+          "actual": 25.919,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "28:test:backend/tests/test_kernel_dual_backend_conformance.py::test_commit_visible_result[sqlite]",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_dual_backend_conformance.py": "af07779c418f3b79e1d9d9f60b5d0e0bff94438a"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_dual_backend_conformance.py::test_commit_visible_result[sqlite]"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_dual_backend_conformance.py::test_commit_visible_result[sqlite]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "29:test:backend/tests/test_artifact_handles.py::TestStageWorkerPayload::test_staging_failure_degrades_to_inline",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_artifact_handles.py": "651078421d73e0209a5d24c818b10a8c664555b1",
+        "backend/tests/test_kernel_runtime.py": "6057e0daa9cde886b055ad1bc5a3202c11ba7d4c"
+      },
+      "nodes": [
+        "backend/tests/test_artifact_handles.py::TestStageWorkerPayload::test_staging_failure_degrades_to_inline",
+        "backend/tests/test_artifact_handles.py::TestResolveWorkerPayload::test_rebuild_matches_original_semantics",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation",
+        "backend/tests/test_kernel_runtime.py::TestArtifactHandleAcceptance::test_resolved_handle_result_crosses_acceptance[sqlite]",
+        "backend/tests/test_kernel_runtime.py::TestArtifactHandleAcceptance::test_corrupt_handle_fails_closed[sqlite]"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_artifact_handles.py::TestStageWorkerPayload::test_staging_failure_degrades_to_inline": "passed",
+        "backend/tests/test_artifact_handles.py::TestResolveWorkerPayload::test_rebuild_matches_original_semantics": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides0]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides1]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides2]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides3]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides4]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides5]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides6]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides7]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides8]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides9]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_malformed_handles_rejected[overrides10]": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_non_dict_handle_rejected": "passed",
+        "backend/tests/test_artifact_handles.py::TestHandleWireValidation::test_wire_round_trip": "passed",
+        "backend/tests/test_kernel_runtime.py::TestArtifactHandleAcceptance::test_resolved_handle_result_crosses_acceptance[sqlite]": "passed",
+        "backend/tests/test_kernel_runtime.py::TestArtifactHandleAcceptance::test_corrupt_handle_fails_closed[sqlite]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "2:test:backend/tests/test_kernel_snapshot.py::test_head_snapshot_membership_and_stable_identity",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_snapshot.py": "93ddae7a5927980621babe3fc958dc691be6f6d7"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_snapshot.py::test_head_snapshot_membership_and_stable_identity",
+        "backend/tests/test_kernel_snapshot.py::test_historical_cut_resolves_without_wall_clock",
+        "backend/tests/test_kernel_snapshot.py::test_future_and_invalid_cuts_rejected",
+        "backend/tests/test_kernel_snapshot.py::test_incoherent_metadata_fails_closed",
+        "backend/tests/test_kernel_snapshot.py::test_pinned_snapshot_stable_while_commits_proceed",
+        "backend/tests/test_kernel_snapshot.py::test_future_bindings_unbound_and_machine_detectable"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_snapshot.py::test_head_snapshot_membership_and_stable_identity": "passed",
+        "backend/tests/test_kernel_snapshot.py::test_historical_cut_resolves_without_wall_clock": "passed",
+        "backend/tests/test_kernel_snapshot.py::test_future_and_invalid_cuts_rejected": "passed",
+        "backend/tests/test_kernel_snapshot.py::test_incoherent_metadata_fails_closed": "passed",
+        "backend/tests/test_kernel_snapshot.py::test_pinned_snapshot_stable_while_commits_proceed": "passed",
+        "backend/tests/test_kernel_snapshot.py::test_future_bindings_unbound_and_machine_detectable": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "32:test:backend/tests/test_kernel_fencing.py::test_same_result_retry_converges_to_existing_publication",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_fencing.py": "24ea00265fb1b308f5e01a5f2cdfaf8b4e80e532",
+        "backend/tests/test_kernel_runtime.py": "6057e0daa9cde886b055ad1bc5a3202c11ba7d4c"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_fencing.py::test_same_result_retry_converges_to_existing_publication",
+        "backend/tests/test_kernel_fencing.py::test_conflicting_duplicate_is_rejected_without_changing_state",
+        "backend/tests/test_kernel_fencing.py::test_stale_worker_finishing_late_cannot_publish",
+        "backend/tests/test_kernel_runtime.py::TestIdempotentSubmission::test_duplicate_same_result_converges[sqlite]",
+        "backend/tests/test_kernel_runtime.py::TestCompetingDispatchLoops::test_two_live_coordinators_never_double_own_work[sqlite]"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_fencing.py::test_same_result_retry_converges_to_existing_publication": "passed",
+        "backend/tests/test_kernel_fencing.py::test_conflicting_duplicate_is_rejected_without_changing_state": "passed",
+        "backend/tests/test_kernel_fencing.py::test_stale_worker_finishing_late_cannot_publish": "passed",
+        "backend/tests/test_kernel_runtime.py::TestIdempotentSubmission::test_duplicate_same_result_converges[sqlite]": "passed",
+        "backend/tests/test_kernel_runtime.py::TestCompetingDispatchLoops::test_two_live_coordinators_never_double_own_work[sqlite]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "33:test:backend/tests/test_kernel_liveness.py::test_detached_timer_cannot_renew",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_liveness.py": "ee96377a5444879850cad37c1130a5fb0e86e8e4"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_liveness.py::test_detached_timer_cannot_renew",
+        "backend/tests/test_kernel_liveness.py::test_external_request_liveness_is_bounded_by_request_activity",
+        "backend/tests/test_kernel_liveness.py::test_cancellation_observation_defeats_stale_liveness",
+        "backend/tests/test_kernel_liveness.py::test_healthy_owner_renews_without_moving_fence"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_liveness.py::test_detached_timer_cannot_renew": "passed",
+        "backend/tests/test_kernel_liveness.py::test_external_request_liveness_is_bounded_by_request_activity": "passed",
+        "backend/tests/test_kernel_liveness.py::test_cancellation_observation_defeats_stale_liveness": "passed",
+        "backend/tests/test_kernel_liveness.py::test_healthy_owner_renews_without_moving_fence": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "34:test:backend/tests/test_kernel_scheduler.py::test_cap_one_never_oversubscribes_under_concurrent_dispatchers",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_scheduler.py": "fbe0ae64b758532edd6367bb052b91cdc9a92987"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_scheduler.py::test_cap_one_never_oversubscribes_under_concurrent_dispatchers",
+        "backend/tests/test_kernel_scheduler.py::test_cap_k_bounds_concurrent_dispatchers",
+        "backend/tests/test_kernel_scheduler.py::test_small_work_served_while_large_backlog_remains",
+        "backend/tests/test_kernel_scheduler.py::test_equal_weight_groups_interleave_without_starvation",
+        "backend/tests/test_kernel_scheduler.py::test_in_flight_window_bounds_fan_out_and_applies_backpressure"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_scheduler.py::test_cap_one_never_oversubscribes_under_concurrent_dispatchers": "passed",
+        "backend/tests/test_kernel_scheduler.py::test_cap_k_bounds_concurrent_dispatchers": "passed",
+        "backend/tests/test_kernel_scheduler.py::test_small_work_served_while_large_backlog_remains": "passed",
+        "backend/tests/test_kernel_scheduler.py::test_equal_weight_groups_interleave_without_starvation": "passed",
+        "backend/tests/test_kernel_scheduler.py::test_in_flight_window_bounds_fan_out_and_applies_backpressure": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "35:test:backend/tests/test_kernel_events.py::test_slow_consumer_does_not_block_execution",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_events.py": "85ae06327d98c1d57547932f648baba7edcc797a",
+        "backend/tests/test_kernel_runtime.py": "6057e0daa9cde886b055ad1bc5a3202c11ba7d4c"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_events.py::test_slow_consumer_does_not_block_execution",
+        "backend/tests/test_kernel_events.py::test_disconnect_and_reconnect_resume_from_durable_sequence",
+        "backend/tests/test_kernel_events.py::test_terminal_events_survive_with_no_subscriber",
+        "backend/tests/test_kernel_events.py::test_concurrent_producers_never_fork_the_sequence",
+        "backend/tests/test_kernel_events.py::test_replay_from_sequence_returns_remaining_events_in_order",
+        "backend/tests/test_kernel_runtime.py::TestSlowClient::test_slow_sse_consumer_does_not_block_execution[sqlite]"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_events.py::test_slow_consumer_does_not_block_execution": "passed",
+        "backend/tests/test_kernel_events.py::test_disconnect_and_reconnect_resume_from_durable_sequence": "passed",
+        "backend/tests/test_kernel_events.py::test_terminal_events_survive_with_no_subscriber": "passed",
+        "backend/tests/test_kernel_events.py::test_concurrent_producers_never_fork_the_sequence": "passed",
+        "backend/tests/test_kernel_events.py::test_replay_from_sequence_returns_remaining_events_in_order": "passed",
+        "backend/tests/test_kernel_runtime.py::TestSlowClient::test_slow_sse_consumer_does_not_block_execution[sqlite]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "36:test:backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_publication.py": "abdae410310284f118a9cfe41eab0d920e34515c",
+        "backend/tests/test_kernel_publication_faults.py": "876db3b4d5308935101b979d7c6394b6276455a4"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set",
+        "backend/tests/test_kernel_publication_faults.py::test_post_activate_fault_leaves_complete_new_set",
+        "backend/tests/test_kernel_publication_faults.py::test_staged_candidate_survives_restart_and_stays_invisible",
+        "backend/tests/test_kernel_publication_faults.py::test_stale_staged_lexical_residue_never_confused_with_published",
+        "backend/tests/test_kernel_publication.py::test_failed_validation_keeps_prior_set_published",
+        "backend/tests/test_kernel_publication.py::test_mixed_cut_members_rejected_at_staging",
+        "backend/tests/test_kernel_publication.py::test_missing_required_member_fails_closed"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-begin]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-rows-materialized]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-source-read]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-staged]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-validate-begin]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-validated]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-pre-activate]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-set-staged]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-validate-begin]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-validated]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_post_activate_fault_leaves_complete_new_set": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_staged_candidate_survives_restart_and_stays_invisible": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_stale_staged_lexical_residue_never_confused_with_published": "passed",
+        "backend/tests/test_kernel_publication.py::test_failed_validation_keeps_prior_set_published": "passed",
+        "backend/tests/test_kernel_publication.py::test_mixed_cut_members_rejected_at_staging": "passed",
+        "backend/tests/test_kernel_publication.py::test_missing_required_member_fails_closed": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "37:measurement:docs/reference/measurements/pr83c2-pg-failover.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr83c2-pg-failover.json": "d73329fdf7127e3b494c20847b57da8512e23d91"
+      },
+      "artifact": "docs/reference/measurements/pr83c2-pg-failover.json",
+      "artifact_sha256": "2060ad113b6f213d9e0ab8c36c8e3f4d180eded69ccfc12e71983bdf58050ccb",
+      "checks": {
+        "sync_lane.rpo_acknowledged_commits_lost": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        "async_lane.rpo_acknowledged_commits_lost": {
+          "expected": 3,
+          "actual": 3,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "37:test:backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_recovery_failover.py": "e87b5e8014ecf09c360ecf1383421734ac739fab"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly",
+        "backend/tests/test_kernel_recovery_failover.py::test_s3_outage_during_source_recovery_fails_honestly"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly": "skipped_env_gated",
+        "backend/tests/test_kernel_recovery_failover.py::test_s3_outage_during_source_recovery_fails_honestly": "skipped_env_gated"
+      },
+      "outcome": "skipped_env_gated",
+      "detail": "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically; backend/tests/test_kernel_recovery_failover.py::test_s3_outage_during_source_recovery_fails_honestly: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically"
+    },
+    {
+      "binding_key": "38:test:backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_pg_failover_promotion.py": "c6cb3d743c96fb7b949566cb7915e2ee0ed4ead4",
+        "backend/tests/test_kernel_recovery_failover.py": "e87b5e8014ecf09c360ecf1383421734ac739fab"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly",
+        "backend/tests/test_kernel_pg_failover_promotion.py::test_acknowledged_truth_survives_primary_loss_and_promotion"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly": "skipped_env_gated",
+        "backend/tests/test_kernel_pg_failover_promotion.py::test_acknowledged_truth_survives_primary_loss_and_promotion": "skipped_env_gated"
+      },
+      "outcome": "skipped_env_gated",
+      "detail": "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically; backend/tests/test_kernel_pg_failover_promotion.py::test_acknowledged_truth_survives_primary_loss_and_promotion: S3 payload-store conformance needs MARKER_TEST_S3_ENDPOINT (object-store base URL) plus MARKER_TEST_S3_ACCESS_KEY and MARKER_TEST_S3_SECRET_KEY credentials; point them at a real S3-compatible s"
+    },
+    {
+      "binding_key": "38:test:backend/tests/test_kernel_runtime.py::TestCancellation::test_cancel_during_execution_beats_late_result[sqlite]",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_reconcile.py": "f1441cd969a6db6527026d908525262edc75569e",
+        "backend/tests/test_kernel_runtime.py": "6057e0daa9cde886b055ad1bc5a3202c11ba7d4c"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_runtime.py::TestCancellation::test_cancel_during_execution_beats_late_result[sqlite]",
+        "backend/tests/test_kernel_runtime.py::TestCrashRestartMatrix::test_boundary_claimed_then_owner_died_takeover[sqlite]",
+        "backend/tests/test_kernel_runtime.py::TestCrashRestartMatrix::test_boundary_lapse_budget_exhausted_fails_terminal[sqlite]",
+        "backend/tests/test_kernel_runtime.py::TestStaleWorker::test_late_success_cannot_complete_or_renew[sqlite]",
+        "backend/tests/test_kernel_reconcile.py::test_removed_committed_payload_is_degraded_not_complete",
+        "backend/tests/test_kernel_reconcile.py::test_modified_committed_payload_is_corrupt_not_complete"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_runtime.py::TestCancellation::test_cancel_during_execution_beats_late_result[sqlite]": "passed",
+        "backend/tests/test_kernel_runtime.py::TestCrashRestartMatrix::test_boundary_claimed_then_owner_died_takeover[sqlite]": "passed",
+        "backend/tests/test_kernel_runtime.py::TestCrashRestartMatrix::test_boundary_lapse_budget_exhausted_fails_terminal[sqlite]": "passed",
+        "backend/tests/test_kernel_runtime.py::TestStaleWorker::test_late_success_cannot_complete_or_renew[sqlite]": "passed",
+        "backend/tests/test_kernel_reconcile.py::test_removed_committed_payload_is_degraded_not_complete": "passed",
+        "backend/tests/test_kernel_reconcile.py::test_modified_committed_payload_is_corrupt_not_complete": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "39:test:backend/tests/test_kernel_source_records.py::TestAccessPolicyRevision::test_policy_only_change_is_new_access_identity",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_authorization.py": "7e15cceae4b7ade11ad52b1f62f103b353cccd3f",
+        "backend/tests/test_kernel_source_acquisition.py": "d3b949ec290da9e9250c0d3a06b235ff1952f7dc",
+        "backend/tests/test_kernel_source_records.py": "ffee537af4187d79db3642fe883807570e074cdb"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_source_records.py::TestAccessPolicyRevision::test_policy_only_change_is_new_access_identity",
+        "backend/tests/test_kernel_source_acquisition.py::TestIdentityMatrix::test_policy_only_change_keeps_content_identity",
+        "backend/tests/test_context_runtime_authorization.py::test_policy_digest_tracks_every_authorization_dimension"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_source_records.py::TestAccessPolicyRevision::test_policy_only_change_is_new_access_identity": "passed",
+        "backend/tests/test_kernel_source_acquisition.py::TestIdentityMatrix::test_policy_only_change_keeps_content_identity": "passed",
+        "backend/tests/test_context_runtime_authorization.py::test_policy_digest_tracks_every_authorization_dimension": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "3:measurement:docs/reference/measurements/pr83c2-pg-failover.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr83c2-pg-failover.json": "d73329fdf7127e3b494c20847b57da8512e23d91"
+      },
+      "artifact": "docs/reference/measurements/pr83c2-pg-failover.json",
+      "artifact_sha256": "2060ad113b6f213d9e0ab8c36c8e3f4d180eded69ccfc12e71983bdf58050ccb",
+      "checks": {
+        "strict_matrix.passed": {
+          "expected": 413,
+          "actual": 413,
+          "ok": true
+        },
+        "sync_lane.rpo_acknowledged_commits_lost": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "3:test:backend/tests/test_kernel_faults.py::test_all_fault_phases_leave_no_partial_state",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_events.py": "85ae06327d98c1d57547932f648baba7edcc797a",
+        "backend/tests/test_kernel_faults.py": "c33653f42e135940c2a03295f7f0852880f97be0",
+        "backend/tests/test_kernel_publication_faults.py": "876db3b4d5308935101b979d7c6394b6276455a4"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_faults.py::test_all_fault_phases_leave_no_partial_state",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set",
+        "backend/tests/test_kernel_events.py::test_restart_preserves_order_and_membership"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_faults.py::test_all_fault_phases_leave_no_partial_state": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-begin]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-rows-materialized]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-source-read]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-staged]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-validate-begin]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-lexical-validated]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-pre-activate]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-set-staged]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-validate-begin]": "passed",
+        "backend/tests/test_kernel_publication_faults.py::test_fault_before_linearization_keeps_prior_set[pub-validated]": "passed",
+        "backend/tests/test_kernel_events.py::test_restart_preserves_order_and_membership": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "3:test:backend/tests/test_kernel_recovery_point.py::test_fault_phase_vocabulary_is_exact",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_recovery_failover.py": "e87b5e8014ecf09c360ecf1383421734ac739fab",
+        "backend/tests/test_kernel_recovery_point.py": "768a574e10324564210ff49ab03756fd68892692"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_recovery_point.py::test_fault_phase_vocabulary_is_exact",
+        "backend/tests/test_kernel_recovery_failover.py::test_crash_before_claim_leaves_work_pending_for_replacement"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_recovery_point.py::test_fault_phase_vocabulary_is_exact": "skipped_env_gated",
+        "backend/tests/test_kernel_recovery_failover.py::test_crash_before_claim_leaves_work_pending_for_replacement": "skipped_env_gated"
+      },
+      "outcome": "skipped_env_gated",
+      "detail": "backend/tests/test_kernel_recovery_point.py::test_fault_phase_vocabulary_is_exact: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically; backend/tests/test_kernel_recovery_failover.py::test_crash_before_claim_leaves_work_pending_for_replacement: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically"
+    },
+    {
+      "binding_key": "40:test:backend/tests/test_kernel_source_acquisition.py::TestAcquisitionHappyPath::test_acquire_commits_full_identity_chain",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_source_acquisition.py": "d3b949ec290da9e9250c0d3a06b235ff1952f7dc",
+        "backend/tests/test_kernel_source_records.py": "ffee537af4187d79db3642fe883807570e074cdb"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_source_acquisition.py::TestAcquisitionHappyPath::test_acquire_commits_full_identity_chain",
+        "backend/tests/test_kernel_source_records.py::TestContentRevision::test_rejected_consistency_class_cannot_mint_revision"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_source_acquisition.py::TestAcquisitionHappyPath::test_acquire_commits_full_identity_chain": "passed",
+        "backend/tests/test_kernel_source_records.py::TestContentRevision::test_rejected_consistency_class_cannot_mint_revision": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "41:test:backend/tests/test_kernel_source_store.py::test_truncation_during_read_is_incoherent",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_source_store.py": "99e45503eea7f82637a55392c388ba49d8407e5c"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_source_store.py::test_truncation_during_read_is_incoherent",
+        "backend/tests/test_kernel_source_store.py::test_append_during_read_is_incoherent",
+        "backend/tests/test_kernel_source_store.py::test_inplace_mutation_during_read_is_incoherent",
+        "backend/tests/test_kernel_source_store.py::test_replacement_after_resolve_acquires_current_content_coherently",
+        "backend/tests/test_kernel_source_store.py::test_mutation_after_read_completes_does_not_affect_acquired_bytes"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_source_store.py::test_truncation_during_read_is_incoherent": "passed",
+        "backend/tests/test_kernel_source_store.py::test_append_during_read_is_incoherent": "passed",
+        "backend/tests/test_kernel_source_store.py::test_inplace_mutation_during_read_is_incoherent": "passed",
+        "backend/tests/test_kernel_source_store.py::test_replacement_after_resolve_acquires_current_content_coherently": "passed",
+        "backend/tests/test_kernel_source_store.py::test_mutation_after_read_completes_does_not_affect_acquired_bytes": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "43:measurement:docs/reference/measurements/pr78-authorization-retrieval.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr78-authorization-retrieval.json": "db9e42e849e21158df3d65232908911bd8fbddc1"
+      },
+      "artifact": "docs/reference/measurements/pr78-authorization-retrieval.json",
+      "artifact_sha256": "e5398814c91fa52594ad56f22b3a4265ca12c2b389ed83a12356d92eb949039c",
+      "checks": {
+        "revocation.revocation_effective_without_reindex": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "identity.changed_on_access_policy_revision": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "43:test:backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_without_reindex_blocks_exact_and_lexical",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_authorization.py": "7e15cceae4b7ade11ad52b1f62f103b353cccd3f",
+        "backend/tests/test_context_runtime_authz_retrieval.py": "54a30a0966df2679c4751fc81739214ae38d879c"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_without_reindex_blocks_exact_and_lexical",
+        "backend/tests/test_context_runtime_authorization.py::test_epoch_is_server_derived_from_committed_truth"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_without_reindex_blocks_exact_and_lexical": "passed",
+        "backend/tests/test_context_runtime_authorization.py::test_epoch_is_server_derived_from_committed_truth": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "44:test:backend/tests/test_context_runtime_high_assurance.py::test_forbidden_growth_cannot_change_high_assurance_rank",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_authz_retrieval.py": "54a30a0966df2679c4751fc81739214ae38d879c",
+        "backend/tests/test_context_runtime_high_assurance.py": "95a1f7acf7e34c13aa15e8006302e0f9c3a2dd37"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_high_assurance.py::test_forbidden_growth_cannot_change_high_assurance_rank",
+        "backend/tests/test_context_runtime_high_assurance.py::test_missing_partition_fails_closed_without_fallback",
+        "backend/tests/test_context_runtime_high_assurance.py::test_partition_routing_is_authorization_bound",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_forbidden_hits_are_not_caller_candidates"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_high_assurance.py::test_forbidden_growth_cannot_change_high_assurance_rank": "passed",
+        "backend/tests/test_context_runtime_high_assurance.py::test_missing_partition_fails_closed_without_fallback": "passed",
+        "backend/tests/test_context_runtime_high_assurance.py::test_partition_routing_is_authorization_bound": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_forbidden_hits_are_not_caller_candidates": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "45:test:backend/tests/test_context_runtime_authz_retrieval.py::test_tombstone_wins_over_pinned_publication",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_authz_retrieval.py": "54a30a0966df2679c4751fc81739214ae38d879c",
+        "backend/tests/test_context_runtime_lexical_conformance.py": "8cf795522da73831ffbf0280ea90d5ae748b0f7b",
+        "backend/tests/test_context_runtime_packets.py": "ac261e5a03183d5e75653eb4fe1114eae47dab1d"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_tombstone_wins_over_pinned_publication",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_and_nonexistent_exact_are_identical",
+        "backend/tests/test_context_runtime_lexical_conformance.py::test_continuation_stays_on_old_publication_after_head_switch[sqlite]",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_tombstone_wins_over_pinned_publication": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_and_nonexistent_exact_are_identical": "passed",
+        "backend/tests/test_context_runtime_lexical_conformance.py::test_continuation_stays_on_old_publication_after_head_switch[sqlite]": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "46:test:backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_mid_query_blocks_later_operations",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_authz_retrieval.py": "54a30a0966df2679c4751fc81739214ae38d879c",
+        "backend/tests/test_context_runtime_lexical_conformance.py": "8cf795522da73831ffbf0280ea90d5ae748b0f7b",
+        "backend/tests/test_context_runtime_service.py": "52d1d7dbc939d475f9789b5177aaccb2af724719"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_mid_query_blocks_later_operations",
+        "backend/tests/test_context_runtime_lexical_conformance.py::test_live_deny_epoch_invalidates_cursor_between_pages[sqlite]",
+        "backend/tests/test_context_runtime_service.py::test_live_deny_epoch_and_allow_do_not_resurrect_cursor"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_mid_query_blocks_later_operations": "passed",
+        "backend/tests/test_context_runtime_lexical_conformance.py::test_live_deny_epoch_invalidates_cursor_between_pages[sqlite]": "passed",
+        "backend/tests/test_context_runtime_service.py::test_live_deny_epoch_and_allow_do_not_resurrect_cursor": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "47:test:backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_exact_read_discloses_nothing",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_authz_retrieval.py": "54a30a0966df2679c4751fc81739214ae38d879c"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_exact_read_discloses_nothing",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_and_nonexistent_exact_are_identical",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_hidden_only_query_looks_like_no_hit",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_counts_and_truncation_describe_authorized_universe_only",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_packet_carries_no_hidden_topology",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_caller_identity_hints_grant_nothing"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_exact_read_discloses_nothing": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_and_nonexistent_exact_are_identical": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_hidden_only_query_looks_like_no_hit": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_counts_and_truncation_describe_authorized_universe_only": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_packet_carries_no_hidden_topology": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_caller_identity_hints_grant_nothing": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "49:measurement:docs/reference/measurements/pr77-bounded-query.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr77-bounded-query.json": "9798ce54339e7daa9ed22fc7bbf311fea4f4355f"
+      },
+      "artifact": "docs/reference/measurements/pr77-bounded-query.json",
+      "artifact_sha256": "66f46380bb5682bee6f1461987d719bd76fa0a396c68ab9482a3337873bd461f",
+      "checks": {
+        "acceptance.single_set_attribution": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "49:test:backend/tests/test_context_runtime_execution.py::test_record_get_resolves_to_pinned_record_and_revision",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_agent_query_adapter.py": "ec63e3be0df98b9b54a540cb2655e49474e579bd",
+        "backend/tests/test_context_runtime_execution.py": "acc0d465222161307ef3262d04901f5dd5cde7e6"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_execution.py::test_record_get_resolves_to_pinned_record_and_revision",
+        "backend/tests/test_context_runtime_execution.py::test_lexical_query_returns_source_resolvable_evidence",
+        "backend/tests/test_agent_query_adapter.py::test_fresh_partial_query_returns_typed_envelope",
+        "backend/tests/test_agent_query_adapter.py::test_chain_stays_on_original_publication_after_head_switch"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_execution.py::test_record_get_resolves_to_pinned_record_and_revision": "passed",
+        "backend/tests/test_context_runtime_execution.py::test_lexical_query_returns_source_resolvable_evidence": "passed",
+        "backend/tests/test_agent_query_adapter.py::test_fresh_partial_query_returns_typed_envelope": "passed",
+        "backend/tests/test_agent_query_adapter.py::test_chain_stays_on_original_publication_after_head_switch": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "4:test:backend/tests/test_kernel_source_anchors.py::TestAnchorIdentity::test_producer_evidence_is_not_identity",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_gc.py": "c1b22854f95d3150c143d107f7b6dbcdb981298d",
+        "backend/tests/test_kernel_lifecycle_conformance.py": "fb1db2893e90e5fb72381ac96fc6ec354fb653f0",
+        "backend/tests/test_kernel_source_anchors.py": "1e84b44a4af4b742430ef969f055252f1e97b9a9"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_source_anchors.py::TestAnchorIdentity::test_producer_evidence_is_not_identity",
+        "backend/tests/test_kernel_source_anchors.py::TestCoordinateSpaceSeparation::test_approximate_flag_distinguishes_evidence_class",
+        "backend/tests/test_kernel_gc.py::test_hold_declared_after_mark_rescues_bytes",
+        "backend/tests/test_kernel_lifecycle_conformance.py::test_storewide_dedup_protects_shared_bytes_across_workspaces[sqlite-local_file]"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_source_anchors.py::TestAnchorIdentity::test_producer_evidence_is_not_identity": "passed",
+        "backend/tests/test_kernel_source_anchors.py::TestCoordinateSpaceSeparation::test_approximate_flag_distinguishes_evidence_class": "passed",
+        "backend/tests/test_kernel_gc.py::test_hold_declared_after_mark_rescues_bytes": "passed",
+        "backend/tests/test_kernel_lifecycle_conformance.py::test_storewide_dedup_protects_shared_bytes_across_workspaces[sqlite-local_file]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "50:test:backend/tests/test_agent_query_adapter.py::test_outcome_envelope_represents_every_backend_status",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_agent_query_adapter.py": "ec63e3be0df98b9b54a540cb2655e49474e579bd",
+        "backend/tests/test_context_runtime_continuation.py": "2837b9171c727a6b38e6a6db5117a002ebbb85de",
+        "backend/tests/test_context_runtime_service.py": "52d1d7dbc939d475f9789b5177aaccb2af724719"
+      },
+      "nodes": [
+        "backend/tests/test_agent_query_adapter.py::test_outcome_envelope_represents_every_backend_status",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue",
+        "backend/tests/test_context_runtime_service.py::test_tamper_replay_and_expiry_are_structured_and_release_pin",
+        "backend/tests/test_agent_query_adapter.py::test_terminal_outcome_carries_no_cursor"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_agent_query_adapter.py::test_outcome_envelope_represents_every_backend_status": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[invalidated]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[stale]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[loop_limit]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[policy_fail_closed]": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_terminal_outcomes_are_explicit_and_never_continue[execution_failure]": "passed",
+        "backend/tests/test_context_runtime_service.py::test_tamper_replay_and_expiry_are_structured_and_release_pin": "passed",
+        "backend/tests/test_agent_query_adapter.py::test_terminal_outcome_carries_no_cursor": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "51:test:backend/tests/test_context_runtime_execution.py::test_fts_operators_in_text_are_treated_as_literals",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_agent_query_adapter.py": "ec63e3be0df98b9b54a540cb2655e49474e579bd",
+        "backend/tests/test_context_runtime_authorization.py": "7e15cceae4b7ade11ad52b1f62f103b353cccd3f",
+        "backend/tests/test_context_runtime_continuation.py": "2837b9171c727a6b38e6a6db5117a002ebbb85de",
+        "backend/tests/test_context_runtime_execution.py": "acc0d465222161307ef3262d04901f5dd5cde7e6"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_execution.py::test_fts_operators_in_text_are_treated_as_literals",
+        "backend/tests/test_context_runtime_execution.py::test_column_filter_and_boolean_words_are_literals",
+        "backend/tests/test_context_runtime_continuation.py::test_coerce_request_revalidates_direct_query_budget",
+        "backend/tests/test_agent_query_adapter.py::test_contract_failures_are_usage_errors",
+        "backend/tests/test_context_runtime_authorization.py::test_caller_cannot_name_high_assurance_partition_profile"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_execution.py::test_fts_operators_in_text_are_treated_as_literals": "passed",
+        "backend/tests/test_context_runtime_execution.py::test_column_filter_and_boolean_words_are_literals": "passed",
+        "backend/tests/test_context_runtime_continuation.py::test_coerce_request_revalidates_direct_query_budget": "passed",
+        "backend/tests/test_agent_query_adapter.py::test_contract_failures_are_usage_errors": "passed",
+        "backend/tests/test_context_runtime_authorization.py::test_caller_cannot_name_high_assurance_partition_profile": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "52:test:backend/tests/test_context_runtime_packets.py::test_output_char_budget_keeps_whole_units",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_packets.py": "ac261e5a03183d5e75653eb4fe1114eae47dab1d",
+        "backend/tests/test_context_runtime_service.py": "52d1d7dbc939d475f9789b5177aaccb2af724719"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_packets.py::test_output_char_budget_keeps_whole_units",
+        "backend/tests/test_context_runtime_packets.py::test_single_unit_larger_than_whole_budget_is_refused_whole",
+        "backend/tests/test_context_runtime_packets.py::test_evidence_unit_count_budget",
+        "backend/tests/test_context_runtime_service.py::test_malformed_cursor_and_output_budget_fail_closed_without_overflow"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_packets.py::test_output_char_budget_keeps_whole_units": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_single_unit_larger_than_whole_budget_is_refused_whole": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_evidence_unit_count_budget": "passed",
+        "backend/tests/test_context_runtime_service.py::test_malformed_cursor_and_output_budget_fail_closed_without_overflow": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "53:test:backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_packets.py": "ac261e5a03183d5e75653eb4fe1114eae47dab1d"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_selected_revision_changes",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_budget_profile_and_output_directive"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_selected_revision_changes": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_budget_profile_and_output_directive": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "55:test:backend/tests/test_context_runtime_service.py::test_live_deny_epoch_and_allow_do_not_resurrect_cursor",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_agent_query_adapter.py": "ec63e3be0df98b9b54a540cb2655e49474e579bd",
+        "backend/tests/test_context_runtime_service.py": "52d1d7dbc939d475f9789b5177aaccb2af724719"
+      },
+      "nodes": [
+        "backend/tests/test_context_runtime_service.py::test_live_deny_epoch_and_allow_do_not_resurrect_cursor",
+        "backend/tests/test_context_runtime_service.py::test_high_assurance_partition_denied_midchain_fails_closed",
+        "backend/tests/test_context_runtime_service.py::test_tampered_snapshot_state_fails_stale_and_releases_pin",
+        "backend/tests/test_agent_query_adapter.py::test_policy_epoch_change_invalidates_mid_chain"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_context_runtime_service.py::test_live_deny_epoch_and_allow_do_not_resurrect_cursor": "passed",
+        "backend/tests/test_context_runtime_service.py::test_high_assurance_partition_denied_midchain_fails_closed": "passed",
+        "backend/tests/test_context_runtime_service.py::test_tampered_snapshot_state_fails_stale_and_releases_pin": "passed",
+        "backend/tests/test_agent_query_adapter.py::test_policy_epoch_change_invalidates_mid_chain": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "56:test:backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_extraction_review.py": "79cbd8b7c21ba9a7075202afdf98df1a28bc1421"
+      },
+      "nodes": [
+        "backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected",
+        "backend/tests/test_extraction_review.py::test_review_decision_bound_to_other_result_is_rejected",
+        "backend/tests/test_extraction_review.py::test_review_actions_are_versioned_and_shape_checked"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected": "passed",
+        "backend/tests/test_extraction_review.py::test_review_decision_bound_to_other_result_is_rejected": "passed",
+        "backend/tests/test_extraction_review.py::test_review_actions_are_versioned_and_shape_checked": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "57:measurement:docs/reference/measurements/pr83b3-industrial-source-artifacts.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr83b3-industrial-source-artifacts.json": "4902e3738dff3043c7edda034a72703229879bd6"
+      },
+      "artifact": "docs/reference/measurements/pr83b3-industrial-source-artifacts.json",
+      "artifact_sha256": "384b62f2e2f3ea83ebfa282c28cc90572e2011c6e55377f7f16613acea883cd7",
+      "checks": {
+        "measurements.fresh_stage_transfer_amplification": {
+          "expected": "3x logical bytes (hash-pass read + PUT write + read-back verify), streamed 1 MiB chunks, no full-body buffering",
+          "actual": "3x logical bytes (hash-pass read + PUT write + read-back verify), streamed 1 MiB chunks, no full-body buffering",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "57:measurement:docs/reference/measurements/pr83c1-industrial-recovery.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr83c1-industrial-recovery.json": "7d5675cdfb9982e3d55b4336ec2bbe5e6e820100"
+      },
+      "artifact": "docs/reference/measurements/pr83c1-industrial-recovery.json",
+      "artifact_sha256": "a0325f5f1aed7828db85227268479aaa5dfafc444460d934a456d4b4defbe700",
+      "checks": {
+        "capture_restore.rpo_commit_delta_lost": {
+          "expected": 2,
+          "actual": 2,
+          "ok": true
+        },
+        "capture_restore.capture_verified": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "57:measurement:docs/reference/measurements/pr83c2-pg-failover.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr83c2-pg-failover.json": "d73329fdf7127e3b494c20847b57da8512e23d91"
+      },
+      "artifact": "docs/reference/measurements/pr83c2-pg-failover.json",
+      "artifact_sha256": "2060ad113b6f213d9e0ab8c36c8e3f4d180eded69ccfc12e71983bdf58050ccb",
+      "checks": {
+        "strict_matrix.passed": {
+          "expected": 413,
+          "actual": 413,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "58:measurement:docs/reference/measurements/pr81a-visual-retrieval.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr81a-visual-retrieval.json": "9438c9cd68b9d4c6d1c06f44675800a0e0a9d8fa"
+      },
+      "artifact": "docs/reference/measurements/pr81a-visual-retrieval.json",
+      "artifact_sha256": "5dee2411dd829d5ea030e6d794847d3db8456c5594bd9311e055d5d4c5bce099",
+      "checks": {
+        "decision.outcome": {
+          "expected": "narrow_rerank_only",
+          "actual": "narrow_rerank_only",
+          "ok": true
+        },
+        "economics.avg_embedding_bytes_per_page": {
+          "expected": 3072,
+          "actual": 3072,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "58:test:backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_eval_pr81a_decision.py": "2bf4a91c58e7f6ac1620d0f984a7b2d1093024a3"
+      },
+      "nodes": [
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_promote_narrow_when_dense_gain_clear": "passed",
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_narrow_rerank_only_when_only_hybrid_pays": "passed",
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_experimental_band": "passed",
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_do_not_promote_when_no_signal": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "59:measurement:docs/reference/measurements/pr81b-model-sensitivity.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr81b-model-sensitivity.json": "b465d5c54a5d34acacab02b967aea8b41c2c3597"
+      },
+      "artifact": "docs/reference/measurements/pr81b-model-sensitivity.json",
+      "artifact_sha256": "f570a87c1c14a3f30e2fef4206fc0072f1414c87b97c81d5a3a330cf87cd8eac",
+      "checks": {
+        "confirmation.outcome": {
+          "expected": "confirmed",
+          "actual": "confirmed",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "59:measurement:docs/reference/measurements/pr82-quality-lab.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr82-quality-lab.json": "9fc312853a2ba8c58b795ff04be5bc5dbe33a174"
+      },
+      "artifact": "docs/reference/measurements/pr82-quality-lab.json",
+      "artifact_sha256": "844699db0ab7903a86e17e2eca288f13ca2dfab78508a714fc1dd9c5bdb7da3f",
+      "checks": {
+        "recommendation.pr83": {
+          "expected": "ready_with_scoped_non_promotions",
+          "actual": "ready_with_scoped_non_promotions",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "5:test:backend/tests/test_kernel_claims.py::test_assertion_identity_preserves_raw_unicode",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/conformance/test_claim_proof_conformance.py": "27168ac3ec8c54cfb8b2b4d5a61aa3bd2501a7f4",
+        "backend/tests/test_kernel_claims.py": "de090b57ee3c4bcd54af5978345446b14f5285f3",
+        "backend/tests/test_kernel_commit.py": "0debbcf8e2f9d572e6bded6bcc6414b30b58126e",
+        "backend/tests/test_kernel_dependencies.py": "98f34e9f517598e933d8e707783fa4b3ef6de6b3",
+        "backend/tests/test_kernel_patches.py": "59b8576426257d9d8f6aa60a45d07e9c6a466d48"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_claims.py::test_assertion_identity_preserves_raw_unicode",
+        "backend/tests/test_kernel_claims.py::test_assessment_identity_ignores_record_id_and_evidence_order",
+        "backend/tests/test_kernel_commit.py::test_identity_domain_schema_version_separation",
+        "backend/tests/test_kernel_dependencies.py::test_exact_native_change_localizes_invalidation",
+        "backend/tests/test_kernel_patches.py::test_apply_replace_text",
+        "backend/tests/test_kernel_patches.py::test_proposal_identity_stable_and_producer_excluded",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_claims.py::test_assertion_identity_preserves_raw_unicode": "passed",
+        "backend/tests/test_kernel_claims.py::test_assessment_identity_ignores_record_id_and_evidence_order": "passed",
+        "backend/tests/test_kernel_commit.py::test_identity_domain_schema_version_separation": "passed",
+        "backend/tests/test_kernel_dependencies.py::test_exact_native_change_localizes_invalidation": "passed",
+        "backend/tests/test_kernel_patches.py::test_apply_replace_text": "passed",
+        "backend/tests/test_kernel_patches.py::test_proposal_identity_stable_and_producer_excluded": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assertion-qualifier-key-order]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assertion-claim-key-scopes-identity]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assertion-value-change]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assertion-raw-unicode-not-folded]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assessment-evidence-set-order]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assessment-policy-revision]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assessment-snapshot-cut]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assessment-workflow-class]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[assessment-declared-context-order]": "passed",
+        "backend/conformance/test_claim_proof_conformance.py::test_identity_case_is_drift_free[proof-support-role-and-rule]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "61:measurement:docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr80b-direct-specialist-displacement.json": "068bd1e80140a0b2dcf03939ddb64983a082cc7e"
+      },
+      "artifact": "docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+      "artifact_sha256": "ef4f3f78cbc065f463da4369850ef8d94089e280de6283074de0e791d3ddbf66",
+      "checks": {
+        "decision.outcome": {
+          "expected": "hybrid_routing_condition",
+          "actual": "hybrid_routing_condition",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "61:measurement:docs/reference/measurements/pr81a-visual-retrieval.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr81a-visual-retrieval.json": "9438c9cd68b9d4c6d1c06f44675800a0e0a9d8fa"
+      },
+      "artifact": "docs/reference/measurements/pr81a-visual-retrieval.json",
+      "artifact_sha256": "5dee2411dd829d5ea030e6d794847d3db8456c5594bd9311e055d5d4c5bce099",
+      "checks": {
+        "decision.outcome": {
+          "expected": "narrow_rerank_only",
+          "actual": "narrow_rerank_only",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "61:test:backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_eval_pr81a_decision.py": "2bf4a91c58e7f6ac1620d0f984a7b2d1093024a3"
+      },
+      "nodes": [
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_promote_narrow_when_dense_gain_clear": "passed",
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_narrow_rerank_only_when_only_hybrid_pays": "passed",
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_experimental_band": "passed",
+        "backend/tests/test_eval_pr81a_decision.py::TestPromotionOutcomes::test_do_not_promote_when_no_signal": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "62:measurement:docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr80b-direct-specialist-displacement.json": "068bd1e80140a0b2dcf03939ddb64983a082cc7e"
+      },
+      "artifact": "docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+      "artifact_sha256": "ef4f3f78cbc065f463da4369850ef8d94089e280de6283074de0e791d3ddbf66",
+      "checks": {
+        "decision.outcome": {
+          "expected": "hybrid_routing_condition",
+          "actual": "hybrid_routing_condition",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "62:measurement:docs/reference/measurements/pr82-quality-lab.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr82-quality-lab.json": "9fc312853a2ba8c58b795ff04be5bc5dbe33a174"
+      },
+      "artifact": "docs/reference/measurements/pr82-quality-lab.json",
+      "artifact_sha256": "844699db0ab7903a86e17e2eca288f13ca2dfab78508a714fc1dd9c5bdb7da3f",
+      "checks": {
+        "recommendation.pr83": {
+          "expected": "ready_with_scoped_non_promotions",
+          "actual": "ready_with_scoped_non_promotions",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "6:test:backend/conformance/test_canonical_conformance.py::test_case",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/conformance/test_canonical_conformance.py": "7291adb39dca3ff12f004628395030164ec2a4bb",
+        "backend/tests/test_kernel_claims.py": "de090b57ee3c4bcd54af5978345446b14f5285f3"
+      },
+      "nodes": [
+        "backend/conformance/test_canonical_conformance.py::test_case",
+        "backend/conformance/test_canonical_conformance.py::test_corpus_covers_required_categories",
+        "backend/conformance/test_canonical_conformance.py::test_rejection_messages_reference_error_not_success",
+        "backend/tests/test_kernel_claims.py::test_assertion_identity_preserves_raw_unicode"
+      ],
+      "node_outcomes": {
+        "backend/conformance/test_canonical_conformance.py::test_case[ordering-nested-map-permutation]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[set-vs-ordered-list]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[unicode-composed-decomposed-distinct]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[string-escapes-and-controls]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[empty-null-omitted-are-distinct]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[high-precision-decimals]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[safe-integer-extremes]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[geometry-quantization-boundaries]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[geometry-equivalent-input-forms]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[geometry-negative-and-tiny]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[representative-evidence-record]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[framing-record-type-separation]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[framing-schema-version-separation]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[framing-canonicalization-profile-separation]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[geometry-profile-separation]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[empty-payload-record]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-float-payload]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-json-float-unit]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-nan]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-infinity]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-negative-infinity]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-unsafe-integer]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-plain-set]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-datetime]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-lone-surrogate]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-set-duplicates]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-bad-decimal-text]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-geometry-overflow]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-geometry-nan-string]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-degenerate-box]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[reject-short-polygon]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[pr72-anchor-pdf-point-geometry-quote]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[pr72-anchor-emu-drawing]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[pr72-anchor-unicode-quote-exact]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[pr72-anchor-float-position-rejected]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[pr73-proposal-replace-text]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[pr73-view-document]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_case[pr73-view-text-float-rejected]": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_corpus_covers_required_categories": "passed",
+        "backend/conformance/test_canonical_conformance.py::test_rejection_messages_reference_error_not_success": "passed",
+        "backend/tests/test_kernel_claims.py::test_assertion_identity_preserves_raw_unicode": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "7:measurement:docs/reference/measurements/pr83b2-industrial-lexical-query-serving.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr83b2-industrial-lexical-query-serving.json": "68e4b48b8de971bfd4679268f30458e5614a4c48"
+      },
+      "artifact": "docs/reference/measurements/pr83b2-industrial-lexical-query-serving.json",
+      "artifact_sha256": "27eb8e6b4fb8c34d7cf2e6bd77de06848eb7f828b2be23f1046f7750fb8a3af2",
+      "checks": {
+        "schema": {
+          "expected": "marker.pr83b2_industrial_lexical_query_serving_evidence.v1",
+          "actual": "marker.pr83b2_industrial_lexical_query_serving_evidence.v1",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "7:test:backend/tests/test_kernel_generation.py::test_historical_rebuild_after_newer_commits_matches",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_generation.py": "96647ed9decd96a8a85f08f9f107657b8c54ee35",
+        "backend/tests/test_kernel_materialization_conformance.py": "91f696e9edbeef140982a5e61b6918ea70c2680b"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_generation.py::test_historical_rebuild_after_newer_commits_matches",
+        "backend/tests/test_kernel_generation.py::test_generation_reads_never_replay_kernel_history",
+        "backend/tests/test_kernel_generation.py::test_same_inputs_same_generation_and_digest",
+        "backend/tests/test_kernel_materialization_conformance.py::test_generation_identity_deterministic_across_reopen[sqlite]"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_generation.py::test_historical_rebuild_after_newer_commits_matches": "passed",
+        "backend/tests/test_kernel_generation.py::test_generation_reads_never_replay_kernel_history": "passed",
+        "backend/tests/test_kernel_generation.py::test_same_inputs_same_generation_and_digest": "passed",
+        "backend/tests/test_kernel_materialization_conformance.py::test_generation_identity_deterministic_across_reopen[sqlite]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "8:test:backend/tests/test_kernel_gc.py::test_hold_declared_after_mark_rescues_bytes",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_gc.py": "c1b22854f95d3150c143d107f7b6dbcdb981298d",
+        "backend/tests/test_kernel_lifecycle_conformance.py": "fb1db2893e90e5fb72381ac96fc6ec354fb653f0"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_gc.py::test_hold_declared_after_mark_rescues_bytes",
+        "backend/tests/test_kernel_gc.py::test_new_commit_and_generation_after_mark_rescues_bytes",
+        "backend/tests/test_kernel_gc.py::test_pre_commit_orphan_reused_by_later_commit_is_rescued",
+        "backend/tests/test_kernel_gc.py::test_unlink_failure_is_truthful_and_retryable",
+        "backend/tests/test_kernel_lifecycle_conformance.py::test_pinned_superseded_generation_survives_collection[sqlite-local_file]"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_gc.py::test_hold_declared_after_mark_rescues_bytes": "passed",
+        "backend/tests/test_kernel_gc.py::test_new_commit_and_generation_after_mark_rescues_bytes": "passed",
+        "backend/tests/test_kernel_gc.py::test_pre_commit_orphan_reused_by_later_commit_is_rescued": "passed",
+        "backend/tests/test_kernel_gc.py::test_unlink_failure_is_truthful_and_retryable": "passed",
+        "backend/tests/test_kernel_lifecycle_conformance.py::test_pinned_superseded_generation_survives_collection[sqlite-local_file]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "8:test:backend/tests/test_kernel_recovery_point.py::test_gc_cannot_delete_closure_inside_quiescence",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_kernel_recovery_point.py": "768a574e10324564210ff49ab03756fd68892692"
+      },
+      "nodes": [
+        "backend/tests/test_kernel_recovery_point.py::test_gc_cannot_delete_closure_inside_quiescence"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_kernel_recovery_point.py::test_gc_cannot_delete_closure_inside_quiescence": "skipped_env_gated"
+      },
+      "outcome": "skipped_env_gated",
+      "detail": "backend/tests/test_kernel_recovery_point.py::test_gc_cannot_delete_closure_inside_quiescence: PostgreSQL kernel conformance needs MARKER_TEST_POSTGRES_ADMIN_URL (server maintenance-database URL); run backend/scripts/run_kernel_pg_conformance.py to provision a real server automatically"
+    },
+    {
+      "binding_key": "9:test:backend/tests/test_database_migration.py::test_no_production_self_heal_remains",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/tests/test_context_runtime_cursor_migration.py": "56d5d8d15edac3faaa1684e61e0b763f48fa70c7",
+        "backend/tests/test_database_migration.py": "1c7bfe07cc02964e2caf2d1d6cea9f02d91487bd"
+      },
+      "nodes": [
+        "backend/tests/test_database_migration.py::test_no_production_self_heal_remains",
+        "backend/tests/test_database_migration.py::test_launchers_run_migration_phase_before_backend",
+        "backend/tests/test_context_runtime_cursor_migration.py::test_pr79a_cursor_store_round_trips_through_migrated_schema"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_database_migration.py::test_no_production_self_heal_remains": "passed",
+        "backend/tests/test_database_migration.py::test_launchers_run_migration_phase_before_backend": "passed",
+        "backend/tests/test_context_runtime_cursor_migration.py::test_pr79a_cursor_store_round_trips_through_migrated_schema": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    }
+  ]
+}

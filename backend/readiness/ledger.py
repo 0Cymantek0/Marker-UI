@@ -127,10 +127,9 @@ def parse_binding(raw: dict, inv_id: int, index: int) -> Binding:
             raise LedgerError(f"{where} executable bindings need at least one pytest node id")
         for node in nodes:
             node_file = node.split("::", 1)[0]
-            repo_path = f"backend/{node_file}"
-            if repo_path not in scope_files:
+            if node_file not in scope_files:
                 raise LedgerError(
-                    f"{where} node {node} targets {repo_path} which is missing from scope_files"
+                    f"{where} node {node} targets {node_file} which is missing from scope_files"
                 )
 
     return Binding(

@@ -25,14 +25,14 @@ SHA = "f" * 40
 OTHER_SHA = "e" * 40
 
 
-def _test_binding(nodes=("tests/test_dummy.py::test_ok",), coverage="full", environment="sqlite-dev"):
+def _test_binding(nodes=("backend/tests/test_dummy.py::test_ok",), coverage="full", environment="sqlite-dev"):
     return {
         "kind": "test",
         "coverage": coverage,
         "environment": environment,
         "rationale": "covers the invariant end to end",
         "nodes": list(nodes),
-        "scope_files": [f"backend/{nodes[0].split('::', 1)[0]}"],
+        "scope_files": [nodes[0].split("::", 1)[0]],
     }
 
 
@@ -65,7 +65,7 @@ def make_result(key, outcome, scope_blobs=None, **extra):
         "kind": extra.get("kind", "test"),
         "outcome": outcome,
         "scope_blobs": scope_blobs if scope_blobs is not None else {"backend/tests/test_dummy.py": SHA},
-        "nodes": ["tests/test_dummy.py::test_ok"],
+        "nodes": ["backend/tests/test_dummy.py::test_ok"],
     }
     result.update(extra)
     return result
@@ -91,11 +91,11 @@ def audit_with(ledger_overrides, results, shas=None, tracked=None):
     return Auditor(resolver, Path(".")).audit(REAL_INVENTORY, ledger, evidence), evidence
 
 
-DEFAULT_KEY = "1:test:tests/test_dummy.py::test_ok"
+DEFAULT_KEY = "1:test:backend/tests/test_dummy.py::test_ok"
 
 
 def _results_for_all(pattern_result):
-    return [pattern_result(f"{i}:test:tests/test_dummy.py::test_ok") for i in range(1, 63)]
+    return [pattern_result(f"{i}:test:backend/tests/test_dummy.py::test_ok") for i in range(1, 63)]
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ def test_all_proven_derives_ready() -> None:
 
 def test_any_failed_derives_not_ready() -> None:
     results = _results_for_all(lambda k: make_result(k, "passed"))
-    results[4] = make_result("5:test:tests/test_dummy.py::test_ok", "failed")
+    results[4] = make_result("5:test:backend/tests/test_dummy.py::test_ok", "failed")
     audit, _ = audit_with({}, results)
     assert audit.verdict == "NOT_READY"
     assert audit.counts["failed"] == 1
@@ -121,8 +121,8 @@ def test_any_failed_derives_not_ready() -> None:
 
 def test_any_no_evidence_derives_not_ready() -> None:
     results = _results_for_all(lambda k: make_result(k, "passed"))
-    results.remove(make_result(f"62:test:tests/test_dummy.py::test_ok", "passed"))
-    results.append(make_result(f"62:test:tests/test_dummy.py::test_ok", "skipped_env_gated"))
+    results.remove(make_result(f"62:test:backend/tests/test_dummy.py::test_ok", "passed"))
+    results.append(make_result(f"62:test:backend/tests/test_dummy.py::test_ok", "skipped_env_gated"))
     audit, _ = audit_with({}, results)
     assert audit.verdict == "NOT_READY"
     assert audit.counts["no_evidence"] == 1
@@ -174,7 +174,7 @@ def test_dangling_binding_without_executed_result_is_an_error() -> None:
 
 def test_orphan_result_is_an_error() -> None:
     results = _results_for_all(lambda k: make_result(k, "passed"))
-    results.append(make_result("99:test:tests/test_dummy.py::test_ok", "passed"))
+    results.append(make_result("99:test:backend/tests/test_dummy.py::test_ok", "passed"))
     audit, _ = audit_with({}, results)
     assert any(f.code == "orphan_result" for f in audit.errors)
 
@@ -382,7 +382,7 @@ def test_binding_node_must_be_in_scope_files() -> None:
         "coverage": "full",
         "environment": "sqlite-dev",
         "rationale": "r",
-        "nodes": ["tests/other.py::test_x"],
+        "nodes": ["backend/tests/other.py::test_x"],
         "scope_files": ["backend/tests/irrelevant.py"],
     }
     with pytest.raises(LedgerError, match="missing from scope_files"):

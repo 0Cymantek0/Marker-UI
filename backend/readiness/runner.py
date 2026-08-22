@@ -33,6 +33,18 @@ class EvidenceRunError(RuntimeError):
     """Raised when the evidence run cannot be produced honestly."""
 
 
+def _node_matches(node: str, collected_id: str) -> bool:
+    """A bound node selects its parametrized children (``test_x`` covers
+    ``test_x[param]``) and class children (``TestCls`` covers
+    ``TestCls::test_x``) exactly as pytest argument selection does."""
+
+    return (
+        collected_id == node
+        or collected_id.startswith(node + "[")
+        or collected_id.startswith(node + "::")
+    )
+
+
 def _junit_node_outcomes(junit_path: Path) -> dict[str, dict[str, str]]:
     """Map pytest node id -> {"outcome": ..., "detail": ...} from junit XML."""
 
@@ -70,7 +82,6 @@ def _junit_node_outcomes(junit_path: Path) -> dict[str, dict[str, str]]:
 class EvidenceRunner:
     def __init__(self, repo_root: Path, ledger_entries: tuple[LedgerEntry, ...]) -> None:
         self._repo_root = Path(repo_root)
-        self._backend_dir = self._repo_root / "backend"
         self._entries = ledger_entries
         self._meta = GitMeta(self._repo_root)
 
@@ -127,15 +138,16 @@ class EvidenceRunner:
                     "-m",
                     "pytest",
                     *nodes,
-                    f"--junitxml={junit_path}",
-                    "--junit-family=xunit1",
+                    f"--junit-xml={junit_path}",
+                    "-o",
+                    "junit_family=xunit1",
                     "-q",
                     "--no-header",
                     "-p",
                     "no:cacheprovider",
                     "--tb=no",
                 ],
-                cwd=self._backend_dir,
+                cwd=self._repo_root,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -148,11 +160,9 @@ class EvidenceRunner:
                     f"{proc.stdout[-2000:]} {proc.stderr[-2000:]}"
                 )
             outcomes = _junit_node_outcomes(junit_path)
-        missing = [node for node in nodes if node not in outcomes]
-        if missing:
-            raise EvidenceRunError(
-                f"pytest outcomes missing for bound nodes (not collected?): {missing[:5]}"
-            )
+        for node in nodes:
+            if not any(_node_matches(node, collected) for collected in outcomes):
+                raise EvidenceRunError(f"pytest outcomes missing for bound node: {node}")
         return outcomes
 
     def _result_for_binding(
@@ -186,7 +196,11 @@ class EvidenceRunner:
             result["detail"] = "" if all_ok else "artifact expectation mismatch"
             return result
 
-        node_results = {node: node_outcomes[node] for node in binding.nodes if node in node_outcomes}
+        node_results: dict[str, dict[str, str]] = {}
+        for node in binding.nodes:
+            for collected, outcome in node_outcomes.items():
+                if _node_matches(node, collected):
+                    node_results[collected] = outcome
         result["nodes"] = list(binding.nodes)
         result["node_outcomes"] = {node: nr["outcome"] for node, nr in node_results.items()}
         outcomes = [nr["outcome"] for nr in node_results.values()]
