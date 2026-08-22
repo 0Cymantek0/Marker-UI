@@ -47,8 +47,9 @@ from app.db_migration import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
-EXPECTED_HEAD = "20260819_0013"
+EXPECTED_HEAD = "20260823_0014"
 EXPECTED_REVISION_CHAIN = [
+    "20260823_0014",
     "20260819_0013",
     "20260818_0012",
     "20260817_0011",
@@ -92,6 +93,8 @@ KERNEL_TABLES = {
     "kernel_publication_heads",
     "kernel_publication_pins",
     "kernel_query_cursors",
+    "kernel_connector_streams",
+    "kernel_connector_inbox",
 }
 SENTINEL_JOB_ID = "sentinel-job"
 SENTINEL_CREATED_AT = "2026-08-15 00:00:00.000000"

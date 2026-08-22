@@ -21,7 +21,6 @@ import asyncio
 from pathlib import Path
 
 import pytest
-import pytest_asyncio
 from alembic import command
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.exc import IntegrityError
