@@ -132,6 +132,28 @@ jobs:
         working-directory: backend
         run: python -m pytest conformance -q
 
+  readiness-integrity:
+    name: PR84A Readiness Ledger Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Integrity gate only: an honest NOT_READY verdict with valid,
+      # fresh, non-overclaiming evidence PASSES this job. It fails on
+      # stale/dangling/corrupted proof, prose-only proven claims,
+      # claim/derivation mismatches, or hand-edited generated reports.
+      # The final release gate is `--mode release-gate` (not wired here).
+      - name: Validate readiness ledger, evidence freshness, and reports
+        run: python backend/scripts/readiness_audit.py --mode integrity
+
   industrial-persistence:
     name: Industrial Persistence Conformance (PostgreSQL + S3)
     runs-on: ubuntu-latest
