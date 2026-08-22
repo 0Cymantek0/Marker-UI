@@ -603,7 +603,9 @@ class FailoverCluster:
     def teardown(self) -> None:
         if self.keep:
             return
+        # -v removes anonymous volumes too (the primary's data volume),
+        # otherwise every provision leaks one.
         for name in (self.primary_container, self.standby_container):
-            _docker(["rm", "-f", name], check=False, timeout=90)
+            _docker(["rm", "-f", "-v", name], check=False, timeout=90)
         _docker(["network", "rm", self.network_name], check=False)
         _docker(["volume", "rm", "-f", self.standby_volume], check=False)

@@ -223,3 +223,45 @@ jobs:
             exit 1
           fi
           echo "no skips: industrial matrix executed every parameter"
+
+  industrial-failover:
+    name: Industrial Failover Conformance (two-node PostgreSQL promotion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # No service containers: the runner provisions (and the drills
+    # control) the real services through Docker — the two-node
+    # PostgreSQL topology, the hard kill, and the pg_promote are the
+    # test subject itself and cannot be provided as a passive service.
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-cpu.lock
+
+      - name: Install locked dependencies (universal CPU lock, markers honored)
+        run: |
+          pip install --upgrade pip uv
+          pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple -r backend/requirements-cpu.lock
+          pip install -r backend/requirements-dev.txt
+
+      - name: Run strict failover matrix (real primary/standby promotion, no skips)
+        working-directory: backend
+        run: |
+          set -o pipefail
+          python scripts/run_failover_conformance.py 2>&1 | tee pytest-failover.out
+
+      - name: "Guard: fail on any skip in the failover matrix"
+        working-directory: backend
+        run: |
+          if grep -Eq '[0-9]+ skipped\b' pytest-failover.out; then
+            echo "ERROR: failover matrix reported skipped tests" >&2
+            exit 1
+          fi
+          echo "no skips: failover matrix executed every parameter"
