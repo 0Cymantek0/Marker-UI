@@ -60,7 +60,6 @@ from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
 from app.kernel.errors import InjectedFaultError, KernelError
-from app.utils.canonical import payload_byte_hash
 
 __all__ = [
     "BLOB_HEX_PATTERN",

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Iterable, Sequence
 
 from sqlalchemy import func, select
 
@@ -31,7 +31,6 @@ from app.kernel.connector_state import (
     CONNECTOR_APPLIED_DUPLICATE,
     CONNECTOR_APPLIED_STALE,
     CONNECTOR_EVENT_CONTENT_CHANGED,
-    CONNECTOR_EVENT_MOVED,
     CONNECTOR_EVENT_POLICY_CHANGED,
     CONNECTOR_EVENT_REMOVED,
     CONNECTOR_EVENT_RESTORED,
@@ -44,7 +43,6 @@ from app.kernel.connector_state import (
 from app.kernel.errors import (
     ConnectorStreamStateError,
     DuplicateConnectorEventError,
-    KernelError,
 )
 from app.kernel.models import (
     KernelConnectorInbox,
