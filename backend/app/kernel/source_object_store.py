@@ -464,6 +464,104 @@ class S3SourceStore:
         post = SourceStatEvidence(os.fstat(fd))
         return digest.hexdigest(), total, pre, post
 
+    async def stage_bytes(self, data: bytes, *, suffix: str) -> StagedSource:
+        """Publish exact in-memory bytes into the shared object store.
+
+        Same dedup, conditional-create, and read-back verification
+        contract as :meth:`stage_from_path`; provenance evidence lives in
+        the connector observation that consumes this staging.
+        """
+        ext = self.validate_suffix(suffix)
+        if not isinstance(data, (bytes, bytearray)):
+            raise SourceStoreError("stage_bytes requires bytes")
+        data = bytes(data)
+        self.stage_calls += 1
+        digest_hex = hashlib.sha256(data).hexdigest()
+        total = len(data)
+        evidence = {"byte_length": total}
+
+        blob_key = f"sha256:{digest_hex}"
+        object_path = self._object_path(blob_key, ext)
+        locator = self.locator_for(blob_key, ext)
+
+        head = await self._status("HEAD", object_path)
+        if head.status_code == 200:
+            existing = await self._stream_digest(object_path)
+            if existing is not None:
+                if existing[0] == digest_hex:
+                    self.dedup_hits += 1
+                    return StagedSource(
+                        blob_key=blob_key,
+                        byte_length=total,
+                        locator=locator,
+                        artifact_path=None,
+                        already_present=True,
+                        pre_stat=dict(evidence),
+                        post_stat=dict(evidence),
+                    )
+                raise SourceStoreError(
+                    f"object {blob_key}{ext} occupied by different content; "
+                    "refusing to overwrite"
+                )
+        elif head.status_code != 404:
+            raise SourceStoreError(
+                f"object store HEAD {blob_key}{ext} failed: HTTP "
+                f"{head.status_code} {head.text[:200]}"
+            )
+
+        self._maybe_inject(PHASE_BEFORE_PUT)
+        response = await self._status(
+            "PUT",
+            object_path,
+            headers={"If-None-Match": "*", "Content-Length": str(total)},
+            body=data,
+            content_sha256=digest_hex,
+        )
+        if response.status_code in (200, 201):
+            self.bytes_written += total
+        elif response.status_code == 412:
+            winner = await self._stream_digest(object_path)
+            if winner is None or winner[0] != digest_hex:
+                raise SourceStoreError(
+                    f"object {blob_key}{ext} occupied by different content; "
+                    "refusing to overwrite"
+                )
+            self.dedup_hits += 1
+            return StagedSource(
+                blob_key=blob_key,
+                byte_length=total,
+                locator=locator,
+                artifact_path=None,
+                already_present=True,
+                pre_stat=dict(evidence),
+                post_stat=dict(evidence),
+            )
+        else:
+            raise SourceStoreError(
+                f"object store PUT {blob_key}{ext} failed: HTTP "
+                f"{response.status_code} {response.text[:200]}"
+            )
+        self._maybe_inject(PHASE_AFTER_PUT)
+
+        read_back = await self._stream_digest(object_path)
+        self.bytes_read_back += total
+        if read_back is None or read_back[0] != digest_hex:
+            raise SourceStoreError(
+                f"read-back verification failed for {blob_key}{ext}: stored "
+                "bytes differ from staged bytes"
+            )
+        self._maybe_inject(PHASE_AFTER_VERIFY)
+
+        return StagedSource(
+            blob_key=blob_key,
+            byte_length=total,
+            locator=locator,
+            artifact_path=None,
+            already_present=False,
+            pre_stat=dict(evidence),
+            post_stat=dict(evidence),
+        )
+
     async def _put_stream(
         self, fd: int, object_path: str, length: int, digest_hex: str
     ) -> httpx.Response:

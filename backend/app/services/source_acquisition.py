@@ -40,11 +40,15 @@ from typing import Any, Callable, Mapping
 from sqlalchemy import select
 
 from app.kernel.commit import KernelCommitBatch, KernelCommitService
+from app.kernel.connector_state import ConnectorEffects
 from app.kernel.errors import DuplicateRecordIdentityError, KernelError
 from app.kernel.models import KernelRecord
+from app.kernel.outbox import OutboxIntent
 from app.kernel.records import (
     SOURCE_CONSISTENCY_BEST_EFFORT,
     SOURCE_CONSISTENCY_STABLE_HANDLE,
+    SOURCE_CONSISTENCY_VERSION_PINNED,
+    SOURCE_KIND_CONNECTOR,
     SOURCE_KIND_LOCAL_PATH,
     SOURCE_KIND_UPLOAD,
     SOURCE_KIND_URL,
@@ -89,7 +93,9 @@ __all__ = [
 SOURCE_CONFIG_KEY = "source_revision"
 
 _OBSERVER = "marker-ui-source-acquisition"
+_OBSERVER_CONNECTOR = "marker-ui-connector-ingestion"
 _POLICY_PROFILE = "local_v1"
+_POLICY_PROFILE_CONNECTOR = "connector_v1"
 
 _MEDIA_TYPES: dict[str, str] = {
     ".pdf": "application/pdf",
@@ -318,7 +324,7 @@ class SourceAcquisitionService:
             },
         )
 
-        result = await self._commit_converging(
+        result = await self.commit_converging(
             records=[identity, revision, policy, observation]
             + ([epoch_record] if epoch_record is not None else []),
             edges=[
@@ -359,6 +365,145 @@ class SourceAcquisitionService:
             kernel_commit_id=result["commit_id"],
             store_profile=self.store.profile,
         )
+
+    # ------------------------------------------------------------------
+    # connector candidate minting (PR71B: stage + build, never commit)
+    # ------------------------------------------------------------------
+
+    async def mint_connector_revision(
+        self,
+        *,
+        source_key: str,
+        data: bytes,
+        suffix: str,
+        consistency_class: str,
+        provider_event_id: str,
+        media_type: str | None = None,
+        policy_facts: Mapping[str, Any] | None = None,
+        evidence: Mapping[str, Any] | None = None,
+    ) -> tuple[list[RecordInput], list[KernelEdge], str]:
+        """Stage provider-fetched bytes and mint the candidate records.
+
+        The connector convergence core calls this for content-carrying
+        provider events: bytes are staged content-addressed through the
+        same store the local profile uses, and the identity/revision/
+        policy/observation candidates follow exactly the semantics
+        ``acquire()`` established — converging onto committed identities
+        at commit time. Committing stays the caller's decision so one
+        connector application unit (records + outbox + inbox +
+        checkpoint) enters the kernel as a single transaction.
+        """
+        if not isinstance(data, (bytes, bytearray)):
+            raise SourceStoreError("connector content must be bytes")
+        suffix = suffix.lower()
+        media_type = media_type or media_type_for_suffix(suffix)
+        policy_facts = dict(policy_facts or {})
+        staged = await self.store.stage_bytes(bytes(data), suffix=suffix)
+
+        identity = SourceIdentityRecord(
+            record_id="source." + payload_byte_hash(source_key.encode("utf-8"))[:24],
+            source_kind=SOURCE_KIND_CONNECTOR,
+            source_key=source_key,
+            registered_context={"acquired_via": "connector"},
+        )
+        epoch_record, epoch_number = await self._current_or_next_epoch()
+        policy = AccessPolicyRevisionRecord(
+            record_id="access."
+            + payload_byte_hash(
+                f"{source_key}|{canonical_json_bytes(to_json_ready(policy_facts))}".encode("utf-8")
+            )[:24],
+            source_ref=identity.record_id,
+            policy_profile=_POLICY_PROFILE_CONNECTOR,
+            policy_facts=policy_facts,
+        )
+        revision = ContentRevisionRecord(
+            record_id="content."
+            + payload_byte_hash(f"{source_key}|{staged.blob_key}|{consistency_class}".encode("utf-8"))[:24],
+            source_ref=identity.record_id,
+            blob_key=staged.blob_key,
+            byte_length=staged.byte_length,
+            media_type=media_type,
+            consistency_class=consistency_class,
+            suffix=suffix,
+        )
+        observation = SourceObservationRecord(
+            record_id="cobs."
+            + payload_byte_hash(f"{source_key}|{provider_event_id}|{staged.blob_key}".encode("utf-8"))[:24],
+            observer=_OBSERVER_CONNECTOR,
+            source_ref=identity.record_id,
+            outcome="accepted",
+            content_revision_ref=revision.record_id,
+            access_policy_ref=policy.record_id,
+            authorization_epoch=epoch_number,
+            evidence={
+                "observed_at": _now_iso(),
+                "provider_event_id": provider_event_id,
+                **(dict(evidence) if evidence else {}),
+                "staged_bytes": {
+                    "byte_length": staged.byte_length,
+                    "artifact_already_present": staged.already_present,
+                },
+            },
+        )
+
+        records: list[RecordInput] = [identity, revision, policy, observation]
+        if epoch_record is not None:
+            records.append(epoch_record)
+        edges = [
+            KernelEdge(
+                edge_kind="derived_from",
+                source_ref=revision.record_id,
+                target_ref=identity.record_id,
+            ),
+            KernelEdge(
+                edge_kind="derived_from",
+                source_ref=policy.record_id,
+                target_ref=identity.record_id,
+            ),
+            KernelEdge(
+                edge_kind="observes",
+                source_ref=observation.record_id,
+                target_ref=identity.record_id,
+            ),
+        ]
+        return records, edges, staged.blob_key
+
+    def connector_source_key(self, provider: str, account: str, item_id: str) -> str:
+        """Provider-qualified logical source key (never a path or hash)."""
+        return f"connector:{provider}:{account}:{item_id}"
+
+    def connector_identity_record(self, source_key: str) -> SourceIdentityRecord:
+        """Deterministic logical-identity candidate for one connector item.
+
+        The record id derives from the source key alone, so every event
+        class (content, policy, removal, restore, move) for one provider
+        item converges onto the SAME identity record — provider-qualified
+        identity, never byte identity.
+        """
+        return SourceIdentityRecord(
+            record_id="source." + payload_byte_hash(source_key.encode("utf-8"))[:24],
+            source_kind=SOURCE_KIND_CONNECTOR,
+            source_key=source_key,
+            registered_context={"acquired_via": "connector"},
+        )
+
+    def connector_policy_record(
+        self, source_key: str, policy_facts: Mapping[str, Any]
+    ) -> AccessPolicyRevisionRecord:
+        """Policy-only transition candidate (same derivation as content mint)."""
+        return AccessPolicyRevisionRecord(
+            record_id="access."
+            + payload_byte_hash(
+                f"{source_key}|{canonical_json_bytes(to_json_ready(dict(policy_facts)))}".encode("utf-8")
+            )[:24],
+            source_ref=self.connector_identity_record(source_key).record_id,
+            policy_profile=_POLICY_PROFILE_CONNECTOR,
+            policy_facts=dict(policy_facts),
+        )
+
+    async def connector_epoch(self) -> tuple[AuthorizationEpochRecord | None, int]:
+        """Exposed epoch convergence for connector candidate assembly."""
+        return await self._current_or_next_epoch()
 
     # ------------------------------------------------------------------
     # resolution (restart / retry / duplicate submission)
@@ -607,19 +752,27 @@ class SourceAcquisitionService:
                 found[record.record_id] = committed
         return found
 
-    async def _commit_converging(
+    async def commit_converging(
         self,
         *,
         records: list[RecordInput],
         edges: list[KernelEdge],
         producer: dict[str, Any],
+        outbox: tuple[OutboxIntent, ...] = (),
+        connector: ConnectorEffects | None = None,
+        _inject_fault_at: str | None = None,
     ) -> dict[str, Any]:
         """Commit only genuinely-new records; converge onto committed ones.
 
         Returns ``{"ids": {candidate_record_id: committed_record_id},
         "commit_id": int}``. One bounded retry handles the race where a
         concurrent acquisition committed an identical record between the
-        resolution query and the insert.
+        resolution query and the insert. ``outbox`` intents and
+        ``connector`` stream effects join the same kernel transaction,
+        so successor work, inbox receipts, and checkpoint movement
+        become visible exactly with the truth that authorizes them.
+        ``_inject_fault_at`` is the deterministic fault-injection seam
+        (see :meth:`KernelCommitService.commit`).
         """
         existing = await self._resolve_existing_ids(records)
         commit_id = 0
@@ -643,7 +796,10 @@ class SourceAcquisitionService:
                         records=tuple(new_records),
                         edges=tuple(resolved_edges),
                         producer=producer,
-                    )
+                        outbox=outbox,
+                        connector=connector,
+                    ),
+                    _inject_fault_at=_inject_fault_at,
                 )
             except DuplicateRecordIdentityError:
                 if attempt == 0:
@@ -687,7 +843,7 @@ class SourceAcquisitionService:
             },
         )
         try:
-            await self._commit_converging(
+            await self.commit_converging(
                 records=[identity, observation],
                 edges=[
                     KernelEdge(

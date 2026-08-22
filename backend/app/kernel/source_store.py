@@ -185,6 +185,16 @@ class SourceArtifactStore(Protocol):
         hooks: Mapping[str, Callable[[], None]] | None = None,
     ) -> StagedSource: ...
 
+    async def stage_bytes(self, data: bytes, *, suffix: str) -> StagedSource:
+        """Publish already-acquired in-memory bytes content-addressed.
+
+        The connector convergence core uses this seam when a provider
+        adapter has fetched authoritative bytes itself: provenance
+        evidence then lives in the connector observation, not in local
+        handle stats.
+        """
+        ...
+
     async def artifact_exists(self, blob_key: str, suffix: str) -> bool: ...
 
     async def available_length(self, blob_key: str, suffix: str) -> int | None:
@@ -426,6 +436,79 @@ class LocalSourceStore:
     # ------------------------------------------------------------------
     # verification
     # ------------------------------------------------------------------
+
+    async def stage_bytes(self, data: bytes, *, suffix: str) -> StagedSource:
+        """Publish exact in-memory bytes as an immutable artifact.
+
+        Same content-addressing, dedup, read-back verification, and
+        read-only finalization as :meth:`stage_from_path`. The staging
+        provenance is the caller's acquisition evidence (provider fetch
+        with version/revision pinning), recorded in the observation that
+        consumes this staging — not in filesystem handle stats.
+        """
+        ext = self.validate_suffix(suffix)
+        if not isinstance(data, (bytes, bytearray)):
+            raise SourceStoreError("stage_bytes requires bytes")
+        async with self._io_lock:
+            return await asyncio.to_thread(self._stage_bytes_sync, bytes(data), ext)
+
+    def _stage_bytes_sync(self, data: bytes, ext: str) -> StagedSource:
+        self.stage_calls += 1
+        digest_hex = hashlib.sha256(data).hexdigest()
+        total = len(data)
+        evidence = {"byte_length": total}
+        blob_key = f"sha256:{digest_hex}"
+        final_path = self.artifact_path(blob_key, ext)
+        locator = self.locator_for(blob_key, ext)
+
+        self._tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = self._tmp_dir / f"{uuid.uuid4().hex}.tmp"
+        try:
+            with open(tmp_path, "xb") as out:
+                out.write(data)
+                out.flush()
+                os.fsync(out.fileno())
+
+            if final_path.is_file():
+                if self._hash_file(final_path) == digest_hex:
+                    self.dedup_hits += 1
+                    self._discard_quietly(tmp_path)
+                    return StagedSource(
+                        blob_key=blob_key,
+                        byte_length=total,
+                        locator=locator,
+                        artifact_path=final_path,
+                        already_present=True,
+                        pre_stat=dict(evidence),
+                        post_stat=dict(evidence),
+                    )
+                self._clear_readonly(final_path)
+                self._replace_atomic(tmp_path, final_path)
+                self._fsync_dir(final_path.parent)
+            else:
+                final_path.parent.mkdir(parents=True, exist_ok=True)
+                self._replace_atomic(tmp_path, final_path)
+                self._fsync_dir(final_path.parent)
+
+            read_back = self._hash_file(final_path)
+            self.bytes_read_back += total
+            if read_back != digest_hex:
+                raise SourceStoreError(f"read-back verification failed for {blob_key}")
+            self._mark_readonly(final_path)
+        except (InjectedFaultError, SourceStoreError):
+            if tmp_path.is_file():
+                self._discard_quietly(tmp_path)
+            raise
+
+        return StagedSource(
+            blob_key=blob_key,
+            byte_length=total,
+            locator=locator,
+            artifact_path=final_path,
+            already_present=False,
+            pre_stat=dict(evidence),
+            post_stat=dict(evidence),
+        )
 
     async def verify_artifact(
         self, blob_key: str, suffix: str, expected_length: int | None = None
