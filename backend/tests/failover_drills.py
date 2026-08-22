@@ -807,8 +807,13 @@ async def async_loss_drill(
             "terminal truth the standby possessed before the cut was lost"
         )
 
-        # prefix property: WAL replay yields a strict prefix of the
-        # acknowledged commit sequence — no holes, no half-commits
+        # prefix property of the replayed history: nothing exists beyond
+        # the promoted head (the lost tail is fully absent, no partial
+        # tail survived), the head pointer equals the newest record
+        # present (no half-advanced head), and the promoted cut does not
+        # exceed what the primary acknowledged. Sequence gaps inside the
+        # surviving prefix are legitimate (rolled-back attempts consume
+        # sequence values), so contiguity is NOT part of the claim.
         from sqlalchemy import text as sa_text
 
         async with promoted_factory() as session:
@@ -819,9 +824,17 @@ async def async_loss_drill(
                 ),
                 {"cut": promoted_head},
             )
-        evidence["prefix_property_holds"] = beyond == 0
+            max_present = await session.scalar(
+                sa_text("SELECT max(kernel_commit_id) FROM kernel_records")
+            )
+        evidence["prefix_property_holds"] = (
+            beyond == 0
+            and max_present == promoted_head
+            and promoted_head <= pre_kill_head
+        )
         assert evidence["prefix_property_holds"], (
-            f"{beyond} records beyond the promoted head: replay is not a prefix"
+            f"replay is not a prefix: beyond={beyond}, "
+            f"max_present={max_present}, promoted={promoted_head}"
         )
 
         # the promoted authority still serves new writes

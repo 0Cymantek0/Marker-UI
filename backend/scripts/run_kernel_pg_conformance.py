@@ -263,14 +263,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if started_container and not args.keep_container:
         print(f"[conformance] stopping container {args.container_name}")
-        _docker(["rm", "-f", args.container_name], check=False)
+        _docker(["rm", "-f", "-v", args.container_name], check=False)
 
     if completed.returncode != 0:
         return completed.returncode
 
     # Belt-and-braces: strict mode already turns skips into failures,
     # but never report success for a run that skipped anything.
-    if re.search(r"^\s*\d+ skipped\b", output, re.M):
+    # Mixed summaries put "N skipped" mid-line ("2 failed, 393 passed,
+    # 1 skipped in ..."), so the scan must not anchor to line start.
+    if re.search(r"\b\d+ skipped\b", output):
         print("ERROR: conformance run reported skipped tests", file=sys.stderr)
         return 3
     print("[conformance] PASS: dual-backend kernel conformance green with real PostgreSQL")

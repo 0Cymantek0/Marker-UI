@@ -248,8 +248,10 @@ async def test_async_lane_measures_declared_loss_honestly(tmp_path: Path) -> Non
     """The declared-lossy comparison lane: asynchronous acknowledgement
     (local WAL flush) does NOT claim cross-failure-domain durability.
     Terminal truth the standby possessed survives; the acknowledged tail
-    after the replication cut is measured loss (0..N), replay is a
-    strict prefix, and the promoted authority still serves new writes."""
+    after the replication cut is measured loss (0..N); the replayed
+    history is a prefix (nothing beyond the promoted head, head equals
+    the newest record, promoted cut never exceeds the acknowledged cut);
+    and the promoted authority still serves new writes."""
     cluster = FailoverCluster(
         synchronous=False,
         tag="async",

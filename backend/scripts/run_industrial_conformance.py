@@ -286,13 +286,15 @@ def main(argv: list[str] | None = None) -> int:
     print(output, end="")
 
     if started_pg and not args.keep_services:
-        pg_runner._docker(["rm", "-f", args.pg_container_name], check=False)
+        pg_runner._docker(["rm", "-f", "-v", args.pg_container_name], check=False)
     if started_s3 and not args.keep_services:
-        pg_runner._docker(["rm", "-f", args.s3_container_name], check=False)
+        pg_runner._docker(["rm", "-f", "-v", args.s3_container_name], check=False)
 
     if completed.returncode != 0:
         return completed.returncode
-    if re.search(r"^\s*\d+ skipped\b", output, re.M):
+    # Mixed summaries put "N skipped" mid-line ("4 passed, 1 skipped in
+    # ..."), so the scan must not anchor to line start.
+    if re.search(r"\b\d+ skipped\b", output):
         print("ERROR: industrial run reported skipped tests", file=sys.stderr)
         return 3
     print(
