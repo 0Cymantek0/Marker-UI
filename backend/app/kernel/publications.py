@@ -1039,7 +1039,31 @@ class PublicationService:
                     f"{existing.content_digest}, rebuilt {digest}); refusing to "
                     "rewrite an immutable lexical generation"
                 )
-            return existing  # idempotent rebuild: immutable rows untouched
+            # A validated manifest row is only honest while its physical
+            # artifact actually exists (a restore that lost the physical
+            # table, or physical corruption, must not be served as a
+            # reusable state). Reuse the row only when the physical layer
+            # verifies; otherwise rematerialize the physical layer from
+            # this same verified corpus — same identity, same digest, no
+            # new truth authored.
+            if not await self._physical_lexical_problems(
+                existing.fts_table, backend
+            ):
+                return existing  # idempotent rebuild: immutable rows untouched
+            await self._retry(
+                lambda: self._rematerialize_lexical_transaction(
+                    lexical_generation_id,
+                    existing.fts_table,
+                    backend=backend,
+                    tokenizer=tokenizer,
+                    corpus=corpus,
+                    rows=rows,
+                    maybe_inject=maybe_inject,
+                )
+            )
+            return await self._retry(
+                lambda: self._validate_lexical_transaction(lexical_generation_id)
+            )
 
         await self._retry(
             lambda: self._stage_lexical_transaction(
@@ -1062,6 +1086,75 @@ class PublicationService:
         return await self._retry(
             lambda: self._validate_lexical_transaction(lexical_generation_id)
         )
+
+    async def _physical_lexical_problems(
+        self, fts_table: str, backend: str
+    ) -> list[str]:
+        """Structural problems with one lexical physical artifact."""
+        async with self._session_factory() as session:
+            try:
+                return await physical_integrity_problems(session, backend, fts_table)
+            except Exception as exc:  # noqa: BLE001 - reported as a problem
+                return [f"physical check failed: {exc}"]
+
+    async def _rematerialize_lexical_transaction(
+        self,
+        lexical_generation_id: str,
+        fts_table: str,
+        *,
+        backend: str,
+        tokenizer: str,
+        corpus: Sequence[LexicalSourceRow],
+        rows: Sequence[LexicalRowRef],
+        maybe_inject: Any,
+    ) -> None:
+        """Rebuild the physical lexical layer for a validated generation.
+
+        The manifest row is immutable and stays validated; only the
+        backend-native physical table and the derived locator rows are
+        rematerialized from the corpus this builder just re-derived and
+        digest-verified against the stored manifest. One transaction:
+        either the physical layer is whole again or nothing changed.
+        """
+        async with self._session_factory() as session:
+            async with session.begin():
+                await session.execute(text(drop_physical_sql(fts_table)))
+                await session.execute(
+                    delete(KernelLexicalRow).where(
+                        KernelLexicalRow.lexical_generation_id
+                        == lexical_generation_id
+                    )
+                )
+                await stage_physical(
+                    session,
+                    backend=backend,
+                    table=fts_table,
+                    tokenizer=tokenizer,
+                    rows=[
+                        {
+                            "row_index": row.row_index,
+                            "record_id": row.record_id,
+                            "view_id": row.view_id,
+                            "node_id": row.node_id,
+                            "text": corpus[row.row_index].text,
+                        }
+                        for row in rows
+                    ],
+                )
+                maybe_inject(PHASE_PUB_LEXICAL_ROWS_MATERIALIZED)
+                session.add_all(
+                    KernelLexicalRow(
+                        lexical_generation_id=lexical_generation_id,
+                        row_index=row.row_index,
+                        record_id=row.record_id,
+                        view_id=row.view_id,
+                        node_id=row.node_id,
+                        revision_ref=row.revision_ref,
+                        text_hash=row.text_hash,
+                        text_chars=row.text_chars,
+                    )
+                    for row in rows
+                )
 
     async def _stage_lexical_transaction(
         self,

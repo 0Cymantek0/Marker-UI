@@ -196,9 +196,19 @@ class RecoveryWorkspace:
         return await current_head_commit(self.session_factory, self.workspace_id)
 
     async def acquire_source(self, path: Path, *, job_id: str):
-        acquired = await self.acquisition.acquire(
-            path, source_kind="local_path", suffix=".pdf", job_id=job_id
-        )
+        import os as _os
+
+        previous = _os.environ.get("MARKER_WORKSPACE_ROOTS")
+        _os.environ["MARKER_WORKSPACE_ROOTS"] = str(path.parent)
+        try:
+            acquired = await self.acquisition.acquire(
+                path, source_kind="local_path", suffix=".pdf", job_id=job_id
+            )
+        finally:
+            if previous is None:
+                _os.environ.pop("MARKER_WORKSPACE_ROOTS", None)
+            else:
+                _os.environ["MARKER_WORKSPACE_ROOTS"] = previous
         self.source_blocks.append(acquired.to_config())
         return acquired
 

@@ -643,16 +643,21 @@ class PgSidecarTools:
     image: str = "postgres:16-alpine"
 
     async def _run(self, args: Sequence[str], *, stdin_bytes: bytes | None = None) -> bytes:
+        docker_args = ["docker", "run", "--rm"]
+        if stdin_bytes is not None:
+            docker_args.append("-i")
+        docker_args.extend(
+            [
+                "--add-host",
+                "host.docker.internal:host-gateway",
+                "-e",
+                f"PGPASSWORD={self.password}",
+                self.image,
+                *args,
+            ]
+        )
         proc = await asyncio.create_subprocess_exec(
-            "docker",
-            "run",
-            "--rm",
-            "--add-host",
-            "host.docker.internal:host-gateway",
-            "-e",
-            f"PGPASSWORD={self.password}",
-            self.image,
-            *args,
+            *docker_args,
             stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -1242,7 +1247,8 @@ async def restore_object_namespaces(
             raise RecoveryManifestError(
                 f"restored source {ref.blob_key} landed at {staged.blob_key}"
             )
-        tmp_path.unlink(missing_ok=True)
+    # scratch cleanup is best-effort: Windows may briefly hold staging
+    # file handles after streamed uploads (shutil.rmtree ignore_errors)
 
 
 # ---------------------------------------------------------------------------
@@ -1404,11 +1410,32 @@ async def _verify_publications(
                 ok = False
                 details.append(f"profile {profile!r}: no published set restored")
             continue
-        if resolved.publication_set_id not in expected_ids:
+        recorded = next(
+            (ref for ref in manifest.publications if ref.profile == profile), None
+        )
+        if resolved.publication_set_id in expected_ids:
+            protected = True
+        elif (
+            recorded is not None
+            and resolved.kernel_commit_id == recorded.kernel_commit_id
+            and resolved.snapshot_id == recorded.snapshot_id
+        ):
+            # B4 honest rebuild: the restored physical serving state may
+            # be rebuilt as an explicitly NEW publication set, provided
+            # it binds the same intended publication lineage (the cut
+            # and the snapshot the recorded publication was built from).
+            protected = True
+        else:
+            protected = False
+        if not protected:
             ok = False
             details.append(
                 f"profile {profile!r}: restored head {resolved.publication_set_id} "
-                "is not a publication the recovery point protects"
+                "is not a publication the recovery point protects (cut "
+                f"{resolved.kernel_commit_id}/snapshot {resolved.snapshot_id} "
+                "vs manifest "
+                f"{recorded.kernel_commit_id if recorded else '?'}/"
+                f"{recorded.snapshot_id if recorded else '?'})"
             )
             continue
         verification = await verify_publication_set(
