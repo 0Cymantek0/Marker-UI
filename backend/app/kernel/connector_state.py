@@ -299,10 +299,14 @@ async def check_connector_effects(
                     expected_cursor_token=cursor.expected_cursor_token,
                     observed_cursor=None,
                 )
-            if cursor.new_state != CONNECTOR_STREAM_CONSUMING:
+            if (
+                cursor.new_state == CONNECTOR_STREAM_RECONCILIATION_REQUIRED
+                and not cursor.reconciliation_reason
+            ):
                 raise ConnectorStreamStateError(
-                    f"stream {effects.stream_id!r} does not exist; only its "
-                    "creation (state consuming) may initialize it"
+                    f"stream {effects.stream_id!r} does not exist; creating it "
+                    "in reconciliation_required demands the reason it was "
+                    "born broken"
                 )
             flip = ConnectorFlip(
                 kind="insert",
@@ -312,7 +316,7 @@ async def check_connector_effects(
                 new_cursor_token=cursor.new_cursor_token,
                 new_cursor_seq=cursor.new_cursor_seq,
                 new_state=cursor.new_state,
-                reconciliation_reason=None,
+                reconciliation_reason=cursor.reconciliation_reason,
             )
         else:
             if row.workspace_id != workspace_id:

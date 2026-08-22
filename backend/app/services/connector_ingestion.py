@@ -297,24 +297,19 @@ class ConnectorIngestionService:
         """Drive the adapter's authoritative scan to durable completion.
 
         Each scan page is applied through the same atomic unit; the
-        checkpoint moves tentatively page-wise (crash mid-scan restarts
-        from the last durably-applied page) and only the page carrying
+        checkpoint moves tentatively page-wise and only the page carrying
         ``final=True`` completes the reconciliation, installing the
-        provider's fresh checkpoint. ``page_limit`` bounds work per
-        call — the remaining pages are a later continuation, never a
+        provider's fresh checkpoint. A crash mid-scan restarts the scan
+        from the beginning — pages already durably applied converge as
+        duplicates and the no-op guard skips their checkpoint
+        re-acknowledgement, so restart is idempotent and an incomplete
+        scan is never blessed as complete. ``page_limit`` bounds work
+        per call; the remaining pages are a later continuation, never a
         skipped interval.
         """
-        row = await self._stream_row(stream_id)
-        resume = (
-            row.cursor_token
-            if row is not None
-            and row.state == CONNECTOR_STREAM_RECONCILIATION_REQUIRED
-            and row.cursor_token
-            else None
-        )
-
         commit_ids: list[int] = []
         pages = 0
+        resume: str | None = None
         while True:
             scan = await adapter.full_scan(resume)
             pages += 1
@@ -466,6 +461,33 @@ class ConnectorIngestionService:
                 view = _view_of(row) if row else _empty_view(stream_id)
                 return ApplyResult(tuple(outcomes), 0, view)
 
+        # One unit may carry several changes for one item (or several
+        # items): candidates minted per-change collapse here — one
+        # logical record, one edge — so a batch never carries duplicate
+        # record ids (identity/epoch candidates are deterministic).
+        deduped_records: list[RecordInput] = []
+        seen_ids: set[str] = set()
+        for record in records:
+            if record.record_id not in seen_ids:
+                seen_ids.add(record.record_id)
+                deduped_records.append(record)
+        deduped_edges: list[KernelEdge] = []
+        seen_edges: set[tuple[str, str, str]] = set()
+        for edge in edges:
+            key = (edge.edge_kind, edge.source_ref, edge.target_ref)
+            if key not in seen_edges:
+                seen_edges.add(key)
+                deduped_edges.append(edge)
+
+        # Receipts without a stream row must materialize the stream in
+        # the same commit (empty checkpoint: nothing consumed yet).
+        if cursor is None and not await self._stream_row(stream_id):
+            cursor = ConnectorCursorAdvancement(
+                expected_cursor_token=None,
+                new_cursor_token="",
+                new_state=CONNECTOR_STREAM_CONSUMING,
+            )
+
         effects = ConnectorEffects(
             workspace_id=self.workspace_id,
             stream_id=stream_id,
@@ -474,8 +496,8 @@ class ConnectorIngestionService:
         )
         try:
             result = await self._acq.commit_converging(
-                records=records,
-                edges=edges,
+                records=deduped_records,
+                edges=deduped_edges,
                 producer={
                     "operation": producer_op,
                     "stream_id": stream_id,
@@ -513,16 +535,19 @@ class ConnectorIngestionService:
         source_key = self._source_key(adapter, change.item_id)
 
         # P2: arrival order is not causal order. A comparable provider
-        # sequence older than (or equal to) the newest durably-applied
-        # state for this item must never regress truth.
+        # sequence strictly older than the newest durably-applied state
+        # for this item must never regress truth. An equal sequence
+        # under a different delivery identity is a replay of the same
+        # final state: it proceeds and converges through record
+        # identity (never through notification-id dedupe alone).
         if change.seq is not None:
             last = await self._last_applied_seq(stream_id, change.item_id)
-            if last is not None and change.seq <= last:
+            if last is not None and change.seq < last:
                 return EventOutcome(
                     event_id=change.event_id,
                     item_id=change.item_id,
                     applied_state=CONNECTOR_APPLIED_STALE,
-                    note=f"provider seq {change.seq} not newer than applied {last}",
+                    note=f"provider seq {change.seq} older than applied {last}",
                 )
 
         # T6: providers that cannot prove revision order are resolved
@@ -897,6 +922,7 @@ class ConnectorIngestionService:
         cursor = ConnectorCursorAdvancement(
             expected_cursor_token=row.cursor_token if row else None,
             new_cursor_token=row.cursor_token if row else "",
+            new_cursor_seq=row.cursor_seq if row else None,
             new_state=CONNECTOR_STREAM_RECONCILIATION_REQUIRED,
             reconciliation_reason=resolved_reason,
         )

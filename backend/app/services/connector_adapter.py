@@ -205,9 +205,10 @@ class ScriptedProvider(ConnectorAdapter):
         self._rounds: list[ChangePage] = []
         self._issued_cursors: set[str] = set()
         self._item_state: dict[str, ItemSnapshot] = {}
-        self._scan_pages: list[ScanPage] = []
-        self._scan_pos = 0
+        self._scan_by_resume: dict[str | None, ScanPage] = {}
+        self._invalid_signal: tuple[str, str] | None = None
         self.fetch_calls = 0
+        self.item_fetches: list[str] = []
 
     # ------------------------------------------------------------------
     # scripting surface (tests only)
@@ -218,15 +219,26 @@ class ScriptedProvider(ConnectorAdapter):
         if page.next_cursor:
             self._issued_cursors.add(page.next_cursor)
 
+    def script_invalid_signal(self, reason: str, detail: str = "") -> None:
+        """Make the next ``fetch_changes`` raise InvalidStreamSignal."""
+        self._invalid_signal = (reason, detail)
+
     def seed_item(self, snapshot: ItemSnapshot) -> None:
         self._item_state[snapshot.item_id] = snapshot
 
     def script_scan(self, pages: list[ScanPage]) -> None:
-        self._scan_pages = list(pages)
-        self._scan_pos = 0
+        """Key scan pages by resume token, restart-position-safe.
+
+        Page ``i``'s ``resume_token`` names page ``i+1``; ``None``
+        before the first page. A process restarted mid-scan replays the
+        same deterministic page for any durably-recorded resume token.
+        """
+        self._scan_by_resume = {None: pages[0]} if pages else {}
+        for previous, page in zip(pages, pages[1:]):
+            self._scan_by_resume[previous.resume_token] = page
 
     def cursor_is_known(self, cursor: str | None) -> bool:
-        return cursor is None or cursor in self._issued_cursors
+        return cursor is None or cursor == "" or cursor in self._issued_cursors
 
     # ------------------------------------------------------------------
     # adapter contract
@@ -234,6 +246,10 @@ class ScriptedProvider(ConnectorAdapter):
 
     async def fetch_changes(self, cursor: str | None) -> ChangePage:
         self.fetch_calls += 1
+        if self._invalid_signal is not None:
+            reason, detail = self._invalid_signal
+            self._invalid_signal = None
+            raise InvalidStreamSignal(reason, detail)
         if not self.cursor_is_known(cursor):
             raise InvalidStreamSignal(
                 INVALID_REASON_TOKEN_INVALID,
@@ -244,15 +260,13 @@ class ScriptedProvider(ConnectorAdapter):
         return self._rounds.pop(0)
 
     async def fetch_item(self, item_id: str) -> ItemSnapshot | None:
+        self.item_fetches.append(item_id)
         return self._item_state.get(item_id)
 
     async def full_scan(self, resume: str | None) -> ScanPage:
-        if resume is None:
-            self._scan_pos = 0
-        if self._scan_pos >= len(self._scan_pages):
+        page = self._scan_by_resume.get(resume)
+        if page is None:
             # A scan past its script is an empty final page: durable
             # idempotence for repeated reconciliation (T18).
             return ScanPage(changes=(), resume_token=None, final=True, fresh_cursor=resume)
-        page = self._scan_pages[self._scan_pos]
-        self._scan_pos += 1
         return page
