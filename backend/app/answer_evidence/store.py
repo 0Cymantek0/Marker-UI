@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import Sequence
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.kernel.models import (
@@ -219,16 +218,3 @@ class AnswerEvidenceStore:
                 .all()
             )
         return list(rows)
-
-    async def load_assessment(
-        self, *, workspace_id: str, assessment_id: str
-    ) -> KernelAnswerSupportAssessment | None:
-        async with self.session_factory() as session:
-            return (
-                await session.execute(
-                    select(KernelAnswerSupportAssessment).where(
-                        KernelAnswerSupportAssessment.workspace_id == workspace_id,
-                        KernelAnswerSupportAssessment.assessment_id == assessment_id,
-                    )
-                )
-            ).scalar_one_or_none()

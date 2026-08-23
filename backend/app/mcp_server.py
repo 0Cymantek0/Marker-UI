@@ -502,7 +502,7 @@ AnswerContentParam = Annotated[
     Field(description="The answer text the external agent produced. Stored immutably (bounded to 65536 characters).", examples=["Revenue grew 12% in Q2."]),
 ]
 DisclosureIdsParam = Annotated[
-    list[str],
+    list[str] | None,
     Field(
         description="Ordered disclosure ids from marker_query disclose=true pages; the order they were received is preserved in the trace.",
         examples=[["dsc_x8yKh3nTBQ"]],
@@ -862,32 +862,40 @@ async def marker_events(
 async def marker_answer_trace(
     workspace_id: AnswerWorkspaceParam,
     answer_ref: AnswerRefParam,
-    answer: AnswerContentParam,
-    disclosure_ids: DisclosureIdsParam,
+    answer: AnswerContentParam = "",
+    disclosure_ids: DisclosureIdsParam = None,
 ) -> AnswerTraceOutput:
     """Commit one external answer bound to its disclosed context, or read it back.
 
-    Marker UI records exactly which disclosed context pages (from
-    marker_query disclose=true) an answer may be bound to; it cannot
-    observe the external model's internal attention, and the trace never
-    claims the answer is entailed by its context. Commits are idempotent
-    per (workspace, answer_ref): identical replays return the committed
-    trace; a different answer body or context set for the same answer_ref
-    is an explicit conflict. The committed answer is immutable —
-    corrected answers use a new answer_ref, and support assessments
-    (marker_answer_assessment) never rewrite it. Context already
-    disclosed to an external agent cannot be retroactively revoked;
-    revocation only stops future disclosure.
+    With answer and disclosure_ids the call commits: Marker UI records
+    exactly which disclosed context pages (from marker_query
+    disclose=true) the answer binds to; it cannot observe the external
+    model's internal attention, and the trace never claims the answer is
+    entailed by its context. Commits are idempotent per (workspace,
+    answer_ref): identical replays return the committed trace; a
+    different answer body or context set for the same answer_ref is an
+    explicit conflict. The committed answer is immutable — corrected
+    answers use a new answer_ref, and support assessments
+    (marker_answer_assessment) never rewrite it. With neither argument
+    the call reads the committed trace back. Context already disclosed
+    to an external agent cannot be retroactively revoked; revocation
+    only stops future disclosure.
     """
 
     require_mcp_scopes(SCOPE_ANSWERS_WRITE)
-    envelope = await record_agent_answer_trace(
-        workspace_id=workspace_id,
-        answer_ref=answer_ref,
-        answer=answer,
-        disclosure_ids=disclosure_ids,
-        principal_id=_mcp_caller_principal_id(),
-    )
+    if answer or disclosure_ids:
+        envelope = await record_agent_answer_trace(
+            workspace_id=workspace_id,
+            answer_ref=answer_ref,
+            answer=answer,
+            disclosure_ids=disclosure_ids or [],
+            principal_id=_mcp_caller_principal_id(),
+        )
+    else:
+        envelope = await read_agent_answer_trace(
+            workspace_id=workspace_id,
+            answer_ref=answer_ref,
+        )
     return AnswerTraceOutput(**envelope)
 
 

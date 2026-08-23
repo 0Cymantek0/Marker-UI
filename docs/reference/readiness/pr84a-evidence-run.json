@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-23T00:03:59+00:00",
-  "git_head": "cac1218dbd130a2fc90b20f800b6978cad7288d6",
+  "generated_at": "2026-08-23T00:35:17+00:00",
+  "git_head": "331acf2acd5c567ca1a10e1ec06025a9186be3f4",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -1579,11 +1579,11 @@
         "backend/app/answer_evidence/domain.py": "0b6adfa18e547d391b09e2c10ef6ae9582abd3bb",
         "backend/app/answer_evidence/errors.py": "8eb8ef7367a9125c1400ddd10f5def8fdf0284a1",
         "backend/app/answer_evidence/service.py": "1fa160d568c31cd89fba329c2bf3d1f5035d6f9e",
-        "backend/app/answer_evidence/store.py": "bb00546d0f49f865796cd442b862f391488f11a3",
+        "backend/app/answer_evidence/store.py": "6934fb32ba16c17191cf278bbcd969812b85790c",
         "backend/app/kernel/models.py": "ea86492b92c18e913cc4f332b126323e0c1050e4",
         "backend/tests/test_agent_answer_surface.py": "d4479101741d4807a73a31ba2c425a004d6124af",
         "backend/tests/test_answer_evidence.py": "3dd788b1f970e45be3e65a41864704ce32bc2078",
-        "backend/tests/test_answer_evidence_boundary.py": "8f9ee665b2b0a3ad57aaf58fd8c583bdf9e3e81e"
+        "backend/tests/test_answer_evidence_boundary.py": "1da4f66153fa1f9323f83d32138943fcbbf3ee6d"
       },
       "nodes": [
         "backend/tests/test_answer_evidence.py",
@@ -1616,6 +1616,7 @@
         "backend/tests/test_answer_evidence_boundary.py::test_full_chain_discloses_every_page_in_order": "passed",
         "backend/tests/test_answer_evidence_boundary.py::test_trace_binds_adapter_disclosures_idempotently": "passed",
         "backend/tests/test_answer_evidence_boundary.py::test_assessment_via_adapter_judges_without_mutation": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_tool_read_mode_returns_committed_trace_without_body": "passed",
         "backend/tests/test_answer_evidence_boundary.py::test_foreign_disclosure_via_adapter_fails_closed": "passed",
         "backend/tests/test_answer_evidence_boundary.py::test_existing_clients_see_no_disclosure_by_default": "passed",
         "backend/tests/test_answer_evidence_boundary.py::test_failed_outcomes_disclose_nothing": "passed",

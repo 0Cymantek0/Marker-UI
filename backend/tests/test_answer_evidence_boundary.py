@@ -209,6 +209,33 @@ async def test_assessment_via_adapter_judges_without_mutation(answer_env):
     assert reread["current_assessment"]["verdict"] == "unsupported"
 
 
+async def test_tool_read_mode_returns_committed_trace_without_body(answer_env):
+    from app import mcp_server as mcp
+
+    factory, commit_service = answer_env
+    await _publish(factory, commit_service, "ws-read")
+    pages = await _collect_via_adapter("ws-read", page_size=10)
+    committed = await record_agent_answer_trace(
+        workspace_id="ws-read",
+        answer_ref="turn-r",
+        answer="Read me back.",
+        disclosure_ids=[p["disclosure_id"] for p in pages],
+    )
+    read_back = await mcp.marker_answer_trace(
+        workspace_id="ws-read", answer_ref="turn-r"
+    )
+    assert read_back.trace_id == committed["trace_id"]
+    assert read_back.answer == "Read me back."
+    assert read_back.assessment_state == "unassessed"
+    async with factory() as session:
+        count = (
+            await session.execute(
+                select(func.count()).select_from(KernelAnswerTrace)
+            )
+        ).scalar_one()
+        assert count == 1
+
+
 async def test_foreign_disclosure_via_adapter_fails_closed(answer_env):
     factory, commit_service = answer_env
     await _publish(factory, commit_service, "ws-a")
