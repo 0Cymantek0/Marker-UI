@@ -53,6 +53,7 @@ LANE_OK = "ok"
 LANE_OUTPUT_CONTRACT_FAILURE = "output_contract_failure"
 LANE_PROVIDER_FAILURE = "provider_failure"
 LANE_REPLAY_CACHE_MISS = "replay_cache_miss"
+LANE_CONTEXT_REFUSED = "context_refused"
 
 LANE_STATUSES = frozenset(
     {
@@ -60,6 +61,7 @@ LANE_STATUSES = frozenset(
         LANE_OUTPUT_CONTRACT_FAILURE,
         LANE_PROVIDER_FAILURE,
         LANE_REPLAY_CACHE_MISS,
+        LANE_CONTEXT_REFUSED,
     }
 )
 

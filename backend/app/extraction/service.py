@@ -24,10 +24,14 @@ from typing import Any
 from app.context_runtime import QUERY_SCHEMA_VERSION, execute_query, parse_query_request
 from app.extraction.contract import ExtractionRequest, resolve_schema
 from app.extraction.extractor import extract_candidates
+from app.extraction.hybrid import (
+    RULE_HYBRID_CORROBORATED,
+    reconcile_hybrid,
+)
 from app.extraction.reconciliation import (
+    HYBRID_POLICY_VERSION,
     RECONCILE_POLICY_ID,
     RECONCILE_POLICY_VERSION,
-    reconcile,
 )
 from app.extraction.results import (
     FIELD_OUTCOME_ACCEPTED,
@@ -40,6 +44,11 @@ from app.extraction.results import (
     result_from_dict,
 )
 from app.extraction.review import ReviewDecision, StaleReviewError, apply_review
+from app.extraction.specialist import (
+    LANE_CONTEXT_REFUSED,
+    SpecialistLane,
+    SpecialistLaneResult,
+)
 from app.extraction.validation import evaluate_invariants
 from app.kernel.commit import KernelCommitBatch, KernelCommitService
 from app.kernel.errors import DuplicateRecordIdentityError, KernelError
@@ -60,8 +69,15 @@ EXTRACTOR_NAME = "marker-extraction"
 EXTRACTOR_VERSION = "pr80a.1"
 #: Workflow class stamped on extraction assessments.
 EXTRACTION_WORKFLOW_CLASS = "marker.extraction.pr80a.v1"
+#: Workflow class stamped on hybrid-corroborated assessments.
+HYBRID_WORKFLOW_CLASS = "marker.extraction.hybrid.v1"
 #: Authority rule for anchor-witness proof supports.
 WITNESS_AUTHORITY_RULE = f"{RECONCILE_POLICY_ID}/v1:anchor-witness"
+#: Authority rule for deterministically corroborated proof supports:
+#: the proof is the normalizer over cited source text, not the model.
+CORROBORATION_AUTHORITY_RULE = (
+    f"{RECONCILE_POLICY_ID}/{HYBRID_POLICY_VERSION}:deterministic-normalization"
+)
 
 
 def _short_identity(identity: str) -> str:
@@ -106,10 +122,12 @@ class ExtractionService:
         commit_service: KernelCommitService | None = None,
         *,
         workspace_id: str = "local",
+        specialist: SpecialistLane | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._commit_service = commit_service or KernelCommitService(session_factory)
         self.workspace_id = workspace_id
+        self._specialist = specialist
 
     # ------------------------------------------------------------------
     # run
@@ -187,7 +205,14 @@ class ExtractionService:
             return result
 
         candidates = extract_candidates(packet, schema)
-        reconciled = reconcile(schema, candidates)
+        lane_result = self._run_specialist_lane(packet, schema, context)
+        reconciled = reconcile_hybrid(
+            schema,
+            candidates,
+            lane_result,
+            workspace_id=self.workspace_id,
+            publication_set_id=context.publication_set_id,
+        )
         result = ExtractionResult(
             schema_id=schema.schema_id,
             schema_version=schema.version,
@@ -197,10 +222,46 @@ class ExtractionService:
             fields=reconciled.fields,
             line_items=reconciled.line_items,
             invariants=reconciled.invariants,
+            specialist=lane_result.report() if lane_result is not None else None,
         )
 
         await self._persist_result(result)
         return result
+
+    def _run_specialist_lane(
+        self, packet: Any, schema: Any, context: ExtractionContext
+    ) -> SpecialistLaneResult | None:
+        """Invoke the specialist lane if one is configured for this service.
+
+        Opt-in by construction: services built without a lane keep pure
+        PR80A semantics. The lane sees only this run's authorized
+        packet; if its recorded context binding does not match the
+        run's authoritative context (stale replay defense), its
+        proposals are refused wholesale and the refusal is reported.
+        """
+        if self._specialist is None:
+            return None
+        lane_result = self._specialist.generate(
+            packet, schema, workspace_id=self.workspace_id
+        )
+        provenance = lane_result.provenance
+        if provenance is not None and (
+            provenance.publication_set_id != context.publication_set_id
+            or provenance.workspace_id != self.workspace_id
+        ):
+            return SpecialistLaneResult(
+                status=LANE_CONTEXT_REFUSED,
+                producer_id=lane_result.producer_id,
+                producer_family=lane_result.producer_family,
+                config_identity=lane_result.config_identity,
+                provenance=provenance,
+                runtime=lane_result.runtime,
+                error_detail=(
+                    "lane context binding does not match this run's "
+                    "publication/workspace; proposals refused"
+                ),
+            )
+        return lane_result
 
     # ------------------------------------------------------------------
     # persistence
@@ -214,6 +275,12 @@ class ExtractionService:
         def _accept(outcome: FieldOutcome, claim_key: str, predicate: str) -> None:
             if outcome.status != FIELD_OUTCOME_ACCEPTED or outcome.value is None:
                 return
+            corroborated = outcome.rule == RULE_HYBRID_CORROBORATED
+            policy_revision = (
+                f"{RECONCILE_POLICY_VERSION}+{HYBRID_POLICY_VERSION}"
+                if corroborated
+                else RECONCILE_POLICY_VERSION
+            )
             assertion = ClaimAssertionRecord(
                 record_id=_assertion_record_id(claim_key, outcome.value),
                 claim_key=claim_key,
@@ -232,23 +299,34 @@ class ExtractionService:
             )
             if not evidence_refs:
                 return
+            declared_context: dict[str, Any] = {
+                "publication_set_id": result.context.publication_set_id,
+                "schema_identity": result.schema_identity,
+                "result_identity": result.identity,
+            }
+            if corroborated:
+                # The committed assessment must say HOW the value was
+                # proved: deterministic normalization over cited source
+                # text, with the hybrid workflow class and rule named.
+                declared_context["hybrid_rule"] = RULE_HYBRID_CORROBORATED
             assessment = ClaimAssessmentRecord(
-                record_id=_assessment_record_id(assertion.record_id, RECONCILE_POLICY_VERSION),
+                record_id=_assessment_record_id(assertion.record_id, policy_revision),
                 assertion_ref=assertion.record_id,
                 outcome="source_exact",
                 policy_id=RECONCILE_POLICY_ID,
-                policy_revision=RECONCILE_POLICY_VERSION,
+                policy_revision=policy_revision,
                 evidence_refs=tuple(evidence_refs),
                 snapshot_commit_id=head,
-                workflow_class=EXTRACTION_WORKFLOW_CLASS,
-                declared_context={
-                    "publication_set_id": result.context.publication_set_id,
-                    "schema_identity": result.schema_identity,
-                    "result_identity": result.identity,
-                },
+                workflow_class=(
+                    HYBRID_WORKFLOW_CLASS if corroborated else EXTRACTION_WORKFLOW_CLASS
+                ),
+                declared_context=declared_context,
             )
             records.append(assertion)
             records.append(assessment)
+            authority_rule = (
+                CORROBORATION_AUTHORITY_RULE if corroborated else WITNESS_AUTHORITY_RULE
+            )
             for ref in evidence_refs:
                 records.append(
                     ProofSupportRecord(
@@ -256,7 +334,7 @@ class ExtractionService:
                         holder_ref=assessment.record_id,
                         evidence_ref=ref,
                         role="witness",
-                        authority_rule=WITNESS_AUTHORITY_RULE,
+                        authority_rule=authority_rule,
                     )
                 )
 
