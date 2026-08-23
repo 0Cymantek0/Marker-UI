@@ -17,7 +17,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.context_runtime import QUERY_SCHEMA_VERSION, execute_query, parse_query_request
+from app.context_runtime import (
+    QUERY_SCHEMA_VERSION,
+    ContinuationService,
+    CursorCodec,
+    CursorKeyring,
+    execute_query,
+    parse_query_request,
+)
 from app.context_runtime.errors import (
     QueryAuthorizationError,
     UnsupportedOperatorError,
@@ -39,7 +46,7 @@ SENTINEL = "MU_RED_7f3a9c2e4b"
 #: closure must be selective (public material keeps flowing), not a
 #: document-wide denial.
 PUBLIC_TEXT = "public needle content for retrieval"
-SENTINEL_TEXT = f"secret token {SENTINEL} inside otherwise ordinary text"
+SENTINEL_TEXT = f"secret token {SENTINEL} inside otherwise ordinary needle text"
 
 
 async def _publish_sentinel_workspace(factory, commit_service, workspace: str):
@@ -230,3 +237,455 @@ async def test_unsupported_visual_and_vector_paths_stay_unsupported(
                     "operations": [{"op": op, "text": SENTINEL}],
                 }
             )
+
+
+# ---------------------------------------------------------------------------
+# Scenario 4 - packet/reuse closure: a packet built under the old policy
+# cannot be reused under the new one, and the fresh packet carries no
+# sentinel at the content level (identity rotation alone is not proof).
+# ---------------------------------------------------------------------------
+
+
+async def test_packet_identity_rotates_and_content_never_discloses(
+    payload_env,
+) -> None:
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    policy = RedactionPolicyService(factory, commit_service, workspace_id="ws-red")
+
+    before = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+    assert any(SENTINEL in (u.text or "") for u in before.evidence), (
+        "pre-redaction packet must contain the sentinel for the rotation proof"
+    )
+
+    await policy.define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+    after = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+    assert after.identity_id != before.identity_id
+    assert after.authorization["redaction"]["revision"] > 0
+    _assert_packet_clean(after)
+    assert _packet_text(after), "public evidence must keep flowing"
+
+
+# ---------------------------------------------------------------------------
+# Scenario 5 - cursor closure: a cursor issued before the transition
+# cannot continue into old privileged content; a chain issued after the
+# transition pages only projected content.
+# ---------------------------------------------------------------------------
+
+
+def _codec() -> CursorCodec:
+    return CursorCodec(
+        CursorKeyring({"k1": b"pr89-red-key----" + b"x" * 32}, current_key_id="k1")
+    )
+
+
+async def test_cursor_issued_before_redaction_is_invalidated(payload_env) -> None:
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    first = await service.fresh_query(_request("ws-red", "needle"), page_size=1)
+    assert first.status == "partial"
+    assert first.next_cursor
+
+    await RedactionPolicyService(
+        factory, commit_service, workspace_id="ws-red"
+    ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+
+    resumed = await service.continue_query(
+        first.next_cursor, workspace_id="ws-red", page_size=1
+    )
+    assert resumed.status == "invalidated"
+    assert resumed.reason == "authorization_changed"
+    assert resumed.packet is None
+
+
+async def test_post_redaction_chain_pages_only_projected_content(payload_env) -> None:
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    await RedactionPolicyService(
+        factory, commit_service, workspace_id="ws-red"
+    ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+    service = ContinuationService(factory, cursor_codec=_codec(), pin_lease_seconds=60)
+
+    delivered: list[str] = []
+    cursor = None
+    pages = 0
+    fresh = await service.fresh_query(_request("ws-red", "needle"), page_size=1)
+    pages += 1
+    if fresh.packet is not None:
+        delivered.extend(unit.text or "" for unit in fresh.packet.evidence)
+    cursor = fresh.next_cursor
+    while cursor is not None and pages < 12:
+        page = await service.continue_query(cursor, workspace_id="ws-red", page_size=1)
+        pages += 1
+        if page.packet is not None:
+            payload = to_json(page.packet)
+            payload.pop("query", None)
+            _assert_no_sentinel(repr(payload))
+            delivered.extend(unit.text or "" for unit in page.packet.evidence)
+        cursor = page.next_cursor
+        if page.status == "complete":
+            break
+
+    _assert_no_sentinel(*delivered)
+    assert delivered, "the chain must deliver public material"
+
+
+# ---------------------------------------------------------------------------
+# Scenario 6b - direct-release analog: disclosures minted after the
+# transition store already-projected bytes; the durable row a future
+# answer binds to carries no sentinel.
+# ---------------------------------------------------------------------------
+
+
+async def test_post_redaction_disclosure_rows_are_sentinel_free(payload_env) -> None:
+    from sqlalchemy import select
+
+    from app.agent_answer_evidence import (
+        configure_answer_evidence_runtime,
+        reset_answer_evidence_runtime,
+    )
+    from app.agent_query import (
+        configure_query_runtime,
+        reset_query_runtime,
+        run_agent_query,
+    )
+    from app.kernel.models import KernelContextDisclosure
+
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    await RedactionPolicyService(
+        factory, commit_service, workspace_id="ws-red"
+    ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+
+    configure_query_runtime(session_factory=factory)
+    configure_answer_evidence_runtime(session_factory=factory)
+    try:
+        envelope = await run_agent_query(
+            query=_request("ws-red", "needle"), disclose=True
+        )
+    finally:
+        reset_query_runtime()
+        reset_answer_evidence_runtime()
+
+    assert envelope.get("status") in ("partial", "complete"), envelope
+
+    async with factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(KernelContextDisclosure.packet_json)
+                    .order_by(KernelContextDisclosure.created_at.desc())
+                    .limit(5)
+                )
+            )
+            .all()
+        )
+    assert rows, "durable disclosure rows must exist"
+    for (payload_json,) in rows:
+        _assert_no_sentinel(payload_json)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 7 - cross-profile isolation: profiles are distinct committed
+# rulesets; material restricted under one profile flows under another
+# only because that profile's rules say so, and identities never mix.
+# ---------------------------------------------------------------------------
+
+
+async def test_cross_profile_isolation(payload_env) -> None:
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    policy = RedactionPolicyService(factory, commit_service, workspace_id="ws-red")
+    await policy.define_profile("strict", [{"kind": "literal", "value": SENTINEL}])
+    await policy.define_profile("open", [])
+
+    strict = await execute_query(
+        factory,
+        parse_query_request(
+            _request("ws-red", "needle", context={"redaction_profile_id": "strict"})
+        ),
+    )
+    open_packet = await execute_query(
+        factory,
+        parse_query_request(
+            _request("ws-red", "needle", context={"redaction_profile_id": "open"})
+        ),
+    )
+
+    _assert_packet_clean(strict)
+    assert "[redacted]" in _packet_text(strict)
+    assert strict.identity_id != open_packet.identity_id
+    # "open" carries no rules: the sentinel is releasable there by the
+    # operator's explicit choice, which is exactly why identities must
+    # differ - an "open" packet can never be replayed as a "strict" one.
+    assert any(SENTINEL in (u.text or "") for u in open_packet.evidence)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 9 - concurrent transition: a redaction commit that lands
+# mid-execution linearizes before the next operation, and concurrent
+# readers never observe a mixed packet after the boundary.
+# ---------------------------------------------------------------------------
+
+
+async def test_mid_query_redaction_linearizes_before_next_operation(
+    payload_env,
+) -> None:
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    policy = RedactionPolicyService(factory, commit_service, workspace_id="ws-red")
+
+    async def redact_after_first(index: int) -> None:
+        if index == 0:
+            await policy.define_profile(
+                "default", [{"kind": "literal", "value": SENTINEL}]
+            )
+
+    request = parse_query_request(
+        {
+            "schema_version": QUERY_SCHEMA_VERSION,
+            "workspace_id": "ws-red",
+            "operations": [
+                {"op": "lexical_search", "text": "public", "limit": 5},
+                {"op": "lexical_search", "text": SENTINEL, "limit": 5},
+            ],
+        }
+    )
+    packet = await execute_query(factory, request, _after_operation=redact_after_first)
+    _assert_packet_clean(packet)
+    assert packet.authorization["redaction"]["revision"] > 0
+
+
+async def test_concurrent_readers_settle_projected(payload_env) -> None:
+    import asyncio
+
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+
+    stop = asyncio.Event()
+    errors: list[Exception] = []
+
+    async def reader() -> None:
+        while not stop.is_set():
+            await execute_query(factory, parse_query_request(_request("ws-red", "needle")))
+
+    async def writer() -> None:
+        await asyncio.sleep(0.05)
+        await RedactionPolicyService(
+            factory, commit_service, workspace_id="ws-red"
+        ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+        for _ in range(4):
+            await asyncio.sleep(0.05)
+
+    readers = [asyncio.create_task(reader()) for _ in range(4)]
+    try:
+        await writer()
+    finally:
+        stop.set()
+        for task in readers:
+            try:
+                await task
+            except Exception as exc:
+                errors.append(exc)
+
+    assert not errors, f"reader exceptions: {errors}"
+    # Post-boundary sweep: once the commit is durable and settled, no
+    # read may disclose the sentinel.
+    for _ in range(4):
+        packet = await execute_query(
+            factory, parse_query_request(_request("ws-red", "needle"))
+        )
+        _assert_packet_clean(packet)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 10 - rebuild failure: a failed re-materialization/reindex
+# never reopens stale unrestricted content; release safety never waits
+# for derived-state rebuilds.
+# ---------------------------------------------------------------------------
+
+
+async def test_failed_rematerialization_never_reopens_stale_content(
+    payload_env, monkeypatch
+) -> None:
+    import app.kernel.publications as publications_module
+
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    await RedactionPolicyService(
+        factory, commit_service, workspace_id="ws-red"
+    ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+
+    # New content revision exists to publish, but validation of the
+    # staged set fails (injected fault): the publication head must not
+    # move, and serving must stay projected under the old generation.
+    await _commit_view(
+        commit_service,
+        "ws-red",
+        _view(
+            "view-red-1b",
+            {"n-sentinel": SENTINEL_TEXT, "n-public": PUBLIC_TEXT},
+            "rev-red-1b",
+        ),
+        advance=False,
+    )
+    generation = await GenerationService(factory).build_and_activate(
+        await resolve_snapshot(factory, "ws-red")
+    )
+
+    async def broken_validate(self, publication_set_id, *args, **kwargs):
+        raise publications_module.PublicationIntegrityError(
+            "injected validation failure"
+        )
+
+    monkeypatch.setattr(
+        publications_module.PublicationService,
+        "validate_publication_set",
+        broken_validate,
+    )
+    with pytest.raises(Exception):
+        await PublicationService(factory).publish(
+            materialized_generation_id=generation.generation_id
+        )
+    monkeypatch.undo()
+
+    packet = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+    _assert_packet_clean(packet)
+    assert _packet_text(packet), "serving must continue on the old generation"
+
+
+# ---------------------------------------------------------------------------
+# Scenario 11 - restart recovery: redaction state is durable; a process
+# restart cannot resurrect an unrestricted serving route.
+# ---------------------------------------------------------------------------
+
+
+async def test_restart_preserves_redaction_state(payload_env) -> None:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    await RedactionPolicyService(
+        factory, commit_service, workspace_id="ws-red"
+    ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+
+    db_path = factory.kw["bind"].url.database
+    await factory.kw["bind"].dispose()
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_path}", connect_args={"check_same_thread": False}
+    )
+    reborn = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        packet = await execute_query(
+            reborn, parse_query_request(_request("ws-red", "needle"))
+        )
+        _assert_packet_clean(packet)
+        assert _packet_text(packet)
+
+        service = ContinuationService(
+            reborn, cursor_codec=_codec(), pin_lease_seconds=60
+        )
+        fresh = await service.fresh_query(_request("ws-red", "needle"), page_size=1)
+        assert fresh.status in ("partial", "complete")
+        if fresh.packet is not None:
+            _assert_packet_clean(fresh.packet)
+    finally:
+        await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Scenario 13 - secondary leakage: no service-contributed surface (exact
+# masked text, omission details, authorization view) echoes the sentinel.
+# ---------------------------------------------------------------------------
+
+
+async def test_no_secondary_leakage_in_details_and_placeholders(payload_env) -> None:
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    await RedactionPolicyService(
+        factory, commit_service, workspace_id="ws-red"
+    ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+
+    sentinel_query = await execute_query(
+        factory, parse_query_request(_request("ws-red", SENTINEL))
+    )
+    assert not sentinel_query.evidence
+    for omission in sentinel_query.omitted:
+        _assert_no_sentinel(omission.detail or "", omission.reason)
+
+    broad = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+    _assert_packet_clean(broad)
+    assert "secret token [redacted] inside otherwise ordinary needle text" in _packet_text(
+        broad
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scenario 14 - policy relaxation: a newer revision that lifts the rule
+# re-evaluates fresh; no stale pre-redaction packet is resurrected.
+# ---------------------------------------------------------------------------
+
+
+async def test_relaxation_reevaluates_fresh_without_stale_resurrection(
+    payload_env,
+) -> None:
+    factory, _store, commit_service = payload_env
+    await _publish_sentinel_workspace(factory, commit_service, "ws-red")
+    policy = RedactionPolicyService(factory, commit_service, workspace_id="ws-red")
+
+    pre = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+    await policy.define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+    redacted = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+    await policy.define_profile("default", [])
+    relaxed = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+
+    assert SENTINEL in _packet_text(pre)
+    _assert_packet_clean(redacted)
+    assert SENTINEL in _packet_text(relaxed), "a relaxed policy lawfully releases"
+    assert len({pre.identity_id, redacted.identity_id, relaxed.identity_id}) == 3
+
+
+# ---------------------------------------------------------------------------
+# Scenario 6 (REST convert routes) - the publication-serving corpus is
+# disjoint from conversion job outputs: no serving path can resolve to
+# job-store bytes, so a publication redaction policy has no binding
+# point there (operator pre-publication surface).
+# ---------------------------------------------------------------------------
+
+
+async def test_serving_corpus_is_disjoint_from_job_outputs(payload_env) -> None:
+    factory, _store, commit_service = payload_env
+    publication_set_id = await _publish_sentinel_workspace(
+        factory, commit_service, "ws-red"
+    )
+    await RedactionPolicyService(
+        factory, commit_service, workspace_id="ws-red"
+    ).define_profile("default", [{"kind": "literal", "value": SENTINEL}])
+
+    packet = await execute_query(
+        factory, parse_query_request(_request("ws-red", "needle"))
+    )
+    _assert_packet_clean(packet)
+    # Every served locator is bound to the published generation, never
+    # to a job-store path: the serving surface resolves exclusively
+    # through the pinned publication set.
+    for unit in packet.evidence:
+        assert unit.locator.publication_set_id == publication_set_id
+        assert unit.locator.record_id.startswith("view-")
