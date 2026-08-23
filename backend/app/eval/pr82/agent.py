@@ -87,6 +87,9 @@ _AUTHORIZATION_VIEW_KEYS = frozenset(
         "epoch_fingerprint",
         "deny_revision",
         "policy_digest",
+        # PR89: the effective redaction identity (profile name, revision,
+        # rules digest) rides the trusted view — digest-only like the rest.
+        "redaction",
     }
 )
 
