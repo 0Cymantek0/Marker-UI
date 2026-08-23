@@ -1,7 +1,7 @@
 """Invariant-57 local economics envelope benchmark.
 
 Drives the representative local workload through the real kernel
-authorities on SQLite — the deterministic PR81A corpus (16 PDFs / 27
+authorities on SQLite — the deterministic PR81A corpus (15 PDFs / 27
 pages) committed via ``seed_workspace``, a real document revision with
 republication, the publication-pin/GC retention lifecycle, a
 review-required extraction scenario, and repeated cold-start samples —
@@ -371,7 +371,7 @@ def build_envelope(run: dict, review: dict, cold_samples: list[dict],
         model_participation={"mode": "none"},
         workload={
             "identity": (
-                "PR81A deterministic corpus (16 PDFs/27 pages) via seed_workspace: "
+                "PR81A deterministic corpus (15 PDFs/27 pages) via seed_workspace: "
                 "ingest+publish -> doc-rev-01 v3->v4 revision+republish -> "
                 "publication-pin GC lifecycle -> PR80A-style review scenario; "
                 "cold-start samples on fresh databases"
@@ -390,7 +390,7 @@ def build_envelope(run: dict, review: dict, cold_samples: list[dict],
             "dbstat_available": storage_final["dbstat_available"],
         },
         windows=[
-            {"id": "ingest_publish", "label": "seed 16 docs + build generation + publish lexical"},
+            {"id": "ingest_publish", "label": "seed the corpus docs + build generation + publish lexical"},
             {"id": "revision", "label": "revise doc-rev-01 v3->v4 + rebuild + republish"},
             {"id": "gc_lifecycle", "label": "publication-pin GC hold then release"},
             {"id": "review", "label": "conflicting invoice extraction scenario"},
@@ -537,7 +537,7 @@ def build_envelope(run: dict, review: dict, cold_samples: list[dict],
     build_values = [sample["build_publish_s"] * 1000.0 for sample in cold_samples]
     envelope.set("cold_start", measured(
         round(statistics.median(cold_values), 2), "milliseconds", "cold_start",
-        "fresh SQLite database per sample: migrate -> seed 16 docs -> build "
+        "fresh SQLite database per sample: migrate -> seed the corpus -> build "
         "generation -> publish lexical -> first lexical_search query answered",
         samples={
             "n": sample_count,
@@ -577,7 +577,7 @@ def build_envelope(run: dict, review: dict, cold_samples: list[dict],
     )
     envelope.counters["ingest_publish_wall_ms"] = measured(
         round(run["ingest_publish_s"] * 1000, 1), "milliseconds", "ingest_publish",
-        "perf_counter around seed_workspace (16 docs + generation + publication)",
+        "perf_counter around seed_workspace (corpus docs + generation + publication)",
         samples={"n": 1},
     )
 

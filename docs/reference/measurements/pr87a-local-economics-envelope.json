@@ -2,14 +2,14 @@
   "schema": "marker.economics_envelope.v1",
   "profile": "local-sqlite-dev",
   "dimension_set": "invariant_57",
-  "git_sha": "d407682bdea1f58d5a1f7a345ec1f3e176601daa",
-  "generated_at": "2026-08-23T11:39:40+00:00",
+  "git_sha": "3306ba92a0145982c86b80b376f239b2524560b0",
+  "generated_at": "2026-08-23T12:14:44+00:00",
   "run_mode": "offline",
   "model_participation": {
     "mode": "none"
   },
   "workload": {
-    "identity": "PR81A deterministic corpus (16 PDFs/27 pages) via seed_workspace: ingest+publish -> doc-rev-01 v3->v4 revision+republish -> publication-pin GC lifecycle -> PR80A-style review scenario; cold-start samples on fresh databases",
+    "identity": "PR81A deterministic corpus (15 PDFs/27 pages) via seed_workspace: ingest+publish -> doc-rev-01 v3->v4 revision+republish -> publication-pin GC lifecycle -> PR80A-style review scenario; cold-start samples on fresh databases",
     "fingerprint": "pr81a:50dd2d38ae43aa815348d0cccf1bab1c9b61ca7773e5a6474354b98e0f5e3477",
     "documents": 15,
     "queries_available": 35
@@ -26,7 +26,7 @@
   "windows": [
     {
       "id": "ingest_publish",
-      "label": "seed 16 docs + build generation + publish lexical"
+      "label": "seed the corpus docs + build generation + publish lexical"
     },
     {
       "id": "revision",
@@ -128,22 +128,22 @@
       "status": "measured",
       "unit": "milliseconds",
       "window": "cold_start",
-      "value": 1494.0,
-      "source": "fresh SQLite database per sample: migrate -> seed 16 docs -> build generation -> publish lexical -> first lexical_search query answered",
+      "value": 2229.8,
+      "source": "fresh SQLite database per sample: migrate -> seed the corpus -> build generation -> publish lexical -> first lexical_search query answered",
       "samples": {
         "n": 3,
-        "min": 1379.0,
-        "p50": 1494.0,
-        "max": 1663.5,
+        "min": 2136.3,
+        "p50": 2229.8,
+        "max": 2295.8,
         "per_sample_total_ms": [
-          1663.5,
-          1379.0,
-          1494.0
+          2136.3,
+          2295.8,
+          2229.8
         ],
         "per_sample_build_publish_ms": [
-          66.6,
-          61.7,
-          58.8
+          91.0,
+          88.8,
+          89.5
         ]
       }
     },
@@ -164,7 +164,7 @@
         "revision_rows_publication": 1,
         "payload_dedup_hits_during_revision": 0,
         "generation_rebuilds": 1,
-        "revision_wall_ms": 281.1
+        "revision_wall_ms": 385.1
       }
     },
     "review_burden": {
@@ -244,7 +244,7 @@
       "status": "measured",
       "unit": "milliseconds",
       "window": "revision",
-      "value": 281.1,
+      "value": 385.1,
       "source": "perf_counter around revise_document (commit + rebuild + republish)",
       "samples": {
         "n": 1
@@ -254,8 +254,8 @@
       "status": "measured",
       "unit": "milliseconds",
       "window": "ingest_publish",
-      "value": 738.9,
-      "source": "perf_counter around seed_workspace (16 docs + generation + publication)",
+      "value": 987.2,
+      "source": "perf_counter around seed_workspace (corpus docs + generation + publication)",
       "samples": {
         "n": 1
       }
@@ -267,5 +267,5 @@
     "physical FTS byte attribution is unavailable on SQLite builds without DBSTAT",
     "visual-derived storage is not exercised here; the OFF/ON visual economics artifact (pr87c-visual-economics.json) measures the same corpus with visual enabled"
   ],
-  "wall_time_s": 9.015
+  "wall_time_s": 11.926
 }

@@ -58,9 +58,11 @@ async def pg_stat_io_snapshot(conn: AsyncConnection) -> dict[str, Any]:
 async def pg_stat_database_snapshot(
     conn: AsyncConnection, database_name: str
 ) -> dict[str, Any]:
+    """PG16 column names (``tup_inserted``, not ``tuples_inserted``;
+    ``blks_written`` moved to ``pg_stat_io`` in PG14+)."""
     row = (await conn.execute(text(
-        "SELECT xact_commit, xact_rollback, blks_read, blks_written, "
-        "tuples_inserted, tuples_updated, tuples_deleted "
+        "SELECT xact_commit, xact_rollback, blks_read, "
+        "tup_inserted, tup_updated, tup_deleted "
         "FROM pg_stat_database WHERE datname = :name"
     ), {"name": database_name})).mappings().one()
     return dict(row)

@@ -1,0 +1,323 @@
+{
+  "schema": "marker.economics_envelope.v1",
+  "profile": "industrial-postgres16-s3",
+  "dimension_set": "invariant_57",
+  "git_sha": "3306ba92a0145982c86b80b376f239b2524560b0",
+  "generated_at": "2026-08-23T12:13:42+00:00",
+  "run_mode": "offline",
+  "model_participation": {
+    "mode": "none"
+  },
+  "workload": {
+    "identity": "PR81A deterministic corpus (16 PDFs) committed via seed_workspace with real S3 source artifacts -> doc-rev-01 v3->v4 revision + rebuild + republish; cold-start samples on fresh PostgreSQL databases + fresh S3 namespaces; real pg_stat_* probes + S3 object listings",
+    "fingerprint": "pr81a:50dd2d38ae43aa815348d0cccf1bab1c9b61ca7773e5a6474354b98e0f5e3477",
+    "documents": 15,
+    "queries_available": 35,
+    "postgres": "postgres:16-alpine",
+    "object_store": "minio/minio (S3-compatible)"
+  },
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "cpu_count": 12,
+    "postgres_banner": "PostgreSQL 16.14 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+    "s3_endpoint": "http://127.0.0.1:55446",
+    "provisioned": "docker",
+    "samples": 3
+  },
+  "windows": [
+    {
+      "id": "baseline",
+      "label": "post-migration empty database"
+    },
+    {
+      "id": "ingest_publish",
+      "label": "seed 16 docs + build generation + publish lexical"
+    },
+    {
+      "id": "revision",
+      "label": "revise doc-rev-01 v3->v4 + rebuild + republish"
+    },
+    {
+      "id": "cold_start",
+      "label": "fresh db: migrate->seed->build->publish->first query"
+    },
+    {
+      "id": "full",
+      "label": "entire main workload (baseline -> post-revision)"
+    }
+  ],
+  "dimensions": {
+    "database_rows": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 961,
+      "source": "exact per-table COUNT(*) over public kernel_% tables discovered from pg_class/pg_namespace (baseline empty -> post-revision), summed and categorized by table-name prefix",
+      "breakdown": {
+        "derived_generation": 125,
+        "lexical": 754,
+        "logical_authority": 79,
+        "publication": 3
+      }
+    },
+    "payload_objects": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 16,
+      "source": "S3PayloadStore.list_objects + S3SourceStore.list_blob_keys over uniquely-named per-run buckets (content-addressed blob keys)",
+      "breakdown": {
+        "payload_objects": 0,
+        "source_objects": 16
+      }
+    },
+    "wal_write_amplification": {
+      "status": "derived",
+      "unit": "ratio",
+      "window": "full",
+      "value": 23.796,
+      "source": "pg_stat_wal wal_bytes delta over the full window divided by committed source artifact bytes in the same window",
+      "derivation": {
+        "numerator": "wal_bytes_delta_full",
+        "denominator": "logical_payload_bytes"
+      }
+    },
+    "retained_generations": {
+      "status": "measured",
+      "unit": "count",
+      "window": "revision",
+      "value": 2,
+      "source": "kernel_generations grouped by state after the v4 revision + republication",
+      "breakdown": {
+        "state_active": 1,
+        "state_superseded": 1,
+        "generations_before_revision": 1
+      }
+    },
+    "fts_storage": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 745472,
+      "source": "SUM of pg_total_relation_size over kernel_lexical_* and kernel_fts_* tables present in the database"
+    },
+    "vector_storage": {
+      "status": "not_applicable",
+      "unit": "bytes",
+      "window": "full",
+      "reason": "publication schema reserves a nullable vector_generation_id slot only; no vector index is materialized on this profile"
+    },
+    "visual_storage": {
+      "status": "not_applicable",
+      "unit": "bytes",
+      "window": "full",
+      "reason": "workload runs with visual capability absent; visual storage is measured by the visual economics artifact (pr87c)"
+    },
+    "copy_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 88486,
+      "source": "payload staging writes (kernel_payload_objects registry sum of payload_length) + source staging writes (S3SourceStore.bytes_written) + source read-back verification (S3SourceStore.bytes_read_back); payload read-backs are not instrumented on the S3 payload profile",
+      "breakdown": {
+        "payload_staging_writes": 0,
+        "source_staging_writes": 44243,
+        "source_read_backs": 44243
+      }
+    },
+    "cold_start": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "cold_start",
+      "value": 1294.0,
+      "source": "fresh PostgreSQL database per sample + fresh S3 namespaces: migrate -> seed 16 docs -> build generation -> publish lexical -> first lexical_search query answered",
+      "samples": {
+        "n": 3,
+        "min": 1194.9,
+        "p50": 1294.0,
+        "max": 1346.2,
+        "per_sample_total_ms": [
+          1194.9,
+          1346.2,
+          1294.0
+        ],
+        "per_sample_build_publish_ms": [
+          100.2,
+          114.8,
+          102.1
+        ]
+      }
+    },
+    "review_burden": {
+      "status": "not_applicable",
+      "unit": "count",
+      "window": "full",
+      "reason": "this industrial run measures storage/WAL economics only; review burden is measured on the local-profile artifact (pr87a-local-economics-envelope.json)"
+    },
+    "reprocessing": {
+      "status": "measured",
+      "unit": "count",
+      "window": "revision",
+      "value": 1,
+      "source": "doc-rev-01 v3->v4 content revision through the real commit/generation/publication path",
+      "breakdown": {
+        "revision_events": 1,
+        "documents_changed": 1,
+        "documents_unchanged_reused": 14,
+        "rows_added_by_revision": 444,
+        "revision_rows_derived_generation": 63,
+        "revision_rows_lexical": 377,
+        "revision_rows_logical_authority": 3,
+        "revision_rows_publication": 1,
+        "wal_bytes_delta_revision": 491664,
+        "payload_bytes_staged_v4": 2510,
+        "revision_wal_amplification": 195.8821,
+        "generation_rebuilds": 1,
+        "revision_wall_ms": 492.9
+      }
+    }
+  },
+  "counters": {
+    "payload_object_count": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 0,
+      "source": "S3PayloadStore.list_objects over the run's payload bucket"
+    },
+    "source_object_count": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 16,
+      "source": "S3SourceStore.list_blob_keys over the run's source bucket"
+    },
+    "logical_payload_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 44243,
+      "source": "SUM of committed ContentRevisionRecord byte_length from kernel_records (cross-checked against corpus manifest byte_length)"
+    },
+    "wal_bytes_delta_full": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 1052808,
+      "source": "pg_current_wal_lsn()/pg_wal_lsn_diff between baseline and end snapshots = wal_bytes_generated (backend-independent, exact)"
+    },
+    "wal_bytes_delta_revision": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "revision",
+      "value": 491664,
+      "source": "pg_stat_wal.wal_bytes delta restricted to the revision window (post-ingest snapshot -> post-revision snapshot)"
+    },
+    "logical_revision_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "revision",
+      "value": 2510,
+      "source": "doc-rev-01 v4 PDF byte_length (the source bytes changed by revision)"
+    },
+    "revision_wall_ms": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "revision",
+      "value": 492.9,
+      "source": "perf_counter around revise_document (commit + rebuild + republish)",
+      "samples": {
+        "n": 1
+      }
+    },
+    "ingest_publish_wall_ms": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "ingest_publish",
+      "value": 1122.0,
+      "source": "perf_counter around seed_workspace (16 docs + generation + publication)",
+      "samples": {
+        "n": 1
+      }
+    },
+    "pg_database_bytes_final": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 10361879,
+      "source": "pg_database_size(database_name) at end of window"
+    },
+    "relation_total_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 1622016,
+      "source": "SUM pg_total_relation_size over all public kernel_% tables",
+      "breakdown": {
+        "kernel_answer_support_assessments": 40960,
+        "kernel_answer_trace_disclosures": 16384,
+        "kernel_answer_traces": 40960,
+        "kernel_commit_heads": 24576,
+        "kernel_commit_manifests": 32768,
+        "kernel_connector_inbox": 49152,
+        "kernel_connector_streams": 32768,
+        "kernel_context_disclosures": 32768,
+        "kernel_events": 16384,
+        "kernel_generation_edges": 16384,
+        "kernel_generation_heads": 24576,
+        "kernel_generation_records": 172032,
+        "kernel_generations": 65536,
+        "kernel_lexical_generations": 81920,
+        "kernel_lexical_rows": 368640,
+        "kernel_liveness": 8192,
+        "kernel_outbox": 40960,
+        "kernel_payload_objects": 8192,
+        "kernel_payload_retirements": 24576,
+        "kernel_progress": 16384,
+        "kernel_publication_heads": 24576,
+        "kernel_publication_pins": 16384,
+        "kernel_publication_sets": 65536,
+        "kernel_publications": 32768,
+        "kernel_query_cursors": 49152,
+        "kernel_reader_pins": 24576,
+        "kernel_record_edges": 40960,
+        "kernel_records": 172032,
+        "kernel_retention_roots": 32768,
+        "kernel_scheduling_entries": 16384,
+        "kernel_scheduling_groups": 8192,
+        "kernel_view_heads": 8192,
+        "kernel_work_leases": 16384
+      }
+    },
+    "pg_stat_database_tup_inserted_delta": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 0,
+      "source": "pg_stat_database.tup_inserted delta (baseline -> end)"
+    },
+    "provisioned_mode": {
+      "status": "measured",
+      "unit": "identifier",
+      "window": "full",
+      "value": "docker",
+      "source": "service provisioning mode (docker containers or external endpoints)"
+    },
+    "s3_endpoint_identifier": {
+      "status": "measured",
+      "unit": "identifier",
+      "window": "full",
+      "value": "http://127.0.0.1:55446",
+      "source": "S3-compatible endpoint URL (no credentials recorded)"
+    }
+  },
+  "non_claims": [
+    "no human review time is claimed; review burden is measured on the local-profile artifact (pr87a-local-economics-envelope.json)",
+    "WAL byte volume is measured with pg_current_wal_lsn() between window boundaries (exact and backend-independent; the LSN is cluster-wide and the cluster hosts only the benchmark database during the run); pg_stat_wal.wal_records/wal_fpi cumulative counters are flushed asynchronously by the statistics collector and did not observe the kernel sessions' writes at snapshot time under the async driver, so only the byte volume is reported",
+    "probe ordering: at each boundary the WAL LSN snapshot is taken FIRST, then row-count and relation-size probes; the final window's WAL LSN snapshot is taken LAST so any WAL the probes themselves emit stays inside the 'full' window",
+    "payload read-back bytes are not separately instrumented on the S3PayloadStore profile (no bytes_read_back counter); copy_bytes counts payload staging writes (registry sum) + source staging writes + source read-back verification only"
+  ],
+  "wall_time_s": 18.853
+}
