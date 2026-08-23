@@ -22,6 +22,7 @@ on success, budget termination, validation failure, and cancellation.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Callable, Mapping
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -43,6 +44,7 @@ from app.context_runtime.packets import (
     OmittedEvidence,
     assemble_packet,
 )
+from app.context_runtime.redaction import EffectiveRedaction, NO_REDACTION, terms_survive
 from app.kernel.publications import (
     LexicalHit,
     PublicationReader,
@@ -94,7 +96,10 @@ async def execute_query(
         )
 
     auth = await resolve_effective_authorization(
-        session_factory, request.workspace_id, assurance=request.assurance
+        session_factory,
+        request.workspace_id,
+        assurance=request.assurance,
+        redaction_profile_id=request.context.redaction_profile_id,
     )
     if request.assurance == ASSURANCE_HIGH:
         # High assurance reads only the security-domain partition
@@ -198,11 +203,15 @@ async def _execute_pinned(
 
     for index, op in enumerate(request.operations):
         name = _op_name(op)
-        # Live authorization: a deny/epoch/policy change committed after
-        # the query started linearizes before this operation.
+        # Live authorization: a deny/epoch/policy/redaction change
+        # committed after the query started linearizes before this
+        # operation.
         if index > 0:
             auth = await resolve_effective_authorization(
-                session_factory, request.workspace_id, assurance=request.assurance
+                session_factory,
+                request.workspace_id,
+                assurance=request.assurance,
+                redaction_profile_id=request.context.redaction_profile_id,
             )
         if name == "lexical_search":
             remaining = budget.max_candidates - candidates_considered
@@ -328,7 +337,7 @@ async def _execute_pinned(
                 )
             else:
                 unit = _record_candidate(
-                    index, attribution, record, op.node_id
+                    index, attribution, record, op.node_id, auth.redaction
                 )
                 if unit is None:
                     omissions.append(
@@ -392,14 +401,31 @@ async def _authorized_lexical_hits(
             source_ref = await _resolve_source_ref_for_id(
                 reader, hit.record_id, lineage_cache
             )
-            if auth.allows(
+            if not auth.allows(
                 hit.record_id,
                 source_ref=source_ref,
                 domain_key=auth.domain_of(source_ref),
             ):
-                authorized.append(hit)
-                if len(authorized) >= target:
-                    break
+                continue
+            # Release-time redaction (PR89): the pinned generation may
+            # physically retain newly redacted bytes, so every releasable
+            # hit is projected under the *current* effective rules. A hit
+            # that matched only redacted material is dropped — a returned
+            # placeholder row would itself confirm the redacted content —
+            # while a hit whose query terms survive keeps flowing with the
+            # affected spans masked. Locator hashes stay over the raw
+            # indexed bytes: they are provenance identity against the
+            # generation, not a release of its content.
+            redacted = auth.redaction.redact_text(hit.text)
+            if redacted != hit.text and not terms_survive(text, redacted):
+                continue
+            authorized.append(
+                dataclasses.replace(hit, text=redacted)
+                if redacted != hit.text
+                else hit
+            )
+            if len(authorized) >= target:
+                break
         if len(hits) < fetch:
             return authorized, False
         offset += len(hits)
@@ -472,6 +498,7 @@ def _record_candidate(
     attribution: Mapping[str, Any],
     record: Any,
     node_id: str | None,
+    redaction: EffectiveRedaction = NO_REDACTION,
 ) -> CandidateUnit | None:
     """Build an exact-selection candidate from a pinned record.
 
@@ -479,7 +506,11 @@ def _record_candidate(
     record's revision identity); without it, the unit is the whole
     record (no text body claimed — its content hash is the record's
     payload byte hash). ``None`` means the requested node does not
-    exist in the record.
+    exist in the record. Since PR89 the node's releasable text is
+    projected under the current effective redaction rules — the
+    citation still resolves, to masked content — while ``text_hash``
+    stays over the raw node bytes so locator identity remains bound to
+    the immutable generation, not to policy state.
     """
     payload = record.payload if isinstance(record.payload, Mapping) else {}
     view_id = payload.get("view_id") or "document"
@@ -490,6 +521,7 @@ def _record_candidate(
         text = texts[node_id]
         if not isinstance(text, str):
             return None
+        redacted = redaction.redact_text(text)
         return CandidateUnit(
             operation_index=index,
             op="record_get",
@@ -506,7 +538,7 @@ def _record_candidate(
                 text_hash=payload_byte_hash(text.encode("utf-8")),
                 row_index=None,
             ),
-            text=text,
+            text=redacted,
             rank=None,
         )
     return CandidateUnit(
@@ -533,7 +565,13 @@ def build_record_candidate(
     attribution: Mapping[str, Any],
     record: Any,
     node_id: str | None,
+    redaction: EffectiveRedaction = NO_REDACTION,
 ) -> CandidateUnit | None:
-    """Build one exact-read candidate for continuation paging."""
+    """Build one exact-read candidate for continuation paging.
 
-    return _record_candidate(index, attribution, record, node_id)
+    ``redaction`` is the current effective state for the page: the same
+    projection the executor applies, so a chain's later pages can never
+    deliver material a fresh query would withhold.
+    """
+
+    return _record_candidate(index, attribution, record, node_id, redaction)

@@ -205,6 +205,7 @@ class ContinuationService:
                 self.session_factory,
                 parsed.workspace_id,
                 assurance=parsed.assurance,
+                redaction_profile_id=parsed.context.redaction_profile_id,
             )
             profile = (
                 auth.partition_profile()
@@ -253,6 +254,7 @@ class ContinuationService:
                 self.session_factory,
                 parsed.workspace_id,
                 assurance=parsed.assurance,
+                redaction_profile_id=parsed.context.redaction_profile_id,
             )
             if latest.identity_view() != auth.identity_view():
                 return _outcome(
@@ -439,6 +441,7 @@ class ContinuationService:
                 self.session_factory,
                 workspace_id,
                 assurance=query.assurance,
+                redaction_profile_id=query.context.redaction_profile_id,
             )
         except QueryAuthorizationError:
             await self._finish_unclaimed(row, CURSOR_STATUS_REVOKED)
@@ -488,6 +491,7 @@ class ContinuationService:
                 self.session_factory,
                 workspace_id,
                 assurance=query.assurance,
+                redaction_profile_id=query.context.redaction_profile_id,
             )
             if latest.identity_view() != auth.identity_view():
                 await self._finish_claimed(row, CURSOR_STATUS_REVOKED)

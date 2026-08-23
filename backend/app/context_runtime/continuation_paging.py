@@ -21,6 +21,7 @@ from app.context_runtime.packets import (
     assemble_packet,
     candidate_unit_cost,
 )
+from app.context_runtime.redaction import terms_survive
 from app.context_runtime.continuation_state import after_from_storage, after_storage, locator_key
 from app.kernel.lexical import lexical_query_hash
 from app.kernel.publications import LexicalSearchAfter, PublicationReader
@@ -141,7 +142,7 @@ class ContinuationPager:
                 page_considered += 1
                 totals["candidates_considered"] += 1
                 candidate = build_record_candidate(
-                    index, attribution, record, operation.node_id
+                    index, attribution, record, operation.node_id, auth.redaction
                 )
                 if candidate is None:
                     omissions.append(
@@ -262,6 +263,17 @@ class ContinuationPager:
                     domain_key=auth.domain_of(source_ref),
                 ):
                     continue
+                # Release-time redaction (PR89), identical to the
+                # executor's gate: project the current effective rules
+                # over the hit, and drop a hit that matched only
+                # redacted material so its existence is not confirmed by
+                # a placeholder row. The keyset already advanced past
+                # this row, so a drop here cannot loop or re-emit.
+                redacted = auth.redaction.redact_text(hit.text)
+                if redacted != hit.text and not terms_survive(
+                    operation.text, redacted
+                ):
+                    continue
                 if totals["candidates_considered"] >= request.budget.max_candidates:
                     omissions.append(
                         OmittedEvidence(
@@ -302,7 +314,7 @@ class ContinuationPager:
                         text_hash=hit.text_hash,
                         row_index=hit.row_index,
                     ),
-                    text=hit.text,
+                    text=redacted,
                     rank=hit.rank,
                 )
                 added, selected_output_chars, selected_units = self._accept_candidate(

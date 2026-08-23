@@ -24,6 +24,7 @@ from app.context_runtime import (
     parse_query_request,
     to_json,
 )
+from app.context_runtime.errors import QueryAuthorizationError
 from app.kernel.commit import KernelCommitBatch
 from app.kernel.generations import GenerationService
 from app.kernel.publications import PublicationService, fts_table_name
@@ -611,6 +612,9 @@ async def test_packet_carries_no_hidden_topology(payload_env: tuple) -> None:
         "epoch_fingerprint",
         "deny_revision",
         "policy_digest",
+        # PR89: the effective redaction identity rides the trusted view
+        # (name/revision/digest only — no rules, no topology).
+        "redaction",
     }
 
 
@@ -621,6 +625,10 @@ async def test_caller_identity_hints_grant_nothing(payload_env: tuple) -> None:
     policy = QueryPolicyService(factory, service, workspace_id="ws-a")
     await policy.deny_domain("dom-beta")
 
+    # PR89 sharpens the redaction seam: an uncommitted profile name no
+    # longer rides along inert — the request itself fails closed before
+    # any content is read. Hints that DO resolve (security/verifier)
+    # still grant nothing against the live deny.
     forged = parse_query_request(
         _request(
             [_get(beta, "n1")],
@@ -631,6 +639,18 @@ async def test_caller_identity_hints_grant_nothing(payload_env: tuple) -> None:
             },
         )
     )
-    packet = await execute_query(factory, forged)
+    with pytest.raises(QueryAuthorizationError):
+        await execute_query(factory, forged)
+
+    hinted = parse_query_request(
+        _request(
+            [_get(beta, "n1")],
+            context={
+                "security_context_id": "admin",
+                "verifier_policy_id": "override",
+            },
+        )
+    )
+    packet = await execute_query(factory, hinted)
     assert packet.evidence == ()
     assert packet.omitted[0].reason == "not_found"

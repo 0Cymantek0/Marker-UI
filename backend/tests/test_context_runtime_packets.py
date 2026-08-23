@@ -265,6 +265,13 @@ async def test_identity_changes_with_every_context_dimension(
 ) -> None:
     factory, store, service = payload_env
     await _publish(factory, service, "ws-a", {"n1": "alpha needle"})
+    # PR89: redaction profile names are server-resolved; the named
+    # profile must be committed before it can shape a serving context.
+    from app.services.redaction_policy import RedactionPolicyService
+
+    await RedactionPolicyService(factory, service, workspace_id="ws-a").define_profile(
+        "strict", [{"kind": "literal", "value": "not-present-in-corpus"}]
+    )
     ops = [{"op": "lexical_search", "text": "needle"}]
     base = await _query(factory, ops)
 
