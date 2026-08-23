@@ -1,0 +1,159 @@
+{
+  "schema": "marker.economics_envelope_index.v1",
+  "generated_at": "2026-08-23T12:14:44+00:00",
+  "git_sha": "3306ba92a0145982c86b80b376f239b2524560b0",
+  "artifacts": {
+    "local": {
+      "path": "reference/measurements/pr87a-local-economics-envelope.json",
+      "sha256": "23079cb0d004f3e4490e03f86f350a17e154ca0735ad943131bf2b81c4703594",
+      "dimension_set": "invariant_57",
+      "run_mode": "offline",
+      "git_sha": "3306ba92a0145982c86b80b376f239b2524560b0",
+      "validation_errors": [],
+      "statuses": {
+        "database_rows": "measured",
+        "payload_objects": "measured",
+        "wal_write_amplification": "not_applicable",
+        "retained_generations": "measured",
+        "fts_storage": "unavailable",
+        "vector_storage": "not_applicable",
+        "visual_storage": "not_applicable",
+        "copy_bytes": "measured",
+        "cold_start": "measured",
+        "reprocessing": "measured",
+        "review_burden": "measured"
+      }
+    },
+    "industrial": {
+      "path": "reference/measurements/pr87b-industrial-economics-envelope.json",
+      "sha256": "dc97f193d5f76a6c3fdf917c52f57ca2d50732bef2a6a661cd60ea02fce51e2d",
+      "dimension_set": "invariant_57",
+      "run_mode": "offline",
+      "git_sha": "3306ba92a0145982c86b80b376f239b2524560b0",
+      "validation_errors": [],
+      "statuses": {
+        "database_rows": "measured",
+        "payload_objects": "measured",
+        "wal_write_amplification": "derived",
+        "retained_generations": "measured",
+        "fts_storage": "measured",
+        "vector_storage": "not_applicable",
+        "visual_storage": "not_applicable",
+        "copy_bytes": "measured",
+        "cold_start": "measured",
+        "review_burden": "not_applicable",
+        "reprocessing": "measured"
+      }
+    },
+    "visual": {
+      "path": "reference/measurements/pr87c-visual-economics.json",
+      "sha256": "8d9b50208f608f3d5a42590eacca4f0a4d5c4160d92a3997e56716caea25c7b8",
+      "dimension_set": "invariant_58",
+      "run_mode": "offline-replay",
+      "git_sha": "d3aefef2882021da9f402155de68a64147911732",
+      "validation_errors": [],
+      "statuses": {
+        "quality_gain": "measured",
+        "storage_delta": "measured",
+        "build_delta": "measured",
+        "query_delta": "measured",
+        "model_service_delta": "measured",
+        "acl_complexity": "measured",
+        "disabled_state_proof": "measured",
+        "decision": "measured"
+      }
+    }
+  },
+  "coverage": {
+    "database_rows": {
+      "local": "measured",
+      "industrial": "measured"
+    },
+    "payload_objects": {
+      "local": "measured",
+      "industrial": "measured"
+    },
+    "wal_write_amplification": {
+      "local": "not_applicable",
+      "industrial": "derived"
+    },
+    "retained_generations": {
+      "local": "measured",
+      "industrial": "measured"
+    },
+    "fts_storage": {
+      "local": "unavailable",
+      "industrial": "measured"
+    },
+    "vector_storage": {
+      "local": "not_applicable",
+      "industrial": "not_applicable"
+    },
+    "visual_storage": {
+      "local": "not_applicable",
+      "industrial": "not_applicable",
+      "visual": "measured"
+    },
+    "copy_bytes": {
+      "local": "measured",
+      "industrial": "measured"
+    },
+    "cold_start": {
+      "local": "measured",
+      "industrial": "measured"
+    },
+    "review_burden": {
+      "local": "measured",
+      "industrial": "not_applicable"
+    },
+    "reprocessing": {
+      "local": "measured",
+      "industrial": "measured"
+    },
+    "quality_gain": {
+      "visual": "measured"
+    },
+    "storage_delta": {
+      "visual": "measured"
+    },
+    "build_delta": {
+      "visual": "measured"
+    },
+    "query_delta": {
+      "visual": "measured"
+    },
+    "model_service_delta": {
+      "visual": "measured"
+    },
+    "acl_complexity": {
+      "visual": "measured"
+    },
+    "disabled_state_proof": {
+      "visual": "measured"
+    },
+    "decision": {
+      "visual": "measured"
+    }
+  },
+  "checks": {
+    "all_artifacts_valid": true,
+    "every_dimension_explicitly_stated": true,
+    "storage_dimensions_measured_where_implemented": true,
+    "vector_storage_absence_or_measurement_declared": true,
+    "wal_amplification_measured_on_industrial": true,
+    "database_rows_measured_on_local": true,
+    "database_rows_measured_on_industrial": true,
+    "cold_start_measured_on_local": true,
+    "cold_start_measured_on_industrial": true,
+    "review_burden_reported_on_local": true,
+    "reprocessing_measured_on_local": true,
+    "reprocessing_measured_on_industrial": true,
+    "fts_storage_attributed_on_industrial": true,
+    "visual_storage_measured_by_visual_experiment": true,
+    "visual_disabled_state_proved": true,
+    "visual_decision_recorded": true,
+    "acl_complexity_measured": true
+  },
+  "problems": [],
+  "pass": true
+}
