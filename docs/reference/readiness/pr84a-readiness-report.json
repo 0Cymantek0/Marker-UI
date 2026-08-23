@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "e506791db3783e7212ce2b72e96cce6ae33effcf"
+    "git_head": "b73f2776049d3f7bd7cbcad145258c4d1cba140e"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 42,
+    "proven": 44,
     "failed": 0,
-    "no_evidence": 20
+    "no_evidence": 18
   },
   "group_counts": {
     "23C.1": {
@@ -47,22 +47,22 @@
       "total": 8
     },
     "23C.7": {
-      "proven": 1,
+      "proven": 3,
       "failed": 0,
-      "no_evidence": 5,
+      "no_evidence": 3,
       "total": 6
     }
   },
   "gap_type_counts": {
     "B": 10,
     "D": 5,
-    "F": 5
+    "F": 3
   },
   "residual_gap_ranking": [
-    "23C.7",
     "23C.1",
     "23C.3",
     "23C.4",
+    "23C.7",
     "23C.2",
     "23C.5",
     "23C.6"
@@ -716,21 +716,26 @@
       "id": 57,
       "group": "23C.7",
       "label": "scale-envelope-economics",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "F",
-      "gap_note": "Measured dimensions: object counts, copy bytes, transfer amplification, failover RTO components. Missing as measured fields: WAL/write amplification, retained-generation accounting, FTS/vector/visual storage, cold starts, review burden, reprocessing cost, database-row envelopes."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "local sqlite + docker postgres16/minio industrial + offline VLM replay"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 58,
       "group": "23C.7",
       "label": "visual-retrieval-selective-economics",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "F",
-      "gap_note": "Selectivity + disable proven and storage/update costs partially measured; ACL complexity is unmeasured and no enabled-vs-disabled operational-load delta exists."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "offline decision-rule + artifact-honesty tests",
+        "offline same-workload OFF/ON + ACL experiment (VLM replay cache)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 59,

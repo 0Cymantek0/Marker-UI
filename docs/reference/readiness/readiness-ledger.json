@@ -171,13 +171,13 @@
       "id": 6,
       "status_claim": "no_evidence",
       "gap_type": "D",
-      "gap_note": "Determinism proven multi-OS \u00d7 multi-Python on x86_64 with committed golden constants; the invariant's literal cross-language and ARM64 clauses have no executable fixture (no second-language implementation, no ARM64 runner).",
+      "gap_note": "Determinism proven multi-OS × multi-Python on x86_64 with committed golden constants; the invariant's literal cross-language and ARM64 clauses have no executable fixture (no second-language implementation, no ARM64 runner).",
       "bindings": [
         {
           "kind": "test",
           "coverage": "partial",
-          "environment": "canonical-conformance (os\u00d7python matrix in CI; local run is one x86_64 cell)",
-          "rationale": "38 committed golden vectors cover ordering/unicode/numbers/geometry/framing/rejection and run on the ubuntu/windows/macos \u00d7 py3.11/3.13 CI matrix (x86_64 only); no non-Python implementation or ARM64 cell exists.",
+          "environment": "canonical-conformance (os×python matrix in CI; local run is one x86_64 cell)",
+          "rationale": "38 committed golden vectors cover ordering/unicode/numbers/geometry/framing/rejection and run on the ubuntu/windows/macos × py3.11/3.13 CI matrix (x86_64 only); no non-Python implementation or ARM64 cell exists.",
           "nodes": [
             "backend/conformance/test_canonical_conformance.py::test_case",
             "backend/conformance/test_canonical_conformance.py::test_corpus_covers_required_categories",
@@ -1120,7 +1120,7 @@
           "kind": "test",
           "coverage": "partial",
           "environment": "postgres+s3 strict (CI industrial lanes)",
-          "rationale": "Outages fail honestly (never false success) \u2014 the reconciliation-required half of the clause; no external-effect destination table exists.",
+          "rationale": "Outages fail honestly (never false success) — the reconciliation-required half of the clause; no external-effect destination table exists.",
           "nodes": [
             "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly",
             "backend/tests/test_kernel_recovery_failover.py::test_s3_outage_during_source_recovery_fails_honestly"
@@ -1526,7 +1526,7 @@
           "kind": "test",
           "coverage": "full",
           "environment": "sqlite-dev",
-          "rationale": "Requests are schema/operator/budget validated and fail closed; query text is always quoted literal (no operator/join/effect grammar); callers cannot name identity-bearing profiles \u2014 the server derives them.",
+          "rationale": "Requests are schema/operator/budget validated and fail closed; query text is always quoted literal (no operator/join/effect grammar); callers cannot name identity-bearing profiles — the server derives them.",
           "nodes": [
             "backend/tests/test_context_runtime_execution.py::test_fts_operators_in_text_are_treated_as_literals",
             "backend/tests/test_context_runtime_execution.py::test_column_filter_and_boolean_words_are_literals",
@@ -1696,9 +1696,7 @@
     },
     {
       "id": 57,
-      "status_claim": "no_evidence",
-      "gap_type": "F",
-      "gap_note": "Measured dimensions: object counts, copy bytes, transfer amplification, failover RTO components. Missing as measured fields: WAL/write amplification, retained-generation accounting, FTS/vector/visual storage, cold starts, review burden, reprocessing cost, database-row envelopes.",
+      "status_claim": "proven",
       "bindings": [
         {
           "kind": "measurement",
@@ -1739,15 +1737,47 @@
           "artifact_expect": {
             "strict_matrix.passed": 413
           }
+        },
+        {
+          "kind": "measurement",
+          "coverage": "full",
+          "environment": "local sqlite + docker postgres16/minio industrial + offline VLM replay",
+          "rationale": "Every dimension named by the invariant is reported with an executed measurement or an explicit unavailable/not_applicable state on each profile: database rows (exact COUNT(*) by category, local+industrial), payload/object counts and bytes (content-addressed store walks + S3 listings), WAL/write amplification (exact pg_current_wal_lsn byte delta over committed source bytes, same-window raw counters retained), retained generations through the pin/GC lifecycle, FTS storage (pg_total_relation_size industrial; truthful unavailable locally without DBSTAT), vector storage (not_applicable: no implementation exists), visual storage (measured by the OFF/ON visual artifact), copy bytes (staging + verification), cold starts (repeated fresh-database samples, both storage profiles), review burden (deterministic conflict scenario, no invented human time), and reprocessing (same-window revision row/WAL/byte deltas with unchanged-document reuse proved at zero rows). The index artifact composes and validates all three envelopes and fails closed on missing/corrupted/hand-weakened evidence; its structural checks are the bound expectations.",
+          "scope_files": [
+            "docs/reference/measurements/pr87-economics-envelope-index.json",
+            "docs/reference/measurements/pr87a-local-economics-envelope.json",
+            "docs/reference/measurements/pr87b-industrial-economics-envelope.json",
+            "docs/reference/measurements/pr87c-visual-economics.json",
+            "backend/scripts/bench_economics_local.py",
+            "backend/scripts/bench_economics_industrial.py",
+            "backend/scripts/bench_economics_visual.py",
+            "backend/scripts/economics_envelope_index.py"
+          ],
+          "artifact": "docs/reference/measurements/pr87-economics-envelope-index.json",
+          "artifact_expect": {
+            "checks.all_artifacts_valid": true,
+            "checks.every_dimension_explicitly_stated": true,
+            "checks.storage_dimensions_measured_where_implemented": true,
+            "checks.vector_storage_absence_or_measurement_declared": true,
+            "checks.wal_amplification_measured_on_industrial": true,
+            "checks.database_rows_measured_on_local": true,
+            "checks.database_rows_measured_on_industrial": true,
+            "checks.cold_start_measured_on_local": true,
+            "checks.cold_start_measured_on_industrial": true,
+            "checks.review_burden_reported_on_local": true,
+            "checks.reprocessing_measured_on_local": true,
+            "checks.reprocessing_measured_on_industrial": true,
+            "checks.fts_storage_attributed_on_industrial": true,
+            "checks.visual_storage_measured_by_visual_experiment": true,
+            "pass": true
+          }
         }
       ],
       "context_docs": []
     },
     {
       "id": 58,
-      "status_claim": "no_evidence",
-      "gap_type": "F",
-      "gap_note": "Selectivity + disable proven and storage/update costs partially measured; ACL complexity is unmeasured and no enabled-vs-disabled operational-load delta exists.",
+      "status_claim": "proven",
       "bindings": [
         {
           "kind": "test",
@@ -1773,6 +1803,42 @@
           "artifact_expect": {
             "decision.outcome": "narrow_rerank_only",
             "economics.avg_embedding_bytes_per_page": 3072
+          }
+        },
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "offline decision-rule + artifact-honesty tests",
+          "rationale": "Selectivity and disable-ability are executable: the OFF arm is proved to carry zero visual state (no embeddings, no index entries, no visual lanes, no rerank calls) against the committed artifact; the predeclared OFF/ON disposition rule (dense and hybrid judged by their own imported PR81A margins, ACL acceptance structural) is pinned by tests that fail on re-tuned margins or incomplete ACL vectors; and the committed disposition is re-derived from the artifact's own measured inputs so a hand-flipped decision fails.",
+          "nodes": [
+            "backend/tests/test_eval_pr81a_economics_decision.py",
+            "backend/tests/test_economics_visual_envelope.py"
+          ],
+          "scope_files": [
+            "backend/tests/test_eval_pr81a_economics_decision.py",
+            "backend/tests/test_economics_visual_envelope.py",
+            "backend/app/eval/pr81a/economics_decision.py",
+            "backend/app/eval/pr81a/decision.py",
+            "backend/scripts/bench_economics_visual.py"
+          ]
+        },
+        {
+          "kind": "measurement",
+          "coverage": "full",
+          "environment": "offline same-workload OFF/ON + ACL experiment (VLM replay cache)",
+          "rationale": "Same-workload visual OFF vs selective visual ON comparison with the complete operational-load delta (rows via the OFF/ON arms, render/embedding bytes, cold build + revision rebuild, warm query latency with sample counts, VLM call counts and usage from the replay cache) and the ACL complexity vector measured through real deny-domain propagation (38.5ms to resolver visibility with zero visual rebuilds), the partitioned high-assurance publication, and the partitioned visual matrix (43,008 duplicated bytes, 146 authorized-universe filter calls). Hybrid rerank gains +0.3033 visual-hard task success over OFF (0.6567 -> 0.960), reproducing the committed PR81A conclusion; the predeclared disposition is narrow_only, dense stays disabled, and zero forbidden/stale delivery was observed across all arms.",
+          "scope_files": [
+            "docs/reference/measurements/pr87c-visual-economics.json",
+            "backend/scripts/bench_economics_visual.py",
+            "backend/app/eval/pr81a/economics_decision.py",
+            "backend/app/eval/pr81a/lanes.py"
+          ],
+          "artifact": "docs/reference/measurements/pr87c-visual-economics.json",
+          "artifact_expect": {
+            "disposition.disposition": "narrow_only",
+            "dimensions.disabled_state_proof.value": true,
+            "dimensions.acl_complexity.breakdown.denied_rebuilds_required": 0,
+            "dimensions.quality_gain.value": 0.3033
           }
         }
       ],

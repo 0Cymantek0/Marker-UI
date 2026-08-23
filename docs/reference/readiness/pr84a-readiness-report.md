@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `e506791db3783e7212ce2b72e96cce6ae33effcf`
-- Invariants proven: **42 / 62**
+- Audited source head: `b73f2776049d3f7bd7cbcad145258c4d1cba140e`
+- Invariants proven: **44 / 62**
 - Failed: **0**
-- No acceptable evidence: **20**
+- No acceptable evidence: **18**
 
 ## Group summary
 
@@ -17,7 +17,7 @@
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
 | 23C.6 | Agent and product behavior | 7 | 0 | 1 |
-| 23C.7 | Economics and claim language | 1 | 0 | 5 |
+| 23C.7 | Economics and claim language | 3 | 0 | 3 |
 
 ## Invariant statuses
 
@@ -79,8 +79,8 @@
 | 54 | 23C.6 | proven | deterministic local sqlite lane (migrated file DB through Alembic head 20260823_0015, real kernel commit spine, real publications/authorization, real EvidencePacket delivery chains) |
 | 55 | 23C.6 | proven | sqlite-dev |
 | 56 | 23C.6 | no-evidence | executed proof covers only part of the invariant wording |
-| 57 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |
-| 58 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |
+| 57 | 23C.7 | proven | local sqlite + docker postgres16/minio industrial + offline VLM replay |
+| 58 | 23C.7 | proven | offline decision-rule + artifact-honesty tests, offline same-workload OFF/ON + ACL experiment (VLM replay cache) |
 | 59 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |
 | 60 | 23C.7 | no-evidence | only non-executable context (docs/prose) bound |
 | 61 | 23C.7 | proven | offline decision-rule tests, offline-artifact (PR81A; VLM cache replay), offline-artifact (PR80B displacement replay) |
@@ -113,18 +113,16 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 
 ### Type F — measurement/economics/operations closure missing
 
-- **Inv 57** (23C.7, scale-envelope-economics): Measured dimensions: object counts, copy bytes, transfer amplification, failover RTO components. Missing as measured fields: WAL/write amplification, retained-generation accounting, FTS/vector/visual storage, cold starts, review burden, reprocessing cost, database-row envelopes. Reason: executed proof covers only part of the invariant wording.
-- **Inv 58** (23C.7, visual-retrieval-selective-economics): Selectivity + disable proven and storage/update costs partially measured; ACL complexity is unmeasured and no enabled-vs-disabled operational-load delta exists. Reason: executed proof covers only part of the invariant wording.
 - **Inv 59** (23C.7, subsystem-owner-rollback-kill): Utility is measured per capability slice; the required per-subsystem support owner, rollback, expiry, and kill-condition matrix does not exist in any artifact. Reason: executed proof covers only part of the invariant wording.
 - **Inv 60** (23C.7, leadership-claim-discipline): No leadership-claim completeness fields or validators exist: workflow, competitors, catastrophic budget, and review burden are not named in any artifact schema or test. Reason: only non-executable context (docs/prose) bound.
 - **Inv 62** (23C.7, final-displacement-test): Concession language and specialist comparisons exist; the final rational-user displacement test (better accepted end-to-end outcome by leaving Marker UI) has never been executed as such. Reason: executed proof covers only part of the invariant wording.
 
 ### Next-slice ranking (groups with most non-proven invariants)
 
-- 23C.7 Economics and claim language: 5 non-proven
 - 23C.1 Truth and persistence: 4 non-proven
 - 23C.3 Verification and routing: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
+- 23C.7 Economics and claim language: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 2 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven
 - 23C.6 Agent and product behavior: 1 non-proven
