@@ -53,6 +53,7 @@ def test_placeholder_may_not_echo_value_or_match_pattern() -> None:
         {"kind": "pattern", "pattern": "("},
         {"kind": "pattern", "pattern": "x", "flags": ["MULTILINE"]},
         {"kind": "literal", "value": "x", "placeholder": ""},
+        {"kind": "literal", "value": "x", "placeholder": "a\\b"},
     ],
 )
 def test_malformed_rules_fail_closed(rule) -> None:

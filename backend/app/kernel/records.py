@@ -872,10 +872,12 @@ def normalize_redaction_rule(rule: Any) -> dict[str, Any]:
     if (
         not isinstance(placeholder, str)
         or not 1 <= len(placeholder) <= _REDACTION_PLACEHOLDER_MAX_CHARS
+        or "\\" in placeholder
     ):
         raise KernelError(
             "redaction placeholder must be 1-"
-            f"{_REDACTION_PLACEHOLDER_MAX_CHARS} characters"
+            f"{_REDACTION_PLACEHOLDER_MAX_CHARS} characters without "
+            "backslashes"
         )
     if kind == REDACTION_RULE_KIND_LITERAL:
         value = rule.get("value")
