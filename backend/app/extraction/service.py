@@ -43,7 +43,24 @@ from app.extraction.results import (
     ExtractionResult,
     result_from_dict,
 )
-from app.extraction.review import ReviewDecision, StaleReviewError, apply_review
+from app.extraction.review import (
+    ReviewDecision,
+    ReviewError,
+    StaleReviewError,
+    apply_review,
+)
+from app.extraction.review_ops import (
+    REVIEW_TRANSITION_ACCEPTED,
+    REVIEW_TRANSITION_BYPASS_REFUSED,
+    REVIEW_TRANSITION_CORRECTED,
+    REVIEW_TRANSITION_REJECTED,
+    REVIEW_TRANSITION_REQUIRED,
+    REVIEW_TRANSITION_STALE,
+    ReviewTransition,
+    iter_review_required_fields,
+    review_transition_record,
+    utc_now_iso,
+)
 from app.extraction.specialist import (
     LANE_CONTEXT_REFUSED,
     SpecialistLane,
@@ -123,11 +140,15 @@ class ExtractionService:
         *,
         workspace_id: str = "local",
         specialist: SpecialistLane | None = None,
+        review_clock: Any = None,
     ) -> None:
         self._session_factory = session_factory
         self._commit_service = commit_service or KernelCommitService(session_factory)
         self.workspace_id = workspace_id
         self._specialist = specialist
+        # Operational review-accounting clock. Injectable for
+        # deterministic dwell measurement; defaults to real UTC.
+        self._review_clock = review_clock or utc_now_iso
 
     # ------------------------------------------------------------------
     # run
@@ -354,6 +375,23 @@ class ExtractionService:
                         f"{item_name}.{field_name}",
                     )
 
+        # Operational accounting: fields entering the review-required
+        # state get a durable transition at the authoritative moment.
+        # Non-authoritative view records; they change no claim state.
+        required_at = self._review_clock()
+        for field_path, _outcome in iter_review_required_fields(result):
+            records.append(
+                review_transition_record(
+                    ReviewTransition(
+                        kind=REVIEW_TRANSITION_REQUIRED,
+                        result_identity=result.identity,
+                        field_path=field_path,
+                        publication_set_id=result.context.publication_set_id,
+                        occurred_at=required_at,
+                    )
+                )
+            )
+
         await self._commit_records(
             records, producer={"operation": "extraction.run", "schema": result.schema_id}
         )
@@ -431,17 +469,40 @@ class ExtractionService:
             "status": status,
         }
 
+    async def _record_review_transition(self, transition: ReviewTransition) -> None:
+        """Commit one operational transition (its own small batch)."""
+        await self._commit_records(
+            [review_transition_record(transition)],
+            producer={
+                "operation": "extraction.review_ops",
+                "transition": transition.kind,
+            },
+        )
+
     async def apply_review(self, decision: ReviewDecision) -> ExtractionResult:
         """Apply one review decision to its bound stored result.
 
         Fails with :class:`StaleReviewError` when the decision's bound
         context no longer matches the stored result, or when the stored
         result's publication is no longer the active one (the reviewed
-        evidence generation may have been superseded).
+        evidence generation may have been superseded). Refused stale and
+        bypass attempts leave a durable operational transition; they
+        never change claim state.
         """
         stored = await self.load_result(decision.result_identity)
         current = await self.current_publication_set_id()
         if current != stored.context.publication_set_id:
+            await self._record_review_transition(
+                ReviewTransition(
+                    kind=REVIEW_TRANSITION_STALE,
+                    result_identity=decision.result_identity,
+                    field_path=decision.field_path,
+                    publication_set_id=stored.context.publication_set_id,
+                    occurred_at=self._review_clock(),
+                    reviewer=decision.reviewer,
+                    detail="the reviewed publication is no longer active",
+                )
+            )
             raise StaleReviewError(
                 "the reviewed publication is no longer active: reviewed "
                 f"{stored.context.publication_set_id!r}, now {current!r}"
@@ -451,13 +512,42 @@ class ExtractionService:
             raise KeyError(f"result has no scalar field {decision.field_path!r}")
         schema = resolve_schema(stored.schema_id, stored.schema_version)
         updated_fields = dict(stored.fields)
-        updated_fields[decision.field_path] = apply_review(
-            stored.fields[decision.field_path],
-            decision,
-            result_identity=stored.identity,
-            schema_identity=stored.schema_identity,
-            publication_set_id=stored.context.publication_set_id,
-        )
+        try:
+            updated_fields[decision.field_path] = apply_review(
+                stored.fields[decision.field_path],
+                decision,
+                result_identity=stored.identity,
+                schema_identity=stored.schema_identity,
+                publication_set_id=stored.context.publication_set_id,
+            )
+        except StaleReviewError:
+            await self._record_review_transition(
+                ReviewTransition(
+                    kind=REVIEW_TRANSITION_STALE,
+                    result_identity=decision.result_identity,
+                    field_path=decision.field_path,
+                    publication_set_id=stored.context.publication_set_id,
+                    occurred_at=self._review_clock(),
+                    reviewer=decision.reviewer,
+                    detail="decision context binding does not match the result",
+                )
+            )
+            raise
+        except ReviewError:
+            # Grounding/already-accepted refusals are bypass attempts:
+            # acceptance without the evidence the policy requires.
+            await self._record_review_transition(
+                ReviewTransition(
+                    kind=REVIEW_TRANSITION_BYPASS_REFUSED,
+                    result_identity=decision.result_identity,
+                    field_path=decision.field_path,
+                    publication_set_id=stored.context.publication_set_id,
+                    occurred_at=self._review_clock(),
+                    reviewer=decision.reviewer,
+                    detail="review refused: no grounded evidence or already accepted",
+                )
+            )
+            raise
         invariants = evaluate_invariants(schema, updated_fields, stored.line_items)
         updated = ExtractionResult(
             schema_id=stored.schema_id,
@@ -470,19 +560,40 @@ class ExtractionService:
             invariants=invariants,
         )
 
-        records: list[Any] = [
-            DecisionRecord(
-                record_id=f"extraction.review.{_short_identity(hashlib.sha256(decision.result_identity.encode('utf-8') + decision.field_path.encode('utf-8') + decision.action.encode('utf-8')).hexdigest())}",
-                decision_key=(
-                    f"extraction-review:{_short_identity(decision.result_identity)}"
-                    f":{decision.field_path}"
-                ),
-                outcome=decision.action,
-                rationale=decision.rationale,
-                input_refs=(result_record_id(decision.result_identity),),
+        decision_record = DecisionRecord(
+            record_id=f"extraction.review.{_short_identity(hashlib.sha256(decision.result_identity.encode('utf-8') + decision.field_path.encode('utf-8') + decision.action.encode('utf-8')).hexdigest())}",
+            decision_key=(
+                f"extraction-review:{_short_identity(decision.result_identity)}"
+                f":{decision.field_path}"
             ),
+            outcome=decision.action,
+            rationale=decision.rationale,
+            input_refs=(result_record_id(decision.result_identity),),
+        )
+        records: list[Any] = [
+            decision_record,
             self._result_view_record(updated),
         ]
+        # The decision transition commits atomically with the decision
+        # itself: a replayed decision is rejected as a duplicate batch,
+        # so replay can never double-count review burden.
+        records.append(
+            review_transition_record(
+                ReviewTransition(
+                    kind={
+                        "accept": REVIEW_TRANSITION_ACCEPTED,
+                        "correct": REVIEW_TRANSITION_CORRECTED,
+                        "reject": REVIEW_TRANSITION_REJECTED,
+                    }[decision.action],
+                    result_identity=decision.result_identity,
+                    field_path=decision.field_path,
+                    publication_set_id=stored.context.publication_set_id,
+                    occurred_at=self._review_clock(),
+                    reviewer=decision.reviewer,
+                    decision_record_id=decision_record.record_id,
+                )
+            )
+        )
         if decision.action == "correct":
             corrected = updated_fields[decision.field_path]
             assertion = ClaimAssertionRecord(
