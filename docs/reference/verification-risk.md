@@ -201,3 +201,21 @@ unchanged by the audit fixes.
   sub-object; witness predictions are not finiteness-validated; and the
   gate loads all committed proof supports per commit rather than
   filtering by holder.
+
+## PR88 addendum (2026-08-23)
+
+Two of the recorded follow-ups above are closed by PR88
+(`docs/reference/review-policy-operations.md`):
+
+- **Mandatory expiry + named population.** The high-risk source-native
+  gate now rejects NEW authorization whose risk evidence lacks
+  `expires_at` or `metadata.calibration_population`. Committed records
+  keep their historical meaning.
+- **Committed-evidence gate bug.** The gate passed committed (not
+  in-batch) risk-evidence payload JSON strings to `from_payload`
+  undecoded, so cross-commit evidence reuse always failed; fixed with a
+  regression cover.
+
+The remaining follow-ups (cropper_profile dimension, dependency_key
+model_family, explicit runtime-key sub-object, finiteness validation,
+holder-filtered support loads) remain open and unchanged.

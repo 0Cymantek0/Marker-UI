@@ -1,0 +1,307 @@
+{
+  "schema_version": "marker.review_policy_ops.report.v1",
+  "git_sha": "0c24b5ed86ae03b2304690651f2c70ab8b4df418",
+  "environment": {
+    "database": "sqlite (aiosqlite, file-backed, alembic head)",
+    "clock": "injected deterministic ISO timestamps (no wall-clock sleeps)",
+    "authorities": "real kernel commit/publication/query/extraction/review seams"
+  },
+  "scenario_timeline": {
+    "t0_required": "2026-08-20T10:00:00Z",
+    "t1_accept": "2026-08-20T10:05:00Z",
+    "t2_correct": "2026-08-20T10:12:00Z",
+    "t3_bypass_attempt": "2026-08-20T10:20:00Z",
+    "t4_stale_attempt": "2026-08-20T10:25:00Z"
+  },
+  "region_status": {
+    "before_review": {
+      "invoice_number": {
+        "assertion_ref": "extraction.assertion.4a5f8e44a2e95b62",
+        "usability_class": "usable_authority",
+        "usable": true,
+        "outcome": "source_exact",
+        "assessment_id": "extraction.assessment.cf1c9b5faa64d9ab",
+        "carried_by_commit": 2,
+        "snapshot_commit_id": 1,
+        "evidence_refs": [
+          "invoice-header",
+          "invoice-header-alt"
+        ],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 2
+        }
+      },
+      "total_due": {
+        "assertion_ref": "extraction.assertion.0281f108b5072587",
+        "usability_class": "unresolved_unavailable",
+        "usable": false,
+        "outcome": null,
+        "assessment_id": null,
+        "carried_by_commit": null,
+        "snapshot_commit_id": null,
+        "evidence_refs": [],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 2
+        }
+      },
+      "currency": {
+        "assertion_ref": "extraction.assertion.0c8697cff9a2cf8d",
+        "usability_class": "unresolved_unavailable",
+        "usable": false,
+        "outcome": null,
+        "assessment_id": null,
+        "carried_by_commit": null,
+        "snapshot_commit_id": null,
+        "evidence_refs": [],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 2
+        }
+      },
+      "currency_reviewed": {
+        "assertion_ref": "extraction.assertion.258e0dc898f7112d",
+        "usability_class": "unresolved_unavailable",
+        "usable": false,
+        "outcome": null,
+        "assessment_id": null,
+        "carried_by_commit": null,
+        "snapshot_commit_id": null,
+        "evidence_refs": [],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 2
+        }
+      }
+    },
+    "after_review": {
+      "invoice_number": {
+        "assertion_ref": "extraction.assertion.4a5f8e44a2e95b62",
+        "usability_class": "usable_authority",
+        "usable": true,
+        "outcome": "source_exact",
+        "assessment_id": "extraction.assessment.cf1c9b5faa64d9ab",
+        "carried_by_commit": 2,
+        "snapshot_commit_id": 1,
+        "evidence_refs": [
+          "invoice-header",
+          "invoice-header-alt"
+        ],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 7
+        }
+      },
+      "total_due": {
+        "assertion_ref": "extraction.assertion.0281f108b5072587",
+        "usability_class": "unresolved_unavailable",
+        "usable": false,
+        "outcome": null,
+        "assessment_id": null,
+        "carried_by_commit": null,
+        "snapshot_commit_id": null,
+        "evidence_refs": [],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 7
+        }
+      },
+      "currency": {
+        "assertion_ref": "extraction.assertion.0c8697cff9a2cf8d",
+        "usability_class": "unresolved_unavailable",
+        "usable": false,
+        "outcome": null,
+        "assessment_id": null,
+        "carried_by_commit": null,
+        "snapshot_commit_id": null,
+        "evidence_refs": [],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 7
+        }
+      },
+      "currency_reviewed": {
+        "assertion_ref": "extraction.assertion.258e0dc898f7112d",
+        "usability_class": "usable_with_warning",
+        "usable": true,
+        "outcome": "accepted_with_warning",
+        "assessment_id": "extraction.assessment.a99972a5fb41970e",
+        "carried_by_commit": 4,
+        "snapshot_commit_id": 1,
+        "evidence_refs": [],
+        "resolved_under": {
+          "policy_id": "marker.extraction.reconcile",
+          "policy_revision": "v1",
+          "workflow_class": "marker.extraction.pr80a.v1",
+          "as_of_commit": 7
+        }
+      }
+    },
+    "document_state_after_review": "usable_with_unresolved_regions"
+  },
+  "calibration_applicability": {
+    "schema_version": "marker.calibration.applicability.v2",
+    "population": {
+      "name": "invoice-total/en/matched/v1",
+      "corpus_identity": "sha256:a6cde0976cdfb22daf1900ebaf6b5446db0f52c52e9c81181b9e1aecf6df7103",
+      "slice_id": "matched",
+      "distribution": "matched",
+      "sampling_frame": "all samples of the matched slice in the v1 corpus"
+    },
+    "assumptions": {
+      "distribution_class": "matched",
+      "label_definition": "witness prediction differs from the labeled truth",
+      "policy_id": "marker.high_risk.source_native",
+      "policy_revision": "1",
+      "sampling_frame": "all samples of the matched slice in the v1 corpus",
+      "workflow_class": "high_risk.source_native.v1"
+    },
+    "shift_status": "matched",
+    "validity": {
+      "evaluated_at": "2026-08-01T00:00:00Z",
+      "expires_at": "2026-09-01T00:00:00Z",
+      "retest_triggers": [
+        "policy_revision_change",
+        "population_shift",
+        "time_expiry"
+      ]
+    },
+    "support": {
+      "sample_count": 10,
+      "support_required": 5,
+      "support_sufficient": true,
+      "status": "ok",
+      "missing_confidence_count": 0
+    },
+    "uncertainty_method": "wilson_score_95_accuracy",
+    "calibration_method": {
+      "method_id": "equal_width_ece_and_brier",
+      "method_version": "marker.calibration.ece_brier.v1",
+      "target_event": "witness_prediction_correct"
+    },
+    "metrics": {
+      "brier_score": 0.16,
+      "expected_calibration_error": 0.0,
+      "maximum_calibration_error": 0.0,
+      "accuracy": {
+        "count": 8,
+        "denominator": 10,
+        "rate": 0.8,
+        "lower": 0.4901624715366418,
+        "upper": 0.9433178485456247,
+        "wilson_95": [
+          0.4901624715366418,
+          0.9433178485456247
+        ],
+        "status": "defined"
+      },
+      "bins": [
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 10,
+          "mean_confidence": 0.8,
+          "empirical_accuracy": 0.8,
+          "gap": 0.0
+        }
+      ]
+    },
+    "catastrophic_failures": {
+      "observed_failures": 0,
+      "trials": 10,
+      "upper_bound_95": "0.2588655509",
+      "status": "bounded",
+      "method": "one_sided_95_clopper_pearson_upper_bound",
+      "zero_failures_observed": true,
+      "zero_failures_implies_zero_risk": false,
+      "statement": "0 catastrophic failure(s) in 10 trial(s) bounds the one-sided 95% failure rate at <= 0.2588655509; observed zeros do not establish zero risk"
+    }
+  },
+  "metrics": {
+    "schema_version": "marker.review_policy_ops.v1",
+    "population": {
+      "workspace_id": "ws-pr88-ops",
+      "schema_id": "demo.invoice",
+      "policy_id": "marker.extraction.reconcile",
+      "policy_version": "v1",
+      "accounting_unit": "one field of one extraction result identity",
+      "source": "durable review transition ledger (kernel native_object views)"
+    },
+    "eligible_cases": 2,
+    "required_review": 2,
+    "required_events": 2,
+    "reviewed": 2,
+    "decisions_without_observed_requirement": 0,
+    "unresolved_backlog": 0,
+    "review_coverage_rate": {
+      "value": 1.0,
+      "status": "defined",
+      "count": 2,
+      "denominator": 2
+    },
+    "dwell": {
+      "status": "defined",
+      "resolved_cases": 2,
+      "measure": "decision_at_minus_first_required_at_seconds",
+      "min_seconds": 300.0,
+      "median_seconds": 510.0,
+      "max_seconds": 720.0
+    },
+    "outcomes": {
+      "accepted": 1,
+      "corrected": 1,
+      "rejected": 0
+    },
+    "stale_rejections": 1,
+    "bypass_refusals": 1,
+    "bypass_rate": {
+      "value": 0.3333333333333333,
+      "status": "defined",
+      "count": 1,
+      "denominator": 3
+    },
+    "replay_contract": "replayed decisions are rejected atomically by kernel identity dedup (decision record and transition commit together or not at all); replay cannot double-count burden or mint duplicate authority",
+    "non_claims": "fixture-scale operational accounting only; no production staffing capacity, queue infrastructure, or human-time claim"
+  },
+  "checks": {
+    "accepted_region_usable_before_review": true,
+    "conflicted_regions_unresolved_before_review": true,
+    "no_region_poisoning": true,
+    "no_region_promotion": true,
+    "corrected_region_human_sourced_not_source_authority": true,
+    "document_state_preserves_regions": true,
+    "review_required_accounted": true,
+    "review_coverage_complete": true,
+    "dwell_measured_deterministically": true,
+    "outcomes_honest": true,
+    "replay_idempotent": true,
+    "bypass_refused_and_accounted": true,
+    "stale_refused_and_accounted": true,
+    "calibration_population_named": true,
+    "calibration_assumptions_structured": true,
+    "calibration_expiry_machine_evaluable": true,
+    "calibration_applies_only_to_named_context": true,
+    "calibration_zero_catastrophes_not_zero_risk": true,
+    "calibration_round_trip_fail_closed": true
+  },
+  "non_claims": [
+    "fixture-scale operational accounting; no production staffing or queue claim",
+    "dwell is the declared deterministic measure, not human review time",
+    "calibration support is the committed conformance corpus, not production traffic"
+  ]
+}
