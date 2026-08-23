@@ -87,6 +87,25 @@ review seams on SQLite with injected deterministic clocks (no
 wall-clock sleeps) and fails closed if any check or the validator
 fails.
 
+## Regression record
+
+Session environment: Windows, CPython 3.11.9, SQLite (aiosqlite),
+`python -X utf8` from `backend`.
+
+- Focused PR88 suites (calibration applicability, region status kernel
+  + extraction, review ops, artifact honesty, kernel risk + gate
+  integration, verification-risk conformance): all green before each
+  commit in this session.
+- Readiness evidence run at the evidence head (`5fa39de`): every bound
+  binding executed — 84 passed, 4 `skipped_env_gated` (docker/postgres
+  industrial partial bindings, never backing a proven claim), 0 failed;
+  auditor derives 47/62 proven, integrity passes.
+- Full backend regression (`tests` + `conformance`):
+  **3625 passed, 208 skipped, 0 failed** in 36m47s. The 208 skips are
+  the branch's known environment-gated lanes (GPU/CUDA, docker
+  postgres/S3, source-ingress timeouts); no lane was intentionally left
+  unexecuted beyond those gates.
+
 ## Bypass semantics
 
 A bypass is an attempt to obtain acceptance without the evidence the
