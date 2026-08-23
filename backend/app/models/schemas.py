@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_serializer
 
+from app.operational.as_of import AsOfContract
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -157,6 +159,12 @@ class JobStatusResponse(BaseModel):
     progress: int = 0
     error_message: Optional[str] = None
     result_text: Optional[str] = None
+    # Server-derived as-of truth contract (invariant 56): the authoritative
+    # state this representation refers to. Clients round-trip
+    # ``as_of.state_token`` through download/regenerate preconditions so the
+    # server — not the browser — decides whether the observed state is still
+    # current for the action.
+    as_of: Optional[AsOfContract] = None
     # Per-format cached output text. Keys are the available output formats
     # (markdown/json/html/chunks); values are the rendered text for each. When
     # present, the preview can switch tabs without reconverting.

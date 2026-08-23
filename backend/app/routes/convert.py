@@ -35,6 +35,7 @@ from app.database import get_db
 from app.errors import InputNotAllowedError, UnsupportedFormatError, UsageError
 from app.models.job import ConversionJob
 from app.models.schemas import ConversionResponse, JobStatusResponse, HistoryResponse, ConvertPlanRequest, ConverterPlanResponse, RetryJobRequest
+from app.operational.as_of import AsOfVerification, derive_as_of, verify_as_of
 from app.audio.providers.registry import (
     validate_audio_benchmark_selection,
     validate_audio_diarization_selection,
@@ -204,6 +205,41 @@ def _parse_formats(formats_json: str | None) -> dict[str, str] | None:
     falls back to the single-format preview.
     """
     return parse_cached_formats(formats_json)
+
+
+def _as_of_headers(verification: AsOfVerification) -> dict[str, str]:
+    """Label every export response with the as-of state it actually serves.
+
+    ``verified``: the caller presented an observed state token and it matched
+    the current derivation. ``historical``: no currency claim was made, so the
+    response carries the actual current state rather than an implied one.
+    """
+
+    return {
+        "X-Marker-As-Of-State": verification.current.state_token,
+        "X-Marker-As-Of-Mode": verification.mode,
+        "X-Marker-As-Of-Completeness": verification.current.completeness,
+    }
+
+
+def _stale_state_detail(verification: AsOfVerification) -> dict[str, Any]:
+    """Typed 409 body for a rejected stale action.
+
+    The ``code`` discriminator lets the frontend distinguish staleness from a
+    generic failure without parsing prose; ``current_as_of`` gives it the
+    refreshed contract without a second round-trip.
+    """
+
+    return {
+        "code": "stale_state",
+        "message": (
+            "The observed as-of state no longer matches this job's current "
+            "state. Refresh the status and retry against the current state."
+        ),
+        "observed_state_token": verification.observed,
+        "current_state_token": verification.current.state_token,
+        "current_as_of": verification.current.model_dump(mode="json"),
+    }
 
 
 def _parse_conversion_metadata(metadata_json: str | None) -> dict[str, Any] | None:
@@ -1196,6 +1232,7 @@ async def get_status(
         status=status,
         progress=progress,
         error_message=job.error_message,
+        as_of=derive_as_of(job, effective_status=status),
         result_text=job.result_text,
         image_understanding=_parse_image_understanding(job.result_metadata_json),
         conversion_metadata=_parse_conversion_metadata(job.result_metadata_json),
@@ -1250,9 +1287,28 @@ async def llm_traces(job_id: str) -> dict[str, Any]:
 async def download_result(
     job_id: str,
     format: Optional[str] = Query(None, description="Specific format to download: markdown, html, json, chunks, or all"),
+    as_of: Optional[str] = Query(
+        None,
+        description=(
+            "As-of state token previously observed via as_of.state_token in "
+            "status/history. When supplied, the server verifies the observed "
+            "state is still current before exporting; a mismatch returns 409 "
+            "stale_state. Omitting it requests the stored representation "
+            "explicitly as a historical export."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    """Download the converted output file(s)."""
+    """Download the converted output file(s).
+
+    Stale-export contract (invariant 56): the server — not the browser — is
+    the arbiter. A presented token is re-derived and compared against the
+    durable row, so a representation observed before a material change
+    (regenerate, lifecycle transition, artifact purge) can never be silently
+    substituted with newer content. Tokenless downloads stay possible as
+    explicitly historical exports, labeled with the actual current state via
+    response headers.
+    """
     stmt = select(ConversionJob).where(ConversionJob.id == job_id)
     result = await db.execute(stmt)
     job = result.scalar_one_or_none()
@@ -1261,6 +1317,11 @@ async def download_result(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status != "completed":
         raise HTTPException(status_code=400, detail="Job not yet completed")
+
+    verification = verify_as_of(job, as_of)
+    if verification.mode == "verified" and not verification.fresh:
+        raise HTTPException(status_code=409, detail=_stale_state_detail(verification))
+    as_of_headers = _as_of_headers(verification)
 
     formats_map = parse_cached_formats(job.formats_json) or {}
     if "markdown" not in formats_map and job.result_text:
@@ -1326,6 +1387,7 @@ async def download_result(
                 path=str(tmp_zip),
                 filename=f"{stem}.zip",
                 media_type="application/zip",
+                headers=as_of_headers,
                 background=BackgroundTask(tmp_zip.unlink, missing_ok=True),
             )
         except Exception:
@@ -1362,6 +1424,7 @@ async def download_result(
             path=str(tmp_path),
             filename=f"{stem}.{ext}",
             media_type=media_types.get(ext, "text/plain"),
+            headers=as_of_headers,
             background=BackgroundTask(tmp_path.unlink, missing_ok=True),
         )
 
@@ -1498,6 +1561,7 @@ async def get_history(
                 status=j.status,
                 progress=j.progress,
                 error_message=j.error_message,
+                as_of=derive_as_of(j),
                 result_text=None,  # Exclude from history - use /status endpoint for full text
                 created_at=j.created_at,
                 completed_at=j.completed_at,
@@ -1701,6 +1765,14 @@ async def _job_source_path(job: ConversionJob) -> Path | None:
 async def regenerate_format(
     job_id: str,
     format: str = Query(..., description=f"Output format to regenerate: {OUTPUT_FORMATS_DESCRIPTION}"),
+    as_of: Optional[str] = Query(
+        None,
+        description=(
+            "Optional as-of state token observed via status/history. When "
+            "supplied, regeneration refuses to mutate a job whose state moved "
+            "since observation (409 stale_state)."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Render one additional output format for an existing completed job.
@@ -1709,6 +1781,13 @@ async def regenerate_format(
     queue entry or card. The rendered text is merged into the job's
     ``formats_json`` cache and the format becomes instantly viewable in the
     preview tabs without re-running the primary conversion.
+
+    This is a mutating action on a previously observed result, so it honors
+    the same as-of precondition as download: a caller who pins the observed
+    state token gets a typed 409 when the row moved. Without a token the
+    action proceeds against the current row — regeneration reads current
+    state by design and merges additively, so there is no observed
+    representation to substitute.
     """
     if format not in OUTPUT_FORMAT_SET:
         raise HTTPException(
@@ -1726,6 +1805,10 @@ async def regenerate_format(
             status_code=400,
             detail="Job must be completed before regenerating a format.",
         )
+
+    verification = verify_as_of(job, as_of)
+    if verification.mode == "verified" and not verification.fresh:
+        raise HTTPException(status_code=409, detail=_stale_state_detail(verification))
 
     source_path = await _job_source_path(job)
     if source_path is None:
