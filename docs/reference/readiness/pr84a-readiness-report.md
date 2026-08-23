@@ -2,17 +2,17 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `5fa39dee5b61b9d6ae0524adabb90de0271cba5b`
-- Invariants proven: **47 / 62**
+- Audited source head: `4eb9f22d745791eb507a56f5e2bf429014816031`
+- Invariants proven: **48 / 62**
 - Failed: **0**
-- No acceptable evidence: **15**
+- No acceptable evidence: **14**
 
 ## Group summary
 
 | Group | Name | Proven | Failed | No evidence |
 |---|---|---:|---:|---:|
 | 23C.1 | Truth and persistence | 5 | 0 | 4 |
-| 23C.2 | Geometry, patches, and incrementality | 7 | 0 | 2 |
+| 23C.2 | Geometry, patches, and incrementality | 8 | 0 | 1 |
 | 23C.3 | Verification and routing | 8 | 0 | 1 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
@@ -40,7 +40,7 @@
 | 15 | 23C.2 | proven | sqlite-dev |
 | 16 | 23C.2 | proven | sqlite-dev |
 | 17 | 23C.2 | proven | sqlite-dev |
-| 18 | 23C.2 | no-evidence | executed proof covers only part of the invariant wording |
+| 18 | 23C.2 | proven | sqlite-dev |
 | 19 | 23C.3 | proven | sqlite-dev |
 | 20 | 23C.3 | proven | sqlite-dev |
 | 21 | 23C.3 | proven | sqlite-dev |
@@ -95,7 +95,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 1** (23C.1, single-transactional-commit-authority): Single transactional authority and atomicity are proven; the clause 'per-document JSONL files are not the serving authority' has no executed negative test asserting JSONL non-authority (no serving path may read per-document ledgers). Reason: executed proof covers only part of the invariant wording.
 - **Inv 4** (23C.1, blob-vs-observation-identity): Separation is demonstrated indirectly (GC rescue keys on blob_key; evidence classes are distinct record identities); a direct dedup-collision test naming both identities is missing. Reason: executed proof covers only part of the invariant wording.
 - **Inv 13** (23C.2, cross-page-fragment-preservation): Continuation-edge and alternative-preservation semantics exist; the all-fragments + full-provenance preservation property for cross-page continuations and multi-page tables has no executable assertion. Reason: executed proof covers only part of the invariant wording.
-- **Inv 18** (23C.2, redaction-all-paths): Redaction policy exists only as audit-text redaction plus retrieval identity rotation; the invariant's enumerated surface (image/cache/index/visual vector/export/cursor) is untested and may be partially unimplemented. Reason: executed proof covers only part of the invariant wording.
 - **Inv 30** (23C.4, admission-memory-envelope): PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial. Reason: executed proof covers only part of the invariant wording.
 - **Inv 37** (23C.4, external-effect-semantics-declared): Local exactly-once acceptance and truthful refusal/reconciliation are proven; the per-destination external-effect semantics declaration driven by real destination primitives is absent. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 43** (23C.5, revocation-slo): Revocation effectiveness without content events is proven and measured; a declared numeric SLO (bound/latency) is neither declared nor asserted. Reason: executed proof covers only part of the invariant wording.
@@ -119,7 +118,7 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - 23C.1 Truth and persistence: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
 - 23C.7 Economics and claim language: 3 non-proven
-- 23C.2 Geometry, patches, and incrementality: 2 non-proven
+- 23C.2 Geometry, patches, and incrementality: 1 non-proven
 - 23C.3 Verification and routing: 1 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven
 - 23C.6 Agent and product behavior: 1 non-proven

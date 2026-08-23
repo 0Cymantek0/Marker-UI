@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "5fa39dee5b61b9d6ae0524adabb90de0271cba5b"
+    "git_head": "4eb9f22d745791eb507a56f5e2bf429014816031"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 47,
+    "proven": 48,
     "failed": 0,
-    "no_evidence": 15
+    "no_evidence": 14
   },
   "group_counts": {
     "23C.1": {
@@ -17,9 +17,9 @@
       "total": 9
     },
     "23C.2": {
-      "proven": 7,
+      "proven": 8,
       "failed": 0,
-      "no_evidence": 2,
+      "no_evidence": 1,
       "total": 9
     },
     "23C.3": {
@@ -54,7 +54,7 @@
     }
   },
   "gap_type_counts": {
-    "B": 7,
+    "B": 6,
     "D": 5,
     "F": 3
   },
@@ -267,11 +267,13 @@
       "id": 18,
       "group": "23C.2",
       "label": "redaction-all-paths",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "B",
-      "gap_note": "Redaction policy exists only as audit-text redaction plus retrieval identity rotation; the invariant's enumerated surface (image/cache/index/visual vector/export/cursor) is untested and may be partially unimplemented."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 19,

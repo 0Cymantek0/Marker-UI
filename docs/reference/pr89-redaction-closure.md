@@ -122,3 +122,30 @@ authorization, authz-retrieval), kernel publication. Full gate:
   for it).
 - No general policy language, no visual-retrieval productization, no
   frontend work — unchanged scope boundaries from the focused plan.
+
+## 7. Regression record
+
+Session environment: Windows, CPython 3.11.9, SQLite (aiosqlite),
+`python -X utf8 -m pytest` from `backend`.
+
+- Focused PR89 suites (closure sentinel suite, resolution, profile
+  records, context-runtime representation/packets/service/authorization/
+  authz-retrieval, kernel publication, answer evidence + boundary,
+  agent query adapter, continuation, cursor migration, pr82 agent):
+  all green before each commit in this session.
+- Readiness evidence run at the evidence head (`4eb9f22`): every bound
+  binding executed — 786 node outcomes passed, 7 `skipped_env_gated`
+  (docker/postgres industrial partial bindings, never backing a proven
+  claim), 0 failed; auditor derives **48/62 proven** (invariant 18
+  `redaction-all-paths` proven), integrity passes.
+- Full backend regression (`tests` + `conformance`):
+  **3663 passed, 208 skipped, 0 failed** in 51m49s. The 208 skips are
+  the branch's known environment-gated lanes (GPU/CUDA, docker
+  postgres/S3, source-ingress timeouts); no lane was intentionally left
+  unexecuted beyond those gates.
+- Two integration findings surfaced mid-session and were closed inside
+  it: the pr82 hostile-document eval's authorization-view key contract
+  needed the new digest-only redaction dimension (`d1adbb0`), and a
+  first full-regression attempt executed against a tree edited mid-run
+  (stale evidence scope blobs) — the recorded numbers above are from
+  the final frozen-tree run only.
