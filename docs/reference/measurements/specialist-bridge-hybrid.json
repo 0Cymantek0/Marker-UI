@@ -1,0 +1,5110 @@
+{
+  "acceptance": {
+    "corpus_24": true,
+    "full_lineage": true,
+    "lane_full_coverage": true,
+    "no_exact_doc_regression": true,
+    "zero_fabricated_to_authority": true,
+    "zero_false_authority": true
+  },
+  "aggregate_metrics": {
+    "marker-hybrid-bridge:kc/poolside/laguna-s-2.1:free": {
+      "danger": {
+        "confident_on_conflict": 2,
+        "cross_row_contamination_fields": 0
+      },
+      "docs": {
+        "doc_exact": 18,
+        "error_docs": 0,
+        "total": 24
+      },
+      "evidence": {
+        "coverage": 1.0,
+        "emitted": 457,
+        "with_evidence": 457
+      },
+      "invariant": {
+        "contradiction_classes": {
+          "flagged": 3,
+          "none": 21
+        },
+        "counts": {
+          "not_reported": 0,
+          "reported_match": 18,
+          "reported_mismatch": 6
+        }
+      },
+      "review": {
+        "self_flagged": 63,
+        "unverified_emitted": 0
+      },
+      "rows": {
+        "counts": {
+          "conflict_confident": 1,
+          "exact": 68,
+          "partial": 7
+        },
+        "field_accuracy_inside_matched_rows": 0.9467,
+        "field_counts": {
+          "confident_on_conflict": 2,
+          "correct": 284,
+          "correct_absent": 2,
+          "missing_flagged": 16
+        }
+      },
+      "scalar": {
+        "absent_rejection_rate": 1.0,
+        "accuracy_on_present": 0.9417,
+        "counts": {
+          "correct": 97,
+          "correct_absent": 16,
+          "honest_conflict": 1,
+          "missing_flagged": 6
+        },
+        "gold_absent": 16,
+        "gold_present": 103
+      },
+      "slices": {
+        "ambiguity.decoy_anchor": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "ambiguity.row": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "ambiguity.scalar": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "baseline.happy": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "edge.invalid_value": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "edge.negative": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "edge.zero": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "encoding.fullwidth": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "integrity.not_evaluable": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "integrity.row_loss": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "integrity.total_mismatch": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "layout.label_variants": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "layout.noise": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "layout.pagination": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "missing.optional": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "missing.required": {
+          "doc_exact": 3,
+          "doc_exact_rate": 1.0,
+          "docs": 3
+        },
+        "normalization.currency": {
+          "doc_exact": 1,
+          "doc_exact_rate": 0.5,
+          "docs": 2
+        },
+        "normalization.date": {
+          "doc_exact": 1,
+          "doc_exact_rate": 0.5,
+          "docs": 2
+        },
+        "normalization.decimal": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "normalization.decimal_eu": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "structure.broken_row_long": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "structure.broken_row_short": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "structure.duplicate_conflict": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "structure.duplicate_identical": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "structure.many_rows": {
+          "doc_exact": 2,
+          "doc_exact_rate": 1.0,
+          "docs": 2
+        },
+        "structure.near_duplicate_desc": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "witness.conflict": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "witness.corroboration": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        }
+      }
+    },
+    "marker-pr80a": {
+      "danger": {
+        "cross_row_contamination_fields": 0
+      },
+      "docs": {
+        "doc_exact": 17,
+        "error_docs": 0,
+        "total": 24
+      },
+      "evidence": {
+        "coverage": 1.0,
+        "emitted": 454,
+        "with_evidence": 454
+      },
+      "invariant": {
+        "contradiction_classes": {
+          "flagged": 5,
+          "none": 19
+        },
+        "counts": {
+          "not_reported": 0,
+          "reported_match": 19,
+          "reported_mismatch": 5
+        }
+      },
+      "review": {
+        "self_flagged": 61,
+        "unverified_emitted": 0
+      },
+      "rows": {
+        "counts": {
+          "conflict_honest": 1,
+          "exact": 68,
+          "missed": 2,
+          "partial": 5
+        },
+        "field_accuracy_inside_matched_rows": 0.9692,
+        "field_counts": {
+          "conflict_value_flagged": 2,
+          "correct": 284,
+          "correct_absent": 1,
+          "missing": 8,
+          "missing_flagged": 9
+        }
+      },
+      "scalar": {
+        "absent_rejection_rate": 1.0,
+        "accuracy_on_present": 0.9126,
+        "counts": {
+          "correct": 94,
+          "correct_absent": 16,
+          "honest_conflict": 1,
+          "missing_flagged": 9
+        },
+        "gold_absent": 16,
+        "gold_present": 103
+      },
+      "slices": {
+        "ambiguity.decoy_anchor": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "ambiguity.row": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "ambiguity.scalar": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "baseline.happy": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "edge.invalid_value": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "edge.negative": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "edge.zero": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "encoding.fullwidth": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "integrity.not_evaluable": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "integrity.row_loss": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "integrity.total_mismatch": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "layout.label_variants": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "layout.noise": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "layout.pagination": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "missing.optional": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "missing.required": {
+          "doc_exact": 3,
+          "doc_exact_rate": 1.0,
+          "docs": 3
+        },
+        "normalization.currency": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 2
+        },
+        "normalization.date": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 2
+        },
+        "normalization.decimal": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "normalization.decimal_eu": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "structure.broken_row_long": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "structure.broken_row_short": {
+          "doc_exact": 0,
+          "doc_exact_rate": 0.0,
+          "docs": 1
+        },
+        "structure.duplicate_conflict": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "structure.duplicate_identical": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "structure.many_rows": {
+          "doc_exact": 2,
+          "doc_exact_rate": 1.0,
+          "docs": 2
+        },
+        "structure.near_duplicate_desc": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "witness.conflict": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        },
+        "witness.corroboration": {
+          "doc_exact": 1,
+          "doc_exact_rate": 1.0,
+          "docs": 1
+        }
+      }
+    }
+  },
+  "artifact_schema_version": "marker.specialist_bridge_evidence.v1",
+  "claim_scope": "24 synthetic PR80B corpus documents, one recorded free-tier model replayed offline, demo.invoice@1.0.0 only; no claim about held-out routing promotion, production review capacity, or other providers",
+  "corpus": {
+    "documents": 24,
+    "fingerprint": "1bc8a20b3e0d80fa32ad2e765083b8d702483e44a53884eb6452fdd170ff468c",
+    "root": "backend\\eval_data\\pr80b"
+  },
+  "doc_exact": {
+    "hybrid": 18,
+    "marker-pr80a": 17
+  },
+  "fabricated_to_authority": {},
+  "git_sha": "b743c84fc8ef703a10d398fde59ac3dc8893d955",
+  "lineage_coverage": 1.0,
+  "per_doc": {
+    "inv-001-straightforward": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 20,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:093e62334327cc8f84ea90915e999ed6e1c27b4e07b2ce0c0c34c8949feeae1a",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "accepted",
+        "timings_ms": {
+          "commit_ms": 28.68,
+          "extract_ms": 352.1,
+          "publish_ms": 267.29,
+          "total_ms": 1774.59
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 17,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-001-straightforward",
+        "error": null,
+        "evidence": {
+          "emitted": 20,
+          "with_evidence": 20
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 0,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-01",
+            "normalized_system": "2026-03-01",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-001",
+            "normalized_system": "INV-2026-001",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-4481",
+            "normalized_system": "PO-4481",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "155",
+            "normalized_system": "155",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-002-missing-optional": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:234ec3b5ae60d12aab9a62714db09a622b38f29ad322b10f123db1e363601e6d",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "partial",
+        "timings_ms": {
+          "commit_ms": 32.22,
+          "extract_ms": 549.1,
+          "publish_ms": 451.6,
+          "total_ms": 2191.23
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 16,
+          "correct_absent": 1,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-002-missing-optional",
+        "error": null,
+        "evidence": {
+          "emitted": 19,
+          "with_evidence": 19
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-03",
+            "normalized_system": "2026-03-03",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-002",
+            "normalized_system": "INV-2026-002",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "155",
+            "normalized_system": "155",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-003-missing-required-date": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:265453196a592cdfee5eccb1d8947f94bd686c3548de2833680196bb4dfa96dd",
+        "review_required_fields": [
+          "invoice_date"
+        ],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 291.71,
+          "extract_ms": 462.21,
+          "publish_ms": 345.61,
+          "total_ms": 2295.57
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 16,
+          "correct_absent": 1,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-003-missing-required-date",
+        "error": null,
+        "evidence": {
+          "emitted": 19,
+          "with_evidence": 19
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "invoice_date",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-003",
+            "normalized_system": "INV-2026-003",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-4482",
+            "normalized_system": "PO-4482",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "155",
+            "normalized_system": "155",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-004-missing-required-number": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:f23fcbc6596594dad9d340b80ea83b3cbd5bc28f3312d805a41e80a9f164f4d3",
+        "review_required_fields": [
+          "invoice_number"
+        ],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 30.5,
+          "extract_ms": 440.37,
+          "publish_ms": 347.76,
+          "total_ms": 2018.08
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 16,
+          "correct_absent": 1,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-004-missing-required-number",
+        "error": null,
+        "evidence": {
+          "emitted": 19,
+          "with_evidence": 19
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-08",
+            "normalized_system": "2026-03-08",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "invoice_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-4483",
+            "normalized_system": "PO-4483",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "155",
+            "normalized_system": "155",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-005-zero-values": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-9001].sku",
+          "items[SKU-9001].description",
+          "items[SKU-9001].quantity",
+          "items[SKU-9001].unit_price",
+          "items[SKU-9001].amount",
+          "items[SKU-9002].sku",
+          "items[SKU-9002].description",
+          "items[SKU-9002].quantity",
+          "items[SKU-9002].unit_price",
+          "items[SKU-9002].amount",
+          "items[SKU-9003].sku",
+          "items[SKU-9003].description",
+          "items[SKU-9003].quantity",
+          "items[SKU-9003].unit_price",
+          "items[SKU-9003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-9001].sku",
+          "items[SKU-9001].description",
+          "items[SKU-9001].quantity",
+          "items[SKU-9001].unit_price",
+          "items[SKU-9001].amount",
+          "items[SKU-9002].sku",
+          "items[SKU-9002].description",
+          "items[SKU-9002].quantity",
+          "items[SKU-9002].unit_price",
+          "items[SKU-9002].amount",
+          "items[SKU-9003].sku",
+          "items[SKU-9003].description",
+          "items[SKU-9003].quantity",
+          "items[SKU-9003].unit_price",
+          "items[SKU-9003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:45ecd20c10a73ef1434e7efa1f5d0cedfb4b53837674f4a26095b5790814b074",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "partial",
+        "timings_ms": {
+          "commit_ms": 27.05,
+          "extract_ms": 412.42,
+          "publish_ms": 330.95,
+          "total_ms": 1917.6
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 16,
+          "correct_absent": 1,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-005-zero-values",
+        "error": null,
+        "evidence": {
+          "emitted": 19,
+          "with_evidence": 19
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-9001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-9002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-9003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-10",
+            "normalized_system": "2026-03-10",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-005",
+            "normalized_system": "INV-2026-005",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "100",
+            "normalized_system": "100",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-006-date-format-us": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1010].sku",
+          "items[SKU-1010].description",
+          "items[SKU-1010].quantity",
+          "items[SKU-1010].unit_price",
+          "items[SKU-1010].amount",
+          "items[SKU-1011].sku",
+          "items[SKU-1011].description",
+          "items[SKU-1011].quantity",
+          "items[SKU-1011].unit_price",
+          "items[SKU-1011].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [
+          "invoice_date"
+        ],
+        "false_authority_events": [],
+        "lane_proposals": 14,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1010].sku",
+          "items[SKU-1010].description",
+          "items[SKU-1010].quantity",
+          "items[SKU-1010].unit_price",
+          "items[SKU-1010].amount",
+          "items[SKU-1011].sku",
+          "items[SKU-1011].description",
+          "items[SKU-1011].quantity",
+          "items[SKU-1011].unit_price",
+          "items[SKU-1011].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:c2932774bc39683e04ee7df456c4c8e8c7975164779e030f7f55a447de9452d1",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "partial",
+        "timings_ms": {
+          "commit_ms": 102.47,
+          "extract_ms": 350.58,
+          "publish_ms": 304.04,
+          "total_ms": 1862.17
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 12,
+          "correct_absent": 1,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-006-date-format-us",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1010"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1011"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-15",
+            "normalized_system": "2026-03-15",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-006",
+            "normalized_system": "INV-2026-006",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "35",
+            "normalized_system": "35",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-007-currency-symbol": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1110].sku",
+          "items[SKU-1110].description",
+          "items[SKU-1110].quantity",
+          "items[SKU-1110].unit_price",
+          "items[SKU-1110].amount",
+          "items[SKU-1111].sku",
+          "items[SKU-1111].description",
+          "items[SKU-1111].quantity",
+          "items[SKU-1111].unit_price",
+          "items[SKU-1111].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [
+          "currency"
+        ],
+        "false_authority_events": [],
+        "lane_proposals": 14,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1110].sku",
+          "items[SKU-1110].description",
+          "items[SKU-1110].quantity",
+          "items[SKU-1110].unit_price",
+          "items[SKU-1110].amount",
+          "items[SKU-1111].sku",
+          "items[SKU-1111].description",
+          "items[SKU-1111].quantity",
+          "items[SKU-1111].unit_price",
+          "items[SKU-1111].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:12dca5470a56205dd5c5b81a23a1a48848d835d9b5c997ef1e33cae1d16ebebb",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "partial",
+        "timings_ms": {
+          "commit_ms": 26.33,
+          "extract_ms": 302.45,
+          "publish_ms": 299.35,
+          "total_ms": 1822.96
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 12,
+          "correct_absent": 1,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-007-currency-symbol",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1110"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1111"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-12",
+            "normalized_system": "2026-03-12",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-007",
+            "normalized_system": "INV-2026-007",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "47",
+            "normalized_system": "47",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-008-decimal-commas": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "items[SKU-2002].sku",
+          "items[SKU-2002].description",
+          "items[SKU-2002].quantity",
+          "items[SKU-2002].unit_price",
+          "items[SKU-2001].sku",
+          "items[SKU-2001].description",
+          "items[SKU-2001].quantity"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 14,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-2002].sku",
+          "items[SKU-2002].description",
+          "items[SKU-2002].quantity",
+          "items[SKU-2002].unit_price",
+          "items[SKU-2002].amount",
+          "items[SKU-2001].sku",
+          "items[SKU-2001].description",
+          "items[SKU-2001].quantity",
+          "items[SKU-2001].unit_price",
+          "items[SKU-2001].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [
+          "total_due",
+          "items[SKU-2002].amount",
+          "items[SKU-2001].unit_price",
+          "items[SKU-2001].amount"
+        ],
+        "result_identity": "sha256:aab66d4a4dbbc5a21416265f25f9d3daeac112b64d8f110c0cd1b1c6892e2587",
+        "review_required_fields": [
+          "total_due",
+          "items[SKU-2002].amount",
+          "items[SKU-2001].unit_price",
+          "items[SKU-2001].amount"
+        ],
+        "rows": {
+          "accepted": 0,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 24.59,
+          "extract_ms": 240.4,
+          "publish_ms": 325.85,
+          "total_ms": 1756.68
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 8,
+          "correct_absent": 1,
+          "missing_flagged": 4,
+          "row.partial": 2
+        },
+        "doc_exact": false,
+        "doc_id": "inv-008-decimal-commas",
+        "error": null,
+        "evidence": {
+          "emitted": 10,
+          "with_evidence": 10
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_mismatch",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 12,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "wrong fields: ['amount', 'unit_price']",
+            "field_outcomes": {
+              "amount": "missing_flagged",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "missing_flagged"
+            },
+            "outcome": "partial",
+            "sku": "SKU-2001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "wrong fields: ['amount']",
+            "field_outcomes": {
+              "amount": "missing_flagged",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "partial",
+            "sku": "SKU-2002"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-15",
+            "normalized_system": "2026-03-15",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-008",
+            "normalized_system": "INV-2026-008",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "honest abstention/flag; value present in document",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "3750.00",
+            "normalized_system": "",
+            "outcome": "missing_flagged",
+            "system_status": "absent"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-009-decimal-eu": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "items[SKU-3001].sku",
+          "items[SKU-3001].description",
+          "items[SKU-3001].quantity",
+          "items[SKU-3002].sku",
+          "items[SKU-3002].description",
+          "items[SKU-3002].quantity",
+          "items[SKU-3003].sku",
+          "items[SKU-3003].description",
+          "items[SKU-3003].quantity"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-3001].sku",
+          "items[SKU-3001].description",
+          "items[SKU-3001].quantity",
+          "items[SKU-3001].unit_price",
+          "items[SKU-3001].amount",
+          "items[SKU-3002].sku",
+          "items[SKU-3002].description",
+          "items[SKU-3002].quantity",
+          "items[SKU-3002].unit_price",
+          "items[SKU-3002].amount",
+          "items[SKU-3003].sku",
+          "items[SKU-3003].description",
+          "items[SKU-3003].quantity",
+          "items[SKU-3003].unit_price",
+          "items[SKU-3003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [
+          "total_due",
+          "items[SKU-3001].unit_price",
+          "items[SKU-3001].amount",
+          "items[SKU-3002].unit_price",
+          "items[SKU-3002].amount",
+          "items[SKU-3003].unit_price",
+          "items[SKU-3003].amount"
+        ],
+        "result_identity": "sha256:31da2e0801ab25a062c3f4bcf35435d421b0bad79b68f48b528c3112e10a25d7",
+        "review_required_fields": [
+          "total_due",
+          "items[SKU-3001].unit_price",
+          "items[SKU-3001].amount",
+          "items[SKU-3002].unit_price",
+          "items[SKU-3002].amount",
+          "items[SKU-3003].unit_price",
+          "items[SKU-3003].amount"
+        ],
+        "rows": {
+          "accepted": 0,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 22.08,
+          "extract_ms": 167.59,
+          "publish_ms": 239.41,
+          "total_ms": 1294.8
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 9,
+          "correct_absent": 1,
+          "missing_flagged": 7,
+          "row.partial": 3
+        },
+        "doc_exact": false,
+        "doc_id": "inv-009-decimal-eu",
+        "error": null,
+        "evidence": {
+          "emitted": 12,
+          "with_evidence": 12
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_mismatch",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 17,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "wrong fields: ['amount', 'unit_price']",
+            "field_outcomes": {
+              "amount": "missing_flagged",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "missing_flagged"
+            },
+            "outcome": "partial",
+            "sku": "SKU-3001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "wrong fields: ['amount', 'unit_price']",
+            "field_outcomes": {
+              "amount": "missing_flagged",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "missing_flagged"
+            },
+            "outcome": "partial",
+            "sku": "SKU-3002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "wrong fields: ['amount', 'unit_price']",
+            "field_outcomes": {
+              "amount": "missing_flagged",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "missing_flagged"
+            },
+            "outcome": "partial",
+            "sku": "SKU-3003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "EUR",
+            "normalized_system": "EUR",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-05-12",
+            "normalized_system": "2026-05-12",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-009",
+            "normalized_system": "INV-2026-009",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "honest abstention/flag; value present in document",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "2045.00",
+            "normalized_system": "",
+            "outcome": "missing_flagged",
+            "system_status": "absent"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-010-many-rows": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-4105].sku",
+          "items[SKU-4105].description",
+          "items[SKU-4105].quantity",
+          "items[SKU-4105].unit_price",
+          "items[SKU-4105].amount",
+          "items[SKU-4106].sku",
+          "items[SKU-4106].description",
+          "items[SKU-4106].quantity",
+          "items[SKU-4106].unit_price",
+          "items[SKU-4106].amount",
+          "items[SKU-4107].sku",
+          "items[SKU-4107].description",
+          "items[SKU-4107].quantity",
+          "items[SKU-4107].unit_price",
+          "items[SKU-4107].amount",
+          "items[SKU-4108].sku",
+          "items[SKU-4108].description",
+          "items[SKU-4108].quantity",
+          "items[SKU-4108].unit_price",
+          "items[SKU-4108].amount",
+          "items[SKU-4103].sku",
+          "items[SKU-4103].description",
+          "items[SKU-4103].quantity",
+          "items[SKU-4103].unit_price",
+          "items[SKU-4103].amount",
+          "items[SKU-4104].sku",
+          "items[SKU-4104].description",
+          "items[SKU-4104].quantity",
+          "items[SKU-4104].unit_price",
+          "items[SKU-4104].amount",
+          "items[SKU-4101].sku",
+          "items[SKU-4101].description",
+          "items[SKU-4101].quantity",
+          "items[SKU-4101].unit_price",
+          "items[SKU-4101].amount",
+          "items[SKU-4102].sku",
+          "items[SKU-4102].description",
+          "items[SKU-4102].quantity",
+          "items[SKU-4102].unit_price",
+          "items[SKU-4102].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 45,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-4105].sku",
+          "items[SKU-4105].description",
+          "items[SKU-4105].quantity",
+          "items[SKU-4105].unit_price",
+          "items[SKU-4105].amount",
+          "items[SKU-4106].sku",
+          "items[SKU-4106].description",
+          "items[SKU-4106].quantity",
+          "items[SKU-4106].unit_price",
+          "items[SKU-4106].amount",
+          "items[SKU-4107].sku",
+          "items[SKU-4107].description",
+          "items[SKU-4107].quantity",
+          "items[SKU-4107].unit_price",
+          "items[SKU-4107].amount",
+          "items[SKU-4108].sku",
+          "items[SKU-4108].description",
+          "items[SKU-4108].quantity",
+          "items[SKU-4108].unit_price",
+          "items[SKU-4108].amount",
+          "items[SKU-4103].sku",
+          "items[SKU-4103].description",
+          "items[SKU-4103].quantity",
+          "items[SKU-4103].unit_price",
+          "items[SKU-4103].amount",
+          "items[SKU-4104].sku",
+          "items[SKU-4104].description",
+          "items[SKU-4104].quantity",
+          "items[SKU-4104].unit_price",
+          "items[SKU-4104].amount",
+          "items[SKU-4101].sku",
+          "items[SKU-4101].description",
+          "items[SKU-4101].quantity",
+          "items[SKU-4101].unit_price",
+          "items[SKU-4101].amount",
+          "items[SKU-4102].sku",
+          "items[SKU-4102].description",
+          "items[SKU-4102].quantity",
+          "items[SKU-4102].unit_price",
+          "items[SKU-4102].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:e19ddb2968646c5228eafb92d6beec60562fab3765bace2ffa1d4fa3fe88e2df",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 8,
+          "proposal_only": 0,
+          "total": 8
+        },
+        "run_status": "accepted",
+        "timings_ms": {
+          "commit_ms": 24.26,
+          "extract_ms": 1001.57,
+          "publish_ms": 295.27,
+          "total_ms": 2473.92
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 37,
+          "row.exact": 8
+        },
+        "doc_exact": true,
+        "doc_id": "inv-010-many-rows",
+        "error": null,
+        "evidence": {
+          "emitted": 45,
+          "with_evidence": 45
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 0,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4101"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4102"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4103"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4104"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4105"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4106"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4107"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-4108"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-20",
+            "normalized_system": "2026-03-20",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-010",
+            "normalized_system": "INV-2026-010",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-4501",
+            "normalized_system": "PO-4501",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "178.91",
+            "normalized_system": "178.91",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-011-duplicate-sku-identical": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-5001].sku",
+          "items[SKU-5001].description",
+          "items[SKU-5001].quantity",
+          "items[SKU-5001].unit_price",
+          "items[SKU-5001].amount",
+          "items[SKU-5002].sku",
+          "items[SKU-5002].description",
+          "items[SKU-5002].quantity",
+          "items[SKU-5002].unit_price",
+          "items[SKU-5002].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-5001].sku",
+          "items[SKU-5001].description",
+          "items[SKU-5001].quantity",
+          "items[SKU-5001].unit_price",
+          "items[SKU-5001].amount",
+          "items[SKU-5002].sku",
+          "items[SKU-5002].description",
+          "items[SKU-5002].quantity",
+          "items[SKU-5002].unit_price",
+          "items[SKU-5002].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:a0c76fc39b2f098fa1d5ddf0f2c572161ccc659efe90288e2e7014d410b06f3a",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "partial",
+        "timings_ms": {
+          "commit_ms": 24.59,
+          "extract_ms": 232.2,
+          "publish_ms": 284.11,
+          "total_ms": 1638.59
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 12,
+          "correct_absent": 1,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-011-duplicate-sku-identical",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-5001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-5002"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-22",
+            "normalized_system": "2026-03-22",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-011",
+            "normalized_system": "INV-2026-011",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "95",
+            "normalized_system": "95",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-012-duplicate-sku-conflicting": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-6001].sku",
+          "items[SKU-6001].description",
+          "items[SKU-6001].quantity",
+          "items[SKU-6001].unit_price",
+          "items[SKU-6001].amount",
+          "items[SKU-6002].sku",
+          "items[SKU-6002].description",
+          "items[SKU-6002].quantity",
+          "items[SKU-6002].unit_price",
+          "items[SKU-6002].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-6001].sku",
+          "items[SKU-6001].description",
+          "items[SKU-6001].quantity",
+          "items[SKU-6001].unit_price",
+          "items[SKU-6001].amount",
+          "items[SKU-6002].sku",
+          "items[SKU-6002].description",
+          "items[SKU-6002].quantity",
+          "items[SKU-6002].unit_price",
+          "items[SKU-6002].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:90371e942b9b9c0641c40a4e43de574f00563e15e1f4fd2c2fad4d350748cc99",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 22.24,
+          "extract_ms": 247.55,
+          "publish_ms": 258.8,
+          "total_ms": 1518.83
+        }
+      },
+      "score": {
+        "counts": {
+          "confident_on_conflict": 2,
+          "correct": 10,
+          "correct_absent": 1,
+          "row.conflict_confident": 1,
+          "row.exact": 1
+        },
+        "doc_exact": false,
+        "doc_id": "inv-012-duplicate-sku-conflicting",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "flagged",
+          "expected": "not_evaluable",
+          "outcome": "reported_mismatch",
+          "route_reported": "violated",
+          "scorer_computed": "mismatch"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "gold row is document-internal conflict; handling scored above",
+            "field_outcomes": {
+              "amount": "confident_on_conflict",
+              "description": "correct",
+              "quantity": "confident_on_conflict",
+              "unit_price": "correct"
+            },
+            "outcome": "conflict_confident",
+            "sku": "SKU-6001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-6002"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-24",
+            "normalized_system": "2026-03-24",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-012",
+            "normalized_system": "INV-2026-012",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "50",
+            "normalized_system": "50",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-013-broken-row-short": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-7001].sku",
+          "items[SKU-7001].description",
+          "items[SKU-7001].quantity",
+          "items[SKU-7001].unit_price",
+          "items[SKU-7001].amount",
+          "items[SKU-7003].sku",
+          "items[SKU-7003].description",
+          "items[SKU-7003].quantity",
+          "items[SKU-7003].unit_price",
+          "items[SKU-7003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 18,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-7001].sku",
+          "items[SKU-7001].description",
+          "items[SKU-7001].quantity",
+          "items[SKU-7001].unit_price",
+          "items[SKU-7001].amount",
+          "items[SKU-7003].sku",
+          "items[SKU-7003].description",
+          "items[SKU-7003].quantity",
+          "items[SKU-7003].unit_price",
+          "items[SKU-7003].amount",
+          "items[SKU-7002].sku",
+          "items[SKU-7002].description",
+          "items[SKU-7002].quantity",
+          "items[SKU-7002].unit_price"
+        ],
+        "proposal_only_fields": [
+          "items[SKU-7002].sku",
+          "items[SKU-7002].description",
+          "items[SKU-7002].quantity",
+          "items[SKU-7002].unit_price"
+        ],
+        "proposal_review_fields": [
+          "items[SKU-7002].sku",
+          "items[SKU-7002].description",
+          "items[SKU-7002].quantity",
+          "items[SKU-7002].unit_price"
+        ],
+        "result_identity": "sha256:d9760d62ea5be77b21e2bc85c498c065a6403edeb5e9191fb45564fdd61e80cc",
+        "review_required_fields": [
+          "items[SKU-7002].sku",
+          "items[SKU-7002].description",
+          "items[SKU-7002].quantity",
+          "items[SKU-7002].unit_price"
+        ],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 1,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 19.15,
+          "extract_ms": 242.41,
+          "publish_ms": 257.12,
+          "total_ms": 1458.81
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 12,
+          "correct_absent": 2,
+          "missing_flagged": 3,
+          "row.exact": 2,
+          "row.partial": 1
+        },
+        "doc_exact": false,
+        "doc_id": "inv-013-broken-row-short",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_mismatch",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 6,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-7001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "wrong fields: ['amount', 'description', 'quantity']",
+            "field_outcomes": {
+              "amount": "missing_flagged",
+              "description": "missing_flagged",
+              "quantity": "missing_flagged",
+              "unit_price": "correct_absent"
+            },
+            "outcome": "partial",
+            "sku": "SKU-7002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-7003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-25",
+            "normalized_system": "2026-03-25",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-013",
+            "normalized_system": "INV-2026-013",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "150",
+            "normalized_system": "150",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-014-broken-row-long": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-7201].sku",
+          "items[SKU-7201].description",
+          "items[SKU-7201].quantity",
+          "items[SKU-7201].unit_price",
+          "items[SKU-7201].amount",
+          "items[SKU-7203].sku",
+          "items[SKU-7203].description",
+          "items[SKU-7203].quantity",
+          "items[SKU-7203].unit_price",
+          "items[SKU-7203].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-7201].sku",
+          "items[SKU-7201].description",
+          "items[SKU-7201].quantity",
+          "items[SKU-7201].unit_price",
+          "items[SKU-7201].amount",
+          "items[SKU-7203].sku",
+          "items[SKU-7203].description",
+          "items[SKU-7203].quantity",
+          "items[SKU-7203].unit_price",
+          "items[SKU-7203].amount",
+          "items[SKU-7202].sku",
+          "items[SKU-7202].description",
+          "items[SKU-7202].quantity",
+          "items[SKU-7202].unit_price",
+          "items[SKU-7202].amount"
+        ],
+        "proposal_only_fields": [
+          "items[SKU-7202].sku",
+          "items[SKU-7202].description",
+          "items[SKU-7202].quantity",
+          "items[SKU-7202].unit_price",
+          "items[SKU-7202].amount"
+        ],
+        "proposal_review_fields": [
+          "items[SKU-7202].sku",
+          "items[SKU-7202].description",
+          "items[SKU-7202].quantity",
+          "items[SKU-7202].unit_price",
+          "items[SKU-7202].amount"
+        ],
+        "result_identity": "sha256:a0b51554340c168e9ebbc3094cf96d05d2ca8078b5f2f6344541f4c69f4e3e67",
+        "review_required_fields": [
+          "items[SKU-7202].sku",
+          "items[SKU-7202].description",
+          "items[SKU-7202].quantity",
+          "items[SKU-7202].unit_price",
+          "items[SKU-7202].amount"
+        ],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 1,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 20.03,
+          "extract_ms": 290.02,
+          "publish_ms": 245.32,
+          "total_ms": 1538.99
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 12,
+          "correct_absent": 1,
+          "missing_flagged": 4,
+          "row.exact": 2,
+          "row.partial": 1
+        },
+        "doc_exact": false,
+        "doc_id": "inv-014-broken-row-long",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_mismatch",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 6,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-7201"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "wrong fields: ['amount', 'description', 'quantity', 'unit_price']",
+            "field_outcomes": {
+              "amount": "missing_flagged",
+              "description": "missing_flagged",
+              "quantity": "missing_flagged",
+              "unit_price": "missing_flagged"
+            },
+            "outcome": "partial",
+            "sku": "SKU-7202"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-7203"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-26",
+            "normalized_system": "2026-03-26",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-014",
+            "normalized_system": "INV-2026-014",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "175",
+            "normalized_system": "175",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-015-nonnumeric-amount": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-7501].sku",
+          "items[SKU-7501].description",
+          "items[SKU-7501].quantity",
+          "items[SKU-7501].unit_price",
+          "items[SKU-7501].amount",
+          "items[SKU-7502].sku",
+          "items[SKU-7502].description",
+          "items[SKU-7502].quantity",
+          "items[SKU-7502].unit_price",
+          "items[SKU-7503].sku",
+          "items[SKU-7503].description",
+          "items[SKU-7503].quantity",
+          "items[SKU-7503].unit_price",
+          "items[SKU-7503].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 18,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-7501].sku",
+          "items[SKU-7501].description",
+          "items[SKU-7501].quantity",
+          "items[SKU-7501].unit_price",
+          "items[SKU-7501].amount",
+          "items[SKU-7502].sku",
+          "items[SKU-7502].description",
+          "items[SKU-7502].quantity",
+          "items[SKU-7502].unit_price",
+          "items[SKU-7503].sku",
+          "items[SKU-7503].description",
+          "items[SKU-7503].quantity",
+          "items[SKU-7503].unit_price",
+          "items[SKU-7503].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:afe673b54e053688bd54b6c977aed316563b201a8f3475b8ebc03de9af3b28c1",
+        "review_required_fields": [
+          "items[SKU-7502].amount"
+        ],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 17.15,
+          "extract_ms": 277.84,
+          "publish_ms": 209.81,
+          "total_ms": 1530.25
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 15,
+          "correct_absent": 2,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-015-nonnumeric-amount",
+        "error": null,
+        "evidence": {
+          "emitted": 18,
+          "with_evidence": 18
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "not_evaluable",
+          "outcome": "reported_match",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 6,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-7501"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct_absent",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-7502"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-7503"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-27",
+            "normalized_system": "2026-03-27",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-015",
+            "normalized_system": "INV-2026-015",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "172.5",
+            "normalized_system": "172.5",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-016-total-mismatch": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:bd4231639c5bcee924f70f55c5595b8f015200fc4259a497a07b9780339b03e9",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 22.08,
+          "extract_ms": 317.26,
+          "publish_ms": 270.72,
+          "total_ms": 1657.81
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 16,
+          "correct_absent": 1,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-016-total-mismatch",
+        "error": null,
+        "evidence": {
+          "emitted": 19,
+          "with_evidence": 19
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "flagged",
+          "expected": "violated",
+          "outcome": "reported_match",
+          "route_reported": "violated",
+          "scorer_computed": "mismatch"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-28",
+            "normalized_system": "2026-03-28",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-016",
+            "normalized_system": "INV-2026-016",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "160",
+            "normalized_system": "160",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-017-missing-total": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 19,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "items[SKU-1001].sku",
+          "items[SKU-1001].description",
+          "items[SKU-1001].quantity",
+          "items[SKU-1001].unit_price",
+          "items[SKU-1001].amount",
+          "items[SKU-1002].sku",
+          "items[SKU-1002].description",
+          "items[SKU-1002].quantity",
+          "items[SKU-1002].unit_price",
+          "items[SKU-1002].amount",
+          "items[SKU-1003].sku",
+          "items[SKU-1003].description",
+          "items[SKU-1003].quantity",
+          "items[SKU-1003].unit_price",
+          "items[SKU-1003].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:1fae8078af2bfd1fe9b89d0432a9145b3680273657b6917776e908bf7b7a96d3",
+        "review_required_fields": [
+          "total_due"
+        ],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 27.42,
+          "extract_ms": 290.26,
+          "publish_ms": 335.01,
+          "total_ms": 1779.18
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 16,
+          "correct_absent": 1,
+          "row.exact": 3
+        },
+        "doc_exact": true,
+        "doc_id": "inv-017-missing-total",
+        "error": null,
+        "evidence": {
+          "emitted": 19,
+          "with_evidence": 19
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "not_evaluable",
+          "outcome": "reported_match",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1001"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1002"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1003"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-03-30",
+            "normalized_system": "2026-03-30",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-017",
+            "normalized_system": "INV-2026-017",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-4490",
+            "normalized_system": "PO-4490",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "total_due",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-018-label-variants": {
+      "metrics": {
+        "accepted_fields": [
+          "currency",
+          "items[SKU-1210].sku",
+          "items[SKU-1210].description",
+          "items[SKU-1210].quantity",
+          "items[SKU-1210].unit_price",
+          "items[SKU-1210].amount",
+          "items[SKU-1212].sku",
+          "items[SKU-1212].description",
+          "items[SKU-1212].quantity",
+          "items[SKU-1212].unit_price",
+          "items[SKU-1212].amount",
+          "items[SKU-1211].sku",
+          "items[SKU-1211].description",
+          "items[SKU-1211].quantity",
+          "items[SKU-1211].unit_price",
+          "items[SKU-1211].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [
+          "currency"
+        ],
+        "false_authority_events": [],
+        "lane_proposals": 20,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1210].sku",
+          "items[SKU-1210].description",
+          "items[SKU-1210].quantity",
+          "items[SKU-1210].unit_price",
+          "items[SKU-1210].amount",
+          "items[SKU-1212].sku",
+          "items[SKU-1212].description",
+          "items[SKU-1212].quantity",
+          "items[SKU-1212].unit_price",
+          "items[SKU-1212].amount",
+          "items[SKU-1211].sku",
+          "items[SKU-1211].description",
+          "items[SKU-1211].quantity",
+          "items[SKU-1211].unit_price",
+          "items[SKU-1211].amount"
+        ],
+        "proposal_only_fields": [
+          "invoice_number",
+          "invoice_date",
+          "po_number",
+          "total_due"
+        ],
+        "proposal_review_fields": [
+          "invoice_number",
+          "invoice_date",
+          "po_number",
+          "total_due"
+        ],
+        "result_identity": "sha256:10ec5b9ffae0a28bde82b7d29504d9b1df0abad4dd67389e18abd2ed700359bf",
+        "review_required_fields": [
+          "invoice_number",
+          "invoice_date",
+          "po_number",
+          "total_due"
+        ],
+        "rows": {
+          "accepted": 3,
+          "proposal_only": 0,
+          "total": 3
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 21.77,
+          "extract_ms": 284.62,
+          "publish_ms": 288.77,
+          "total_ms": 1596.39
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 13,
+          "missing_flagged": 4,
+          "row.exact": 3
+        },
+        "doc_exact": false,
+        "doc_id": "inv-018-label-variants",
+        "error": null,
+        "evidence": {
+          "emitted": 16,
+          "with_evidence": 16
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_mismatch",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 4,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1210"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1211"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1212"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "honest abstention/flag; value present in document",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-04-02",
+            "normalized_system": "",
+            "outcome": "missing_flagged",
+            "system_status": "absent"
+          },
+          {
+            "detail": "honest abstention/flag; value present in document",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-88121",
+            "normalized_system": "",
+            "outcome": "missing_flagged",
+            "system_status": "absent"
+          },
+          {
+            "detail": "honest abstention/flag; value present in document",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-2210",
+            "normalized_system": "",
+            "outcome": "missing_flagged",
+            "system_status": "absent"
+          },
+          {
+            "detail": "honest abstention/flag; value present in document",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "312.40",
+            "normalized_system": "",
+            "outcome": "missing_flagged",
+            "system_status": "absent"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-019-noise-heavy": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1311].sku",
+          "items[SKU-1311].description",
+          "items[SKU-1311].quantity",
+          "items[SKU-1311].unit_price",
+          "items[SKU-1311].amount",
+          "items[SKU-1310].sku",
+          "items[SKU-1310].description",
+          "items[SKU-1310].quantity",
+          "items[SKU-1310].unit_price",
+          "items[SKU-1310].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 14,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "items[SKU-1311].sku",
+          "items[SKU-1311].description",
+          "items[SKU-1311].quantity",
+          "items[SKU-1311].unit_price",
+          "items[SKU-1311].amount",
+          "items[SKU-1310].sku",
+          "items[SKU-1310].description",
+          "items[SKU-1310].quantity",
+          "items[SKU-1310].unit_price",
+          "items[SKU-1310].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:9c41e4436ef2db4944c7841f165d2fe35385fa06d23a74344cb24dfc2532501f",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 24.8,
+          "extract_ms": 272.99,
+          "publish_ms": 277.87,
+          "total_ms": 1637.81
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 13,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-019-noise-heavy",
+        "error": null,
+        "evidence": {
+          "emitted": 15,
+          "with_evidence": 15
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "flagged",
+          "expected": "violated",
+          "outcome": "reported_match",
+          "route_reported": "violated",
+          "scorer_computed": "mismatch"
+        },
+        "review": {
+          "self_flagged": 0,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1310"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1311"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-04-01",
+            "normalized_system": "2026-04-01",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-019",
+            "normalized_system": "INV-2026-019",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-4520",
+            "normalized_system": "PO-4520",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "152.32",
+            "normalized_system": "152.32",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-020-two-witness-agree": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-3100].sku",
+          "items[SKU-3100].description",
+          "items[SKU-3100].quantity",
+          "items[SKU-3100].unit_price",
+          "items[SKU-3100].amount",
+          "items[SKU-3101].sku",
+          "items[SKU-3101].description",
+          "items[SKU-3101].quantity",
+          "items[SKU-3101].unit_price",
+          "items[SKU-3101].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 15,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-3100].sku",
+          "items[SKU-3100].description",
+          "items[SKU-3100].quantity",
+          "items[SKU-3100].unit_price",
+          "items[SKU-3100].amount",
+          "items[SKU-3101].sku",
+          "items[SKU-3101].description",
+          "items[SKU-3101].quantity",
+          "items[SKU-3101].unit_price",
+          "items[SKU-3101].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:303e16ef48a8ce9c4079822e97385fcfc92a93274e19a3e30c3a7d9fd7daa997",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "accepted",
+        "timings_ms": {
+          "commit_ms": 23.06,
+          "extract_ms": 302.09,
+          "publish_ms": 302.52,
+          "total_ms": 1735.49
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 13,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-020-two-witness-agree",
+        "error": null,
+        "evidence": {
+          "emitted": 15,
+          "with_evidence": 15
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 0,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-3100"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-3101"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-04-03",
+            "normalized_system": "2026-04-03",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-020",
+            "normalized_system": "INV-2026-020",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-3301",
+            "normalized_system": "PO-3301",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "155",
+            "normalized_system": "155",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-021-two-witness-conflict": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "items[SKU-3100].sku",
+          "items[SKU-3100].description",
+          "items[SKU-3100].quantity",
+          "items[SKU-3100].unit_price",
+          "items[SKU-3100].amount",
+          "items[SKU-3101].sku",
+          "items[SKU-3101].description",
+          "items[SKU-3101].quantity",
+          "items[SKU-3101].unit_price",
+          "items[SKU-3101].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 14,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "items[SKU-3100].sku",
+          "items[SKU-3100].description",
+          "items[SKU-3100].quantity",
+          "items[SKU-3100].unit_price",
+          "items[SKU-3100].amount",
+          "items[SKU-3101].sku",
+          "items[SKU-3101].description",
+          "items[SKU-3101].quantity",
+          "items[SKU-3101].unit_price",
+          "items[SKU-3101].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:ab2079759481e4bef8d643d3062f7982b294c818405297f5b479cdae80978854",
+        "review_required_fields": [
+          "total_due"
+        ],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "review_required",
+        "timings_ms": {
+          "commit_ms": 18.21,
+          "extract_ms": 320.59,
+          "publish_ms": 273.49,
+          "total_ms": 1648.06
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 12,
+          "honest_conflict": 1,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-021-two-witness-conflict",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "not_evaluable",
+          "outcome": "reported_match",
+          "route_reported": "not_evaluable",
+          "scorer_computed": "unevaluable"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-3100"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-3101"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-04-05",
+            "normalized_system": "2026-04-05",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-021",
+            "normalized_system": "INV-2026-021",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-3302",
+            "normalized_system": "PO-3302",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "document conflict flagged honestly",
+            "field": "total_due",
+            "gold_status": "conflicting",
+            "normalized_gold": "155.00|159.97",
+            "normalized_system": "",
+            "outcome": "honest_conflict",
+            "system_status": "absent"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-022-negative-credit": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-8099].sku",
+          "items[SKU-8099].description",
+          "items[SKU-8099].quantity",
+          "items[SKU-8099].unit_price",
+          "items[SKU-8099].amount",
+          "items[SKU-8100].sku",
+          "items[SKU-8100].description",
+          "items[SKU-8100].quantity",
+          "items[SKU-8100].unit_price",
+          "items[SKU-8100].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 14,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "total_due",
+          "items[SKU-8099].sku",
+          "items[SKU-8099].description",
+          "items[SKU-8099].quantity",
+          "items[SKU-8099].unit_price",
+          "items[SKU-8099].amount",
+          "items[SKU-8100].sku",
+          "items[SKU-8100].description",
+          "items[SKU-8100].quantity",
+          "items[SKU-8100].unit_price",
+          "items[SKU-8100].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:6e53c10d0d6d6152e11df843f294445f036133e3449a47f9a34d2d979de948d0",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "partial",
+        "timings_ms": {
+          "commit_ms": 20.49,
+          "extract_ms": 230.67,
+          "publish_ms": 275.13,
+          "total_ms": 1730.01
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 12,
+          "correct_absent": 1,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-022-negative-credit",
+        "error": null,
+        "evidence": {
+          "emitted": 14,
+          "with_evidence": 14
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 1,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-8099"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-8100"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-04-08",
+            "normalized_system": "2026-04-08",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-022",
+            "normalized_system": "INV-2026-022",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "correctly reported absent",
+            "field": "po_number",
+            "gold_status": "absent",
+            "normalized_gold": "",
+            "normalized_system": "",
+            "outcome": "correct_absent",
+            "system_status": "absent"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "100",
+            "normalized_system": "100",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-023-fullwidth-punctuation": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1130].sku",
+          "items[SKU-1130].description",
+          "items[SKU-1130].quantity",
+          "items[SKU-1130].unit_price",
+          "items[SKU-1130].amount",
+          "items[SKU-1131].sku",
+          "items[SKU-1131].description",
+          "items[SKU-1131].quantity",
+          "items[SKU-1131].unit_price",
+          "items[SKU-1131].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 15,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-1130].sku",
+          "items[SKU-1130].description",
+          "items[SKU-1130].quantity",
+          "items[SKU-1130].unit_price",
+          "items[SKU-1130].amount",
+          "items[SKU-1131].sku",
+          "items[SKU-1131].description",
+          "items[SKU-1131].quantity",
+          "items[SKU-1131].unit_price",
+          "items[SKU-1131].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:00d5a2e52d523b3735eb7b942f58c84404351e68aee9211f07ea6501a03afde9",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 2,
+          "proposal_only": 0,
+          "total": 2
+        },
+        "run_status": "accepted",
+        "timings_ms": {
+          "commit_ms": 20.68,
+          "extract_ms": 232.36,
+          "publish_ms": 286.49,
+          "total_ms": 1656.94
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 13,
+          "row.exact": 2
+        },
+        "doc_exact": true,
+        "doc_id": "inv-023-fullwidth-punctuation",
+        "error": null,
+        "evidence": {
+          "emitted": 15,
+          "with_evidence": 15
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 0,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1130"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-1131"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "USD",
+            "normalized_system": "USD",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-06-30",
+            "normalized_system": "2026-06-30",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-99023",
+            "normalized_system": "INV-99023",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-7-771",
+            "normalized_system": "PO-7-771",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "210",
+            "normalized_system": "210",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    },
+    "inv-024-multipage": {
+      "metrics": {
+        "accepted_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-108].sku",
+          "items[SKU-108].description",
+          "items[SKU-108].quantity",
+          "items[SKU-108].unit_price",
+          "items[SKU-108].amount",
+          "items[SKU-105].sku",
+          "items[SKU-105].description",
+          "items[SKU-105].quantity",
+          "items[SKU-105].unit_price",
+          "items[SKU-105].amount",
+          "items[SKU-106].sku",
+          "items[SKU-106].description",
+          "items[SKU-106].quantity",
+          "items[SKU-106].unit_price",
+          "items[SKU-106].amount",
+          "items[SKU-107].sku",
+          "items[SKU-107].description",
+          "items[SKU-107].quantity",
+          "items[SKU-107].unit_price",
+          "items[SKU-107].amount",
+          "items[SKU-109].sku",
+          "items[SKU-109].description",
+          "items[SKU-109].quantity",
+          "items[SKU-109].unit_price",
+          "items[SKU-109].amount",
+          "items[SKU-110].sku",
+          "items[SKU-110].description",
+          "items[SKU-110].quantity",
+          "items[SKU-110].unit_price",
+          "items[SKU-110].amount",
+          "items[SKU-112].sku",
+          "items[SKU-112].description",
+          "items[SKU-112].quantity",
+          "items[SKU-112].unit_price",
+          "items[SKU-112].amount",
+          "items[SKU-102].sku",
+          "items[SKU-102].description",
+          "items[SKU-102].quantity",
+          "items[SKU-102].unit_price",
+          "items[SKU-102].amount",
+          "items[SKU-103].sku",
+          "items[SKU-103].description",
+          "items[SKU-103].quantity",
+          "items[SKU-103].unit_price",
+          "items[SKU-103].amount",
+          "items[SKU-104].sku",
+          "items[SKU-104].description",
+          "items[SKU-104].quantity",
+          "items[SKU-104].unit_price",
+          "items[SKU-104].amount",
+          "items[SKU-111].sku",
+          "items[SKU-111].description",
+          "items[SKU-111].quantity",
+          "items[SKU-111].unit_price",
+          "items[SKU-111].amount",
+          "items[SKU-101].sku",
+          "items[SKU-101].description",
+          "items[SKU-101].quantity",
+          "items[SKU-101].unit_price",
+          "items[SKU-101].amount"
+        ],
+        "accepted_without_lineage": [],
+        "conflicts_preserved": [],
+        "corroborated_fields": [],
+        "false_authority_events": [],
+        "lane_proposals": 65,
+        "lane_runtime": {
+          "attempts": 1,
+          "completion_tokens": null,
+          "from_cache": true,
+          "latency_ms": 0,
+          "prompt_tokens": null
+        },
+        "lane_status": "ok",
+        "proposal_fields": [
+          "invoice_number",
+          "invoice_date",
+          "currency",
+          "po_number",
+          "total_due",
+          "items[SKU-108].sku",
+          "items[SKU-108].description",
+          "items[SKU-108].quantity",
+          "items[SKU-108].unit_price",
+          "items[SKU-108].amount",
+          "items[SKU-105].sku",
+          "items[SKU-105].description",
+          "items[SKU-105].quantity",
+          "items[SKU-105].unit_price",
+          "items[SKU-105].amount",
+          "items[SKU-106].sku",
+          "items[SKU-106].description",
+          "items[SKU-106].quantity",
+          "items[SKU-106].unit_price",
+          "items[SKU-106].amount",
+          "items[SKU-107].sku",
+          "items[SKU-107].description",
+          "items[SKU-107].quantity",
+          "items[SKU-107].unit_price",
+          "items[SKU-107].amount",
+          "items[SKU-109].sku",
+          "items[SKU-109].description",
+          "items[SKU-109].quantity",
+          "items[SKU-109].unit_price",
+          "items[SKU-109].amount",
+          "items[SKU-110].sku",
+          "items[SKU-110].description",
+          "items[SKU-110].quantity",
+          "items[SKU-110].unit_price",
+          "items[SKU-110].amount",
+          "items[SKU-112].sku",
+          "items[SKU-112].description",
+          "items[SKU-112].quantity",
+          "items[SKU-112].unit_price",
+          "items[SKU-112].amount",
+          "items[SKU-102].sku",
+          "items[SKU-102].description",
+          "items[SKU-102].quantity",
+          "items[SKU-102].unit_price",
+          "items[SKU-102].amount",
+          "items[SKU-103].sku",
+          "items[SKU-103].description",
+          "items[SKU-103].quantity",
+          "items[SKU-103].unit_price",
+          "items[SKU-103].amount",
+          "items[SKU-104].sku",
+          "items[SKU-104].description",
+          "items[SKU-104].quantity",
+          "items[SKU-104].unit_price",
+          "items[SKU-104].amount",
+          "items[SKU-111].sku",
+          "items[SKU-111].description",
+          "items[SKU-111].quantity",
+          "items[SKU-111].unit_price",
+          "items[SKU-111].amount",
+          "items[SKU-101].sku",
+          "items[SKU-101].description",
+          "items[SKU-101].quantity",
+          "items[SKU-101].unit_price",
+          "items[SKU-101].amount"
+        ],
+        "proposal_only_fields": [],
+        "proposal_review_fields": [],
+        "result_identity": "sha256:bec4eb35293bcb95ff598acdc3b51452813a60eba1c98270404b66b6e8a88889",
+        "review_required_fields": [],
+        "rows": {
+          "accepted": 12,
+          "proposal_only": 0,
+          "total": 12
+        },
+        "run_status": "accepted",
+        "timings_ms": {
+          "commit_ms": 26.38,
+          "extract_ms": 1611.01,
+          "publish_ms": 290.79,
+          "total_ms": 3014.78
+        }
+      },
+      "score": {
+        "counts": {
+          "correct": 53,
+          "row.exact": 12
+        },
+        "doc_exact": true,
+        "doc_id": "inv-024-multipage",
+        "error": null,
+        "evidence": {
+          "emitted": 65,
+          "with_evidence": 65
+        },
+        "extra_rows": [],
+        "invariant": {
+          "contradiction_class": "none",
+          "expected": "satisfied",
+          "outcome": "reported_match",
+          "route_reported": "satisfied",
+          "scorer_computed": "consistent"
+        },
+        "review": {
+          "self_flagged": 0,
+          "unverified_emitted": 0
+        },
+        "rows": [
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-101"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-102"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-103"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-104"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-105"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-106"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-107"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-108"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-109"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-110"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-111"
+          },
+          {
+            "cross_row_fields": [],
+            "detail": "",
+            "field_outcomes": {
+              "amount": "correct",
+              "description": "correct",
+              "quantity": "correct",
+              "unit_price": "correct"
+            },
+            "outcome": "exact",
+            "sku": "SKU-112"
+          }
+        ],
+        "scalars": [
+          {
+            "detail": "normalized values agree",
+            "field": "currency",
+            "gold_status": "present",
+            "normalized_gold": "EUR",
+            "normalized_system": "EUR",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_date",
+            "gold_status": "present",
+            "normalized_gold": "2026-07-15",
+            "normalized_system": "2026-07-15",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "invoice_number",
+            "gold_status": "present",
+            "normalized_gold": "INV-2026-024",
+            "normalized_system": "INV-2026-024",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "po_number",
+            "gold_status": "present",
+            "normalized_gold": "PO-77120",
+            "normalized_system": "PO-77120",
+            "outcome": "correct",
+            "system_status": "emitted"
+          },
+          {
+            "detail": "normalized values agree",
+            "field": "total_due",
+            "gold_status": "present",
+            "normalized_gold": "866.2",
+            "normalized_system": "866.2",
+            "outcome": "correct",
+            "system_status": "emitted"
+          }
+        ],
+        "system_id": "marker-pr80a"
+      }
+    }
+  },
+  "policy": {
+    "corroboration_rule": "hybrid.corroboration.deterministic_normalization.v1",
+    "grounded": "marker.extraction.reconcile/v1",
+    "hybrid": "marker.extraction.hybrid/v1"
+  },
+  "schema_identity": "demo.invoice@1.0.0",
+  "specialist": {
+    "cache_fingerprint": "sha256:8007efb6a4c183e9542b25b5f9ebf42768ce0ce2ae9b7d8063ec0a61b96b0e60",
+    "cache_path": "docs\\reference\\measurements\\pr80b-llm-cache.json",
+    "model_requested": "kc/poolside/laguna-s-2.1:free",
+    "model_served": [
+      "poolside/laguna-s-2.1:free"
+    ],
+    "recorded_responses": 24,
+    "replay": true
+  },
+  "totals": {
+    "accepted_fields_without_lineage": 0,
+    "authoritative_accepted_fields": 457,
+    "conflicts_preserved": 0,
+    "corroborated_fields": 3,
+    "docs": 24,
+    "fabricated_to_authority_events": 0,
+    "false_authority_events": 0,
+    "fields_with_any_proposal": 480,
+    "hybrid_review_required_fields": 29,
+    "lane_failures": 0,
+    "proposal_only_fields": 13,
+    "proposal_review_fields": 24
+  }
+}
