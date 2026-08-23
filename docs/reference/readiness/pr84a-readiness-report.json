@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "7eb9cb81fd6b04109d0fe0b0dd7698fe74a9e8c0"
+    "git_head": "e506791db3783e7212ce2b72e96cce6ae33effcf"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 41,
+    "proven": 42,
     "failed": 0,
-    "no_evidence": 21
+    "no_evidence": 20
   },
   "group_counts": {
     "23C.1": {
@@ -41,9 +41,9 @@
       "total": 10
     },
     "23C.6": {
-      "proven": 6,
+      "proven": 7,
       "failed": 0,
-      "no_evidence": 2,
+      "no_evidence": 1,
       "total": 8
     },
     "23C.7": {
@@ -54,7 +54,7 @@
     }
   },
   "gap_type_counts": {
-    "B": 11,
+    "B": 10,
     "D": 5,
     "F": 5
   },
@@ -64,8 +64,8 @@
     "23C.3",
     "23C.4",
     "23C.2",
-    "23C.6",
-    "23C.5"
+    "23C.5",
+    "23C.6"
   ],
   "integrity_findings": [],
   "invariants": [
@@ -670,11 +670,13 @@
       "id": 53,
       "group": "23C.6",
       "label": "packet-reuse-invalidation",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "B",
-      "gap_note": "Most named triggers are explicit identity dimensions with tests; 'citation change' has no identity dimension and renderer/tokenizer rotation is covered only via serialization_profile + publication tokenizer fields."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev lane: real kernel commit spine, real immutable publication sets/generations, trusted local_v1 authorization resolution, durable Alembic-migrated cursors through head 20260823_0016, and the run_agent_query delivery seam"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 54,

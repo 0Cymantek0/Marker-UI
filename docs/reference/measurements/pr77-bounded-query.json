@@ -24,7 +24,7 @@
   "method": "each typed query repeated 30x via time.perf_counter; acceptance is structural/count-based, wall-clock is evidence only; runtime metadata is non-semantic",
   "migration": {
     "action": "initialized",
-    "to_revision": "20260817_0011"
+    "to_revision": "20260823_0016"
   },
   "platform": "Windows-10-10.0.26200-SP0",
   "python": "3.11.9",
@@ -33,7 +33,7 @@
     "across_publication_switch": {
       "candidates_considered": 50,
       "follow_up_saw_new_set": true,
-      "identity_id": "sha256:6e9b829172929e0ad9b7e17ceaac7f4e2ce0f928dc7be57ef3ac2f1ceb70e9a3",
+      "identity_id": "sha256:6032c2bd0c3ecb3a1d530261c995830ef92b086d9160c3b5f68dfb9381ac6563",
       "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
       "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
       "omission_reasons": [
@@ -43,7 +43,7 @@
       "operations_executed": 2,
       "output_chars": 16472,
       "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
-      "query_runtime_ms": 396.183,
+      "query_runtime_ms": 829.206,
       "single_set_attribution": true,
       "status": "partial",
       "stayed_on_pinned_set": true,
@@ -65,18 +65,18 @@
         "units_omitted": 0
       },
       "candidates_considered": 0,
-      "identity_id": "sha256:eaccc35513fc8a2ce900332f1d37def27f5b6c15bf957c665a0a20f824ed32f3",
+      "identity_id": "sha256:17a7d24b154a7053be2f19a63b064821e2b2ee3e891a6806b477fdef7f00645f",
       "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
       "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
-      "mean_ms": 146.185,
+      "mean_ms": 467.065,
       "omission_reasons": [],
       "operations_executed": 1,
       "output_chars": 652,
       "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
       "query_latency_ms": {
-        "p50": 143.016,
-        "p95": 157.873,
-        "p99": 159.156
+        "p50": 463.142,
+        "p95": 525.752,
+        "p99": 562.722
       },
       "single_set_attribution": true,
       "status": "complete",
@@ -98,10 +98,10 @@
         "units_omitted": 151
       },
       "candidates_considered": 200,
-      "identity_id": "sha256:c9f561387889e75cc6b4170c4fea13bfe0d90f64c1ab753c0f488e0304dbcee0",
+      "identity_id": "sha256:51dd0afdd5997fbf88f22695e875f785ea1f2fb06d00b52f2ce752cd12ca7718",
       "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
       "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
-      "mean_ms": 57.422,
+      "mean_ms": 309.111,
       "omission_reasons": [
         "candidate_budget",
         "unit_budget"
@@ -110,9 +110,9 @@
       "output_chars": 32992,
       "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
       "query_latency_ms": {
-        "p50": 56.38,
-        "p95": 65.583,
-        "p99": 79.813
+        "p50": 314.066,
+        "p95": 363.863,
+        "p99": 381.991
       },
       "single_set_attribution": true,
       "status": "partial",
@@ -134,10 +134,10 @@
         "units_omitted": 196
       },
       "candidates_considered": 200,
-      "identity_id": "sha256:f6270da55fbf7c48483a5fd169305dac484aa3ed5fe0fc7d8b309c7db63dcf62",
+      "identity_id": "sha256:f38f8d1a5451b55059c10d928738ff668ad85fb80560b7accb53122e76119ad1",
       "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
       "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
-      "mean_ms": 55.073,
+      "mean_ms": 325.742,
       "omission_reasons": [
         "candidate_budget",
         "unit_budget"
@@ -146,9 +146,9 @@
       "output_chars": 3291,
       "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
       "query_latency_ms": {
-        "p50": 54.147,
-        "p95": 61.425,
-        "p99": 65.965
+        "p50": 313.038,
+        "p95": 370.069,
+        "p99": 588.855
       },
       "single_set_attribution": true,
       "status": "partial",
@@ -170,18 +170,18 @@
         "units_omitted": 0
       },
       "candidates_considered": 1,
-      "identity_id": "sha256:8bb599500960e192f0815633805416a942b14da4b24b6e835ab7b35d2a41ddc6",
+      "identity_id": "sha256:9ee7a6d7bdc33f6be3578df442470c13077d0a6148ff9a54ef5464334a721313",
       "lexical_generation_id": "sha256:73e0f068c37b9036e8e9b561afba5f5827dd22d77c096742b8f0b5722c7ea226",
       "materialized_generation_id": "sha256:1fc4f6c0c3f16d4fcc61f5918f4885b966a718164c1dfa5d6605ff70442b6aa6",
-      "mean_ms": 31.606,
+      "mean_ms": 267.82,
       "omission_reasons": [],
       "operations_executed": 1,
       "output_chars": 656,
       "publication_set_id": "sha256:216aac78a20472aabce5613cd3c35df6dcb5f6ae3005533eafca95cfd742ce43",
       "query_latency_ms": {
-        "p50": 31.086,
-        "p95": 36.25,
-        "p99": 37.911
+        "p50": 269.116,
+        "p95": 306.249,
+        "p99": 393.034
       },
       "single_set_attribution": true,
       "status": "complete",

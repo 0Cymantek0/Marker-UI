@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `7eb9cb81fd6b04109d0fe0b0dd7698fe74a9e8c0`
-- Invariants proven: **41 / 62**
+- Audited source head: `e506791db3783e7212ce2b72e96cce6ae33effcf`
+- Invariants proven: **42 / 62**
 - Failed: **0**
-- No acceptable evidence: **21**
+- No acceptable evidence: **20**
 
 ## Group summary
 
@@ -16,7 +16,7 @@
 | 23C.3 | Verification and routing | 5 | 0 | 4 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
-| 23C.6 | Agent and product behavior | 6 | 0 | 2 |
+| 23C.6 | Agent and product behavior | 7 | 0 | 1 |
 | 23C.7 | Economics and claim language | 1 | 0 | 5 |
 
 ## Invariant statuses
@@ -75,7 +75,7 @@
 | 50 | 23C.6 | proven | sqlite-dev |
 | 51 | 23C.6 | proven | sqlite-dev |
 | 52 | 23C.6 | proven | sqlite-dev |
-| 53 | 23C.6 | no-evidence | executed proof covers only part of the invariant wording |
+| 53 | 23C.6 | proven | sqlite-dev lane: real kernel commit spine, real immutable publication sets/generations, trusted local_v1 authorization resolution, durable Alembic-migrated cursors through head 20260823_0016, and the run_agent_query delivery seam |
 | 54 | 23C.6 | proven | deterministic local sqlite lane (migrated file DB through Alembic head 20260823_0015, real kernel commit spine, real publications/authorization, real EvidencePacket delivery chains) |
 | 55 | 23C.6 | proven | sqlite-dev |
 | 56 | 23C.6 | no-evidence | executed proof covers only part of the invariant wording |
@@ -102,7 +102,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 30** (23C.4, admission-memory-envelope): PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial. Reason: executed proof covers only part of the invariant wording.
 - **Inv 37** (23C.4, external-effect-semantics-declared): Local exactly-once acceptance and truthful refusal/reconciliation are proven; the per-destination external-effect semantics declaration driven by real destination primitives is absent. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 43** (23C.5, revocation-slo): Revocation effectiveness without content events is proven and measured; a declared numeric SLO (bound/latency) is neither declared nor asserted. Reason: executed proof covers only part of the invariant wording.
-- **Inv 53** (23C.6, packet-reuse-invalidation): Most named triggers are explicit identity dimensions with tests; 'citation change' has no identity dimension and renderer/tokenizer rotation is covered only via serialization_profile + publication tokenizer fields. Reason: executed proof covers only part of the invariant wording.
 
 ### Type D — evidence valid but narrower than the invariant
 
@@ -127,8 +126,8 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - 23C.3 Verification and routing: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 2 non-proven
-- 23C.6 Agent and product behavior: 2 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven
+- 23C.6 Agent and product behavior: 1 non-proven
 
 ## Reproduction
 

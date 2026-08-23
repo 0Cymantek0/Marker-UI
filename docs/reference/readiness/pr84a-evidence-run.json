@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-23T08:31:50+00:00",
-  "git_head": "7eb9cb81fd6b04109d0fe0b0dd7698fe74a9e8c0",
+  "generated_at": "2026-08-23T10:55:49+00:00",
+  "git_head": "e506791db3783e7212ce2b72e96cce6ae33effcf",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -396,10 +396,10 @@
       "binding_key": "24:measurement:docs/reference/measurements/pr77-bounded-query.json",
       "kind": "measurement",
       "scope_blobs": {
-        "docs/reference/measurements/pr77-bounded-query.json": "9798ce54339e7daa9ed22fc7bbf311fea4f4355f"
+        "docs/reference/measurements/pr77-bounded-query.json": "4668b1284c82fb6e7e8f8823dac8437b2a81abb0"
       },
       "artifact": "docs/reference/measurements/pr77-bounded-query.json",
-      "artifact_sha256": "66f46380bb5682bee6f1461987d719bd76fa0a396c68ab9482a3337873bd461f",
+      "artifact_sha256": "93f371c0569ec8270baf05b23663a79ec7950de76f900284559b6f1420dd440d",
       "checks": {
         "acceptance.server_operations_bounded_by_request": {
           "expected": true,
@@ -1354,7 +1354,7 @@
         "backend/app/kernel/commit.py": "ed42da77f3bde0b4dfeb613a1d5d44b7f65719d8",
         "backend/app/kernel/connector_state.py": "ef8416239cc18a831d827e8eb727ff241bacf21b",
         "backend/app/kernel/errors.py": "2106a0d55137a52c7933a03a915348749bec89c0",
-        "backend/app/kernel/models.py": "ea86492b92c18e913cc4f332b126323e0c1050e4",
+        "backend/app/kernel/models.py": "d8ad3bc5661fa6947b04e68e81442f6d7e5eb527",
         "backend/app/kernel/records.py": "1036890ec23a1b375a65a20677d872f3c68cd925",
         "backend/app/kernel/source_object_store.py": "93a3ed15eaacd04adacb46e7a0d563eda01eb5a7",
         "backend/app/kernel/source_store.py": "d1f3466ca89f45a075251fe85f7029735292a5de",
@@ -1362,7 +1362,7 @@
         "backend/app/services/connector_ingestion.py": "060e018bc0ffab858ec7c8f527eb612d07a51196",
         "backend/app/services/source_acquisition.py": "71afeb65644369b60a29da43f7bf40ebe9da7584",
         "backend/tests/test_connector_ingestion.py": "5723792157ad784f3d57994d31cc1d24d021dc79",
-        "backend/tests/test_connector_migration.py": "7f5bfc35113cd35b4af6d40558e0a343d14e4c7f",
+        "backend/tests/test_connector_migration.py": "ca635fc44e9c437767901a55ed2433c3e3ea6e4f",
         "backend/tests/test_connector_state.py": "cf692d959182d82d761e7f645b553ccebf05e5da"
       },
       "nodes": [
@@ -1554,7 +1554,7 @@
       "scope_blobs": {
         "backend/app/mcp_resources.py": "421a3826c39934ac4736a634e01e3db70657bb23",
         "backend/tests/test_answer_evidence_docs.py": "7af78dffde477179884d4ebcbe0c3ed0bf35a389",
-        "docs/reference/pr85-answer-evidence.md": "0f804c51305a28c048ed8b87a3a50252d607521d",
+        "docs/reference/pr85-answer-evidence.md": "2c52e7ec85f3e3a464d8e74a9bc5821b819190f9",
         "docs/usage/mcp.md": "d2cec35acbe01ad53fc20def72c0a16dc3b6b79a"
       },
       "nodes": [
@@ -1574,10 +1574,10 @@
       "binding_key": "49:measurement:docs/reference/measurements/pr77-bounded-query.json",
       "kind": "measurement",
       "scope_blobs": {
-        "docs/reference/measurements/pr77-bounded-query.json": "9798ce54339e7daa9ed22fc7bbf311fea4f4355f"
+        "docs/reference/measurements/pr77-bounded-query.json": "4668b1284c82fb6e7e8f8823dac8437b2a81abb0"
       },
       "artifact": "docs/reference/measurements/pr77-bounded-query.json",
-      "artifact_sha256": "66f46380bb5682bee6f1461987d719bd76fa0a396c68ab9482a3337873bd461f",
+      "artifact_sha256": "93f371c0569ec8270baf05b23663a79ec7950de76f900284559b6f1420dd440d",
       "checks": {
         "acceptance.single_set_attribution": {
           "expected": true,
@@ -1709,22 +1709,77 @@
       "detail": ""
     },
     {
-      "binding_key": "53:test:backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes",
+      "binding_key": "53:test:backend/tests/test_context_runtime_representation.py",
       "kind": "test",
       "scope_blobs": {
-        "backend/tests/test_context_runtime_packets.py": "ac261e5a03183d5e75653eb4fe1114eae47dab1d"
+        "backend/alembic/versions/20260823_0016_add_cursor_representation_binding.py": "f716302eb90e52e713332baf66d08ad9fcd4b1c7",
+        "backend/app/agent_answer_evidence.py": "e5de5e2e8b08e445ce9740068dd6937912a5f968",
+        "backend/app/agent_query.py": "b6652e48a461c445acf7d39f46fab989d9192895",
+        "backend/app/answer_evidence/domain.py": "4398676387a6644bec8cb0e8f5615344e4eec65b",
+        "backend/app/answer_evidence/service.py": "1fa160d568c31cd89fba329c2bf3d1f5035d6f9e",
+        "backend/app/answer_evidence/store.py": "6934fb32ba16c17191cf278bbcd969812b85790c",
+        "backend/app/context_runtime/authorization.py": "8cdf1dd8f535feb2d0ecf4e047dc8ea64f530c21",
+        "backend/app/context_runtime/continuation_paging.py": "812684f0a5ad001e413ed7161adfa948ccef1784",
+        "backend/app/context_runtime/continuation_state.py": "8de3f19f142a0b23b10107a8644f521ce3fabbb0",
+        "backend/app/context_runtime/continuation_store.py": "115b1e004c00388b4e3395fd289bec6773213674",
+        "backend/app/context_runtime/contract.py": "f23d716fdfe1c0218164c0bdfa781bc3fc8bdf5f",
+        "backend/app/context_runtime/executor.py": "5a00fba163bfb03b9110698f171b4e9064528f89",
+        "backend/app/context_runtime/packets.py": "3b316955366ef645119bc17e550dd842848b1310",
+        "backend/app/context_runtime/service.py": "1abe777bb003d8b6f26fbc4c8c0c1b7fe9a178c5",
+        "backend/app/kernel/models.py": "d8ad3bc5661fa6947b04e68e81442f6d7e5eb527",
+        "backend/tests/test_context_runtime_authz_retrieval.py": "54a30a0966df2679c4751fc81739214ae38d879c",
+        "backend/tests/test_context_runtime_packets.py": "ac261e5a03183d5e75653eb4fe1114eae47dab1d",
+        "backend/tests/test_context_runtime_representation.py": "252f58c02fcc27811953fb3e0e1a37ee9f1ef56e"
       },
       "nodes": [
-        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes",
-        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_selected_revision_changes",
-        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension",
-        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_budget_profile_and_output_directive"
+        "backend/tests/test_context_runtime_representation.py",
+        "backend/tests/test_context_runtime_packets.py",
+        "backend/tests/test_context_runtime_authz_retrieval.py"
       ],
       "node_outcomes": {
-        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes": "passed",
-        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_selected_revision_changes": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_representation_semantics_are_server_owned_and_deterministic": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_normalized_query_carries_no_representation_dimensions": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_identity_stable_then_rotates_with_citation_scheme": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_citation_scheme_field_order_is_not_identity_noise": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_identity_rotates_with_renderer_schema_and_framing": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_renderer_rotation_across_restart_changes_reusable_variant": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_caller_cannot_spoof_representation_dimensions": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_tokenizer_identity_binds_generation_and_fails_closed": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_continuation_proceeds_without_rotation": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_continuation_rotation_invalidates_before_mixed_output": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_legacy_cursor_without_representation_binding_fails_closed": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_citation_views_derive_from_the_authority_tuple": "passed",
+        "backend/tests/test_context_runtime_representation.py::test_disclosure_history_immutable_across_representation_rotation": "passed",
         "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension": "passed",
-        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_budget_profile_and_output_directive": "passed"
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_output_char_budget_keeps_whole_units": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_single_unit_larger_than_whole_budget_is_refused_whole": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_evidence_unit_count_budget": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_duplicate_evidence_across_operations_deduplicated_explicitly": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_repeated_same_operator_cannot_reset_budgets": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_stable_for_identical_request_and_state": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_ignores_irrelevant_request_spelling": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_selected_revision_changes": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_budget_profile_and_output_directive": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_identity_reproducible_after_restart": "passed",
+        "backend/tests/test_context_runtime_packets.py::test_to_json_is_structurally_complete": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_without_reindex_blocks_exact_and_lexical": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_forbidden_hits_are_not_caller_candidates": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_tombstone_wins_over_pinned_publication": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_and_nonexistent_exact_are_identical": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_revoke_mid_query_blocks_later_operations": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unauthorized_exact_read_discloses_nothing": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_hidden_only_query_looks_like_no_hit": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_counts_and_truncation_describe_authorized_universe_only": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_packet_carries_no_hidden_topology": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_caller_identity_hints_grant_nothing": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_authorized_exact_read_retains_attribution": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_hidden_extra_hits_do_not_signal_more_matches": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_mixed_query_preserves_authorized_recall": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_restore_is_explicit_and_invalidates_identity": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_identity_stable_under_unchanged_state": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_unrelated_commits_do_not_churn_identity": "passed",
+        "backend/tests/test_context_runtime_authz_retrieval.py::test_policy_epoch_and_deny_changes_invalidate_identity": "passed"
       },
       "outcome": "passed",
       "detail": ""
@@ -1738,11 +1793,11 @@
         "backend/app/agent_query.py": "b6652e48a461c445acf7d39f46fab989d9192895",
         "backend/app/agent_surface.py": "875caa09d3c2671af638da024bf0b42b99588ae2",
         "backend/app/answer_evidence/__init__.py": "b07f2674c19108e1ea7e76a85a00fd8e3ff32ae7",
-        "backend/app/answer_evidence/domain.py": "0b6adfa18e547d391b09e2c10ef6ae9582abd3bb",
+        "backend/app/answer_evidence/domain.py": "4398676387a6644bec8cb0e8f5615344e4eec65b",
         "backend/app/answer_evidence/errors.py": "8eb8ef7367a9125c1400ddd10f5def8fdf0284a1",
         "backend/app/answer_evidence/service.py": "1fa160d568c31cd89fba329c2bf3d1f5035d6f9e",
         "backend/app/answer_evidence/store.py": "6934fb32ba16c17191cf278bbcd969812b85790c",
-        "backend/app/kernel/models.py": "ea86492b92c18e913cc4f332b126323e0c1050e4",
+        "backend/app/kernel/models.py": "d8ad3bc5661fa6947b04e68e81442f6d7e5eb527",
         "backend/tests/test_agent_answer_surface.py": "d4479101741d4807a73a31ba2c425a004d6124af",
         "backend/tests/test_answer_evidence.py": "3dd788b1f970e45be3e65a41864704ce32bc2078",
         "backend/tests/test_answer_evidence_boundary.py": "1da4f66153fa1f9323f83d32138943fcbbf3ee6d"
@@ -2238,8 +2293,8 @@
       "binding_key": "9:test:backend/tests/test_database_migration.py::test_no_production_self_heal_remains",
       "kind": "test",
       "scope_blobs": {
-        "backend/tests/test_context_runtime_cursor_migration.py": "7f6aac96150cbfe0bdec73ee0199a90af6794000",
-        "backend/tests/test_database_migration.py": "e42375adf9d7b70ac7413a7d92ba42bb917d1f3a"
+        "backend/tests/test_context_runtime_cursor_migration.py": "127d7d7df51d30459254bdbd2b169d86c8061121",
+        "backend/tests/test_database_migration.py": "8a07e2617d7ff8a1c3ba745d024e9a3e4f28567e"
       },
       "nodes": [
         "backend/tests/test_database_migration.py::test_no_production_self_heal_remains",

@@ -1571,27 +1571,45 @@
     },
     {
       "id": 53,
-      "status_claim": "no_evidence",
-      "gap_type": "B",
-      "gap_note": "Most named triggers are explicit identity dimensions with tests; 'citation change' has no identity dimension and renderer/tokenizer rotation is covered only via serialization_profile + publication tokenizer fields.",
+      "status_claim": "proven",
+      "gap_type": null,
+      "gap_note": null,
       "bindings": [
         {
           "kind": "test",
-          "coverage": "partial",
-          "environment": "sqlite-dev",
-          "rationale": "Reuse identity rotates on source/publication, ACL/authorization digest, verifier policy, redaction profile, and serialization profile changes; citation is not an identity dimension and no separate renderer-artifact rotation test exists.",
+          "coverage": "full",
+          "environment": "sqlite-dev lane: real kernel commit spine, real immutable publication sets/generations, trusted local_v1 authorization resolution, durable Alembic-migrated cursors through head 20260823_0016, and the run_agent_query delivery seam",
+          "rationale": "Every trigger class in the invariant wording is executed as behavior, not field presence. Source/publication and content-revision rotation, verification (verifier_policy_id) / redaction (redaction_profile_id) / serialization context rotation, budget/output rotation, and restart-reproducible determinism are proven in test_context_runtime_packets.py (same-query stability, spelling-equivalence stability, restart reproduction). ACL/policy rotation is proven in test_context_runtime_authz_retrieval.py (access-policy revision, authorization epoch, deny revision, restore transitions, caller hints granting nothing). Citation, renderer, and tokenizer closure plus the newer layers are proven in test_context_runtime_representation.py (PR86): packet identity binds the server-owned representation semantics derived from the deployed packet schema, the authoritative CITATION_LOCATOR_FIELDS citation scheme, the identity framing record, and the canonicalization identity - a citation-scheme or renderer/framing rotation rotates identity_id while field order and unchanged state keep it stable; citations are single-sourced from the same tuple at answer time and an incompatible scheme fails closed instead of partially citing; tokenizer rotation is proven at its real source (lexical generation identity binds tokenizer+config, the backend-supported set is pinned so a foreign tokenizer build fails closed, and the pinned publication projection carries tokenizer/lexical_generation_id into packet identity and continuation publication binding); caller forges of representation/citation/renderer dimensions are rejected by the strict query contract; live continuation chains durably bind representation semantics (representation_json) and end explicitly as representation_changed before emitting a page under rotated semantics, with pre-binding rows failing closed; disclose=true deliveries before and after a rotation keep both historical disclosures immutable with distinct packet_ids and the answer trace fingerprint stays unchanged. No invariant wording remains unproven.",
           "nodes": [
-            "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_publication_set_changes",
-            "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_selected_revision_changes",
-            "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension",
-            "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_budget_profile_and_output_directive"
+            "backend/tests/test_context_runtime_representation.py",
+            "backend/tests/test_context_runtime_packets.py",
+            "backend/tests/test_context_runtime_authz_retrieval.py"
           ],
           "scope_files": [
-            "backend/tests/test_context_runtime_packets.py"
+            "backend/alembic/versions/20260823_0016_add_cursor_representation_binding.py",
+            "backend/app/agent_answer_evidence.py",
+            "backend/app/agent_query.py",
+            "backend/app/answer_evidence/domain.py",
+            "backend/app/answer_evidence/service.py",
+            "backend/app/answer_evidence/store.py",
+            "backend/app/context_runtime/authorization.py",
+            "backend/app/context_runtime/contract.py",
+            "backend/app/context_runtime/continuation_state.py",
+            "backend/app/context_runtime/continuation_store.py",
+            "backend/app/context_runtime/executor.py",
+            "backend/app/context_runtime/continuation_paging.py",
+            "backend/app/context_runtime/packets.py",
+            "backend/app/context_runtime/service.py",
+            "backend/app/kernel/models.py",
+            "backend/tests/test_context_runtime_authz_retrieval.py",
+            "backend/tests/test_context_runtime_packets.py",
+            "backend/tests/test_context_runtime_representation.py"
           ]
         }
       ],
-      "context_docs": []
+      "context_docs": [
+        "docs/reference/packet-representation-reuse.md"
+      ]
     },
     {
       "id": 54,
