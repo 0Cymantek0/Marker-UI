@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `331acf2acd5c567ca1a10e1ec06025a9186be3f4`
-- Invariants proven: **40 / 62**
+- Audited source head: `7eb9cb81fd6b04109d0fe0b0dd7698fe74a9e8c0`
+- Invariants proven: **41 / 62**
 - Failed: **0**
-- No acceptable evidence: **22**
+- No acceptable evidence: **21**
 
 ## Group summary
 
@@ -13,7 +13,7 @@
 |---|---|---:|---:|---:|
 | 23C.1 | Truth and persistence | 5 | 0 | 4 |
 | 23C.2 | Geometry, patches, and incrementality | 7 | 0 | 2 |
-| 23C.3 | Verification and routing | 4 | 0 | 5 |
+| 23C.3 | Verification and routing | 5 | 0 | 4 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
 | 23C.6 | Agent and product behavior | 6 | 0 | 2 |
@@ -49,7 +49,7 @@
 | 24 | 23C.3 | proven | sqlite-dev |
 | 25 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
 | 26 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
-| 27 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
+| 27 | 23C.3 | proven | deterministic local lane (real kernel/publication/query authorities per document; specialist responses replayed offline from the committed PR80B cache - no network, no credentials) |
 | 28 | 23C.4 | proven | sqlite-dev, offline-artifact (PR68A measured comparison, frozen) |
 | 29 | 23C.4 | proven | sqlite-dev |
 | 30 | 23C.4 | no-evidence | executed proof covers only part of the invariant wording |
@@ -99,7 +99,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 22** (23C.3, verification-status-relative): Relativity is structural (every dimension is matched before an outcome), yet the 'one unresolved region does not make the entire document unusable' property has no direct two-region assertion. Reason: executed proof covers only part of the invariant wording.
 - **Inv 23** (23C.3, calibration-artifact-discipline): Calibration artifact schema carries method/version/sample/support/CI/shift but not named population/assumptions/expiry fields; zero observed catastrophic failures are reported as counts only. Reason: executed proof covers only part of the invariant wording.
 - **Inv 26** (23C.3, review-policy-operational): Verification-policy operational usability (review coverage, queue time, bypass rate) is an acknowledged open follow-up in docs/reference/verification-risk.md; only the extraction review lane is tested. Reason: executed proof covers only part of the invariant wording.
-- **Inv 27** (23C.3, no-training-routing-transparency): Displacement comparison is measurement-only; routing of trained specialists as non-authoritative candidates is a declared condition, not an executed behavior. Reason: executed proof covers only part of the invariant wording.
 - **Inv 30** (23C.4, admission-memory-envelope): PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial. Reason: executed proof covers only part of the invariant wording.
 - **Inv 37** (23C.4, external-effect-semantics-declared): Local exactly-once acceptance and truthful refusal/reconciliation are proven; the per-destination external-effect semantics declaration driven by real destination primitives is absent. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 43** (23C.5, revocation-slo): Revocation effectiveness without content events is proven and measured; a declared numeric SLO (bound/latency) is neither declared nor asserted. Reason: executed proof covers only part of the invariant wording.
@@ -123,9 +122,9 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 
 ### Next-slice ranking (groups with most non-proven invariants)
 
-- 23C.3 Verification and routing: 5 non-proven
 - 23C.7 Economics and claim language: 5 non-proven
 - 23C.1 Truth and persistence: 4 non-proven
+- 23C.3 Verification and routing: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 2 non-proven
 - 23C.6 Agent and product behavior: 2 non-proven

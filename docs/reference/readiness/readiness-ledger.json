@@ -171,13 +171,13 @@
       "id": 6,
       "status_claim": "no_evidence",
       "gap_type": "D",
-      "gap_note": "Determinism proven multi-OS × multi-Python on x86_64 with committed golden constants; the invariant's literal cross-language and ARM64 clauses have no executable fixture (no second-language implementation, no ARM64 runner).",
+      "gap_note": "Determinism proven multi-OS \u00d7 multi-Python on x86_64 with committed golden constants; the invariant's literal cross-language and ARM64 clauses have no executable fixture (no second-language implementation, no ARM64 runner).",
       "bindings": [
         {
           "kind": "test",
           "coverage": "partial",
-          "environment": "canonical-conformance (os×python matrix in CI; local run is one x86_64 cell)",
-          "rationale": "38 committed golden vectors cover ordering/unicode/numbers/geometry/framing/rejection and run on the ubuntu/windows/macos × py3.11/3.13 CI matrix (x86_64 only); no non-Python implementation or ARM64 cell exists.",
+          "environment": "canonical-conformance (os\u00d7python matrix in CI; local run is one x86_64 cell)",
+          "rationale": "38 committed golden vectors cover ordering/unicode/numbers/geometry/framing/rejection and run on the ubuntu/windows/macos \u00d7 py3.11/3.13 CI matrix (x86_64 only); no non-Python implementation or ARM64 cell exists.",
           "nodes": [
             "backend/conformance/test_canonical_conformance.py::test_case",
             "backend/conformance/test_canonical_conformance.py::test_corpus_covers_required_categories",
@@ -760,26 +760,64 @@
     },
     {
       "id": 27,
-      "status_claim": "no_evidence",
-      "gap_type": "B",
-      "gap_note": "Displacement comparison is measurement-only; routing of trained specialists as non-authoritative candidates is a declared condition, not an executed behavior.",
+      "status_claim": "proven",
+      "gap_type": null,
+      "gap_note": null,
       "bindings": [
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "deterministic local lane (real kernel/publication/query authorities per document; specialist responses replayed offline from the committed PR80B cache - no network, no credentials)",
+          "rationale": "Transparent routing to a trained specialist is executed behavior, not a declaration: a production extraction run consults one trained specialist lane when explicitly enabled, receives only the run's authorized bounded packet context, records durable producer provenance distinct from source evidence, and can never turn a model-only proposal into authority. Tests bind each clause: proposals stay reviewable non-evidence (reconciliation matrix), deterministic corroboration is the only proposal-to-acceptance bridge and its proof points at the cited source witness plus the normalizer rule, never the model (service proof-graph test), model agreement is not a witness, the PR80B fabricated unit-price case commits zero authority, prompt-injection content cannot gain tools/schema/authority, stale publication and cross-workspace provenance is refused, provider failures are typed and bounded with the deterministic result intact, replay makes every test deterministic and credential-free, and the offline hybrid benchmark shows zero false-authority and 100 percent accepted-value lineage on the committed 24-document corpus.",
+          "nodes": [
+            "backend/tests/test_specialist_contract.py",
+            "backend/tests/test_specialist_provider.py",
+            "backend/tests/test_hybrid_reconciliation.py",
+            "backend/tests/test_hybrid_service.py",
+            "backend/tests/test_hybrid_adversarial.py",
+            "backend/tests/test_eval_bridge.py"
+          ],
+          "scope_files": [
+            "backend/app/extraction/provider.py",
+            "backend/app/extraction/specialist.py",
+            "backend/app/extraction/hybrid.py",
+            "backend/app/extraction/normalization.py",
+            "backend/app/extraction/service.py",
+            "backend/app/eval/bridge/runner.py",
+            "backend/app/eval/bridge/translate.py",
+            "backend/scripts/bench_specialist_bridge.py",
+            "backend/tests/test_specialist_contract.py",
+            "backend/tests/test_specialist_provider.py",
+            "backend/tests/test_hybrid_reconciliation.py",
+            "backend/tests/test_hybrid_service.py",
+            "backend/tests/test_hybrid_adversarial.py",
+            "backend/tests/test_eval_bridge.py",
+            "docs/reference/specialist-bridge.md",
+            "docs/reference/measurements/specialist-bridge-hybrid.json"
+          ]
+        },
         {
           "kind": "measurement",
           "coverage": "partial",
-          "environment": "offline-artifact (PR80B displacement replay)",
-          "rationale": "The displacement report compares direct specialist use (invoice2data, hosted LLM) against the evidence-backed route and declares the non-authoritative routing condition, but no behavioral test binds the no-training routing constraint.",
+          "environment": "offline-artifact (PR80B displacement replay + specialist bridge hybrid replay)",
+          "rationale": "The displacement report compares direct specialist use (invoice2data, hosted LLM) against the evidence-backed route, and the specialist-bridge artifact measures the hybrid path end to end on the same committed corpus: 18/24 exact documents vs 17/24 for the deterministic route, zero false-authority events, zero fabricated-to-authority events, and 100 percent accepted-value lineage.",
           "scope_files": [
-            "docs/reference/measurements/pr80b-direct-specialist-displacement.json"
+            "docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+            "docs/reference/measurements/specialist-bridge-hybrid.json"
           ],
-          "artifact": "docs/reference/measurements/pr80b-direct-specialist-displacement.json",
+          "artifact": "docs/reference/measurements/specialist-bridge-hybrid.json",
           "artifact_expect": {
-            "decision.outcome": "hybrid_routing_condition"
+            "acceptance.zero_false_authority": true,
+            "acceptance.zero_fabricated_to_authority": true,
+            "acceptance.full_lineage": true,
+            "acceptance.no_exact_doc_regression": true,
+            "totals.docs": 24
           }
         }
       ],
       "context_docs": [
-        "docs/reference/pr80b-direct-specialist-displacement.md"
+        "docs/reference/pr80b-direct-specialist-displacement.md",
+        "docs/reference/specialist-bridge.md"
       ]
     },
     {
@@ -1082,7 +1120,7 @@
           "kind": "test",
           "coverage": "partial",
           "environment": "postgres+s3 strict (CI industrial lanes)",
-          "rationale": "Outages fail honestly (never false success) — the reconciliation-required half of the clause; no external-effect destination table exists.",
+          "rationale": "Outages fail honestly (never false success) \u2014 the reconciliation-required half of the clause; no external-effect destination table exists.",
           "nodes": [
             "backend/tests/test_kernel_recovery_failover.py::test_database_outage_during_takeover_fails_honestly",
             "backend/tests/test_kernel_recovery_failover.py::test_s3_outage_during_source_recovery_fails_honestly"
@@ -1488,7 +1526,7 @@
           "kind": "test",
           "coverage": "full",
           "environment": "sqlite-dev",
-          "rationale": "Requests are schema/operator/budget validated and fail closed; query text is always quoted literal (no operator/join/effect grammar); callers cannot name identity-bearing profiles — the server derives them.",
+          "rationale": "Requests are schema/operator/budget validated and fail closed; query text is always quoted literal (no operator/join/effect grammar); callers cannot name identity-bearing profiles \u2014 the server derives them.",
           "nodes": [
             "backend/tests/test_context_runtime_execution.py::test_fts_operators_in_text_are_treated_as_literals",
             "backend/tests/test_context_runtime_execution.py::test_column_filter_and_boolean_words_are_literals",
