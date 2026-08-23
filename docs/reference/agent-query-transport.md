@@ -45,7 +45,7 @@ The result is the machine-readable `marker.query_result.v1` envelope:
 | `status` | `complete`, `partial`, `invalidated`, `stale`, `loop_limit`, `policy_fail_closed`, `execution_failure` |
 | `result` | `cumulative_budget` (server-authoritative pages/work/output) plus the serialized `marker.evidence_packet.v1` packet when protected output is released |
 | `next_cursor` | present exactly when `status` is `partial` |
-| `reason` / `error_code` | stable class strings; capability failures stay in the coarse `cursor_invalid` class PR79A established |
+| `reason` / `error_code` | stable class strings; capability failures stay in the coarse `cursor_invalid` class PR79A established; a deployed citation/renderer semantics rotation ends live chains explicitly as `representation_changed` (PR86) |
 
 The envelope is forward-compatible: future statuses (for example PR80
 `review_required`) extend the `status` field without redesigning the

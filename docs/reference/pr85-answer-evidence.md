@@ -78,6 +78,12 @@ acquire a support field.
   *reads* the stored answer (spans must cover it; optional `quote_digest`
   must match the stored slice; cited evidence locators must exist inside
   a disclosure bound to the trace — fabricated citations fail closed).
+  Citation locator fields derive from the context runtime's single
+  authoritative `CITATION_LOCATOR_FIELDS`, which also participates in
+  packet identity (PR86): a deployed citation-scheme rotation changes
+  citation construction, validation, and reuse identity together, and a
+  reference missing a scheme field is rejected rather than partially
+  cited. See [`packet-representation-reuse.md`](packet-representation-reuse.md).
 - **Tenancy fails closed.** Every lookup is workspace-scoped. Linking and
   assessment tables carry composite tenant foreign keys
   (`(workspace_id, …)` → owning table) so a cross-workspace reference is

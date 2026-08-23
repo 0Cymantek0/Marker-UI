@@ -43,6 +43,16 @@ keys survive page rotation. A page-size choice cannot reset the original
 request caps. `max_chain_pages`, lexical traversal caps, and atomic nonce
 claims bound excessive or oscillating work.
 
+Representation semantics are bound too (PR86). The cursor row records the
+deployed packet representation semantics (packet schema, citation locator
+scheme, identity framing, canonicalization) it was created under. On resume
+the stored binding is compared against the deployed semantics: a mismatch
+ends the chain explicitly with `invalidated` / `representation_changed`
+before any page is emitted, and a row predating the binding (`NULL`) fails
+closed the same way rather than being reinterpreted. A chain therefore
+never silently mixes incompatible citation/renderer semantics. See
+[`packet-representation-reuse.md`](packet-representation-reuse.md).
+
 ## Cursor and retention design
 
 The client token is a signed reference, not a serialized query. Its only

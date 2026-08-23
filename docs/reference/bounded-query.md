@@ -91,14 +91,19 @@ request whose operation count exceeds its budget raises
 - omission reasons;
 - the caller-supplied context: `security_context_id`,
   `verifier_policy_id`, `redaction_profile_id`,
-  `serialization_profile`.
+  `serialization_profile`;
+- the server-owned representation semantics (PR86): the deployed
+  packet schema, citation locator scheme, identity framing record, and
+  canonicalization identity — see
+  [`packet-representation-reuse.md`](packet-representation-reuse.md).
 
 Runtime-only values (timing, pin ids) never enter identity, so
 identical request + identical published state reproduce the identical
 packet (including across process restart). Any relevant change — new
 publication set, moved content revision, changed security/verifier/
-redaction/serialization dimension, changed budget or output directive —
-changes the identity.
+redaction/serialization dimension, changed budget or output directive,
+or a deployed citation/renderer semantics rotation — changes the
+identity.
 
 **The context fields are identity seams, not authorization proof.**
 They are carried and hashed exactly as supplied; PR78 (see
