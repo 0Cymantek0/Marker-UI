@@ -1,0 +1,112 @@
+{
+  "schema": "marker.pr89_redaction_surface_matrix.v1",
+  "generated_for": "PR89 redaction closure (readiness invariant 18 redaction-all-paths)",
+  "branch_base": "f5c40a3336216016a77c2f94fb9e9071c3bded4c",
+  "sentinel": "MU_RED_7f3a9c2e4b (literal rule; fixture in backend/tests/test_redaction_closure.py)",
+  "effective_boundary": "The kernel commit of the redaction_profile record: any release decision whose redaction resolution begins after that commit observes the new rules (initial resolution, per-operation re-resolution, and the post-run re-check that invalidates in-flight continuations).",
+  "authority": "Server-authoritative only: callers name a serving context (redaction_profile_id), the committed rules behind the name decide release, unknown names fail closed, and an omitted name resolves the committed 'default' profile (never an escape).",
+  "paths": [
+    {
+      "family": "lexical-text-retrieval",
+      "surface": "marker_query lexical_search (MCP/agent transport; context_runtime executor)",
+      "releasable": true,
+      "authority": "resolve_effective_authorization (live deny overlay, epoch, access-policy digest) + pinned PublicationSet generation",
+      "redaction_binding": "release-time projection in executor._authorized_lexical_hits after the live-deny check; hit dropped when no query term survives (existence-leak prevention); locator hashes stay over raw indexed bytes",
+      "stale_object": "published FTS generation physically retains the sentinel",
+      "after_change": "sentinel masked in flowing rows; sentinel-only matches dropped; public rows keep flowing",
+      "proof": "backend/tests/test_redaction_closure.py::test_redaction_closes_lexical_and_exact_reads, ::test_sentinel_baseline_retrievable_before_redaction"
+    },
+    {
+      "family": "structured-exact-read",
+      "surface": "marker_query record_get (node and whole-record)",
+      "releasable": true,
+      "authority": "same as lexical (record/source/domain deny before content release)",
+      "redaction_binding": "node text projected in executor._record_candidate / build_record_candidate; whole-record units carry no text body",
+      "stale_object": "materialized generation retains raw node text",
+      "after_change": "affected node resolves to masked content (citation resolves, does not vanish); no sentinel in any released text",
+      "proof": "backend/tests/test_redaction_closure.py::test_redaction_closes_lexical_and_exact_reads"
+    },
+    {
+      "family": "packet-reuse-cache",
+      "surface": "EvidencePacket identity/reuse (identity-deterministic assembly; disclosure rows)",
+      "releasable": true,
+      "authority": "packet_identity_dimensions: trusted authorization identity incl. redaction {profile, revision, rules_digest}",
+      "redaction_binding": "redaction identity inside the authorization dimension: any policy transition rotates identity_id; delivered evidence text is already projected",
+      "stale_object": "pre-change packets/disclosures remain stored (immutable evidence)",
+      "after_change": "same request re-assembles fresh under new identity; no stale packet can be presented as current; new disclosure rows store redacted text only",
+      "proof": "backend/tests/test_redaction_closure.py::test_packet_identity_rotates_and_content_never_discloses (scenario 4)"
+    },
+    {
+      "family": "cursor-continuation",
+      "surface": "ContinuationService fresh_query/continue_query chains",
+      "releasable": true,
+      "authority": "cursor binding compares stored authorization identity (incl. redaction) against re-resolved state at continue time and post-run",
+      "redaction_binding": "identity_view redaction dimension: revision change invalidates the chain before protected output; later pages re-project current rules (continuation_paging)",
+      "stale_object": "cursor rows minted pre-change reference the old identity",
+      "after_change": "continue after transition -> invalidated (authorization_changed); chains issued post-change page only projected content",
+      "proof": "backend/tests/test_redaction_closure.py cursor-closure and post-change chain walk tests (scenario 5)"
+    },
+    {
+      "family": "dense-vector-retrieval",
+      "surface": "vector_search operator",
+      "releasable": false,
+      "authority": "contract rejects unsupported operators (UnsupportedOperatorError) before execution",
+      "redaction_binding": "n/a - unreachable",
+      "stale_object": "none (no dense index is built or servable)",
+      "after_change": "unchanged: still refused explicitly",
+      "proof": "backend/tests/test_redaction_closure.py::test_unsupported_visual_and_vector_paths_stay_unsupported"
+    },
+    {
+      "family": "visual-retrieval",
+      "surface": "visual_search operator (pr81a remains an offline reference experiment)",
+      "releasable": false,
+      "authority": "contract rejects unsupported operators before execution",
+      "redaction_binding": "n/a - unreachable",
+      "stale_object": "none servable (no public visual route exists)",
+      "after_change": "unchanged: still refused explicitly",
+      "proof": "backend/tests/test_redaction_closure.py::test_unsupported_visual_and_vector_paths_stay_unsupported"
+    },
+    {
+      "family": "answer-evidence-disclosure",
+      "surface": "agent disclosure rows / answer traces (marker_answer_trace read-back)",
+      "releasable": true,
+      "authority": "answers:write scope (audit/verification surface, distinct from queries:read serving scope)",
+      "redaction_binding": "new disclosures store already-projected packet bytes; PR85 contract: past disclosure is immutable evidence and not revocable",
+      "stale_object": "pre-change disclosure rows retain the sentinel as historical evidence of what was lawfully delivered then",
+      "after_change": "serving scopes cannot read traces; post-change disclosures are sentinel-free; historical rows remain inspectable as audit evidence only (explicitly deferred: disclosure-row retention/redaction is a PR85 residual, not a serving path)",
+      "proof": "backend/tests/test_redaction_closure.py disclosure recording test (scenario 6b); scope separation asserted by existing authz suite"
+    },
+    {
+      "family": "rest-convert-outputs",
+      "surface": "/api/convert/{status,download,assets,llm-traces} and marker_read_output* MCP tools",
+      "releasable": true,
+      "authority": "REST/MCP scopes (jobs:*/outputs:read) over the operator's own conversion job outputs",
+      "redaction_binding": "none by construction: job outputs are pre-publication operator work products; they carry no workspace/publication binding, so no redaction policy domain attaches to them",
+      "stale_object": "job bytes persist until the operator deletes the job",
+      "after_change": "unchanged: out of the publication-serving domain; the serving corpus (kernel publications) is unreachable through these routes - a published-corpus query can never resolve to job-store bytes",
+      "proof": "backend/tests/test_redaction_closure.py::test_serving_corpus_is_disjoint_from_job_outputs (negative construction: publication serving resolves only through pinned publication sets)"
+    },
+    {
+      "family": "direct-source-blobs",
+      "surface": "raw source object store",
+      "releasable": false,
+      "authority": "no HTTP/MCP route serves source blobs; consumed during conversion only",
+      "redaction_binding": "n/a - unreachable from any serving interface",
+      "stale_object": "source bytes immutable by design (evidence truth)",
+      "after_change": "unchanged: unreachable",
+      "proof": "release-surface census (route registration review); no route exists"
+    }
+  ],
+  "deferred": [
+    {
+      "item": "disclosure-row retention/redaction after policy change",
+      "reason": "PR85 section 7 residual: disclosed historical truth is immutable evidence; serving-side closure is complete, trace reads are the audit exemption",
+      "follow_up": "future retention/erasure phase (masterplan 4C.10)"
+    },
+    {
+      "item": "physical deletion of sentinel bytes from superseded FTS generations",
+      "reason": "release safety is projection-based; physical cleanup belongs to existing pin-expiry/retention/GC semantics (stale generations stop being servable when pins expire)",
+      "follow_up": "none required for invariant 18"
+    }
+  ]
+}
