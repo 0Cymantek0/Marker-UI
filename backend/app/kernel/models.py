@@ -1215,6 +1215,12 @@ class KernelQueryCursor(Base):
     snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     publication_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     authorization_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Durable binding to the deployed packet representation semantics
+    #: (PR86). A chain must never silently cross a citation/renderer
+    #: rotation: rows created before this binding exist are unverifiable
+    #: and fail closed on resume, and a mismatch invalidates the cursor
+    #: before any page is emitted under changed semantics.
+    representation_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     keyset_json: Mapped[str] = mapped_column(Text, nullable=False)
     cumulative_budget_json: Mapped[str] = mapped_column(Text, nullable=False)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

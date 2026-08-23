@@ -299,7 +299,7 @@ class QueryOutput(MarkerOutputModel):
     )
     error_code: str | None = Field(
         default=None,
-        description="Stable error/reason class: cursor_invalid, cursor_expired, authorization_changed, pinned_state_unavailable, policy_fail_closed, execution_failure, continuation_available, or a budget stop code.",
+        description="Stable error/reason class: cursor_invalid, cursor_expired, authorization_changed, representation_changed, pinned_state_unavailable, policy_fail_closed, execution_failure, continuation_available, or a budget stop code.",
         examples=["cursor_invalid"],
     )
     disclosure_id: str | None = Field(

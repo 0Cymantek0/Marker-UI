@@ -98,6 +98,7 @@ from app.context_runtime.errors import (
 from app.context_runtime.executor import execute_query
 from app.context_runtime.service import ContinuationService
 from app.context_runtime.packets import (
+    CITATION_LOCATOR_FIELDS,
     EVIDENCE_PACKET_SCHEMA_VERSION,
     BudgetReport,
     CandidateUnit,
@@ -106,7 +107,9 @@ from app.context_runtime.packets import (
     EvidenceUnit,
     OmittedEvidence,
     assemble_packet,
+    citation_view,
     packet_identity_dimensions,
+    representation_semantics,
     to_json,
 )
 
@@ -137,6 +140,7 @@ __all__ = [
     "QUERY_SCHEMA_VERSION",
     "SUPPORTED_OPERATIONS",
     "BudgetReport",
+    "CITATION_LOCATOR_FIELDS",
     "CandidateUnit",
     "ContinuationContractError",
     "ContinuationService",
@@ -178,6 +182,7 @@ __all__ = [
     "RecordGetOp",
     "UnsupportedOperatorError",
     "assemble_packet",
+    "citation_view",
     "compile_lexical_match",
     "execute_query",
     "normalized_query",
@@ -185,6 +190,7 @@ __all__ = [
     "parse_query_request",
     "parse_continuation_outcome",
     "parse_cursor_state_json",
+    "representation_semantics",
     "resolve_effective_authorization",
     "to_json",
     "QueryOutcome",

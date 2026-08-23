@@ -16,6 +16,7 @@ from app.context_runtime.continuation import (
 from app.context_runtime.continuation_state import canonical, utc
 from app.context_runtime.cursor import new_cursor_handle, new_cursor_nonce
 from app.context_runtime.contract import QueryRequest, normalized_query
+from app.context_runtime.packets import representation_semantics
 from app.kernel.models import KernelQueryCursor
 
 
@@ -94,6 +95,7 @@ class CursorStore:
             ),
             publication_json=canonical(dict(publication)),
             authorization_json=canonical(dict(authorization)),
+            representation_json=canonical(representation_semantics()),
             keyset_json=canonical(dict(keyset)),
             cumulative_budget_json=canonical(dict(cumulative_budget)),
             page_count=int(cumulative_budget["pages"]),

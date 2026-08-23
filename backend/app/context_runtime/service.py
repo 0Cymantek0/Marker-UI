@@ -48,7 +48,7 @@ from app.context_runtime.cursor import (
 )
 from app.context_runtime.errors import QueryAuthorizationError, QueryContractError
 from app.context_runtime.executor import unpublished_packet
-from app.context_runtime.packets import EvidencePacket
+from app.context_runtime.packets import EvidencePacket, representation_semantics
 from app.context_runtime.continuation_store import CursorStore
 from app.kernel.publications import (
     acquire_publication_pin,
@@ -74,6 +74,7 @@ CONTINUATION_MAX_PRINCIPAL_ID_LENGTH = 128
 _INVALID = "cursor_invalid"
 _EXPIRED = "cursor_expired"
 _AUTH_CHANGED = "authorization_changed"
+_REPRESENTATION_CHANGED = "representation_changed"
 _PIN_UNAVAILABLE = "pinned_state_unavailable"
 _POLICY = "policy_fail_closed"
 _EXECUTION = "execution_failure"
@@ -412,6 +413,27 @@ class ContinuationService:
             logger.info("cursor %s rejected: row state unusable: %s", envelope.handle, exc)
             return _outcome(OUTCOME_STALE, reason=_PIN_UNAVAILABLE, error_code=_PIN_UNAVAILABLE)
 
+        # Representation binding (PR86): pages already delivered in this
+        # chain were rendered under the semantics recorded at cursor
+        # creation. The deployed renderer cannot serve the old semantics
+        # after a rotation, so a mismatch — or a row that predates the
+        # binding and therefore cannot be verified — terminates the chain
+        # explicitly instead of emitting a page that would silently mix
+        # incompatible citation/renderer semantics into one chain.
+        if not self._representation_binding_matches(row.representation_json):
+            await self._finish_unclaimed(row, CURSOR_STATUS_REVOKED)
+            logger.info(
+                "cursor %s rejected: representation binding mismatch "
+                "(stored=%r)",
+                envelope.handle,
+                row.representation_json,
+            )
+            return _outcome(
+                OUTCOME_INVALIDATED,
+                reason=_REPRESENTATION_CHANGED,
+                error_code=_REPRESENTATION_CHANGED,
+            )
+
         try:
             auth = await resolve_effective_authorization(
                 self.session_factory,
@@ -539,6 +561,16 @@ class ContinuationService:
         if not isinstance(parsed, dict):
             raise ValueError("cursor state is not an object")
         return parsed
+
+    @staticmethod
+    def _representation_binding_matches(stored: str | None) -> bool:
+        if stored is None:
+            return False
+        try:
+            parsed = parse_cursor_state_json(stored)
+        except Exception:
+            return False
+        return parsed == representation_semantics()
 
     async def _finish_claimed(self, row: Any, status: str) -> None:
         if await self.store.terminalize_claimed(row.handle, status):

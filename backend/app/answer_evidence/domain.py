@@ -27,6 +27,8 @@ from typing import Any, Literal, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.context_runtime import packets as packet_representation
+from app.context_runtime.packets import citation_view
 from app.utils.canonical import (
     canonical_json_str,
     payload_byte_hash,
@@ -225,7 +227,12 @@ class EvidenceRef(_StrictModel):
     ``disclosure_id`` must name a disclosure already bound to the trace;
     the locator fields must match an evidence unit inside that
     disclosure's packet, so an assessment can never cite evidence that
-    was not actually delivered for the answer.
+    was not actually delivered for the answer. The locator field set is
+    not defined here: it derives from the context runtime's authoritative
+    ``CITATION_LOCATOR_FIELDS`` — the same single source that
+    participates in packet identity — so a deployed citation-scheme
+    rotation changes citation semantics and reuse identity together and
+    an incompatible scheme fails closed instead of partially citing.
     """
 
     disclosure_id: str = Field(min_length=1, max_length=MAX_ID_LENGTH)
@@ -234,11 +241,17 @@ class EvidenceRef(_StrictModel):
     node_id: str | None = Field(default=None, min_length=1, max_length=256)
 
     def locator_view(self) -> dict[str, Any]:
-        return {
-            "record_id": self.record_id,
-            "view_id": self.view_id,
-            "node_id": self.node_id,
-        }
+        # Dereferenced at call time so the context runtime's field tuple
+        # stays the single live authority for citation semantics.
+        fields = packet_representation.CITATION_LOCATOR_FIELDS
+        missing = [field for field in fields if not hasattr(self, field)]
+        if missing:
+            raise AnswerEvidenceContractError(
+                "citation locator scheme requires fields an evidence "
+                f"reference does not carry: {sorted(missing)}; refusing to "
+                "construct a partial citation"
+            )
+        return {field: getattr(self, field) for field in fields}
 
 
 class ClaimSpan(_StrictModel):
@@ -378,12 +391,13 @@ def validate_assessment(
 
 
 def _unit_exists(packet: Mapping[str, Any], ref: EvidenceRef) -> bool:
+    target = ref.locator_view()
     for unit in packet.get("evidence", ()):
-        if (
-            unit.get("record_id") == ref.record_id
-            and unit.get("view_id") == ref.view_id
-            and unit.get("node_id") == ref.node_id
-        ):
+        # A unit missing a citation-scheme field is not citable under this
+        # scheme — never partially matched — so an incompatible rotation
+        # fails closed rather than weakening citation identity.
+        view = citation_view(unit)
+        if view is not None and view == target:
             return True
     return False
 

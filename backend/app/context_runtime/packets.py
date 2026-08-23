@@ -9,8 +9,11 @@ the middle of a unit while being presented as valid.
 Packet identity is deterministic over semantic dimensions only
 (normalized query, publication/generation attribution, evidence
 locators and content hashes, omissions, budget profile, the
-security/verifier/redaction/serialization context, and — since PR78 —
-the trusted effective-authorization identity). Runtime-only values
+security/verifier/redaction/serialization context, the trusted
+effective-authorization identity, and — since PR86 — the server-owned
+representation semantics: the deployed packet schema, citation
+locator scheme, identity framing, and canonicalization identity that
+define how a packet is rendered and cited). Runtime-only values
 never enter identity, so identical state plus identical inputs
 reproduce the identical packet, and any authorization change that can
 change what evidence is legally visible invalidates reuse.
@@ -22,12 +25,14 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
 from app.utils.canonical import (
+    IDENTITY_FRAMING_VERSION,
     canonical_json_bytes,
     record_identity_hash,
     to_json_ready,
 )
 
 __all__ = [
+    "CITATION_LOCATOR_FIELDS",
     "EVIDENCE_PACKET_SCHEMA_VERSION",
     "BudgetReport",
     "EvidenceLocator",
@@ -35,9 +40,11 @@ __all__ = [
     "EvidenceUnit",
     "CandidateUnit",
     "candidate_unit_cost",
+    "citation_view",
     "OmittedEvidence",
     "assemble_packet",
     "packet_identity_dimensions",
+    "representation_semantics",
     "to_json",
 ]
 
@@ -45,7 +52,61 @@ __all__ = [
 #: packet shape must change this version (and therefore every identity).
 EVIDENCE_PACKET_SCHEMA_VERSION = "marker.evidence_packet.v1"
 _PACKET_RECORD_TYPE = "marker.context_runtime.evidence_packet"
-_PACKET_ID_SCHEMA_VERSION = "1.0.0"
+#: Bumped to 2.0.0 with PR86: the identity payload gained the
+#: ``representation`` dimension (citation/renderer semantics).
+_PACKET_ID_SCHEMA_VERSION = "2.0.0"
+
+#: The authoritative fields that constitute one citation from an
+#: assessment claim back to a delivered evidence unit. This tuple is the
+#: single source of truth for citation semantics: answer-time citation
+#: construction/validation derives from it, and it participates in packet
+#: identity through :func:`representation_semantics`, so a deployed
+#: citation-scheme change rotates reuse identity automatically instead of
+#: leaving stale packets citable under incompatible semantics. It is
+#: server-owned: callers cannot name or influence it.
+CITATION_LOCATOR_FIELDS: tuple[str, ...] = (
+    "record_id",
+    "view_id",
+    "node_id",
+)
+
+
+def citation_view(values: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Project one mapping onto the authoritative citation locator fields.
+
+    Returns ``None`` when the mapping does not carry every citation
+    field: a unit (or reference) missing a scheme field is not citable —
+    never partially cited — so incompatible schemes fail closed instead
+    of silently weakening citation identity.
+    """
+
+    if any(field not in values for field in CITATION_LOCATOR_FIELDS):
+        return None
+    return {field: values[field] for field in CITATION_LOCATOR_FIELDS}
+
+
+def representation_semantics() -> dict[str, Any]:
+    """Server-owned identity of the deployed packet representation.
+
+    Everything here is derived from deployed code constants that define
+    caller-visible representation behavior — never from request input —
+    so callers cannot forge it, and a deployment that changes citation
+    or rendering semantics rotates packet identity structurally (no
+    operator cache-clearing discipline). Deliberately excluded: the
+    transport envelope schema versions (``marker.query_result.v1`` and
+    friends) wrap packets without reinterpreting packet content, and
+    runtime/build noise, which must never churn identity.
+    """
+
+    return {
+        "packet_schema": EVIDENCE_PACKET_SCHEMA_VERSION,
+        "citation_locator_fields": sorted(CITATION_LOCATOR_FIELDS),
+        "identity_framing": {
+            "record_type": _PACKET_RECORD_TYPE,
+            "schema_version": _PACKET_ID_SCHEMA_VERSION,
+        },
+        "canonicalization": IDENTITY_FRAMING_VERSION,
+    }
 
 
 @dataclass(frozen=True)
@@ -71,6 +132,15 @@ class EvidenceLocator:
             "text_hash": self.text_hash,
             "row_index": self.row_index,
         }
+
+    def citation_view(self) -> dict[str, Any]:
+        """The authoritative citation locator for this unit, derived from
+        :data:`CITATION_LOCATOR_FIELDS` so a citation-scheme rotation and
+        packet identity can never drift apart."""
+
+        view = citation_view(self.identity_view())
+        assert view is not None  # identity_view carries every locator field
+        return view
 
 
 @dataclass(frozen=True)
@@ -402,21 +472,24 @@ def packet_identity_dimensions(
 
     Reuse is safe only while *all* of these match: normalized query,
     publication/member generation identity (including the set's content
-    digest), selected evidence locators + content hashes and their
-    order, explicit omissions, the budget profile that shaped the
-    selection, the caller-supplied security / verifier / redaction
-    / serialization identities, and the trusted effective-authorization
-    identity (profile, assurance, epoch, deny revision, policy digest).
-    Any relevant change must change the identity — reuse across a
-    changed dimension is a bug. Authorization changes therefore
-    invalidate stale cached packets even when content and request are
-    byte-identical.
+    digest and tokenizer), selected evidence locators + content hashes
+    and their order, explicit omissions, the budget profile that shaped
+    the selection, the caller-supplied security / verifier / redaction
+    / serialization identities, the trusted effective-authorization
+    identity (profile, assurance, epoch, deny revision, policy digest),
+    and the deployed representation semantics (packet schema, citation
+    locator scheme, identity framing, canonicalization). Any relevant
+    change must change the identity — reuse across a changed dimension
+    is a bug. Authorization changes therefore invalidate stale cached
+    packets even when content and request are byte-identical, and
+    citation/renderer rotations invalidate reuse even when trusted data
+    state is byte-identical.
     """
     publication_view = None
     if publication is not None:
         publication_view = {key: publication.get(key) for key in _PUBLICATION_IDENTITY_KEYS}
     return {
-        "packet_schema_version": EVIDENCE_PACKET_SCHEMA_VERSION,
+        "representation": representation_semantics(),
         "query": dict(query),
         "publication": publication_view,
         "evidence": [unit.locator.identity_view() for unit in evidence],
