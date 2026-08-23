@@ -45,6 +45,7 @@ _RECORD_CLASS_AUTHORIZATION_EPOCH = "authorization_epoch"
 _RECORD_CLASS_SOURCE_OBSERVATION = "source_observation"
 _RECORD_CLASS_SECURITY_DOMAIN = "security_domain"
 _RECORD_CLASS_ACCESS_DENIAL = "access_denial"
+_RECORD_CLASS_REDACTION_PROFILE = "redaction_profile"
 
 #: Framing record_type per record class. Together with the per-class
 #: schema_version this is the identity domain separator consumed by
@@ -63,6 +64,7 @@ RECORD_TYPES: dict[str, str] = {
     _RECORD_CLASS_SOURCE_OBSERVATION: "marker.kernel.source_observation.v1",
     _RECORD_CLASS_SECURITY_DOMAIN: "marker.kernel.security_domain.v1",
     _RECORD_CLASS_ACCESS_DENIAL: "marker.kernel.access_denial.v1",
+    _RECORD_CLASS_REDACTION_PROFILE: "marker.kernel.redaction_profile.v1",
 }
 
 
@@ -829,6 +831,164 @@ class AccessDenialRecord(KernelRecord):
             "denied": self.denied,
             "supersedes": self.supersedes,
             "denial_basis": dict(self.denial_basis),
+        }
+
+
+#: Redaction-profile id grammar — the named serving context a caller
+#: may request; the rules behind the name are always server-committed.
+REDACTION_PROFILE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9._-]{0,63}$")
+
+#: Bounded redaction-rule grammar per profile revision (PR89): a rule is
+#: a literal span or a regular expression, each with its own safe
+#: placeholder. Rules are validated at the kernel commit boundary so
+#: only well-formed, compilable policy can ever become effective.
+REDACTION_RULE_KINDS = frozenset({"literal", "pattern"})
+REDACTION_RULE_KIND_LITERAL = "literal"
+REDACTION_RULE_KIND_PATTERN = "pattern"
+_REDACTION_RULES_MAX = 64
+_REDACTION_RULE_VALUE_MAX_CHARS = 512
+_REDACTION_PLACEHOLDER_MAX_CHARS = 64
+_REDACTION_PLACEHOLDER_DEFAULT = "[redacted]"
+_REDACTION_PATTERN_FLAGS = {"IGNORECASE": re.IGNORECASE}
+
+
+def normalize_redaction_rule(rule: Any) -> dict[str, Any]:
+    """Validate and normalize one redaction rule at the kernel boundary.
+
+    Returns the canonical rule mapping (``kind``, the rule body, the
+    placeholder); raises :class:`KernelError` on anything malformed —
+    an invalid pattern, a value embedded in its own placeholder, or a
+    placeholder that would echo the redacted material.
+    """
+    if not isinstance(rule, Mapping):
+        raise KernelError(f"redaction rule must be a mapping, got {type(rule)!r}")
+    kind = rule.get("kind")
+    if kind not in REDACTION_RULE_KINDS:
+        raise KernelError(
+            f"invalid redaction rule kind {kind!r}; allowed: "
+            f"{sorted(REDACTION_RULE_KINDS)}"
+        )
+    placeholder = rule.get("placeholder", _REDACTION_PLACEHOLDER_DEFAULT)
+    if (
+        not isinstance(placeholder, str)
+        or not 1 <= len(placeholder) <= _REDACTION_PLACEHOLDER_MAX_CHARS
+    ):
+        raise KernelError(
+            "redaction placeholder must be 1-"
+            f"{_REDACTION_PLACEHOLDER_MAX_CHARS} characters"
+        )
+    if kind == REDACTION_RULE_KIND_LITERAL:
+        value = rule.get("value")
+        if (
+            not isinstance(value, str)
+            or not 1 <= len(value) <= _REDACTION_RULE_VALUE_MAX_CHARS
+        ):
+            raise KernelError(
+                "literal redaction rule needs a string 'value' of 1-"
+                f"{_REDACTION_RULE_VALUE_MAX_CHARS} characters"
+            )
+        if value in placeholder:
+            raise KernelError(
+                "redaction placeholder must not echo the redacted value"
+            )
+        return {"kind": kind, "value": value, "placeholder": placeholder}
+    pattern = rule.get("pattern")
+    if (
+        not isinstance(pattern, str)
+        or not 1 <= len(pattern) <= _REDACTION_RULE_VALUE_MAX_CHARS
+    ):
+        raise KernelError(
+            "pattern redaction rule needs a string 'pattern' of 1-"
+            f"{_REDACTION_RULE_VALUE_MAX_CHARS} characters"
+        )
+    flags = rule.get("flags", ())
+    if isinstance(flags, str):
+        flags = (flags,)
+    if not isinstance(flags, (tuple, list)) or any(
+        flag not in _REDACTION_PATTERN_FLAGS for flag in flags
+    ):
+        raise KernelError(
+            f"invalid redaction pattern flags {flags!r}; allowed: "
+            f"{sorted(_REDACTION_PATTERN_FLAGS)}"
+        )
+    compiled_flags = 0
+    for flag in flags:
+        compiled_flags |= _REDACTION_PATTERN_FLAGS[flag]
+    try:
+        compiled = re.compile(pattern, compiled_flags)
+    except re.error as exc:
+        raise KernelError(f"redaction pattern does not compile: {exc}") from exc
+    if compiled.search(placeholder):
+        raise KernelError(
+            "redaction placeholder must not match the redaction pattern"
+        )
+    return {
+        "kind": kind,
+        "pattern": pattern,
+        "flags": sorted(flags),
+        "placeholder": placeholder,
+    }
+
+
+def normalize_redaction_rules(rules: Any) -> list[dict[str, Any]]:
+    """Validate a whole rule list; bounded so one profile revision can
+    never smuggle an unbounded program into serving."""
+    if isinstance(rules, (str, bytes)) or not isinstance(rules, (tuple, list)):
+        raise KernelError("redaction rules must be a list of rule mappings")
+    if len(rules) > _REDACTION_RULES_MAX:
+        raise KernelError(
+            f"a redaction profile may carry at most {_REDACTION_RULES_MAX} rules"
+        )
+    return [normalize_redaction_rule(rule) for rule in rules]
+
+
+@dataclass(kw_only=True)
+class RedactionProfileRecord(KernelRecord):
+    """One revision of a named redaction profile (PR89).
+
+    A profile names a *serving context*; its rules declare which content
+    spans must never leave the service under that context. The record is
+    policy, deliberately separate from content: committing a revision
+    changes what the release gate projects, never the immutable source
+    or the published generations that physically retain the bytes. The
+    latest committed revision per ``(workspace, profile_id)`` is the
+    effective one — supersession is a new record, never a mutation, and
+    ``supersedes`` chains the history so identical rule sets cannot
+    collide after a deny→allow-style cycle.
+    ``redaction_basis`` participates in identity so the stored record is
+    self-describing, mirroring ``AccessDenialRecord.denial_basis``.
+    """
+
+    record_class: ClassVar[str] = _RECORD_CLASS_REDACTION_PROFILE
+    record_type: ClassVar[str] = RECORD_TYPES[_RECORD_CLASS_REDACTION_PROFILE]
+
+    profile_id: str
+    rules: tuple[Mapping[str, Any], ...] = ()
+    #: previous RedactionProfileRecord for the same profile, or None
+    supersedes: str | None = None
+    #: self-describing policy context (operator, legal basis, ...)
+    redaction_basis: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.profile_id, str) or not REDACTION_PROFILE_ID_PATTERN.match(
+            self.profile_id
+        ):
+            raise KernelError(
+                f"invalid profile_id: {self.profile_id!r} must match "
+                f"{REDACTION_PROFILE_ID_PATTERN.pattern}"
+            )
+        normalized = normalize_redaction_rules(self.rules)
+        self.rules = tuple(normalized)
+        if self.supersedes is not None:
+            validate_record_ref(self.supersedes, field_name="supersedes")
+
+    def identity_payload(self) -> dict[str, Any]:
+        return {
+            "profile_id": self.profile_id,
+            "rules": [dict(rule) for rule in self.rules],
+            "supersedes": self.supersedes,
+            "redaction_basis": dict(self.redaction_basis),
         }
 
 
