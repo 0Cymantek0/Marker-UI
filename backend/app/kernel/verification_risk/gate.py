@@ -463,6 +463,25 @@ async def check_batch_verification_risk(
             raise VerificationRiskGateError(
                 f"risk evidence {evidence_ref!r} must declare an upper risk bound"
             )
+        # PR88 (invariant 23): statistical authority without an expiry
+        # condition stays valid forever, and evidence that does not name
+        # the population it was calibrated on cannot be applicability-
+        # checked against the claim it is being used for. Both fail
+        # closed. Existing committed records keep their historical
+        # meaning; only NEW high-risk authorization requires them.
+        if evidence.expires_at is None:
+            raise VerificationRiskGateError(
+                f"risk evidence {evidence_ref!r} must declare expires_at; "
+                "high-risk source-native authority without an expiry "
+                "condition never retires"
+            )
+        population = evidence.metadata.get("calibration_population")
+        if not isinstance(population, str) or not population:
+            raise VerificationRiskGateError(
+                f"risk evidence {evidence_ref!r} must name the population it "
+                "was calibrated on in metadata.calibration_population; "
+                "unnamed-population evidence cannot be applicability-checked"
+            )
         try:
             decision = evaluate_verification_risk_policy(
                 evidence,

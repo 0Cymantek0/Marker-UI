@@ -64,6 +64,7 @@ def make_risk(**changes) -> VerificationRiskEvidenceRecord:
         "consensus": False,
         "method_id": "wilson-upper-bound",
         "method_version": "1.0.0",
+        "metadata": {"calibration_population": "invoice-total/en/matched/v1"},
     }
     values.update(changes)
     return VerificationRiskEvidenceRecord(**values)
@@ -243,6 +244,28 @@ async def test_model_only_consensus_rejected_atomically(kernel_env):
         disclosure_refs=("disclosure-a", "disclosure-b"),
     )
     await assert_rejected_atomically(kernel_env, valid_batch(risk=risk))
+
+
+async def test_high_risk_evidence_without_expiry_is_rejected_atomically(kernel_env):
+    # PR88 (invariant 23): statistical authority must retire. Evidence
+    # without an expiry condition cannot authorize new high-risk claims.
+    await assert_rejected_atomically(
+        kernel_env,
+        valid_batch(risk=make_risk(expires_at=None)),
+        match="must declare expires_at",
+    )
+
+
+async def test_high_risk_evidence_without_named_population_is_rejected_atomically(
+    kernel_env,
+):
+    # PR88 (invariant 23): evidence that does not name the population it
+    # was calibrated on cannot be applicability-checked against the claim.
+    await assert_rejected_atomically(
+        kernel_env,
+        valid_batch(risk=make_risk(metadata={})),
+        match="calibration_population",
+    )
 
 
 @pytest.mark.parametrize(
