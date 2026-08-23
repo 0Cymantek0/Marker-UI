@@ -18,11 +18,13 @@ pytestmark = pytest.mark.asyncio
 SENTINEL = "MU_RED_7f3a9c2e4b"
 
 
+@pytest.mark.asyncio
 async def _service(payload_env, workspace: str = "ws-redpol") -> RedactionPolicyService:
     factory, _store, commit_service = payload_env
     return RedactionPolicyService(factory, commit_service, workspace_id=workspace)
 
 
+@pytest.mark.asyncio
 async def test_no_profiles_means_no_redaction(payload_env) -> None:
     factory, _store, _commit = payload_env
     resolved = await resolve_effective_redaction(factory, "ws-fresh", None)
@@ -31,12 +33,14 @@ async def test_no_profiles_means_no_redaction(payload_env) -> None:
     assert resolved.redact_text(f"contains {SENTINEL}") == f"contains {SENTINEL}"
 
 
+@pytest.mark.asyncio
 async def test_named_unknown_profile_fails_closed(payload_env) -> None:
     factory, _store, _commit = payload_env
     with pytest.raises(QueryAuthorizationError):
         await resolve_effective_redaction(factory, "ws-fresh", "attacker-invented")
 
 
+@pytest.mark.asyncio
 async def test_omitted_name_resolves_committed_default(payload_env) -> None:
     factory, _store, _commit = payload_env
     policy = await _service(payload_env)
@@ -48,6 +52,7 @@ async def test_omitted_name_resolves_committed_default(payload_env) -> None:
     assert resolved.redact_text(f"x {SENTINEL} y") == "x [redacted] y"
 
 
+@pytest.mark.asyncio
 async def test_latest_revision_wins_and_relaxation_rotates_identity(
     payload_env,
 ) -> None:
@@ -75,6 +80,7 @@ async def test_latest_revision_wins_and_relaxation_rotates_identity(
     assert relaxed.identity_view() != strict.identity_view()
 
 
+@pytest.mark.asyncio
 async def test_profiles_are_isolated_by_name(payload_env) -> None:
     factory, _store, _commit = payload_env
     policy = await _service(payload_env)
@@ -88,6 +94,7 @@ async def test_profiles_are_isolated_by_name(payload_env) -> None:
     assert strict.identity_view() != open_profile.identity_view()
 
 
+@pytest.mark.asyncio
 async def test_placeholder_never_echoes_material(payload_env) -> None:
     factory, _store, _commit = payload_env
     policy = await _service(payload_env)

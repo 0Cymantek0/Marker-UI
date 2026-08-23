@@ -11,9 +11,6 @@ from app.kernel.records import (
     normalize_redaction_rules,
 )
 
-pytestmark = pytest.mark.asyncio
-
-
 def test_literal_rule_normalizes_with_default_placeholder() -> None:
     rule = normalize_redaction_rule({"kind": "literal", "value": "MU_RED_x"})
     assert rule == {
@@ -69,6 +66,7 @@ def test_rule_list_is_bounded_and_type_checked() -> None:
     assert len(normalize_redaction_rules(())) == 0
 
 
+@pytest.mark.asyncio
 async def test_record_validates_profile_id_and_rules() -> None:
     record = RedactionProfileRecord(
         profile_id="strict",
