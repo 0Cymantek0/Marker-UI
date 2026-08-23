@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-23T12:28:24+00:00",
-  "git_head": "b73f2776049d3f7bd7cbcad145258c4d1cba140e",
+  "generated_at": "2026-08-23T16:26:07+00:00",
+  "git_head": "5fa39dee5b61b9d6ae0524adabb90de0271cba5b",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -289,7 +289,7 @@
       "kind": "test",
       "scope_blobs": {
         "backend/tests/test_kernel_verification_risk.py": "0c40b993be578ca855fc7855a35d7292e9f42858",
-        "backend/tests/test_kernel_verification_risk_integration.py": "e2cd8076361a37691202edd05b98f62c09d6fd99"
+        "backend/tests/test_kernel_verification_risk_integration.py": "74324b4ecc29942977759cafb6e473387422a104"
       },
       "nodes": [
         "backend/tests/test_kernel_verification_risk.py::test_model_consensus_alone_never_verifies_high_risk_claim",
@@ -343,7 +343,7 @@
       "kind": "test",
       "scope_blobs": {
         "backend/tests/test_kernel_verification_risk.py": "0c40b993be578ca855fc7855a35d7292e9f42858",
-        "backend/tests/test_kernel_verification_risk_integration.py": "e2cd8076361a37691202edd05b98f62c09d6fd99"
+        "backend/tests/test_kernel_verification_risk_integration.py": "74324b4ecc29942977759cafb6e473387422a104"
       },
       "nodes": [
         "backend/tests/test_kernel_verification_risk.py::test_valid_source_native_risk_evidence_can_verify_narrow_high_risk_claim",
@@ -362,6 +362,98 @@
         "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes2-policy_changes2-2026-08-15-abstained-distribution_shift]": "passed",
         "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes3-policy_changes3-2026-08-15-abstained-risk_bound_failure]": "passed",
         "backend/tests/test_kernel_verification_risk.py::test_conservative_policy_outcomes[evidence_changes4-policy_changes4-2026-08-15-unavailable-evaluation_scope_mismatch]": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "22:test:backend/tests/test_verification_region_status.py::test_verified_and_unresolved_regions_coexist_without_poisoning",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/app/kernel/assessment_view.py": "d677d7d5fe80802c2fa7c69c2c76556d9a188b08",
+        "backend/tests/test_extraction_region_usability.py": "a4fbb15e51a0a048ea4d2395ff6f7f808806b3ac",
+        "backend/tests/test_verification_region_status.py": "8255033fde7cd640eeba27db91a6a814edce56c0"
+      },
+      "nodes": [
+        "backend/tests/test_verification_region_status.py::test_verified_and_unresolved_regions_coexist_without_poisoning",
+        "backend/tests/test_verification_region_status.py::test_summary_preserves_region_states_without_boolean_collapse",
+        "backend/tests/test_verification_region_status.py::test_bounded_read_for_one_region_does_not_leak_the_neighbor",
+        "backend/tests/test_verification_region_status.py::test_region_b_becomes_verified_while_region_a_history_is_stable",
+        "backend/tests/test_verification_region_status.py::test_policy_revision_change_does_not_carry_old_assessments",
+        "backend/tests/test_verification_region_status.py::test_snapshot_cut_selects_historical_state_without_rewriting",
+        "backend/tests/test_verification_region_status.py::test_failed_region_does_not_remove_verified_neighbor",
+        "backend/tests/test_verification_region_status.py::test_warning_cleared_region_is_usable_and_distinct",
+        "backend/tests/test_extraction_region_usability.py::test_accepted_region_usable_while_conflicted_region_requires_review",
+        "backend/tests/test_extraction_region_usability.py::test_review_required_region_cannot_reach_claim_layer_without_review",
+        "backend/tests/test_extraction_region_usability.py::test_adjudicating_conflicted_region_leaves_accepted_region_stable",
+        "backend/tests/test_extraction_region_usability.py::test_bounded_consumer_view_separates_region_states"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_verification_region_status.py::test_verified_and_unresolved_regions_coexist_without_poisoning": "passed",
+        "backend/tests/test_verification_region_status.py::test_summary_preserves_region_states_without_boolean_collapse": "passed",
+        "backend/tests/test_verification_region_status.py::test_bounded_read_for_one_region_does_not_leak_the_neighbor": "passed",
+        "backend/tests/test_verification_region_status.py::test_region_b_becomes_verified_while_region_a_history_is_stable": "passed",
+        "backend/tests/test_verification_region_status.py::test_policy_revision_change_does_not_carry_old_assessments": "passed",
+        "backend/tests/test_verification_region_status.py::test_snapshot_cut_selects_historical_state_without_rewriting": "passed",
+        "backend/tests/test_verification_region_status.py::test_failed_region_does_not_remove_verified_neighbor": "passed",
+        "backend/tests/test_verification_region_status.py::test_warning_cleared_region_is_usable_and_distinct": "passed",
+        "backend/tests/test_extraction_region_usability.py::test_accepted_region_usable_while_conflicted_region_requires_review": "passed",
+        "backend/tests/test_extraction_region_usability.py::test_review_required_region_cannot_reach_claim_layer_without_review": "passed",
+        "backend/tests/test_extraction_region_usability.py::test_adjudicating_conflicted_region_leaves_accepted_region_stable": "passed",
+        "backend/tests/test_extraction_region_usability.py::test_bounded_consumer_view_separates_region_states": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "23:test:backend/tests/test_calibration_applicability.py::test_artifact_names_population_assumptions_and_expiry_first_class",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/app/eval/verification_risk/applicability.py": "03eb1307ec1572d589941f371103aaf5f284ea39",
+        "backend/tests/test_calibration_applicability.py": "255f6182bc2e02051a4c6261ca05c14410ee8c35",
+        "backend/tests/test_kernel_verification_risk_integration.py": "74324b4ecc29942977759cafb6e473387422a104"
+      },
+      "nodes": [
+        "backend/tests/test_calibration_applicability.py::test_artifact_names_population_assumptions_and_expiry_first_class",
+        "backend/tests/test_calibration_applicability.py::test_zero_observed_catastrophes_is_not_zero_risk",
+        "backend/tests/test_calibration_applicability.py::test_rule_of_three_bounds_are_exact_and_conservative",
+        "backend/tests/test_calibration_applicability.py::test_positive_failure_bounds_solve_the_exact_interval",
+        "backend/tests/test_calibration_applicability.py::test_catastrophic_interpretation_fails_closed",
+        "backend/tests/test_calibration_applicability.py::test_applies_to_matches_only_named_dimensions",
+        "backend/tests/test_calibration_applicability.py::test_expiry_is_machine_evaluable_with_exact_boundary",
+        "backend/tests/test_calibration_applicability.py::test_round_trip_preserves_semantics_without_drift",
+        "backend/tests/test_calibration_applicability.py::test_from_dict_fails_closed_on_unknown_or_wrong_version",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_shift_status_fails_closed",
+        "backend/tests/test_calibration_applicability.py::test_catastrophic_interpretation_is_mandatory",
+        "backend/tests/test_calibration_applicability.py::test_shifted_and_insufficient_slices_stay_honest",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_high_risk_evidence_without_expiry_is_rejected_atomically",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_high_risk_evidence_without_named_population_is_rejected_atomically"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_calibration_applicability.py::test_artifact_names_population_assumptions_and_expiry_first_class": "passed",
+        "backend/tests/test_calibration_applicability.py::test_zero_observed_catastrophes_is_not_zero_risk": "passed",
+        "backend/tests/test_calibration_applicability.py::test_rule_of_three_bounds_are_exact_and_conservative": "passed",
+        "backend/tests/test_calibration_applicability.py::test_positive_failure_bounds_solve_the_exact_interval": "passed",
+        "backend/tests/test_calibration_applicability.py::test_catastrophic_interpretation_fails_closed": "passed",
+        "backend/tests/test_calibration_applicability.py::test_applies_to_matches_only_named_dimensions": "passed",
+        "backend/tests/test_calibration_applicability.py::test_expiry_is_machine_evaluable_with_exact_boundary": "passed",
+        "backend/tests/test_calibration_applicability.py::test_round_trip_preserves_semantics_without_drift": "passed",
+        "backend/tests/test_calibration_applicability.py::test_from_dict_fails_closed_on_unknown_or_wrong_version": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes0]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes1]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes2]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes3]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes4]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes5]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes6]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes7]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed[changes8]": "passed",
+        "backend/tests/test_calibration_applicability.py::test_invalid_shift_status_fails_closed": "passed",
+        "backend/tests/test_calibration_applicability.py::test_catastrophic_interpretation_is_mandatory": "passed",
+        "backend/tests/test_calibration_applicability.py::test_shifted_and_insufficient_slices_stay_honest": "passed",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_high_risk_evidence_without_expiry_is_rejected_atomically": "passed",
+        "backend/tests/test_kernel_verification_risk_integration.py::test_high_risk_evidence_without_named_population_is_rejected_atomically": "passed"
       },
       "outcome": "passed",
       "detail": ""
@@ -474,6 +566,93 @@
       "detail": ""
     },
     {
+      "binding_key": "26:measurement:docs/reference/measurements/pr88-review-policy-ops.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "backend/app/extraction/review_ops.py": "5dfa4b40be46d40501c80c7301b12d0ea14b7b26",
+        "backend/scripts/bench_review_policy_ops.py": "ca2c7fe0e317c76a3afcc28297591b0b47f7ca9e",
+        "backend/tests/test_review_ops.py": "e6a9b99f74f5813f210bcf173a5237dcd91b767b",
+        "backend/tests/test_review_policy_ops_artifact.py": "61b8b3efa30eb9ce95279d6f6ab2ad95b33899cc",
+        "docs/reference/measurements/pr88-review-policy-ops.json": "208c5856f010c1c799cfd6f06ae9e5e9e456be50"
+      },
+      "artifact": "docs/reference/measurements/pr88-review-policy-ops.json",
+      "artifact_sha256": "f7e15617157bb2f745452a701ddfabdabefa25be63d384d10e5f16c20dff5fa7",
+      "checks": {
+        "checks.accepted_region_usable_before_review": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.no_region_poisoning": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.no_region_promotion": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.review_required_accounted": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.review_coverage_complete": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.dwell_measured_deterministically": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.replay_idempotent": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.bypass_refused_and_accounted": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.stale_refused_and_accounted": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "checks.calibration_zero_catastrophes_not_zero_risk": {
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        "metrics.required_review": {
+          "expected": 2,
+          "actual": 2,
+          "ok": true
+        },
+        "metrics.reviewed": {
+          "expected": 2,
+          "actual": 2,
+          "ok": true
+        },
+        "metrics.stale_rejections": {
+          "expected": 1,
+          "actual": 1,
+          "ok": true
+        },
+        "metrics.bypass_refusals": {
+          "expected": 1,
+          "actual": 1,
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
       "binding_key": "26:test:backend/tests/test_extraction_review.py::test_review_accepts_grounded_unresolved_value_and_persist_audit",
       "kind": "test",
       "scope_blobs": {
@@ -484,6 +663,37 @@
       ],
       "node_outcomes": {
         "backend/tests/test_extraction_review.py::test_review_accepts_grounded_unresolved_value_and_persist_audit": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "26:test:backend/tests/test_review_ops.py::test_review_required_path_enters_accounting_once",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/app/extraction/review_ops.py": "5dfa4b40be46d40501c80c7301b12d0ea14b7b26",
+        "backend/app/extraction/service.py": "85ec0b45eeec8ccf5bf552638b32c92ee62fbef8",
+        "backend/tests/test_review_ops.py": "e6a9b99f74f5813f210bcf173a5237dcd91b767b"
+      },
+      "nodes": [
+        "backend/tests/test_review_ops.py::test_review_required_path_enters_accounting_once",
+        "backend/tests/test_review_ops.py::test_review_completion_accounted_with_exact_dwell",
+        "backend/tests/test_review_ops.py::test_rejection_counts_as_reviewed_outcome_and_backlog_is_honest",
+        "backend/tests/test_review_ops.py::test_replayed_decision_does_not_double_count",
+        "backend/tests/test_review_ops.py::test_stale_review_is_rejected_and_accounted_separately",
+        "backend/tests/test_review_ops.py::test_bypass_attempt_on_accepted_field_is_refused_and_accounted",
+        "backend/tests/test_review_ops.py::test_reload_reproduces_identical_accounting",
+        "backend/tests/test_review_ops.py::test_no_review_work_yields_explicit_zero_denominator_not_zero"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_review_ops.py::test_review_required_path_enters_accounting_once": "passed",
+        "backend/tests/test_review_ops.py::test_review_completion_accounted_with_exact_dwell": "passed",
+        "backend/tests/test_review_ops.py::test_rejection_counts_as_reviewed_outcome_and_backlog_is_honest": "passed",
+        "backend/tests/test_review_ops.py::test_replayed_decision_does_not_double_count": "passed",
+        "backend/tests/test_review_ops.py::test_stale_review_is_rejected_and_accounted_separately": "passed",
+        "backend/tests/test_review_ops.py::test_bypass_attempt_on_accepted_field_is_refused_and_accounted": "passed",
+        "backend/tests/test_review_ops.py::test_reload_reproduces_identical_accounting": "passed",
+        "backend/tests/test_review_ops.py::test_no_review_work_yields_explicit_zero_denominator_not_zero": "passed"
       },
       "outcome": "passed",
       "detail": ""
@@ -536,7 +746,7 @@
         "backend/app/extraction/hybrid.py": "27ee7814b824c93a33bac24b01ad797e644d3679",
         "backend/app/extraction/normalization.py": "806e4689843a2f3272b4611fef7db8f6f140db0f",
         "backend/app/extraction/provider.py": "0803c89e4ca9cfdce22ba62164d10e763c77f35f",
-        "backend/app/extraction/service.py": "b0130e894ad7c7c85d41a1be4502fc1ab524fa34",
+        "backend/app/extraction/service.py": "85ec0b45eeec8ccf5bf552638b32c92ee62fbef8",
         "backend/app/extraction/specialist.py": "e8b222b0feaca2fedef1b889d7fcc559e59e9e6c",
         "backend/scripts/bench_specialist_bridge.py": "7ae045134ab58a37d0faa9a28b2f3df605afc3d7",
         "backend/tests/test_eval_bridge.py": "483e1a8bd613af43307d8c6af4bfc00dcf2ecea4",

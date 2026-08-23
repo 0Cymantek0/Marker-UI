@@ -612,9 +612,9 @@
     },
     {
       "id": 22,
-      "status_claim": "no_evidence",
-      "gap_type": "B",
-      "gap_note": "Relativity is structural (every dimension is matched before an outcome), yet the 'one unresolved region does not make the entire document unusable' property has no direct two-region assertion.",
+      "status_claim": "proven",
+      "gap_type": null,
+      "gap_note": null,
       "bindings": [
         {
           "kind": "test",
@@ -631,17 +631,43 @@
             "backend/tests/test_kernel_verification_risk.py",
             "backend/tests/test_kernel_verification_risk_integration.py"
           ]
+        },
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "sqlite-dev",
+          "rationale": "Two independently assessed regions coexist in one document and commit through the real risk gate and proof graph: the verified region stays usable and the unresolved/failed regions stay unresolved across bounded per-region reads, policy-revision and workflow changes, and commit cuts; adjudicating the unresolved region leaves the verified region's committed history untouched; the document summary preserves every usability class with no document-wide boolean. Proven at both the kernel assessment-view seam and the extraction publication/review seam.",
+          "nodes": [
+            "backend/tests/test_verification_region_status.py::test_verified_and_unresolved_regions_coexist_without_poisoning",
+            "backend/tests/test_verification_region_status.py::test_summary_preserves_region_states_without_boolean_collapse",
+            "backend/tests/test_verification_region_status.py::test_bounded_read_for_one_region_does_not_leak_the_neighbor",
+            "backend/tests/test_verification_region_status.py::test_region_b_becomes_verified_while_region_a_history_is_stable",
+            "backend/tests/test_verification_region_status.py::test_policy_revision_change_does_not_carry_old_assessments",
+            "backend/tests/test_verification_region_status.py::test_snapshot_cut_selects_historical_state_without_rewriting",
+            "backend/tests/test_verification_region_status.py::test_failed_region_does_not_remove_verified_neighbor",
+            "backend/tests/test_verification_region_status.py::test_warning_cleared_region_is_usable_and_distinct",
+            "backend/tests/test_extraction_region_usability.py::test_accepted_region_usable_while_conflicted_region_requires_review",
+            "backend/tests/test_extraction_region_usability.py::test_review_required_region_cannot_reach_claim_layer_without_review",
+            "backend/tests/test_extraction_region_usability.py::test_adjudicating_conflicted_region_leaves_accepted_region_stable",
+            "backend/tests/test_extraction_region_usability.py::test_bounded_consumer_view_separates_region_states"
+          ],
+          "scope_files": [
+            "backend/app/kernel/assessment_view.py",
+            "backend/tests/test_extraction_region_usability.py",
+            "backend/tests/test_verification_region_status.py"
+          ]
         }
       ],
       "context_docs": [
+        "docs/reference/review-policy-operations.md",
         "docs/reference/verification-risk.md"
       ]
     },
     {
       "id": 23,
-      "status_claim": "no_evidence",
-      "gap_type": "B",
-      "gap_note": "Calibration artifact schema carries method/version/sample/support/CI/shift but not named population/assumptions/expiry fields; zero observed catastrophic failures are reported as counts only.",
+      "status_claim": "proven",
+      "gap_type": null,
+      "gap_note": null,
       "bindings": [
         {
           "kind": "test",
@@ -658,9 +684,39 @@
             "backend/tests/test_kernel_verification_risk.py",
             "backend/tests/test_verification_risk_eval.py"
           ]
+        },
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "sqlite-dev",
+          "rationale": "The versioned marker.calibration.applicability.v2 artifact names its population, states closed-vocabulary assumptions (label definition and sampling frame mandatory), carries a machine-evaluable expiry window plus retest triggers, keeps support/uncertainty/shift first-class, and interprets zero observed catastrophic failures through an exact one-sided 95% Clopper-Pearson upper bound that is strictly positive on positive trials (zero failures is machine-checkably not zero risk). The high-risk gate rejects new authorization from evidence without expires_at or a named calibration population, and construction/round-trip fail closed on unknown shapes.",
+          "nodes": [
+            "backend/tests/test_calibration_applicability.py::test_artifact_names_population_assumptions_and_expiry_first_class",
+            "backend/tests/test_calibration_applicability.py::test_zero_observed_catastrophes_is_not_zero_risk",
+            "backend/tests/test_calibration_applicability.py::test_rule_of_three_bounds_are_exact_and_conservative",
+            "backend/tests/test_calibration_applicability.py::test_positive_failure_bounds_solve_the_exact_interval",
+            "backend/tests/test_calibration_applicability.py::test_catastrophic_interpretation_fails_closed",
+            "backend/tests/test_calibration_applicability.py::test_applies_to_matches_only_named_dimensions",
+            "backend/tests/test_calibration_applicability.py::test_expiry_is_machine_evaluable_with_exact_boundary",
+            "backend/tests/test_calibration_applicability.py::test_round_trip_preserves_semantics_without_drift",
+            "backend/tests/test_calibration_applicability.py::test_from_dict_fails_closed_on_unknown_or_wrong_version",
+            "backend/tests/test_calibration_applicability.py::test_invalid_applicability_fails_closed",
+            "backend/tests/test_calibration_applicability.py::test_invalid_shift_status_fails_closed",
+            "backend/tests/test_calibration_applicability.py::test_catastrophic_interpretation_is_mandatory",
+            "backend/tests/test_calibration_applicability.py::test_shifted_and_insufficient_slices_stay_honest",
+            "backend/tests/test_kernel_verification_risk_integration.py::test_high_risk_evidence_without_expiry_is_rejected_atomically",
+            "backend/tests/test_kernel_verification_risk_integration.py::test_high_risk_evidence_without_named_population_is_rejected_atomically"
+          ],
+          "scope_files": [
+            "backend/app/eval/verification_risk/applicability.py",
+            "backend/tests/test_calibration_applicability.py",
+            "backend/tests/test_kernel_verification_risk_integration.py"
+          ]
         }
       ],
-      "context_docs": []
+      "context_docs": [
+        "docs/reference/review-policy-operations.md"
+      ]
     },
     {
       "id": 24,
@@ -737,9 +793,9 @@
     },
     {
       "id": 26,
-      "status_claim": "no_evidence",
-      "gap_type": "B",
-      "gap_note": "Verification-policy operational usability (review coverage, queue time, bypass rate) is an acknowledged open follow-up in docs/reference/verification-risk.md; only the extraction review lane is tested.",
+      "status_claim": "proven",
+      "gap_type": null,
+      "gap_note": null,
       "bindings": [
         {
           "kind": "test",
@@ -752,9 +808,61 @@
           "scope_files": [
             "backend/tests/test_extraction_review.py"
           ]
+        },
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "sqlite-dev",
+          "rationale": "The verification policy's review operations are executable end to end over the real review seam: review-required work enters a durable transition ledger at run persistence, decisions commit atomically with their decision record (replays cannot double-count), dwell is measured deterministically with injected clocks, stale and bypass attempts are refused and accounted separately, unresolved backlog and zero-denominator states are explicit, and reload from durable state reproduces identical accounting.",
+          "nodes": [
+            "backend/tests/test_review_ops.py::test_review_required_path_enters_accounting_once",
+            "backend/tests/test_review_ops.py::test_review_completion_accounted_with_exact_dwell",
+            "backend/tests/test_review_ops.py::test_rejection_counts_as_reviewed_outcome_and_backlog_is_honest",
+            "backend/tests/test_review_ops.py::test_replayed_decision_does_not_double_count",
+            "backend/tests/test_review_ops.py::test_stale_review_is_rejected_and_accounted_separately",
+            "backend/tests/test_review_ops.py::test_bypass_attempt_on_accepted_field_is_refused_and_accounted",
+            "backend/tests/test_review_ops.py::test_reload_reproduces_identical_accounting",
+            "backend/tests/test_review_ops.py::test_no_review_work_yields_explicit_zero_denominator_not_zero"
+          ],
+          "scope_files": [
+            "backend/app/extraction/review_ops.py",
+            "backend/app/extraction/service.py",
+            "backend/tests/test_review_ops.py"
+          ]
+        },
+        {
+          "kind": "measurement",
+          "coverage": "full",
+          "environment": "sqlite-dev deterministic tracer (injected clocks, real seams)",
+          "rationale": "One integrated reproducible workload composes all three closures: differential region status through the kernel assessment view before and after adjudication (no poisoning, no promotion, human-sourced correction distinct from source authority), the v2 calibration applicability discipline, and the review-policy operational metrics derived from durable transitions - coverage 2/2 with exact dwell, one refused bypass, one refused stale decision, idempotent replay. The artifact is machine-validated against tampered copies and states its non-claims.",
+          "scope_files": [
+            "backend/app/extraction/review_ops.py",
+            "backend/scripts/bench_review_policy_ops.py",
+            "backend/tests/test_review_ops.py",
+            "backend/tests/test_review_policy_ops_artifact.py",
+            "docs/reference/measurements/pr88-review-policy-ops.json"
+          ],
+          "artifact": "docs/reference/measurements/pr88-review-policy-ops.json",
+          "artifact_expect": {
+            "checks.accepted_region_usable_before_review": true,
+            "checks.no_region_poisoning": true,
+            "checks.no_region_promotion": true,
+            "checks.review_required_accounted": true,
+            "checks.review_coverage_complete": true,
+            "checks.dwell_measured_deterministically": true,
+            "checks.replay_idempotent": true,
+            "checks.bypass_refused_and_accounted": true,
+            "checks.stale_refused_and_accounted": true,
+            "checks.calibration_zero_catastrophes_not_zero_risk": true,
+            "metrics.required_review": 2,
+            "metrics.reviewed": 2,
+            "metrics.stale_rejections": 1,
+            "metrics.bypass_refusals": 1
+          }
         }
       ],
       "context_docs": [
+        "docs/reference/review-policy-operations.md",
         "docs/reference/verification-risk.md"
       ]
     },

@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `b73f2776049d3f7bd7cbcad145258c4d1cba140e`
-- Invariants proven: **44 / 62**
+- Audited source head: `5fa39dee5b61b9d6ae0524adabb90de0271cba5b`
+- Invariants proven: **47 / 62**
 - Failed: **0**
-- No acceptable evidence: **18**
+- No acceptable evidence: **15**
 
 ## Group summary
 
@@ -13,7 +13,7 @@
 |---|---|---:|---:|---:|
 | 23C.1 | Truth and persistence | 5 | 0 | 4 |
 | 23C.2 | Geometry, patches, and incrementality | 7 | 0 | 2 |
-| 23C.3 | Verification and routing | 5 | 0 | 4 |
+| 23C.3 | Verification and routing | 8 | 0 | 1 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
 | 23C.6 | Agent and product behavior | 7 | 0 | 1 |
@@ -44,11 +44,11 @@
 | 19 | 23C.3 | proven | sqlite-dev |
 | 20 | 23C.3 | proven | sqlite-dev |
 | 21 | 23C.3 | proven | sqlite-dev |
-| 22 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
-| 23 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
+| 22 | 23C.3 | proven | sqlite-dev |
+| 23 | 23C.3 | proven | sqlite-dev |
 | 24 | 23C.3 | proven | sqlite-dev |
 | 25 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
-| 26 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
+| 26 | 23C.3 | proven | sqlite-dev, sqlite-dev deterministic tracer (injected clocks, real seams) |
 | 27 | 23C.3 | proven | deterministic local lane (real kernel/publication/query authorities per document; specialist responses replayed offline from the committed PR80B cache - no network, no credentials) |
 | 28 | 23C.4 | proven | sqlite-dev, offline-artifact (PR68A measured comparison, frozen) |
 | 29 | 23C.4 | proven | sqlite-dev |
@@ -96,9 +96,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 4** (23C.1, blob-vs-observation-identity): Separation is demonstrated indirectly (GC rescue keys on blob_key; evidence classes are distinct record identities); a direct dedup-collision test naming both identities is missing. Reason: executed proof covers only part of the invariant wording.
 - **Inv 13** (23C.2, cross-page-fragment-preservation): Continuation-edge and alternative-preservation semantics exist; the all-fragments + full-provenance preservation property for cross-page continuations and multi-page tables has no executable assertion. Reason: executed proof covers only part of the invariant wording.
 - **Inv 18** (23C.2, redaction-all-paths): Redaction policy exists only as audit-text redaction plus retrieval identity rotation; the invariant's enumerated surface (image/cache/index/visual vector/export/cursor) is untested and may be partially unimplemented. Reason: executed proof covers only part of the invariant wording.
-- **Inv 22** (23C.3, verification-status-relative): Relativity is structural (every dimension is matched before an outcome), yet the 'one unresolved region does not make the entire document unusable' property has no direct two-region assertion. Reason: executed proof covers only part of the invariant wording.
-- **Inv 23** (23C.3, calibration-artifact-discipline): Calibration artifact schema carries method/version/sample/support/CI/shift but not named population/assumptions/expiry fields; zero observed catastrophic failures are reported as counts only. Reason: executed proof covers only part of the invariant wording.
-- **Inv 26** (23C.3, review-policy-operational): Verification-policy operational usability (review coverage, queue time, bypass rate) is an acknowledged open follow-up in docs/reference/verification-risk.md; only the extraction review lane is tested. Reason: executed proof covers only part of the invariant wording.
 - **Inv 30** (23C.4, admission-memory-envelope): PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial. Reason: executed proof covers only part of the invariant wording.
 - **Inv 37** (23C.4, external-effect-semantics-declared): Local exactly-once acceptance and truthful refusal/reconciliation are proven; the per-destination external-effect semantics declaration driven by real destination primitives is absent. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 43** (23C.5, revocation-slo): Revocation effectiveness without content events is proven and measured; a declared numeric SLO (bound/latency) is neither declared nor asserted. Reason: executed proof covers only part of the invariant wording.
@@ -120,10 +117,10 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 ### Next-slice ranking (groups with most non-proven invariants)
 
 - 23C.1 Truth and persistence: 4 non-proven
-- 23C.3 Verification and routing: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
 - 23C.7 Economics and claim language: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 2 non-proven
+- 23C.3 Verification and routing: 1 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven
 - 23C.6 Agent and product behavior: 1 non-proven
 

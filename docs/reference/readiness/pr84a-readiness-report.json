@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "b73f2776049d3f7bd7cbcad145258c4d1cba140e"
+    "git_head": "5fa39dee5b61b9d6ae0524adabb90de0271cba5b"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 44,
+    "proven": 47,
     "failed": 0,
-    "no_evidence": 18
+    "no_evidence": 15
   },
   "group_counts": {
     "23C.1": {
@@ -23,9 +23,9 @@
       "total": 9
     },
     "23C.3": {
-      "proven": 5,
+      "proven": 8,
       "failed": 0,
-      "no_evidence": 4,
+      "no_evidence": 1,
       "total": 9
     },
     "23C.4": {
@@ -54,16 +54,16 @@
     }
   },
   "gap_type_counts": {
-    "B": 10,
+    "B": 7,
     "D": 5,
     "F": 3
   },
   "residual_gap_ranking": [
     "23C.1",
-    "23C.3",
     "23C.4",
     "23C.7",
     "23C.2",
+    "23C.3",
     "23C.5",
     "23C.6"
   ],
@@ -313,21 +313,25 @@
       "id": 22,
       "group": "23C.3",
       "label": "verification-status-relative",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "B",
-      "gap_note": "Relativity is structural (every dimension is matched before an outcome), yet the 'one unresolved region does not make the entire document unusable' property has no direct two-region assertion."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 23,
       "group": "23C.3",
       "label": "calibration-artifact-discipline",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "B",
-      "gap_note": "Calibration artifact schema carries method/version/sample/support/CI/shift but not named population/assumptions/expiry fields; zero observed catastrophic failures are reported as counts only."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 24,
@@ -355,11 +359,14 @@
       "id": 26,
       "group": "23C.3",
       "label": "review-policy-operational",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "B",
-      "gap_note": "Verification-policy operational usability (review coverage, queue time, bypass rate) is an acknowledged open follow-up in docs/reference/verification-risk.md; only the extraction review lane is tested."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev",
+        "sqlite-dev deterministic tracer (injected clocks, real seams)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 27,
