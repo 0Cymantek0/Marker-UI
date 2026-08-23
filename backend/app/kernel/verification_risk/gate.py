@@ -413,7 +413,10 @@ async def check_batch_verification_risk(
                     f"risk evidence {evidence_ref!r} is not visible in workspace "
                     f"{workspace_id!r}"
                 )
-            risk_class, risk_payload = committed
+            risk_class, risk_payload_json = committed
+            risk_payload = _risk_gate_payload_json(
+                risk_payload_json, record_id=evidence_ref
+            )
         if risk_class != "verification_risk_evidence":
             raise VerificationRiskGateError(
                 f"risk evidence reference {evidence_ref!r} resolves to "
