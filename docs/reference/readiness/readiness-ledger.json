@@ -1392,11 +1392,27 @@
     },
     {
       "id": 48,
-      "status_claim": "no_evidence",
-      "gap_type": "A",
-      "gap_note": "The required documentation statement — already disclosed external-agent context cannot be revoked — appears nowhere in Marker UI docs and no test links or checks it.",
-      "bindings": [],
-      "context_docs": []
+      "status_claim": "proven",
+      "bindings": [
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "deterministic local lane (canonical reference doc, MCP guide, runtime agent-guide resource, and live tool description read from the working tree)",
+          "rationale": "Executable documentation contract: the checker asserts the three-part distinction in substance on every surface an agent reads (pr85 reference doc, docs/usage/mcp.md, the marker://docs/agent-guide runtime resource, and the marker_answer_trace tool description): future disclosure stops under revocation, already-disclosed external-agent context cannot be retroactively revoked/unseen, and local retention/deletion is not remote revocation. A negative-control test proves the checker rejects weakened wording (vague promises, local-only claims, false un-see claims, empty text), so accidental removal or dilution fails readiness.",
+          "nodes": [
+            "backend/tests/test_answer_evidence_docs.py"
+          ],
+          "scope_files": [
+            "backend/app/mcp_resources.py",
+            "backend/tests/test_answer_evidence_docs.py",
+            "docs/reference/pr85-answer-evidence.md",
+            "docs/usage/mcp.md"
+          ]
+        }
+      ],
+      "context_docs": [
+        "docs/reference/pr85-answer-evidence.md"
+      ]
     },
     {
       "id": 49,
@@ -1541,11 +1557,38 @@
     },
     {
       "id": 54,
-      "status_claim": "no_evidence",
-      "gap_type": "A",
-      "gap_note": "AnswerContextTrace does not exist in the codebase; no entailment-representation separation or material-answer-claim assessment path is implemented or tested (the EvidencePacket docstring disclaims entailment, but that is prose).",
-      "bindings": [],
-      "context_docs": []
+      "status_claim": "proven",
+      "bindings": [
+        {
+          "kind": "test",
+          "coverage": "full",
+          "environment": "deterministic local sqlite lane (migrated file DB through Alembic head 20260823_0015, real kernel commit spine, real publications/authorization, real EvidencePacket delivery chains)",
+          "rationale": "Both halves of the invariant are executed. Trace-not-entailment separation: durable context disclosures (kernel_context_disclosures) capture the delivered packet's full answer-time truth; AnswerContextTrace rows bind external answers to ordered disclosure sets immutably, with retrieval-side EvidencePacket semantics unchanged; tests prove order fidelity, answer-time revision/policy/authorization/stale-completeness preservation, and that later retrieval or policy changes never rewrite history. Separate assessment: kernel_answer_support_assessments append independent supported/unsupported/uncertain judgments with claim spans, quote digests, cited delivered evidence, and assessor provenance; tests prove supported/unsupported/uncertain/unassessed stay distinct, unsupported assessments leave the committed answer byte-identical (row-level digest assertions), fabricated spans/quotes/evidence citations fail closed, tenancy fails closed, retries and races converge deterministically, and state survives process/database reopen. The boundary integration suite proves disclosures are minted at the real run_agent_query delivery seam rather than recomputed later, and that legacy clients see no disclosure by default.",
+          "nodes": [
+            "backend/tests/test_answer_evidence.py",
+            "backend/tests/test_answer_evidence_boundary.py",
+            "backend/tests/test_agent_answer_surface.py"
+          ],
+          "scope_files": [
+            "backend/alembic/versions/20260823_0015_add_answer_evidence.py",
+            "backend/app/agent_answer_evidence.py",
+            "backend/app/agent_query.py",
+            "backend/app/agent_surface.py",
+            "backend/app/answer_evidence/__init__.py",
+            "backend/app/answer_evidence/domain.py",
+            "backend/app/answer_evidence/errors.py",
+            "backend/app/answer_evidence/service.py",
+            "backend/app/answer_evidence/store.py",
+            "backend/app/kernel/models.py",
+            "backend/tests/test_agent_answer_surface.py",
+            "backend/tests/test_answer_evidence.py",
+            "backend/tests/test_answer_evidence_boundary.py"
+          ]
+        }
+      ],
+      "context_docs": [
+        "docs/reference/pr85-answer-evidence.md"
+      ]
     },
     {
       "id": 55,

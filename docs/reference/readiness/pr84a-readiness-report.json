@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "a20a02f467494293828328285c7f1680a875812c"
+    "git_head": "cac1218dbd130a2fc90b20f800b6978cad7288d6"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 38,
+    "proven": 40,
     "failed": 0,
-    "no_evidence": 24
+    "no_evidence": 22
   },
   "group_counts": {
     "23C.1": {
@@ -35,15 +35,15 @@
       "total": 11
     },
     "23C.5": {
-      "proven": 8,
+      "proven": 9,
       "failed": 0,
-      "no_evidence": 2,
+      "no_evidence": 1,
       "total": 10
     },
     "23C.6": {
-      "proven": 5,
+      "proven": 6,
       "failed": 0,
-      "no_evidence": 3,
+      "no_evidence": 2,
       "total": 8
     },
     "23C.7": {
@@ -54,7 +54,6 @@
     }
   },
   "gap_type_counts": {
-    "A": 2,
     "B": 12,
     "D": 5,
     "F": 5
@@ -64,8 +63,8 @@
     "23C.7",
     "23C.1",
     "23C.4",
-    "23C.6",
     "23C.2",
+    "23C.6",
     "23C.5"
   ],
   "integrity_findings": [],
@@ -609,11 +608,13 @@
       "id": 48,
       "group": "23C.5",
       "label": "disclosed-context-non-revocability-doc",
-      "status": "no_evidence",
-      "reason": "none_bound",
-      "environments": [],
-      "gap_type": "A",
-      "gap_note": "The required documentation statement — already disclosed external-agent context cannot be revoked — appears nowhere in Marker UI docs and no test links or checks it."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "deterministic local lane (canonical reference doc, MCP guide, runtime agent-guide resource, and live tool description read from the working tree)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 49,
@@ -677,11 +678,13 @@
       "id": 54,
       "group": "23C.6",
       "label": "trace-not-entailment-proof",
-      "status": "no_evidence",
-      "reason": "none_bound",
-      "environments": [],
-      "gap_type": "A",
-      "gap_note": "AnswerContextTrace does not exist in the codebase; no entailment-representation separation or material-answer-claim assessment path is implemented or tested (the EvidencePacket docstring disclaims entailment, but that is prose)."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "deterministic local sqlite lane (migrated file DB through Alembic head 20260823_0015, real kernel commit spine, real publications/authorization, real EvidencePacket delivery chains)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 55,

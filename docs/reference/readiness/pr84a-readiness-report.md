@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `a20a02f467494293828328285c7f1680a875812c`
-- Invariants proven: **38 / 62**
+- Audited source head: `cac1218dbd130a2fc90b20f800b6978cad7288d6`
+- Invariants proven: **40 / 62**
 - Failed: **0**
-- No acceptable evidence: **24**
+- No acceptable evidence: **22**
 
 ## Group summary
 
@@ -15,8 +15,8 @@
 | 23C.2 | Geometry, patches, and incrementality | 7 | 0 | 2 |
 | 23C.3 | Verification and routing | 4 | 0 | 5 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
-| 23C.5 | Source, authorization, and retrieval | 8 | 0 | 2 |
-| 23C.6 | Agent and product behavior | 5 | 0 | 3 |
+| 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
+| 23C.6 | Agent and product behavior | 6 | 0 | 2 |
 | 23C.7 | Economics and claim language | 1 | 0 | 5 |
 
 ## Invariant statuses
@@ -70,13 +70,13 @@
 | 45 | 23C.5 | proven | sqlite-dev |
 | 46 | 23C.5 | proven | sqlite-dev |
 | 47 | 23C.5 | proven | sqlite-dev |
-| 48 | 23C.5 | no-evidence | no executable evidence bound |
+| 48 | 23C.5 | proven | deterministic local lane (canonical reference doc, MCP guide, runtime agent-guide resource, and live tool description read from the working tree) |
 | 49 | 23C.6 | proven | sqlite-dev |
 | 50 | 23C.6 | proven | sqlite-dev |
 | 51 | 23C.6 | proven | sqlite-dev |
 | 52 | 23C.6 | proven | sqlite-dev |
 | 53 | 23C.6 | no-evidence | executed proof covers only part of the invariant wording |
-| 54 | 23C.6 | no-evidence | no executable evidence bound |
+| 54 | 23C.6 | proven | deterministic local sqlite lane (migrated file DB through Alembic head 20260823_0015, real kernel commit spine, real publications/authorization, real EvidencePacket delivery chains) |
 | 55 | 23C.6 | proven | sqlite-dev |
 | 56 | 23C.6 | no-evidence | executed proof covers only part of the invariant wording |
 | 57 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |
@@ -89,11 +89,6 @@
 ## Residual gap map
 
 Gap types: **A** — implementation missing; **B** — behavior appears present, executable proof missing; **C** — proof exists but cannot currently be trusted (stale/corrupt/unsupported); **D** — evidence valid but narrower than the invariant; **E** — compatibility/public boundary unresolved; **F** — measurement/economics/operations closure missing; **G** — governing applicability needs clarification
-
-### Type A — implementation missing
-
-- **Inv 48** (23C.5, disclosed-context-non-revocability-doc): The required documentation statement — already disclosed external-agent context cannot be revoked — appears nowhere in Marker UI docs and no test links or checks it. Reason: no executable evidence bound.
-- **Inv 54** (23C.6, trace-not-entailment-proof): AnswerContextTrace does not exist in the codebase; no entailment-representation separation or material-answer-claim assessment path is implemented or tested (the EvidencePacket docstring disclaims entailment, but that is prose). Reason: no executable evidence bound.
 
 ### Type B — behavior appears present, executable proof missing
 
@@ -132,9 +127,9 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - 23C.7 Economics and claim language: 5 non-proven
 - 23C.1 Truth and persistence: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
-- 23C.6 Agent and product behavior: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 2 non-proven
-- 23C.5 Source, authorization, and retrieval: 2 non-proven
+- 23C.6 Agent and product behavior: 2 non-proven
+- 23C.5 Source, authorization, and retrieval: 1 non-proven
 
 ## Reproduction
 

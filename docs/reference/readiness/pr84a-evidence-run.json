@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-22T21:58:29+00:00",
-  "git_head": "a20a02f467494293828328285c7f1680a875812c",
+  "generated_at": "2026-08-23T00:03:59+00:00",
+  "git_head": "cac1218dbd130a2fc90b20f800b6978cad7288d6",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -1192,7 +1192,7 @@
         "backend/app/kernel/commit.py": "ed42da77f3bde0b4dfeb613a1d5d44b7f65719d8",
         "backend/app/kernel/connector_state.py": "ef8416239cc18a831d827e8eb727ff241bacf21b",
         "backend/app/kernel/errors.py": "2106a0d55137a52c7933a03a915348749bec89c0",
-        "backend/app/kernel/models.py": "589ccce97d0258e88d6dc49b34f89831fab40e0e",
+        "backend/app/kernel/models.py": "ea86492b92c18e913cc4f332b126323e0c1050e4",
         "backend/app/kernel/records.py": "1036890ec23a1b375a65a20677d872f3c68cd925",
         "backend/app/kernel/source_object_store.py": "93a3ed15eaacd04adacb46e7a0d563eda01eb5a7",
         "backend/app/kernel/source_store.py": "d1f3466ca89f45a075251fe85f7029735292a5de",
@@ -1200,7 +1200,7 @@
         "backend/app/services/connector_ingestion.py": "060e018bc0ffab858ec7c8f527eb612d07a51196",
         "backend/app/services/source_acquisition.py": "71afeb65644369b60a29da43f7bf40ebe9da7584",
         "backend/tests/test_connector_ingestion.py": "5723792157ad784f3d57994d31cc1d24d021dc79",
-        "backend/tests/test_connector_migration.py": "8e016fd8e66473331a18ea68207eb25255d6fae5",
+        "backend/tests/test_connector_migration.py": "7f5bfc35113cd35b4af6d40558e0a343d14e4c7f",
         "backend/tests/test_connector_state.py": "cf692d959182d82d761e7f645b553ccebf05e5da"
       },
       "nodes": [
@@ -1387,6 +1387,28 @@
       "detail": ""
     },
     {
+      "binding_key": "48:test:backend/tests/test_answer_evidence_docs.py",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/app/mcp_resources.py": "421a3826c39934ac4736a634e01e3db70657bb23",
+        "backend/tests/test_answer_evidence_docs.py": "7af78dffde477179884d4ebcbe0c3ed0bf35a389",
+        "docs/reference/pr85-answer-evidence.md": "0f804c51305a28c048ed8b87a3a50252d607521d",
+        "docs/usage/mcp.md": "d2cec35acbe01ad53fc20def72c0a16dc3b6b79a"
+      },
+      "nodes": [
+        "backend/tests/test_answer_evidence_docs.py"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_answer_evidence_docs.py::test_reference_doc_states_non_revocability_contract": "passed",
+        "backend/tests/test_answer_evidence_docs.py::test_mcp_guide_states_non_revocability_contract": "passed",
+        "backend/tests/test_answer_evidence_docs.py::test_runtime_agent_guide_resource_states_the_boundary": "passed",
+        "backend/tests/test_answer_evidence_docs.py::test_tool_descriptions_state_the_boundary": "passed",
+        "backend/tests/test_answer_evidence_docs.py::test_negative_control_checker_rejects_mutated_text": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
       "binding_key": "49:measurement:docs/reference/measurements/pr77-bounded-query.json",
       "kind": "measurement",
       "scope_blobs": {
@@ -1541,6 +1563,65 @@
         "backend/tests/test_context_runtime_packets.py::test_identity_changes_when_selected_revision_changes": "passed",
         "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_every_context_dimension": "passed",
         "backend/tests/test_context_runtime_packets.py::test_identity_changes_with_budget_profile_and_output_directive": "passed"
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "54:test:backend/tests/test_answer_evidence.py",
+      "kind": "test",
+      "scope_blobs": {
+        "backend/alembic/versions/20260823_0015_add_answer_evidence.py": "28ce9a2dc120c3233a0f70c5169a4baaba4edad4",
+        "backend/app/agent_answer_evidence.py": "e5de5e2e8b08e445ce9740068dd6937912a5f968",
+        "backend/app/agent_query.py": "b6652e48a461c445acf7d39f46fab989d9192895",
+        "backend/app/agent_surface.py": "875caa09d3c2671af638da024bf0b42b99588ae2",
+        "backend/app/answer_evidence/__init__.py": "b07f2674c19108e1ea7e76a85a00fd8e3ff32ae7",
+        "backend/app/answer_evidence/domain.py": "0b6adfa18e547d391b09e2c10ef6ae9582abd3bb",
+        "backend/app/answer_evidence/errors.py": "8eb8ef7367a9125c1400ddd10f5def8fdf0284a1",
+        "backend/app/answer_evidence/service.py": "1fa160d568c31cd89fba329c2bf3d1f5035d6f9e",
+        "backend/app/answer_evidence/store.py": "bb00546d0f49f865796cd442b862f391488f11a3",
+        "backend/app/kernel/models.py": "ea86492b92c18e913cc4f332b126323e0c1050e4",
+        "backend/tests/test_agent_answer_surface.py": "d4479101741d4807a73a31ba2c425a004d6124af",
+        "backend/tests/test_answer_evidence.py": "3dd788b1f970e45be3e65a41864704ce32bc2078",
+        "backend/tests/test_answer_evidence_boundary.py": "8f9ee665b2b0a3ad57aaf58fd8c583bdf9e3e81e"
+      },
+      "nodes": [
+        "backend/tests/test_answer_evidence.py",
+        "backend/tests/test_answer_evidence_boundary.py",
+        "backend/tests/test_agent_answer_surface.py"
+      ],
+      "node_outcomes": {
+        "backend/tests/test_answer_evidence.py::test_trace_preserves_disclosed_order_and_answer_time_truth": "passed",
+        "backend/tests/test_answer_evidence.py::test_later_retrieval_change_never_rewrites_history": "passed",
+        "backend/tests/test_answer_evidence.py::test_policy_change_after_answer_keeps_answer_time_authorization": "passed",
+        "backend/tests/test_answer_evidence.py::test_partial_page_truth_is_preserved_not_normalized": "passed",
+        "backend/tests/test_answer_evidence.py::test_trace_without_assessment_is_explicitly_unassessed": "passed",
+        "backend/tests/test_answer_evidence.py::test_supported_assessment_is_durable_and_separate": "passed",
+        "backend/tests/test_answer_evidence.py::test_unsupported_assessment_keeps_answer_byte_identical": "passed",
+        "backend/tests/test_answer_evidence.py::test_uncertain_is_distinguishable_from_all_other_states": "passed",
+        "backend/tests/test_answer_evidence.py::test_cross_workspace_disclosure_reference_fails_closed": "passed",
+        "backend/tests/test_answer_evidence.py::test_foreign_and_unknown_disclosure_ids_share_one_error": "passed",
+        "backend/tests/test_answer_evidence.py::test_cross_workspace_trace_and_assessment_access_fails_closed": "passed",
+        "backend/tests/test_answer_evidence.py::test_missing_reference_is_explicit_failure_not_empty_trace": "passed",
+        "backend/tests/test_answer_evidence.py::test_identical_commit_retry_is_idempotent": "passed",
+        "backend/tests/test_answer_evidence.py::test_concurrent_identical_commits_converge": "passed",
+        "backend/tests/test_answer_evidence.py::test_same_answer_ref_with_different_context_conflicts": "passed",
+        "backend/tests/test_answer_evidence.py::test_trace_and_assessments_survive_reopen": "passed",
+        "backend/tests/test_answer_evidence.py::test_assessment_key_reuse_semantics": "passed",
+        "backend/tests/test_answer_evidence.py::test_concurrent_assessors_append_deterministically": "passed",
+        "backend/tests/test_answer_evidence.py::test_assessment_validation_rejects_fabrications": "passed",
+        "backend/tests/test_answer_evidence.py::test_trace_input_validation": "passed",
+        "backend/tests/test_answer_evidence.py::test_empty_disclosure_set_is_an_explicit_trace": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_disclose_mints_receipt_at_delivery_boundary": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_full_chain_discloses_every_page_in_order": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_trace_binds_adapter_disclosures_idempotently": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_assessment_via_adapter_judges_without_mutation": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_foreign_disclosure_via_adapter_fails_closed": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_existing_clients_see_no_disclosure_by_default": "passed",
+        "backend/tests/test_answer_evidence_boundary.py::test_failed_outcomes_disclose_nothing": "passed",
+        "backend/tests/test_agent_answer_surface.py::test_answer_tools_are_registered_but_not_minimal": "passed",
+        "backend/tests/test_agent_answer_surface.py::test_answer_tool_specs_declare_write_annotations_and_scope": "passed",
+        "backend/tests/test_agent_answer_surface.py::test_answers_write_scope_is_part_of_default_grants": "passed"
       },
       "outcome": "passed",
       "detail": ""
@@ -1994,8 +2075,8 @@
       "binding_key": "9:test:backend/tests/test_database_migration.py::test_no_production_self_heal_remains",
       "kind": "test",
       "scope_blobs": {
-        "backend/tests/test_context_runtime_cursor_migration.py": "696cb0c55db6324523be79f81d73142a68d515f2",
-        "backend/tests/test_database_migration.py": "33e28fa8bda8ad510d19a3ec3c805a7a455c50cb"
+        "backend/tests/test_context_runtime_cursor_migration.py": "7f6aac96150cbfe0bdec73ee0199a90af6794000",
+        "backend/tests/test_database_migration.py": "e42375adf9d7b70ac7413a7d92ba42bb917d1f3a"
       },
       "nodes": [
         "backend/tests/test_database_migration.py::test_no_production_self_heal_remains",
