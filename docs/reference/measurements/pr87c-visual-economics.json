@@ -1,0 +1,256 @@
+{
+  "schema": "marker.economics_envelope.v1",
+  "profile": "local-sqlite-dev+vlm-replay",
+  "dimension_set": "invariant_58",
+  "git_sha": "d3aefef2882021da9f402155de68a64147911732",
+  "generated_at": "2026-08-23T11:56:03+00:00",
+  "run_mode": "offline-replay",
+  "model_participation": {
+    "mode": "replay",
+    "models": [
+      "fu/gemma-4-26b-a4b-it",
+      "nvidia/minimaxai/minimax-m3",
+      "fu/grok-4.3"
+    ],
+    "note": "provider wall time is replay cache time; call counts and usage totals are exact, live latency is not claimed"
+  },
+  "workload": {
+    "identity": "PR81A corpus same-workload visual OFF vs selective visual ON: OFF = lexical text/render baselines only; ON = + CLIP dense generation + hybrid VLM rerank; ACL = deny propagation + partitioned publication + partitioned visual matrix; revision v3->v4 both arms",
+    "fingerprint": "pr81a:50dd2d38ae43aa815348d0cccf1bab1c9b61ca7773e5a6474354b98e0f5e3477",
+    "documents": 15,
+    "queries": 35
+  },
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "cpu_count": 12,
+    "visual_embedder": "clip (as in committed PR81A evidence)"
+  },
+  "windows": [
+    {
+      "id": "off_arm",
+      "label": "baseline lanes, visual capability absent"
+    },
+    {
+      "id": "on_arm",
+      "label": "baseline + dense + hybrid lanes, CLIP generation built"
+    },
+    {
+      "id": "acl_deny",
+      "label": "deny_domain commit to resolver-visible denial, zero rebuilds"
+    },
+    {
+      "id": "acl_partition",
+      "label": "high-assurance publication + partitioned visual matrix"
+    },
+    {
+      "id": "revision_off",
+      "label": "doc-rev-01 v3->v4, no visual state to rebuild"
+    },
+    {
+      "id": "revision_on",
+      "label": "doc-rev-01 v3->v4 + visual generation rebuild"
+    },
+    {
+      "id": "full",
+      "label": "both arms over the whole experiment"
+    }
+  ],
+  "dimensions": {
+    "quality_gain": {
+      "status": "measured",
+      "unit": "delta_rate",
+      "window": "full",
+      "value": 0.3033,
+      "source": "same queries scored for the OFF baseline (lexical-render) and the ON hybrid rerank lane; visual-hard slice task_success difference",
+      "breakdown": {
+        "hybrid_gain": 0.3033,
+        "dense_gain": -0.27,
+        "off_visual_hard_rate": 0.6567,
+        "on_hybrid_visual_hard_rate": 0.96,
+        "on_dense_visual_hard_rate": 0.3867,
+        "off_text_easy_rate": 0.8333,
+        "on_hybrid_text_easy_rate": 1.0
+      }
+    },
+    "storage_delta": {
+      "status": "measured",
+      "unit": "delta_bytes",
+      "window": "full",
+      "value": 725231,
+      "source": "ON minus OFF: visual embedding matrix bytes + render-cache byte delta on the same workload",
+      "breakdown": {
+        "embedding_bytes_on": 47104,
+        "render_bytes_off": 920051,
+        "render_bytes_on": 1598178,
+        "avg_render_bytes_per_page_on": 55110,
+        "avg_embedding_bytes_per_page_on": 2048
+      }
+    },
+    "build_delta": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "full",
+      "value": 18308.1,
+      "source": "ON minus OFF: cold visual generation build + revision rebuild wall time added by the visual route",
+      "breakdown": {
+        "cold_build_delta_ms": 16007.9,
+        "revision_rebuild_delta_ms": 2300.2,
+        "on_index_build_ms": 16007.9,
+        "on_revision_total_ms": 2681.0,
+        "off_revision_total_ms": 380.8
+      },
+      "samples": {
+        "n": 1
+      }
+    },
+    "query_delta": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "on_arm",
+      "value": 0.25,
+      "source": "warm visual index search p50 over every corpus query (index-only, no VLM in the path)",
+      "breakdown": {
+        "off_lane_p50_ms": 206.92,
+        "on_hybrid_lane_p50_ms": 335.09,
+        "on_dense_lane_p50_ms": 27.35
+      },
+      "samples": {
+        "n": 35,
+        "min": 0.25,
+        "p50": 0.25,
+        "max": 0.32
+      }
+    },
+    "model_service_delta": {
+      "status": "measured",
+      "unit": "delta_count",
+      "window": "full",
+      "value": 112,
+      "source": "ON minus OFF VLM calls from per-arm replay clients sharing the committed cache",
+      "breakdown": {
+        "off_vlm_calls": 60,
+        "on_vlm_calls": 172,
+        "on_usage_prompt_tokens": 0,
+        "off_usage_prompt_tokens": 0,
+        "on_usage_completion_tokens": 0,
+        "off_usage_completion_tokens": 0
+      }
+    },
+    "acl_complexity": {
+      "status": "measured",
+      "unit": "count",
+      "window": "acl_partition",
+      "value": 2,
+      "source": "raw ACL cost vector: partitions built, duplicated matrix bytes, partition build time, deny-to-effective latency with zero rebuilds, and authorized-universe filter calls counted through a pass-through authorization wrapper",
+      "breakdown": {
+        "authorized_universe_filter_calls": 146,
+        "denied_rebuilds_required": 0,
+        "deny_to_effective_ms": 39.4,
+        "partition_build_ms": 0.3,
+        "partition_duplicate_bytes": 43008,
+        "visual_partitions": 2
+      }
+    },
+    "disabled_state_proof": {
+      "status": "measured",
+      "unit": "boolean",
+      "window": "off_arm",
+      "value": true,
+      "source": "OFF arm never constructs a VisualIndex, embeds a page, or runs a visual lane; the only renders are the lexical-render baseline's delivery renders",
+      "breakdown": {
+        "off_embedding_bytes": 0,
+        "off_visual_index_entries": 0,
+        "off_visual_lanes_executed": 0,
+        "off_rerank_vlm_calls": 0
+      }
+    },
+    "decision": {
+      "status": "measured",
+      "unit": "identifier",
+      "window": "full",
+      "value": "narrow_only",
+      "source": "predeclared OFF/ON disposition rule (app.eval.pr81a.economics_decision.evaluate_economics_disposition); thresholds imported from the committed PR81A rule",
+      "breakdown": {
+        "dense_gain": -0.27,
+        "hybrid_gain": 0.3033
+      }
+    }
+  },
+  "counters": {
+    "off_vlm_calls": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 60,
+      "source": "per-arm replay VLM client call totals"
+    },
+    "on_vlm_calls": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 172,
+      "source": "per-arm replay VLM client call totals"
+    },
+    "on_usage_prompt_tokens": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 0,
+      "source": "ON arm replay usage totals"
+    },
+    "on_usage_completion_tokens": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 0,
+      "source": "ON arm replay usage totals"
+    }
+  },
+  "non_claims": [
+    "provider/network latency is NOT claimed; the VLM answers come from the committed replay cache (deterministic call counts and usage)",
+    "quality rates reproduce the committed PR81A lane semantics on the same corpus, queries, and cache; they are not a new human study"
+  ],
+  "wall_time_s": 65.28,
+  "disposition": {
+    "disposition": "narrow_only",
+    "dense_gain": -0.27,
+    "hybrid_gain": 0.3033,
+    "cost_deltas": {
+      "render_bytes": 678127,
+      "embedding_bytes": 47104,
+      "pages_rendered": 13,
+      "avg_render_bytes_per_page": -2393,
+      "avg_embedding_bytes_per_page": 2048,
+      "vlm_calls": 112,
+      "index_build_ms": 16007.9,
+      "revision_rebuild_ms": 2300.2
+    },
+    "acl_cost": {
+      "visual_partitions": 2,
+      "partition_duplicate_bytes": 43008,
+      "partition_build_ms": 0.3,
+      "deny_to_effective_ms": 39.4,
+      "denied_rebuilds_required": 0,
+      "authorized_universe_filter_calls": 146
+    },
+    "security_blockers": [],
+    "cost_blockers": [],
+    "acl_blockers": [],
+    "thresholds": {
+      "promotion_margin": 0.1,
+      "rerank_margin": 0.1,
+      "experimental_floor": 0.05,
+      "control_tolerance": 0.1,
+      "max_render_bytes_per_page": 1500000,
+      "max_embedding_bytes_per_page": 8192,
+      "max_warm_query_ms": 250.0
+    },
+    "declared_rule": "keep_disabled when any security/cost/ACL blocker fires, when the text-easy control regresses beyond the 0.10 tolerance, or when both route gains are below the 0.05 experimental floor; promote_under_profile when the dense visual route gains >= 0.10 over OFF on the visual-hard tasks while holding text-easy within 0.10; narrow_only when the dense route missed its margin but the hybrid rerank gains >= 0.10 over OFF with control held; experimental when the best route gains >= 0.05 over OFF with control held; indeterminate when no gain is computable. The ON arm must keep per-page storage inside the declared envelope (avg_render <= 1500000 bytes, avg_embedding <= 8192 bytes) and warm query latency <= 250.0 ms; ACL acceptance is structural: a complete measured ACL vector, zero forbidden delivery, and deny propagation requiring zero visual rebuilds.",
+    "summary": "Hybrid rerank gains 0.303 over OFF on the visual-hard tasks (dense did not clear its margin) with the text-easy control held: enable the narrow visual route under the measured profile."
+  },
+  "dangers": {
+    "decoy_confusion": 4
+  }
+}

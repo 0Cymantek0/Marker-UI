@@ -19,7 +19,10 @@ ENVELOPE_SCHEMA = "marker.economics_envelope.v1"
 #: metric states — anything outside this set fails validation
 STATUSES = ("measured", "derived", "unavailable", "not_applicable")
 
-#: closed unit vocabulary; every quantitative metric must name one
+#: closed unit vocabulary; every quantitative metric must name one.
+#: ``delta_*`` units are signed differences between two measured arms
+#: (OFF vs ON, before vs after) and may be negative — a negative delta
+#: is an honest result, not an error.
 UNITS = (
     "count",
     "bytes",
@@ -29,6 +32,9 @@ UNITS = (
     "rate",
     "boolean",
     "identifier",
+    "delta_count",
+    "delta_bytes",
+    "delta_rate",
 )
 
 #: timing units require a samples block with an explicit sample count

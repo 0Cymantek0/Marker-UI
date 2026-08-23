@@ -32,7 +32,11 @@ from app.eval.economics.contract import (
     UNITS,
 )
 
-_NUMERIC_UNITS = ("count", "bytes", "milliseconds", "seconds", "ratio", "rate")
+_NUMERIC_UNITS = (
+    "count", "bytes", "milliseconds", "seconds", "ratio", "rate",
+    "delta_count", "delta_bytes", "delta_rate",
+)
+_DELTA_UNITS = ("delta_count", "delta_bytes", "delta_rate")
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
 _PERCENTILE_KEYS = ("p50", "p90", "p95", "p99", "max")
 
@@ -179,10 +183,14 @@ def _validate_metric(
         if unit in _NUMERIC_UNITS and value is not None:
             if not _is_number(value):
                 errors.append(f"{where} unit {unit!r} requires a numeric value")
-            elif unit == "count" and (not isinstance(value, int) or isinstance(value, bool)):
-                errors.append(f"{where} unit 'count' requires an integer value")
-            elif unit == "bytes" and (not isinstance(value, int) or isinstance(value, bool)):
-                errors.append(f"{where} unit 'bytes' requires an integer value")
+            elif unit in ("count", "bytes") and (
+                not isinstance(value, int) or isinstance(value, bool)
+            ):
+                errors.append(f"{where} unit {unit!r} requires an integer value")
+            elif unit == "delta_count" and (
+                not isinstance(value, int) or isinstance(value, bool)
+            ):
+                errors.append(f"{where} unit 'delta_count' requires an integer value")
             elif unit == "rate" and not 0.0 <= float(value) <= 1.0:
                 errors.append(f"{where} unit 'rate' requires a value in [0, 1]")
             elif unit in ("count", "bytes") and value < 0:
@@ -214,8 +222,10 @@ def _validate_breakdown(name: str, breakdown: Any, errors: list[str]) -> None:
     for key, value in breakdown.items():
         if not isinstance(key, str) or not key.strip():
             errors.append(f"{where} breakdown keys must be non-empty strings")
-        if not _is_number(value) or value < 0:
-            errors.append(f"{where} breakdown[{key!r}] must be a non-negative number")
+        if not _is_number(value):
+            # signed values are fine (deltas may be negative); anything
+            # non-numeric is not
+            errors.append(f"{where} breakdown[{key!r}] must be a number")
 
 
 def _validate_samples(

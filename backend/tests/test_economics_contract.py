@@ -340,10 +340,22 @@ def test_duplicate_window_ids_fail():
     assert any("duplicate window id" in e for e in validate_envelope(envelope))
 
 
-def test_negative_breakdown_fails():
+def test_non_numeric_breakdown_fails_but_negative_deltas_are_honest():
     envelope = _envelope()
     _dimension(envelope, "database_rows")["breakdown"] = {"logical_authority": -5}
-    assert any("must be a non-negative number" in e
+    assert validate_envelope(envelope) == []
+    _dimension(envelope, "database_rows")["breakdown"] = {"logical_authority": "many"}
+    assert any("must be a number" in e for e in validate_envelope(envelope))
+
+
+def test_delta_units_allow_signed_values():
+    envelope = _envelope()
+    _dimension(envelope, "database_rows").update(
+        {"unit": "delta_count", "value": -12}
+    )
+    assert validate_envelope(envelope) == []
+    _dimension(envelope, "database_rows")["value"] = 4.5
+    assert any("unit 'delta_count' requires an integer" in e
                for e in validate_envelope(envelope))
 
 
