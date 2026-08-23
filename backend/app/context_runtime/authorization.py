@@ -9,7 +9,13 @@ assignment per source, the latest live-deny event per target, and the
 latest PR70 access-policy revision per source. Nothing a caller sends
 can influence the outcome, and anything malformed in the policy
 lineage fails closed as :class:`QueryAuthorizationError` instead of
-degrading to unrestricted reads.
+degrading to unrestricted reads. Since PR89 the effective redaction
+state (resolved from committed ``redaction_profile`` records in
+:mod:`app.context_runtime.redaction`) rides on the same trusted
+object: a caller names a serving context, the committed rules behind
+that name decide what may leave the service, and the redaction
+identity participates in authorization identity so packet reuse and
+cursors rotate on every policy transition.
 
 Base grant model (honest for the local single-user profile): the
 workspace boundary is the base grant — every record in the workspace's
@@ -29,6 +35,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.context_runtime.errors import QueryAuthorizationError
+from app.context_runtime.redaction import (
+    NO_REDACTION,
+    EffectiveRedaction,
+    resolve_effective_redaction,
+)
 from app.kernel.models import KernelRecord
 from app.kernel.publications import high_assurance_profile
 from app.utils.canonical import (
@@ -44,7 +55,6 @@ __all__ = [
     "EffectiveAuthorization",
     "resolve_effective_authorization",
 ]
-
 #: The one authorization profile this slice implements. It states the
 #: truth the local product can actually defend: workspace isolation
 #: plus the live deny overlay, with declared residuals per assurance
@@ -83,6 +93,7 @@ class EffectiveAuthorization:
     denied_records: frozenset[str] = frozenset()
     deny_revision: int = 0
     policy_digest: str = ""
+    redaction: EffectiveRedaction = NO_REDACTION
 
     def allows(
         self,
@@ -122,7 +133,11 @@ class EffectiveAuthorization:
     def identity_view(self) -> dict[str, Any]:
         """Caller-safe identity dimensions: enough to invalidate packet
         reuse on any authorization change, never enough to reveal the
-        domain/denial topology behind the digest."""
+        domain/denial topology behind the digest. The effective
+        redaction state is part of this identity: a redaction-policy
+        transition rotates packet identities and invalidates live
+        cursors exactly like a deny/epoch change, while the rules
+        themselves stay behind the digest."""
         return {
             "profile": self.profile,
             "assurance": self.assurance,
@@ -130,6 +145,7 @@ class EffectiveAuthorization:
             "epoch_fingerprint": self.epoch_fingerprint,
             "deny_revision": self.deny_revision,
             "policy_digest": self.policy_digest,
+            "redaction": self.redaction.identity_view(),
         }
 
 
@@ -156,6 +172,7 @@ async def resolve_effective_authorization(
     workspace_id: str,
     *,
     assurance: str = ASSURANCE_STANDARD,
+    redaction_profile_id: str | None = None,
 ) -> EffectiveAuthorization:
     """Resolve the current effective authorization for one workspace.
 
@@ -163,6 +180,11 @@ async def resolve_effective_authorization(
     only, latest-per-target by causal commit order. Malformed or
     inconsistent policy lineage raises instead of defaulting to
     permissive behavior.
+
+    ``redaction_profile_id`` is the caller-*named* redaction context;
+    the state behind the name is resolved from committed records in
+    :mod:`app.context_runtime.redaction` — an unknown named profile
+    fails closed here, before any content is read.
     """
     if assurance not in (ASSURANCE_STANDARD, ASSURANCE_HIGH):
         raise QueryAuthorizationError(f"unknown assurance mode {assurance!r}")
@@ -309,6 +331,10 @@ async def resolve_effective_authorization(
         canonical_json_bytes(to_json_ready(policy_view))
     )
 
+    redaction = await resolve_effective_redaction(
+        session_factory, workspace_id, redaction_profile_id
+    )
+
     return EffectiveAuthorization(
         profile=AUTHORIZATION_PROFILE_LOCAL,
         assurance=assurance,
@@ -321,4 +347,5 @@ async def resolve_effective_authorization(
         denied_records=denied_records,
         deny_revision=deny_revision,
         policy_digest=policy_digest,
+        redaction=redaction,
     )
