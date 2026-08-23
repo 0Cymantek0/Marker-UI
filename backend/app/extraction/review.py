@@ -164,6 +164,7 @@ def apply_review(
             status=FIELD_OUTCOME_ACCEPTED,
             value=grounded[0].value,
             candidates=outcome.candidates,
+            proposals=outcome.proposals,
             winner=grounded[0].value,
             rule=REVIEW_AUTHORITY_RULE,
             reason=(
@@ -183,6 +184,7 @@ def apply_review(
             status=FIELD_OUTCOME_CORRECTED,
             value=decision.value,
             candidates=outcome.candidates,
+            proposals=outcome.proposals,
             rule=REVIEW_AUTHORITY_RULE,
             reason="reviewer supplied a corrected value (human-sourced)",
             review=review_note,
@@ -193,6 +195,7 @@ def apply_review(
         status=FIELD_OUTCOME_REJECTED,
         value=None,
         candidates=outcome.candidates,
+            proposals=outcome.proposals,
         rule=REVIEW_AUTHORITY_RULE,
         reason=f"reviewer rejected the field: {decision.rationale}",
         review=review_note,

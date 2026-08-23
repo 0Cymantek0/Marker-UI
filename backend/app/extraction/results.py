@@ -85,6 +85,25 @@ INVARIANT_FINDINGS = frozenset(
     {INVARIANT_SATISFIED, INVARIANT_VIOLATED, INVARIANT_NOT_EVALUABLE}
 )
 
+#: Specialist-proposal dispositions. A proposal is NEVER source
+#: evidence; the disposition states how the authority-aware policy
+#: classified it relative to the grounded candidates.
+PROPOSAL_UNPROVED_REVIEW = "unproved_review"
+PROPOSAL_CORROBORATED = "corroborated"
+PROPOSAL_AGREES_WITH_SOURCE = "agrees_with_source"
+PROPOSAL_CONFLICTS_WITH_SOURCE = "conflicts_with_source"
+PROPOSAL_UNPARSEABLE = "unparseable"
+
+PROPOSAL_DISPOSITIONS = frozenset(
+    {
+        PROPOSAL_UNPROVED_REVIEW,
+        PROPOSAL_CORROBORATED,
+        PROPOSAL_AGREES_WITH_SOURCE,
+        PROPOSAL_CONFLICTS_WITH_SOURCE,
+        PROPOSAL_UNPARSEABLE,
+    }
+)
+
 
 @dataclass(frozen=True)
 class EvidenceCitation:
@@ -151,8 +170,119 @@ class CandidateView:
 
 
 @dataclass(frozen=True)
+class SpecialistProvenance:
+    """The authorized context a specialist saw — a disclosure, not evidence.
+
+    Records WHICH workspace/publication/packet/schema the specialist
+    was shown and how much context traveled. Seeing source text never
+    means the source states the model's normalized or inferred output;
+    nothing here can back an :class:`EvidenceCitation`.
+    """
+
+    workspace_id: str
+    publication_set_id: str
+    packet_identity_id: str
+    schema_identity: str
+    route: str
+    contract_version: str
+    config_identity: str
+    context_fingerprint: str
+    context_unit_count: int
+    context_char_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "workspace_id": self.workspace_id,
+            "publication_set_id": self.publication_set_id,
+            "packet_identity_id": self.packet_identity_id,
+            "schema_identity": self.schema_identity,
+            "route": self.route,
+            "contract_version": self.contract_version,
+            "config_identity": self.config_identity,
+            "context_fingerprint": self.context_fingerprint,
+            "context_unit_count": self.context_unit_count,
+            "context_char_count": self.context_char_count,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> SpecialistProvenance:
+        return cls(
+            workspace_id=data["workspace_id"],
+            publication_set_id=data["publication_set_id"],
+            packet_identity_id=data["packet_identity_id"],
+            schema_identity=data["schema_identity"],
+            route=data["route"],
+            contract_version=data["contract_version"],
+            config_identity=data["config_identity"],
+            context_fingerprint=data["context_fingerprint"],
+            context_unit_count=int(data["context_unit_count"]),
+            context_char_count=int(data["context_char_count"]),
+        )
+
+
+@dataclass(frozen=True)
+class ProposalView:
+    """One trained-specialist proposal as it survives on a field outcome.
+
+    Carries durable producer identity (who generated it, under which
+    stable configuration) plus OUR independent typed parse of the raw
+    value. Runtime observations (latency, retries, tokens, cache hits)
+    are deliberately absent: they live on the lane report and never
+    change the semantic meaning of a result.
+    """
+
+    producer_id: str
+    producer_family: str
+    config_identity: str
+    value: str | None
+    typed_value: str | int | None = None
+    parse_error: str | None = None
+    flags: tuple[str, ...] = ()
+    disposition: str = PROPOSAL_UNPROVED_REVIEW
+
+    def __post_init__(self) -> None:
+        if self.disposition not in PROPOSAL_DISPOSITIONS:
+            raise ValueError(
+                f"invalid proposal disposition {self.disposition!r}; "
+                f"allowed: {sorted(PROPOSAL_DISPOSITIONS)}"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "producer_id": self.producer_id,
+            "producer_family": self.producer_family,
+            "config_identity": self.config_identity,
+            "value": self.value,
+            "typed_value": self.typed_value,
+            "parse_error": self.parse_error,
+            "flags": list(self.flags),
+            "disposition": self.disposition,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ProposalView:
+        return cls(
+            producer_id=data["producer_id"],
+            producer_family=data["producer_family"],
+            config_identity=data["config_identity"],
+            value=data.get("value"),
+            typed_value=data.get("typed_value"),
+            parse_error=data.get("parse_error"),
+            flags=tuple(data.get("flags") or ()),
+            disposition=data.get("disposition") or PROPOSAL_UNPROVED_REVIEW,
+        )
+
+
+@dataclass(frozen=True)
 class FieldOutcome:
-    """The reconciled state of one field (or one row sub-field)."""
+    """The reconciled state of one field (or one row sub-field).
+
+    ``proposals`` carries trained-specialist proposals that were NOT
+    counted as witnesses: they are attributable, review-usable input,
+    never source evidence. The key is omitted from serialization when
+    empty so deterministic PR80A-only results keep their exact
+    historical identity.
+    """
 
     status: str
     value: str | int | None = None
@@ -161,6 +291,7 @@ class FieldOutcome:
     rule: str | None = None
     reason: str | None = None
     review: Mapping[str, Any] = field(default_factory=dict)
+    proposals: tuple[ProposalView, ...] = ()
 
     def __post_init__(self) -> None:
         if self.status not in FIELD_OUTCOMES:
@@ -178,7 +309,7 @@ class FieldOutcome:
         return keys
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "status": self.status,
             "value": self.value,
             "candidates": [c.to_dict() for c in self.candidates],
@@ -187,6 +318,9 @@ class FieldOutcome:
             "reason": self.reason,
             "review": dict(self.review),
         }
+        if self.proposals:
+            payload["proposals"] = [p.to_dict() for p in self.proposals]
+        return payload
 
 
 @dataclass(frozen=True)
@@ -235,6 +369,113 @@ class ItemOutcome:
             "status": self.status,
             "fields": {name: out.to_dict() for name, out in self.fields.items()},
         }
+
+
+@dataclass(frozen=True)
+class SpecialistRuntime:
+    """Runtime observations of one specialist lane call.
+
+    Deliberately excluded from result identity: latency, retry counts,
+    token usage, and cache hits describe one visit, not the semantic
+    meaning of the extraction. They are recorded for monitoring (NIST
+    AI RMF third-party measurement), never for authority.
+    """
+
+    latency_ms: int
+    attempts: int
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    from_cache: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "latency_ms": self.latency_ms,
+            "attempts": self.attempts,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "from_cache": self.from_cache,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> SpecialistRuntime:
+        return cls(
+            latency_ms=int(data["latency_ms"]),
+            attempts=int(data["attempts"]),
+            prompt_tokens=data.get("prompt_tokens"),
+            completion_tokens=data.get("completion_tokens"),
+            from_cache=bool(data.get("from_cache", False)),
+        )
+
+
+@dataclass(frozen=True)
+class SpecialistLaneReport:
+    """The durable, inspectable report of one specialist lane invocation.
+
+    Semantic content (status, producer identity, policy, context
+    binding, counts) participates in result identity; runtime
+    observations and raw error text do not. ``status`` is a closed
+    vocabulary so malformed output, provider failure, replay miss, and
+    context refusal are honest, distinguishable states.
+    """
+
+    status: str
+    policy_id: str
+    policy_version: str
+    producer_id: str | None = None
+    producer_family: str | None = None
+    config_identity: str | None = None
+    provenance: SpecialistProvenance | None = None
+    proposal_count: int = 0
+    unknown_fields: tuple[str, ...] = ()
+    runtime: SpecialistRuntime | None = None
+    error_detail: str | None = None
+
+    def semantic_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "status": self.status,
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+            "producer_id": self.producer_id,
+            "producer_family": self.producer_family,
+            "config_identity": self.config_identity,
+            "proposal_count": self.proposal_count,
+            "unknown_fields": list(self.unknown_fields),
+        }
+        if self.provenance is not None:
+            payload["provenance"] = self.provenance.to_dict()
+        return payload
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = self.semantic_payload()
+        if self.runtime is not None:
+            payload["runtime"] = self.runtime.to_dict()
+        if self.error_detail is not None:
+            payload["error_detail"] = self.error_detail
+        return payload
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> SpecialistLaneReport:
+        provenance = data.get("provenance")
+        runtime = data.get("runtime")
+        return cls(
+            status=data["status"],
+            policy_id=data["policy_id"],
+            policy_version=data["policy_version"],
+            producer_id=data.get("producer_id"),
+            producer_family=data.get("producer_family"),
+            config_identity=data.get("config_identity"),
+            provenance=(
+                SpecialistProvenance.from_dict(provenance)
+                if provenance is not None
+                else None
+            ),
+            proposal_count=int(data.get("proposal_count", 0)),
+            unknown_fields=tuple(data.get("unknown_fields") or ()),
+            runtime=(
+                SpecialistRuntime.from_dict(runtime) if runtime is not None else None
+            ),
+            error_detail=data.get("error_detail"),
+        )
 
 
 @dataclass(frozen=True)
@@ -290,6 +531,7 @@ class ExtractionResult:
     line_items: Mapping[str, tuple[ItemOutcome, ...]]
     invariants: tuple[InvariantFinding, ...]
     error: str | None = None
+    specialist: SpecialistLaneReport | None = None
 
     def __post_init__(self) -> None:
         if self.run_status not in RUN_STATUSES:
@@ -307,7 +549,10 @@ class ExtractionResult:
         identity ids, which describe the retrieval mechanics of one
         visit: a deterministic rerun over the same frozen truth must
         produce the same identity even though the first run's own
-        persistence advanced the head.
+        persistence advanced the head. Specialist runtime observations
+        (latency, attempts, tokens, cache hits) and raw provider error
+        text are equally mechanics: a replayed specialist response
+        yields the same identity as the live one.
         """
         return record_identity_hash(
             record_type="marker.extraction.result",
@@ -316,7 +561,7 @@ class ExtractionResult:
         )
 
     def _semantic_payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema_id": self.schema_id,
             "schema_version": self.schema_version,
             "schema_identity": self.schema_identity,
@@ -335,9 +580,12 @@ class ExtractionResult:
             "invariants": [inv.to_dict() for inv in self.invariants],
             "error": self.error,
         }
+        if self.specialist is not None:
+            payload["specialist"] = self.specialist.semantic_payload()
+        return payload
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema_version": RESULT_SCHEMA_VERSION,
             "schema_id": self.schema_id,
             "schema_version_label": self.schema_version,
@@ -352,6 +600,9 @@ class ExtractionResult:
             "invariants": [inv.to_dict() for inv in self.invariants],
             "error": self.error,
         }
+        if self.specialist is not None:
+            payload["specialist"] = self.specialist.to_dict()
+        return payload
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +642,9 @@ def _field_outcome_from_dict(data: Mapping[str, Any]) -> FieldOutcome:
         rule=data.get("rule"),
         reason=data.get("reason"),
         review=dict(data.get("review") or {}),
+        proposals=tuple(
+            ProposalView.from_dict(p) for p in data.get("proposals") or ()
+        ),
     )
 
 
@@ -448,4 +702,9 @@ def result_from_dict(data: Mapping[str, Any]) -> ExtractionResult:
             for inv in data["invariants"]
         ),
         error=data.get("error"),
+        specialist=(
+            SpecialistLaneReport.from_dict(data["specialist"])
+            if data.get("specialist") is not None
+            else None
+        ),
     )
