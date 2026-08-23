@@ -7,6 +7,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from .applicability import (
+    CALIBRATION_APPLICABILITY_SCHEMA_VERSION,
+    ASSUMPTION_KEYS,
+    RETEST_TRIGGERS,
+    CalibrationApplicability,
+    CatastrophicFailureInterpretation,
+    build_applicability,
+    clopper_pearson_upper_95,
+)
 from .baselines import (
     BASELINE_NAMES,
     BaselineComparison,
@@ -66,16 +75,21 @@ def semantic_artifact_identity(value: Any) -> str:
 
 
 __all__ = [
+    "ASSUMPTION_KEYS",
     "BASELINE_NAMES",
+    "CALIBRATION_APPLICABILITY_SCHEMA_VERSION",
     "BaselineComparison",
     "BaselineReport",
     "BaselineResult",
+    "CalibrationApplicability",
+    "CatastrophicFailureInterpretation",
     "CalibrationEvaluation",
     "CalibrationResult",
     "LabeledSample",
     "PairEvaluation",
     "PairRiskMetrics",
     "RateEstimate",
+    "RETEST_TRIGGERS",
     "RiskCorpus",
     "RiskSample",
     "RiskWitness",
@@ -86,6 +100,8 @@ __all__ = [
     "VerificationRiskReport",
     "WitnessOutcome",
     "WitnessProfile",
+    "build_applicability",
+    "clopper_pearson_upper_95",
     "evaluate_all_baselines",
     "evaluate_baselines",
     "evaluate_calibration",
