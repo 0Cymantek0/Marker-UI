@@ -37,6 +37,13 @@ from app.extraction.validation import evaluate_invariants
 RECONCILE_POLICY_ID = "marker.extraction.reconcile"
 RECONCILE_POLICY_VERSION = "v1"
 
+#: Hybrid policy identity: the authority-aware proposal layer that sits
+#: on top of the grounded reconciliation policy. Specialist proposals
+#: never enter witness voting; only deterministic corroboration under
+#: this policy can turn a proposal into an accepted value.
+HYBRID_POLICY_ID = "marker.extraction.hybrid"
+HYBRID_POLICY_VERSION = "v1"
+
 #: Attributable rule ids (part of the versioned policy contract).
 RULE_MISSING_NO_EVIDENCE = "missing.no_evidence.v1"
 RULE_INVALID_ALL_CANDIDATES = "invalid.all_candidates_invalid.v1"
