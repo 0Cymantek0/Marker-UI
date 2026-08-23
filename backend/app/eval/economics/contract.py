@@ -104,6 +104,42 @@ class Metric:
         return out
 
 
+def measured(
+    value: int | float | str | bool,
+    unit: str,
+    window: str,
+    source: str,
+    *,
+    breakdown: Mapping[str, int | float] | None = None,
+    samples: Mapping[str, Any] | None = None,
+) -> Metric:
+    return Metric(
+        status="measured", unit=unit, window=window, value=value,
+        source=source, breakdown=breakdown, samples=samples,
+    )
+
+
+def derived(
+    value: int | float,
+    unit: str,
+    window: str,
+    source: str,
+    derivation: Mapping[str, str],
+) -> Metric:
+    return Metric(
+        status="derived", unit=unit, window=window, value=value,
+        source=source, derivation=derivation,
+    )
+
+
+def unavailable(unit: str, window: str, reason: str) -> Metric:
+    return Metric(status="unavailable", unit=unit, window=window, reason=reason)
+
+
+def not_applicable(unit: str, window: str, reason: str) -> Metric:
+    return Metric(status="not_applicable", unit=unit, window=window, reason=reason)
+
+
 @dataclass
 class Envelope:
     """One profile's economics envelope plus its provenance."""

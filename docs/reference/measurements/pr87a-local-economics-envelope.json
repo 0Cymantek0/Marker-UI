@@ -1,0 +1,271 @@
+{
+  "schema": "marker.economics_envelope.v1",
+  "profile": "local-sqlite-dev",
+  "dimension_set": "invariant_57",
+  "git_sha": "d407682bdea1f58d5a1f7a345ec1f3e176601daa",
+  "generated_at": "2026-08-23T11:39:40+00:00",
+  "run_mode": "offline",
+  "model_participation": {
+    "mode": "none"
+  },
+  "workload": {
+    "identity": "PR81A deterministic corpus (16 PDFs/27 pages) via seed_workspace: ingest+publish -> doc-rev-01 v3->v4 revision+republish -> publication-pin GC lifecycle -> PR80A-style review scenario; cold-start samples on fresh databases",
+    "fingerprint": "pr81a:50dd2d38ae43aa815348d0cccf1bab1c9b61ca7773e5a6474354b98e0f5e3477",
+    "documents": 15,
+    "queries_available": 35
+  },
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "cpu_count": 12,
+    "sqlite": "3.45.1",
+    "database": "sqlite rollback-journal (delete)",
+    "dbstat_available": false
+  },
+  "windows": [
+    {
+      "id": "ingest_publish",
+      "label": "seed 16 docs + build generation + publish lexical"
+    },
+    {
+      "id": "revision",
+      "label": "revise doc-rev-01 v3->v4 + rebuild + republish"
+    },
+    {
+      "id": "gc_lifecycle",
+      "label": "publication-pin GC hold then release"
+    },
+    {
+      "id": "review",
+      "label": "conflicting invoice extraction scenario"
+    },
+    {
+      "id": "cold_start",
+      "label": "fresh db: migrate->seed->build->publish->first query"
+    },
+    {
+      "id": "full",
+      "label": "entire main workload (baseline -> post-GC)"
+    }
+  ],
+  "dimensions": {
+    "database_rows": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 1659,
+      "source": "exact per-table SELECT COUNT(*) via readonly sqlite connection, summed and categorized by table-name prefix",
+      "breakdown": {
+        "derived_generation": 64,
+        "lexical": 1514,
+        "logical_authority": 79,
+        "publication": 2
+      }
+    },
+    "payload_objects": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 16,
+      "source": "content-addressed store object walk (objects/ shards)",
+      "breakdown": {
+        "payload_objects": 0,
+        "source_objects": 16
+      }
+    },
+    "wal_write_amplification": {
+      "status": "not_applicable",
+      "unit": "ratio",
+      "window": "full",
+      "reason": "SQLite runs in rollback-journal mode on this profile (journal_mode=delete); there is no write-ahead log to amplify. WAL-mode amplification is an industrial-profile dimension (pr87b-industrial-economics-envelope.json)."
+    },
+    "retained_generations": {
+      "status": "measured",
+      "unit": "count",
+      "window": "gc_lifecycle",
+      "value": 1,
+      "source": "kernel_generations grouped by state after pin-held GC and pin-released GC",
+      "breakdown": {
+        "state_active": 1,
+        "generations_retired_after_pin_release": 1,
+        "generations_retired_while_pinned": 0,
+        "generations_before_gc": 2
+      }
+    },
+    "fts_storage": {
+      "status": "unavailable",
+      "unit": "bytes",
+      "window": "full",
+      "reason": "this SQLite build does not expose the DBSTAT virtual table, so physical FTS5 shadow-table bytes cannot be attributed; logical volume is measured in counters (lexical rows + text characters)"
+    },
+    "vector_storage": {
+      "status": "not_applicable",
+      "unit": "bytes",
+      "window": "full",
+      "reason": "no vector store implementation exists on any profile; the publication schema reserves a nullable vector_generation_id slot only"
+    },
+    "visual_storage": {
+      "status": "not_applicable",
+      "unit": "bytes",
+      "window": "full",
+      "reason": "this workload runs with visual capability absent (no render store, no visual index); visual storage is measured by the OFF/ON visual economics artifact on the same corpus"
+    },
+    "copy_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 44243,
+      "source": "LocalPayloadStore staging writes + verification read-backs + source store staged artifact bytes",
+      "breakdown": {
+        "payload_staging_writes": 0,
+        "payload_verification_read_backs": 0,
+        "source_staging_bytes": 44243,
+        "payload_dedup_hits": 0
+      }
+    },
+    "cold_start": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "cold_start",
+      "value": 1494.0,
+      "source": "fresh SQLite database per sample: migrate -> seed 16 docs -> build generation -> publish lexical -> first lexical_search query answered",
+      "samples": {
+        "n": 3,
+        "min": 1379.0,
+        "p50": 1494.0,
+        "max": 1663.5,
+        "per_sample_total_ms": [
+          1663.5,
+          1379.0,
+          1494.0
+        ],
+        "per_sample_build_publish_ms": [
+          66.6,
+          61.7,
+          58.8
+        ]
+      }
+    },
+    "reprocessing": {
+      "status": "measured",
+      "unit": "count",
+      "window": "revision",
+      "value": 1,
+      "source": "doc-rev-01 v3->v4 content revision through the real commit/generation/publication path",
+      "breakdown": {
+        "revision_events": 1,
+        "documents_changed": 1,
+        "documents_unchanged_reused": 14,
+        "rows_added_by_revision": 1581,
+        "revision_rows_derived_generation": 63,
+        "revision_rows_lexical": 1514,
+        "revision_rows_logical_authority": 3,
+        "revision_rows_publication": 1,
+        "payload_dedup_hits_during_revision": 0,
+        "generation_rebuilds": 1,
+        "revision_wall_ms": 281.1
+      }
+    },
+    "review_burden": {
+      "status": "measured",
+      "unit": "count",
+      "window": "review",
+      "value": 2,
+      "source": "deterministic conflicting-candidate invoice extraction through the real extraction service; review-required runs + fields counted, one review decision applied and its kernel rows counted",
+      "breakdown": {
+        "review_required_runs": 1,
+        "review_required_fields": 1,
+        "review_decisions_applied": 1,
+        "decision_record_rows": 1,
+        "assessment_record_rows": 36,
+        "rows_added_by_review_window": 62
+      }
+    }
+  },
+  "counters": {
+    "payload_object_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 0,
+      "source": "content-addressed payload store walk"
+    },
+    "source_object_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 44243,
+      "source": "content-addressed source store walk"
+    },
+    "logical_source_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 41728,
+      "source": "corpus manifest byte_length of committed PDF artifacts"
+    },
+    "sqlite_wal_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 0,
+      "source": "kernel.db-wal file size (absent under rollback-journal mode)"
+    },
+    "lexical_generations": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 1,
+      "source": "kernel_lexical_generations rows"
+    },
+    "lexical_rows": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 376,
+      "source": "kernel_lexical_generations.row_count summed"
+    },
+    "lexical_text_chars": {
+      "status": "measured",
+      "unit": "count",
+      "window": "full",
+      "value": 6268,
+      "source": "kernel_lexical_generations.text_char_count summed"
+    },
+    "database_bytes": {
+      "status": "measured",
+      "unit": "bytes",
+      "window": "full",
+      "value": 1314816,
+      "source": "PRAGMA page_count * page_size on the workload database"
+    },
+    "revision_wall_ms": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "revision",
+      "value": 281.1,
+      "source": "perf_counter around revise_document (commit + rebuild + republish)",
+      "samples": {
+        "n": 1
+      }
+    },
+    "ingest_publish_wall_ms": {
+      "status": "measured",
+      "unit": "milliseconds",
+      "window": "ingest_publish",
+      "value": 738.9,
+      "source": "perf_counter around seed_workspace (16 docs + generation + publication)",
+      "samples": {
+        "n": 1
+      }
+    }
+  },
+  "non_claims": [
+    "no human review time is claimed; review burden is item/row counts only",
+    "no queue dwell time is claimed; no timed review queue is driven",
+    "physical FTS byte attribution is unavailable on SQLite builds without DBSTAT",
+    "visual-derived storage is not exercised here; the OFF/ON visual economics artifact (pr87c-visual-economics.json) measures the same corpus with visual enabled"
+  ],
+  "wall_time_s": 9.015
+}

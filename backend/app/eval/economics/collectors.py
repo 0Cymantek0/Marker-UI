@@ -19,6 +19,7 @@ from typing import Any
 #: "other_kernel" rather than being silently dropped.
 TABLE_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("kernel_lexical_", "lexical"),
+    ("kernel_fts_", "lexical"),
     ("kernel_publication", "publication"),
     ("kernel_generation", "derived_generation"),
     ("kernel_view_heads", "derived_generation"),

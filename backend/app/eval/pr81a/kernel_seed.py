@@ -213,14 +213,24 @@ async def seed_workspace(
     service: KernelCommitService,
     corpus: Corpus,
     workspace_id: str,
-    source_root: Path,
+    source_root: Path | None = None,
+    source_store=None,
 ) -> SeededWorkspace:
-    """Commit every corpus document (revision-doc at its superseded cut)."""
+    """Commit every corpus document (revision-doc at its superseded cut).
+
+    ``source_store`` injects an alternative coherent source store (e.g.
+    the S3-backed industrial variant); by default a local content-
+    addressed store is created at ``source_root``.
+    """
+    if source_store is None:
+        if source_root is None:
+            raise ValueError("provide source_root or source_store")
+        source_store = LocalSourceStore(source_root)
     ws = SeededWorkspace(
         workspace_id=workspace_id,
         factory=factory,
         service=service,
-        source_store=LocalSourceStore(source_root),
+        source_store=source_store,
         corpus=corpus,
     )
     for doc in corpus.docs:
