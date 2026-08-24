@@ -70,9 +70,23 @@ Retrieves the current state of a conversion job.
   "error": null,
   "filename": "academic-paper.pdf",
   "output_length": 14032,
-  "completed_at": "2026-06-12T23:43:02"
+  "completed_at": "2026-06-12T23:43:02",
+  "as_of": {
+    "schema_version": "marker.operational.as_of.v1",
+    "state_token": "sha256:…",
+    "completeness": "complete",
+    "result_digest": "sha256:…",
+    "source_revision_id": null,
+    "config_digest": "sha256:…",
+    "artifacts_purged": false
+  }
 }
 ```
+
+`as_of` is the server-derived state this representation refers to. Pass
+`as_of.state_token` back on download/regeneration to make the action
+conditional on the state you observed. See
+[Operational as-of truth](../reference/operational-as-of-truth.md).
 
 ### curl Example
 ```bash
@@ -87,9 +101,28 @@ curl "http://localhost:8000/api/convert/status/8f2b1d60-705a-4e2e-a342-e19ef09bf
 
 Downloads the converted outputs. If the job extracted images, returns a `.zip` file. Otherwise, returns the raw text file of the chosen format.
 
+### Query Parameters
+- `format`: (Optional) String. `markdown`, `html`, `json`, `chunks`, or `all`.
+- `as_of`: (Optional) String. A `as_of.state_token` previously observed
+  from status/history. When supplied, the export only proceeds if that
+  state is still current; otherwise the response is `409` with
+  `detail.code = "stale_state"` and the refreshed `current_as_of`.
+  Omitting it requests the stored representation as an explicitly
+  historical export.
+
+Every response carries `X-Marker-As-Of-State`, `X-Marker-As-Of-Mode`
+(`verified` or `historical`), and `X-Marker-As-Of-Completeness`, so an
+export is never ambiguously readable as current.
+
 ### curl Example
 ```bash
 curl -o paper.zip "http://localhost:8000/api/convert/download/8f2b1d60-705a-4e2e-a342-e19ef09bf3cd"
+```
+
+### curl Example (conditional on observed state)
+```bash
+curl -o paper.md \
+  "http://localhost:8000/api/convert/download/8f2b1d60-705a-4e2e-a342-e19ef09bf3cd?format=markdown&as_of=sha256:…"
 ```
 
 ---
@@ -120,6 +153,10 @@ Retrieves a paginated list of all past conversions.
   "pages": 2
 }
 ```
+
+Each row carries the same `as_of` envelope as `/status/{job_id}`, so a
+history entry states which state its output represents instead of
+implying it is current truth.
 
 ---
 
