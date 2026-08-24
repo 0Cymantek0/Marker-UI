@@ -225,6 +225,16 @@ export interface ConversionMetadata {
   [key: string]: unknown
 }
 
+export interface AsOfContract {
+  schema_version: string
+  state_token: string
+  completeness: 'complete' | 'incomplete' | 'failed' | 'cancelled'
+  result_digest?: string | null
+  source_revision_id?: string | null
+  config_digest?: string | null
+  artifacts_purged?: boolean
+}
+
 export interface JobStatus {
   id: string
   job_id: string
@@ -245,6 +255,9 @@ export interface JobStatus {
   logs?: string[] | null
   elapsed?: number | null
   eta?: number | null
+  // Operational as-of envelope, server-derived. Carried verbatim from
+  // /status and /history so the UI can detect stale-state rejections.
+  as_of?: AsOfContract | null
 }
 
 export interface SSEEvent {
@@ -343,6 +356,7 @@ export interface BackendJobStatus {
   logs?: string[] | null
   elapsed?: number | null
   eta?: number | null
+  as_of?: AsOfContract | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -432,6 +446,35 @@ function mapFrontendToBackendLLM(frontend: LLMConfig): BackendLLMConfig {
   return backend;
 }
 
+export class ApiError extends Error {
+  status: number
+  code?: string
+  currentAsOf?: AsOfContract | null
+  constructor(
+    message: string,
+    opts: { status: number; code?: string; currentAsOf?: AsOfContract | null },
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = opts.status
+    this.code = opts.code
+    this.currentAsOf = opts.currentAsOf ?? null
+  }
+}
+
+// FastAPI HTTPException bodies carry {detail: {code, ...}} (e.g. the 409
+// stale_state rejections from the as-of contract). Extract the machine fields
+// so callers can branch on them without parsing prose.
+function parseErrorDetail(bodyText: string): { code?: string; currentAsOf: AsOfContract | null } {
+  try {
+    const parsed = JSON.parse(bodyText) as { detail?: { code?: string; current_as_of?: AsOfContract | null } }
+    return { code: parsed?.detail?.code, currentAsOf: parsed?.detail?.current_as_of ?? null }
+  } catch {
+    // Non-JSON body: plain message-only error.
+    return { currentAsOf: null }
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -448,7 +491,8 @@ async function request<T>(
 
   if (!res.ok) {
     const body = await res.text().catch(() => res.statusText)
-    throw new Error(`API ${res.status}: ${body}`)
+    const { code, currentAsOf } = parseErrorDetail(body)
+    throw new ApiError(`API ${res.status}: ${body}`, { status: res.status, code, currentAsOf })
   }
 
   if (res.status === 204) return undefined as T
@@ -582,12 +626,24 @@ export function getJobEvents(jobId: string): EventSource {
   return new EventSource(`${API_BASE}/convert/events/${jobId}`)
 }
 
-export async function downloadResult(jobId: string, format?: string): Promise<{ blob: Blob; filename?: string }> {
-  const url = format
+export async function downloadResult(jobId: string, format?: string, asOfToken?: string): Promise<{ blob: Blob; filename?: string }> {
+  let url = format
     ? `${API_BASE}/convert/download/${jobId}?format=${format}`
     : `${API_BASE}/convert/download/${jobId}`
+  if (asOfToken) url += `&as_of=${encodeURIComponent(asOfToken)}`
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`Download failed (${res.status})`)
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '')
+    const { code, currentAsOf } = parseErrorDetail(bodyText)
+    if (code === 'stale_state') {
+      throw new ApiError(`Download failed (${res.status}): stale_state`, {
+        status: res.status,
+        code: 'stale_state',
+        currentAsOf,
+      })
+    }
+    throw new Error(`Download failed (${res.status})`)
+  }
 
   let filename: string | undefined
   const disposition = res.headers.get('content-disposition')
@@ -609,8 +665,10 @@ export interface RegenerateResult {
   available_formats: string[]
 }
 
-export async function regenerateFormat(jobId: string, format: string): Promise<RegenerateResult> {
-  return request<RegenerateResult>(`/convert/${jobId}/regenerate?format=${format}`, {
+export async function regenerateFormat(jobId: string, format: string, asOfToken?: string): Promise<RegenerateResult> {
+  let url = `/convert/${jobId}/regenerate?format=${format}`
+  if (asOfToken) url += `&as_of=${encodeURIComponent(asOfToken)}`
+  return request<RegenerateResult>(url, {
     method: 'POST',
   })
 }

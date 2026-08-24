@@ -8,11 +8,13 @@ import {
   cancelJob,
   regenerateFormat,
   retryConversionJob,
+  ApiError,
   type ConversionConfig,
   type JobStatus,
   type ImageUnderstandingMeta,
   type RetryJobRequestBody,
   type ConversionMetadata,
+  type AsOfContract,
 } from '@/lib/api'
 import { filenameForDownload } from '@/lib/download'
 
@@ -64,6 +66,11 @@ export interface JobState {
   // completed job with this flag set finished but may have skipped LLM
   // refinement on some blocks (rate-limited tables, etc.).
   partialFailure?: boolean
+  // Server-derived operational as-of envelope (readiness invariant 56).
+  asOf?: AsOfContract | null
+  // Set when a token-verified action (download/regenerate) was rejected 409
+  // stale_state — the local state_token no longer matches the server derivation.
+  staleAsOf?: boolean
 }
 
 export interface SourceEngineOverrides {
@@ -89,6 +96,8 @@ interface ConversionContextType {
   // Model-swap prompt controls.
   dismissSwapPrompt: (id: string) => void
   clearRateLimited: (id: string) => void
+  // Best-effort re-sync of the server-derived as-of envelope for a job.
+  refreshAsOf: (id: string) => Promise<void>
   // Cross-provider retry: re-run a terminal job's source file with a new
   // provider/model. Creates a new job card; the original stays in history.
   retryJob: (id: string, provider?: string, model?: string) => Promise<void>
@@ -191,6 +200,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
       logs: [...prev.logs, '[SUCCESS] Conversion execution succeeded.', '[SYSTEM] Fetching result package...'],
     }))
 
+    let capturedAsOf: AsOfContract | null = null
     downloadResult(jobId)
       .then(async ({ blob, filename }) => {
         // Fetch status to capture the per-image understanding sidecar (it is
@@ -208,6 +218,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           conversionMetadata = status.conversion_metadata ?? null
           formats = status.formats ?? null
           availableFormats = status.available_formats ?? undefined
+          capturedAsOf = status.as_of ?? null
         } catch {
           // Non-fatal: badges just won't render for this job.
         }
@@ -224,6 +235,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           conversionMetadata,
           formats,
           availableFormats: availableFormats ?? prev.availableFormats,
+          asOf: capturedAsOf,
           logs: [...prev.logs, '[SUCCESS] Result package successfully fetched and ready.'],
         }))
       })
@@ -236,6 +248,9 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
           statusText: 'Conversion complete',
           error: null,
           resultBlob: null,
+          // Preserve any as_of captured before the download failure so the
+          // UI can still expose operational state and detect stale rejections.
+          asOf: capturedAsOf ?? prev.asOf,
           logs: [...prev.logs, `[WARN] Failed to fetch result locally: ${msg}. Click download to try again.`],
         }))
       })
@@ -461,6 +476,7 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
             rateLimited: false,
             partialFailure: false,
             swapPromptDismissed: false,
+            asOf: job.as_of ?? null,
           }
         })
 
@@ -679,10 +695,22 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
 
     if (!blob) {
       try {
-        const result = await downloadResult(job.jobId, format)
+        const result = await downloadResult(job.jobId, format, job.asOf?.state_token)
         blob = result.blob
         headerFilename = result.filename
       } catch (err) {
+        if (err instanceof ApiError && err.code === 'stale_state') {
+          updateJob(id, (prev) => ({
+            ...prev,
+            staleAsOf: true,
+            asOf: err.currentAsOf ?? prev.asOf,
+            logs: [
+              ...prev.logs,
+              '[WARN] Output changed on the server — download blocked as stale. State refreshed; download again for the current output.',
+            ],
+          }))
+          return
+        }
         console.error('Failed to download result:', err)
         return
       }
@@ -778,18 +806,49 @@ export function ConversionProvider({ children }: { children: React.ReactNode }) 
   const regenerateJobFormat = useCallback(async (id: string, format: string) => {
     const job = jobsRef.current.find((j) => j.id === id)
     if (!job?.jobId) return
-    const result = await regenerateFormat(job.jobId, format)
-    const status = await getJobStatus(job.jobId)
-    updateJob(id, (prev) => ({
-      ...prev,
-      formats: status.formats ?? prev.formats,
-      availableFormats: result.available_formats ?? prev.availableFormats,
-      resultText: status.result_text ?? prev.resultText,
-    }))
+    try {
+      const result = await regenerateFormat(job.jobId, format, job.asOf?.state_token)
+      const status = await getJobStatus(job.jobId)
+      updateJob(id, (prev) => ({
+        ...prev,
+        formats: status.formats ?? prev.formats,
+        availableFormats: result.available_formats ?? prev.availableFormats,
+        resultText: status.result_text ?? prev.resultText,
+        asOf: status.as_of ?? prev.asOf,
+      }))
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'stale_state') {
+        updateJob(id, (prev) => ({
+          ...prev,
+          staleAsOf: true,
+          asOf: err.currentAsOf ?? prev.asOf,
+        }))
+        return
+      }
+      throw err
+    }
+  }, [updateJob])
+
+  const refreshAsOf = useCallback(async (id: string) => {
+    const job = jobsRef.current.find((j) => j.id === id)
+    if (!job?.jobId) return
+    try {
+      const status = await getJobStatus(job.jobId)
+      updateJob(id, (prev) => ({
+        ...prev,
+        asOf: status.as_of ?? prev.asOf,
+        staleAsOf: false,
+        formats: status.formats ?? prev.formats,
+        availableFormats: status.available_formats ?? prev.availableFormats,
+        resultText: status.result_text ?? prev.resultText,
+      }))
+    } catch {
+      // Best-effort refresh; ignore failures silently.
+    }
   }, [updateJob])
 
   return (
-    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited, retryJob }}>
+    <ConversionContext.Provider value={{ jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited, retryJob, refreshAsOf }}>
       {children}
     </ConversionContext.Provider>
   )

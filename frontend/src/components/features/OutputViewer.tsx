@@ -5,7 +5,8 @@ import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ImageUnderstandingBadge } from '@/components/features/image-understanding/ImageUnderstandingBadge'
-import type { ImageUnderstandingMeta } from '@/lib/api'
+import { AsOfStatus } from '@/components/features/as-of/AsOfStatus'
+import type { ImageUnderstandingMeta, AsOfContract } from '@/lib/api'
 
 type OutputTab = 'markdown' | 'html' | 'json' | 'chunks' | 'raw' | 'audio'
 type JsonRecord = Record<string, unknown>
@@ -29,6 +30,9 @@ interface OutputViewerProps {
   imageUnderstanding?: ImageUnderstandingMeta[] | null
   audioMetadata?: JsonRecord | null
   jobId?: string
+  asOf?: AsOfContract | null
+  stale?: boolean
+  onRefreshAsOf?: () => void
 }
 
 export function OutputViewer({
@@ -41,6 +45,9 @@ export function OutputViewer({
   imageUnderstanding,
   audioMetadata,
   jobId,
+  asOf,
+  stale = false,
+  onRefreshAsOf,
 }: OutputViewerProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>('markdown')
   const [copied, setCopied] = useState(false)
@@ -219,6 +226,7 @@ export function OutputViewer({
         </div>
 
         <div className="flex items-center gap-1.5 py-1">
+          <AsOfStatus asOf={asOf} stale={stale} onRefresh={onRefreshAsOf} />
           <Button
             variant="ghost"
             size="sm"

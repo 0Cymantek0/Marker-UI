@@ -24,12 +24,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { getHistory, deleteJob, downloadResult, getJobStatus, type JobStatus } from '@/lib/api'
+import { getHistory, deleteJob, downloadResult, getJobStatus, ApiError, type JobStatus } from '@/lib/api'
 import { filenameForDownload } from '@/lib/download'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/datetime'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { RoutingAnalysis } from '@/components/features/conversion/RoutingAnalysis'
+import { AsOfStatus } from '@/components/features/as-of/AsOfStatus'
 
 const STATUS_VARIANT = {
   pending: 'secondary' as const,
@@ -58,6 +59,10 @@ export function HistoryPage() {
 
   // Delete confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+
+  // Stale-state tracking (readiness invariant 56): ids whose last download was
+  // rejected 409 stale_state, plus per-job as_of patches from the 409 payload.
+  const [staleJobIds, setStaleJobIds] = useState<Set<string>>(new Set())
 
   // Debounce search query changes
   useEffect(() => {
@@ -130,10 +135,14 @@ export function HistoryPage() {
     }
   }
 
+  const retryDownload = (job: JobStatus) => {
+    handleDownload({ stopPropagation() {} } as React.MouseEvent, job)
+  }
+
   const handleDownload = async (e: React.MouseEvent, job: JobStatus) => {
     e.stopPropagation() // Prevent toggling expansion
     try {
-      const { blob, filename: headerFilename } = await downloadResult(job.id)
+      const { blob, filename: headerFilename } = await downloadResult(job.id, undefined, job.as_of?.state_token)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -145,7 +154,23 @@ export function HistoryPage() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       toast.success('Download started')
-    } catch {
+      // A successful download clears any prior stale flag for this job.
+      setStaleJobIds((prev) => {
+        if (!prev.has(job.id)) return prev
+        const next = new Set(prev)
+        next.delete(job.id)
+        return next
+      })
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'stale_state') {
+        // Adopt the fresh state_token from the 409 payload so the next
+        // download attempt uses the current server derivation.
+        if (err.currentAsOf) {
+          setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, as_of: err.currentAsOf } : j)))
+        }
+        setStaleJobIds((prev) => new Set(prev).add(job.id))
+        return
+      }
       toast.error('Failed to download result package')
     }
   }
@@ -467,6 +492,26 @@ export function HistoryPage() {
                               <span className="text-xs font-mono font-bold capitalize text-foreground/90 block mt-1">{job.status}</span>
                             </div>
                           </div>
+
+                          {job.as_of && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <AsOfStatus
+                                asOf={job.as_of}
+                                stale={staleJobIds.has(job.id)}
+                                onRefresh={() => retryDownload(job)}
+                              />
+                              {staleJobIds.has(job.id) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => handleDownload(e, job)}
+                                  className="h-7 text-xs font-semibold rounded-lg"
+                                >
+                                  Retry download
+                                </Button>
+                              )}
+                            </div>
+                          )}
 
                           {job.conversion_metadata && (
                             <RoutingAnalysis

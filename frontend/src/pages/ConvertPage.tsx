@@ -381,7 +381,7 @@ export function ConvertPage() {
     localStorage.setItem('marker-conversion-config', JSON.stringify(config))
   }, [config])
 
-  const { jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited, retryJob } = useConversionQueue()
+  const { jobs, start, cancel, download, clearLogs, removeJob, regenerateJobFormat, dismissSwapPrompt, clearRateLimited, retryJob, refreshAsOf } = useConversionQueue()
 
   // Auto-surface the swap dialog when a running job reports it's stuck on rate
   // limits (key rotation exhausted) and the user hasn't dismissed it yet.
@@ -906,6 +906,9 @@ export function ConvertPage() {
                     imageUnderstanding={selectedJob.imageUnderstanding}
                     audioMetadata={selectedJob.conversionMetadata?.audio ?? selectedJob.conversionMetadata?.audio_batch ?? null}
                     jobId={selectedJob.jobId ?? undefined}
+                    asOf={selectedJob.asOf}
+                    stale={selectedJob.staleAsOf}
+                    onRefreshAsOf={() => { void refreshAsOf(selectedJob.id) }}
                   />
                 </div>
               </div>

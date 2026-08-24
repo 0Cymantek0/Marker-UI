@@ -2,6 +2,13 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { OutputViewer } from '@/components/features/OutputViewer'
+import type { AsOfContract } from '@/lib/api'
+
+const asOfComplete: AsOfContract = {
+  schema_version: 'marker.operational.as_of.v1',
+  state_token: 'sha256:abc',
+  completeness: 'complete',
+}
 
 async function settleReactUpdates() {
   await act(async () => {
@@ -453,6 +460,24 @@ describe('OutputViewer component', () => {
     expect(screen.getByText('follow up action')).toBeInTheDocument()
     expect(screen.getByText('standup-2.wav')).toBeInTheDocument()
     expect(screen.getByText(/Hits: Marker/i)).toBeInTheDocument()
+  })
+
+  it('renders a Current as-of badge when asOf prop is provided', () => {
+    render(
+      <OutputViewer content="# Hello" onDownload={vi.fn()} asOf={asOfComplete} />
+    )
+
+    expect(screen.getByText('Current')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+  })
+
+  it('renders a Stale as-of badge and role=status when stale prop is set', () => {
+    render(
+      <OutputViewer content="# Hello" onDownload={vi.fn()} asOf={asOfComplete} stale />
+    )
+
+    expect(screen.getByText('Stale')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('result changed on the server')
   })
 
   it('keeps the audio inspection tab usable when backend metadata is partial or malformed', () => {

@@ -1,15 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { HistoryPage } from '@/pages/HistoryPage'
+import { ApiError } from '@/lib/api'
 import * as api from '@/lib/api'
 import '@testing-library/jest-dom'
 
-vi.mock('@/lib/api', () => ({
-  getHistory: vi.fn(),
-  deleteJob: vi.fn(),
-  downloadResult: vi.fn(),
-  getJobStatus: vi.fn(),
-}))
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return {
+    ...actual,
+    getHistory: vi.fn(),
+    deleteJob: vi.fn(),
+    downloadResult: vi.fn(),
+    getJobStatus: vi.fn(),
+  }
+})
 
 describe('HistoryPage component delete confirmation flow', () => {
   const mockJob = {
@@ -24,11 +29,17 @@ describe('HistoryPage component delete confirmation flow', () => {
     completed_at: '2026-06-11T09:01:00Z',
     error_message: null,
     result_text: 'sample output',
+    as_of: {
+      schema_version: 'marker.operational.as_of.v1',
+      state_token: 'sha256:old',
+      completeness: 'complete' as const,
+    },
   }
 
   beforeEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.clearAllMocks()
     vi.mocked(api.getHistory).mockResolvedValue({
       jobs: [mockJob],
       total: 1,
@@ -131,7 +142,7 @@ describe('HistoryPage component delete confirmation flow', () => {
       fireEvent.click(downloadBtn)
     })
 
-    expect(api.downloadResult).toHaveBeenCalledWith('job-123')
+    expect(api.downloadResult).toHaveBeenCalledWith('job-123', undefined, 'sha256:old')
     expect(anchor.download).toBe('test_file.zip')
     expect(click).toHaveBeenCalled()
 
@@ -151,5 +162,63 @@ describe('HistoryPage component delete confirmation flow', () => {
     await waitFor(() => {
       expect(api.getHistory).toHaveBeenLastCalledWith(1, 10, undefined, 'pending', 'all')
     })
+  })
+
+  it('shows the output state in the details panel and downloads with the as_of token', async () => {
+    render(<HistoryPage />)
+
+    await screen.findByText('test_file.pdf')
+    // Expand the row to reveal the details panel.
+    fireEvent.click(screen.getByText('test_file.pdf'))
+
+    expect(screen.getByRole('status')).toHaveTextContent('Output state: current, complete.')
+    expect(api.downloadResult).not.toHaveBeenCalled()
+
+    const downloadBtn = screen.getByTitle(/Download Result/i)
+    await act(async () => {
+      fireEvent.click(downloadBtn)
+    })
+
+    expect(api.downloadResult).toHaveBeenCalledWith('job-123', undefined, 'sha256:old')
+  })
+
+  it('flags stale, patches as_of from the 409 payload, and retries with the new token', async () => {
+    vi.mocked(api.downloadResult)
+      .mockRejectedValueOnce(
+        new ApiError('Download failed (409): stale_state', {
+          status: 409,
+          code: 'stale_state',
+          currentAsOf: {
+            schema_version: 'marker.operational.as_of.v1',
+            state_token: 'sha256:new',
+            completeness: 'complete',
+          },
+        })
+      )
+      .mockResolvedValueOnce({
+        blob: new Blob(['zip'], { type: 'application/zip' }),
+        filename: 'test_file.md',
+      })
+
+    render(<HistoryPage />)
+
+    await screen.findByText('test_file.pdf')
+    fireEvent.click(screen.getByText('test_file.pdf'))
+
+    const downloadBtn = screen.getByTitle(/Download Result/i)
+    await act(async () => {
+      fireEvent.click(downloadBtn)
+    })
+
+    // First attempt rejected as stale -> stale notice + retry button appear.
+    expect(screen.getByRole('status')).toHaveTextContent('result changed on the server')
+    expect(screen.getByRole('button', { name: /retry download/i })).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /retry download/i }))
+    })
+
+    // Second attempt uses the refreshed token from the 409 payload.
+    expect(api.downloadResult).toHaveBeenLastCalledWith('job-123', undefined, 'sha256:new')
   })
 })

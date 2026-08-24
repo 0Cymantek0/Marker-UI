@@ -8,6 +8,7 @@ import {
   saveAudioProviders,
   getActiveAudioProvider,
   setActiveAudioProvider,
+  ApiError,
 } from '@/lib/api'
 
 const eventSourceUrls: string[] = []
@@ -60,10 +61,69 @@ describe('downloadResult', () => {
     expect(result.blob).toBeInstanceOf(Blob)
   })
 
+  it('appends the as_of query param when a token is supplied', async () => {
+    mockFetchOnce(200, new Blob(), true)
+
+    await downloadResult('job-dl-token', 'markdown', 'sha256:abc/def')
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.get('as_of')).toBe('sha256:abc/def')
+    expect(url.pathname).toBe('/api/convert/download/job-dl-token')
+    expect(url.searchParams.get('format')).toBe('markdown')
+  })
+
+  it('omits the as_of query param when no token is supplied', async () => {
+    mockFetchOnce(200, new Blob(), true)
+
+    await downloadResult('job-dl-notoken')
+
+    const call = vi.mocked(global.fetch).mock.calls[0]
+    const url = new URL(String(call?.[0]), 'http://localhost')
+    expect(url.searchParams.has('as_of')).toBe(false)
+  })
+
   it('throws on error', async () => {
     mockFetchOnce(500, 'Internal Server Error')
 
     await expect(downloadResult('job-dl-err')).rejects.toThrow('Download failed')
+  })
+
+  it('rejects with ApiError on a 409 stale_state body', async () => {
+    const staleBody = {
+      detail: {
+        code: 'stale_state',
+        message: 'state token mismatch',
+        observed_state_token: 'sha256:old',
+        current_state_token: 'sha256:cur',
+        current_as_of: {
+          schema_version: 'marker.operational.as_of.v1',
+          state_token: 'sha256:cur',
+          completeness: 'complete',
+        },
+      },
+    }
+    mockFetchOnce(409, staleBody)
+
+    let caught: unknown
+    try {
+      await downloadResult('job-dl-stale', 'markdown', 'sha256:old')
+    } catch (err) {
+      caught = err
+    }
+
+    expect(caught).toBeInstanceOf(ApiError)
+    const apiErr = caught as ApiError
+    expect(apiErr.code).toBe('stale_state')
+    expect(apiErr.status).toBe(409)
+    expect(apiErr.message).toContain('stale_state')
+    expect(apiErr.currentAsOf?.state_token).toBe('sha256:cur')
+  })
+
+  it('throws a plain Error on a 500 (backward compat)', async () => {
+    mockFetchOnce(500, 'boom')
+
+    await expect(downloadResult('job-dl-500')).rejects.toThrow(/Download failed \(500\)/)
   })
 })
 

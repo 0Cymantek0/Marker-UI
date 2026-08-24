@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ConvertPage } from '@/pages/ConvertPage'
 import { ConversionProvider } from '@/hooks/useConversionQueue'
 import { BrowserRouter } from 'react-router-dom'
+import { ApiError } from '@/lib/api'
 import '@testing-library/jest-dom'
 
 // Mock the API module
@@ -19,22 +20,26 @@ const mockGetPresets = vi.fn()
 const mockSavePreset = vi.fn()
 const mockDeletePreset = vi.fn()
 
-vi.mock('@/lib/api', () => ({
-  uploadFile: (...args: unknown[]) => mockUploadFile(...args),
-  getJobEvents: (...args: unknown[]) => mockGetJobEvents(...args),
-  downloadResult: (...args: unknown[]) => mockDownloadResult(...args),
-  cancelJob: (...args: unknown[]) => mockCancelJob(...args),
-  deleteJob: (...args: unknown[]) => mockDeleteJob(...args),
-  getJobStatus: (...args: unknown[]) => mockGetJobStatus(...args),
-  getHistory: (...args: unknown[]) => mockGetHistory(...args),
-  getCapabilities: () => mockGetCapabilities(),
-  planConversion: (...args: unknown[]) => mockPlanConversion(...args),
-  getLLMProviders: vi.fn().mockResolvedValue([]),
-  getActiveLLM: vi.fn().mockResolvedValue(null),
-  getPresets: (...args: unknown[]) => mockGetPresets(...args),
-  savePreset: (...args: unknown[]) => mockSavePreset(...args),
-  deletePreset: (...args: unknown[]) => mockDeletePreset(...args),
-}))
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>()
+  return {
+    ...actual,
+    uploadFile: (...args: unknown[]) => mockUploadFile(...args),
+    getJobEvents: (...args: unknown[]) => mockGetJobEvents(...args),
+    downloadResult: (...args: unknown[]) => mockDownloadResult(...args),
+    cancelJob: (...args: unknown[]) => mockCancelJob(...args),
+    deleteJob: (...args: unknown[]) => mockDeleteJob(...args),
+    getJobStatus: (...args: unknown[]) => mockGetJobStatus(...args),
+    getHistory: (...args: unknown[]) => mockGetHistory(...args),
+    getCapabilities: () => mockGetCapabilities(),
+    planConversion: (...args: unknown[]) => mockPlanConversion(...args),
+    getLLMProviders: vi.fn().mockResolvedValue([]),
+    getActiveLLM: vi.fn().mockResolvedValue(null),
+    getPresets: (...args: unknown[]) => mockGetPresets(...args),
+    savePreset: (...args: unknown[]) => mockSavePreset(...args),
+    deletePreset: (...args: unknown[]) => mockDeletePreset(...args),
+  }
+})
 
 // Mock EventSource helper
 interface MockEventSource {
@@ -304,6 +309,11 @@ describe('ConvertPage Integration with real hook', () => {
         result_text: '# Converted',
         output_format: 'markdown',
         available_formats: ['markdown'],
+        as_of: {
+          schema_version: 'marker.operational.as_of.v1',
+          state_token: 'sha256:token',
+          completeness: 'complete',
+        },
       })
 
     const { container } = render(
@@ -332,6 +342,118 @@ describe('ConvertPage Integration with real hook', () => {
     })
     expect(mockDownloadResult).toHaveBeenCalledWith('job-uuid-123')
     expect(eventSource.close).toHaveBeenCalled()
+  })
+
+  it('surfaces a stale rejection from download and refreshes state from the 409 payload', async () => {
+    const eventSource = createMockEventSource()
+    mockGetJobEvents.mockReturnValue(eventSource)
+    mockGetJobStatus
+      .mockResolvedValueOnce({
+        id: 'job-uuid-123',
+        job_id: 'job-uuid-123',
+        status: 'processing',
+        progress: 33,
+        message: 'Performing OCR and text recognition...',
+        output_format: 'markdown',
+        available_formats: ['markdown'],
+      })
+      // Drives completion + the auto-download's status capture: the observed
+      // token is 'sha256:original'.
+      .mockResolvedValueOnce({
+        id: 'job-uuid-123',
+        job_id: 'job-uuid-123',
+        status: 'completed',
+        progress: 100,
+        message: null,
+        result_text: '# Converted',
+        output_format: 'markdown',
+        available_formats: ['markdown'],
+        as_of: {
+          schema_version: 'marker.operational.as_of.v1',
+          state_token: 'sha256:original',
+          completeness: 'complete',
+        },
+      })
+      // Every later status read (the Refresh action) reflects the server's
+      // moved state, matching the 409 payload's refreshed token.
+      .mockResolvedValue({
+        id: 'job-uuid-123',
+        job_id: 'job-uuid-123',
+        status: 'completed',
+        progress: 100,
+        message: null,
+        result_text: '# Converted',
+        output_format: 'markdown',
+        available_formats: ['markdown'],
+        as_of: {
+          schema_version: 'marker.operational.as_of.v1',
+          state_token: 'sha256:refreshed',
+          completeness: 'complete',
+        },
+      })
+
+    // Arm the download sequence BEFORE triggering completion so the mocks are
+    // consumed in order: (1) the completion auto-download succeeds — its
+    // status fetch captures resultText and the observed token 'sha256:original'
+    // so the OutputViewer renders; (2) the first user download is rejected
+    // 409 stale_state and the hook adopts the refreshed token from the payload;
+    // (3) the post-Refresh download succeeds. (A format download always calls
+    // downloadResult — the cached auto-download blob is only reused for the
+    // default formatless path.)
+    mockDownloadResult.mockResolvedValueOnce({
+      blob: new Blob(['# Converted'], { type: 'text/markdown' }),
+      filename: 'converted.md',
+    })
+    mockDownloadResult.mockRejectedValueOnce(
+      new ApiError('Download failed (409): stale_state', {
+        status: 409,
+        code: 'stale_state',
+        currentAsOf: {
+          schema_version: 'marker.operational.as_of.v1',
+          state_token: 'sha256:refreshed',
+          completeness: 'complete',
+        },
+      })
+    )
+    mockDownloadResult.mockResolvedValueOnce({
+      blob: new Blob(['# Converted'], { type: 'text/markdown' }),
+      filename: 'converted.md',
+    })
+
+    const { container } = render(
+      <BrowserRouter>
+        <ConversionProvider>
+          <ConvertPage />
+        </ConversionProvider>
+      </BrowserRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /local paths/i }))
+    fireEvent.change(container.querySelector('textarea')!, { target: { value: 'C:\\stale-ui.pdf' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Convert 1 Document/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Conversion complete')).toBeInTheDocument()
+    })
+    expect(eventSource.close).toHaveBeenCalled()
+
+    // The OutputViewer download is the last "Download" button in document order.
+    const downloadButtons = screen.getAllByRole('button', { name: /download/i })
+    const viewerDownload = downloadButtons[downloadButtons.length - 1]!
+
+    fireEvent.click(viewerDownload)
+
+    await waitFor(() => {
+      expect(screen.getByText('Stale')).toBeInTheDocument()
+    })
+
+    // Trigger the in-viewer Refresh, then download again with the new token.
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /download/i }).pop()!)
+
+    await waitFor(() => {
+      expect(mockDownloadResult).toHaveBeenLastCalledWith('job-uuid-123', 'markdown', 'sha256:refreshed')
+    })
   })
 
   it('clears fallback polling when a disconnected job is removed locally', async () => {
