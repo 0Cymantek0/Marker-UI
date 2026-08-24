@@ -1,9 +1,9 @@
 {
   "schema": "marker.pr90.as_of_evidence.v1",
-  "generated_at": "2026-08-24T00:08:29+00:00",
+  "generated_at": "2026-08-24T01:12:57+00:00",
   "backend": {
-    "total": 21,
-    "passed": 21,
+    "total": 22,
+    "passed": 22,
     "failed": 0,
     "skipped": 0
   },

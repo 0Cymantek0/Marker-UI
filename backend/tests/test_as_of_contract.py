@@ -407,6 +407,63 @@ async def test_state_token_ignores_operational_noise(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_as_of_derives_from_durable_row_not_live_progress(client: AsyncClient, db_session, monkeypatch):
+    """Live task-manager progress must not mint a token the export boundary
+    would then reject.
+
+    The status route merges in-memory progress for non-terminal jobs, so a
+    worker can report ``completed`` before the durable row is finalized. If
+    the envelope derived from that ephemeral status, the token a client
+    observed in that window could never verify at download (which reads the
+    durable row) — false staleness on a perfectly honest client. Deriving
+    from the row keeps status, history, and export on one derivation."""
+    from app.main import _app_state
+    from app.operational.as_of import derive_as_of
+
+    job_id = "job-live-merge"
+    job = _completed_job(job_id, formats={"markdown": "# pending"})
+    job.status = "pending"
+    job.progress = 0
+    job.completed_at = None
+    await _add_job(db_session, job)
+
+    monkeypatch.setattr(
+        _app_state.task_manager,
+        "get_status",
+        lambda jid: {"job_id": jid, "status": "completed", "progress": 100},
+    )
+
+    resp = await client.get(f"/api/convert/status/{job_id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    # The live status still drives the progress UX...
+    assert body["status"] == "completed"
+    # ...but the as-of envelope reports the durable truth, and matches the
+    # derivation the download boundary will perform.
+    assert body["as_of"]["completeness"] == "incomplete"
+    db_session.expire_all()
+    row = (await db_session.execute(select(ConversionJob).where(ConversionJob.id == job_id))).scalar_one()
+    assert body["as_of"]["state_token"] == derive_as_of(row).state_token
+
+    # History (no live merge at all) agrees with status for the same row.
+    history = await client.get("/api/convert/history")
+    entry = {j["job_id"]: j for j in history.json()["jobs"]}[job_id]
+    assert entry["as_of"] == body["as_of"]
+
+    # Once the row is durably completed, the token observed then verifies at
+    # download — no spurious stale rejection.
+    row.status = "completed"
+    row.completed_at = datetime.now(timezone.utc)
+    db_session.add(row)
+    await db_session.commit()
+
+    token = (await _status_token(client, job_id))["state_token"]
+    ok = await client.get(f"/api/convert/download/{job_id}", params={"as_of": token})
+    assert ok.status_code == 200
+    assert ok.headers["x-marker-as-of-mode"] == "verified"
+
+
+@pytest.mark.asyncio
 async def test_failed_job_download_still_blocked_and_status_carries_as_of(client: AsyncClient, db_session):
     """The as-of contract does not weaken existing guards: a failed job is
     still not exportable, while its status honestly reports completeness."""

@@ -1232,7 +1232,7 @@ async def get_status(
         status=status,
         progress=progress,
         error_message=job.error_message,
-        as_of=derive_as_of(job, effective_status=status),
+        as_of=derive_as_of(job),
         result_text=job.result_text,
         image_understanding=_parse_image_understanding(job.result_metadata_json),
         conversion_metadata=_parse_conversion_metadata(job.result_metadata_json),

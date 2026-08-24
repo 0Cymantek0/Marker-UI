@@ -150,15 +150,22 @@ def _output_content(job: Any, formats: dict[str, str]) -> dict[str, str]:
     return content
 
 
-def derive_as_of(job: Any, *, effective_status: str | None = None) -> AsOfContract:
+def derive_as_of(job: Any) -> AsOfContract:
     """Derive the as-of envelope for a job row.
 
     Pure function of durable row state; safe to call on every request. The
     ``job`` argument is any object carrying the ``ConversionJob`` columns
     used below (the ORM row, or a test double).
+
+    Derivation is deliberately bound to the **durable** row, never to
+    in-memory task-manager progress. Status, history, download, and
+    regeneration therefore all derive the same token for the same row: an
+    ephemeral live status cannot mint a token that the export boundary
+    would then reject as stale, and no two surfaces can disagree about
+    which state they represent.
     """
 
-    status = effective_status or job.status
+    status = job.status
     config = _parse_json_object(job.config_json)
     formats = parse_cached_formats(job.formats_json) or {}
     content = _output_content(job, formats)
@@ -201,12 +208,7 @@ def derive_as_of(job: Any, *, effective_status: str | None = None) -> AsOfContra
     )
 
 
-def verify_as_of(
-    job: Any,
-    observed_token: str | None,
-    *,
-    effective_status: str | None = None,
-) -> AsOfVerification:
+def verify_as_of(job: Any, observed_token: str | None) -> AsOfVerification:
     """Compare a caller-observed state token against the current state.
 
     A missing/empty token is not an error: the action falls into explicitly
@@ -215,7 +217,7 @@ def verify_as_of(
     outright forgery — yields ``fresh=False`` for the route to reject.
     """
 
-    current = derive_as_of(job, effective_status=effective_status)
+    current = derive_as_of(job)
     cleaned = observed_token.strip() if isinstance(observed_token, str) else None
     if not cleaned:
         return AsOfVerification(MODE_HISTORICAL, False, None, current)

@@ -23,7 +23,10 @@ boundary outward to the product surfaces the user actually drives.
 ## The envelope
 
 `derive_as_of(job)` is a pure function of the durable `ConversionJob`
-row. Nothing is cached or persisted, so there is no second authority
+row — never of in-memory task-manager progress, so an ephemeral live
+status cannot mint a token that the export boundary would then reject as
+stale, and status/history/export always derive the same token for the
+same row. Nothing is cached or persisted, so there is no second authority
 that can drift from the row, and a process restart cannot erase the
 information needed to detect staleness — the derivation *is* the
 persistence proof.
@@ -116,7 +119,7 @@ never encoded by color alone. It appears on the live result preview
 
 | Surface | Proof |
 |---|---|
-| Server contract + adversarial cases | `backend/tests/test_as_of_contract.py` (14 tests) |
+| Server contract + adversarial cases | `backend/tests/test_as_of_contract.py` (15 tests) |
 | Review-commit staleness (pre-existing authority) | `backend/tests/test_extraction_review.py` |
 | Typed client boundary | `frontend/src/__tests__/api.test.ts` |
 | Accessible as-of exposure | `frontend/src/components/features/as-of/AsOfStatus.test.tsx` |
