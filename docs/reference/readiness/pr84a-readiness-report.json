@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "4eb9f22d745791eb507a56f5e2bf429014816031"
+    "git_head": "4d3f98ad69c4705b7e0b8bb7ef8b29f6583e8018"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 48,
+    "proven": 49,
     "failed": 0,
-    "no_evidence": 14
+    "no_evidence": 13
   },
   "group_counts": {
     "23C.1": {
@@ -41,9 +41,9 @@
       "total": 10
     },
     "23C.6": {
-      "proven": 7,
+      "proven": 8,
       "failed": 0,
-      "no_evidence": 1,
+      "no_evidence": 0,
       "total": 8
     },
     "23C.7": {
@@ -55,7 +55,7 @@
   },
   "gap_type_counts": {
     "B": 6,
-    "D": 5,
+    "D": 4,
     "F": 3
   },
   "residual_gap_ranking": [
@@ -64,8 +64,7 @@
     "23C.7",
     "23C.2",
     "23C.3",
-    "23C.5",
-    "23C.6"
+    "23C.5"
   ],
   "integrity_findings": [],
   "invariants": [
@@ -715,11 +714,14 @@
       "id": 56,
       "group": "23C.6",
       "label": "stale-review-rejection",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "D",
-      "gap_note": "Backend review-commit staleness is proven; UI screens, approvals, exports, and operational status exposing as-of revision/policy/completeness end-to-end (including frontend) is unproven."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev",
+        "sqlite-dev + vitest jsdom"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 57,

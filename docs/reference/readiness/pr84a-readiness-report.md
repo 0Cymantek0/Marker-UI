@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `4eb9f22d745791eb507a56f5e2bf429014816031`
-- Invariants proven: **48 / 62**
+- Audited source head: `4d3f98ad69c4705b7e0b8bb7ef8b29f6583e8018`
+- Invariants proven: **49 / 62**
 - Failed: **0**
-- No acceptable evidence: **14**
+- No acceptable evidence: **13**
 
 ## Group summary
 
@@ -16,7 +16,7 @@
 | 23C.3 | Verification and routing | 8 | 0 | 1 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
-| 23C.6 | Agent and product behavior | 7 | 0 | 1 |
+| 23C.6 | Agent and product behavior | 8 | 0 | 0 |
 | 23C.7 | Economics and claim language | 3 | 0 | 3 |
 
 ## Invariant statuses
@@ -78,7 +78,7 @@
 | 53 | 23C.6 | proven | sqlite-dev lane: real kernel commit spine, real immutable publication sets/generations, trusted local_v1 authorization resolution, durable Alembic-migrated cursors through head 20260823_0016, and the run_agent_query delivery seam |
 | 54 | 23C.6 | proven | deterministic local sqlite lane (migrated file DB through Alembic head 20260823_0015, real kernel commit spine, real publications/authorization, real EvidencePacket delivery chains) |
 | 55 | 23C.6 | proven | sqlite-dev |
-| 56 | 23C.6 | no-evidence | executed proof covers only part of the invariant wording |
+| 56 | 23C.6 | proven | sqlite-dev, sqlite-dev + vitest jsdom |
 | 57 | 23C.7 | proven | local sqlite + docker postgres16/minio industrial + offline VLM replay |
 | 58 | 23C.7 | proven | offline decision-rule + artifact-honesty tests, offline same-workload OFF/ON + ACL experiment (VLM replay cache) |
 | 59 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |
@@ -105,7 +105,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 6** (23C.1, canonical-id-cross-platform): Determinism proven multi-OS × multi-Python on x86_64 with committed golden constants; the invariant's literal cross-language and ARM64 clauses have no executable fixture (no second-language implementation, no ARM64 runner). Reason: executed proof covers only part of the invariant wording.
 - **Inv 25** (23C.3, routing-stays-shadow-until-proven): Routing demonstrably stays shadow/offline, but the promotion condition has not been evaluated against truly held-out shift + catastrophic utility (same fixture trains and evaluates); evidence is fixture-scoped. Reason: executed proof covers only part of the invariant wording.
 - **Inv 38** (23C.4, failure-injection-truthful-outcomes): Cancellation/failover/disk/model-service(lease-lapse) classes are covered on the SQLite lane and DB-outage/WAL semantics on the PG failover lab; shared-memory pressure is not injected anywhere (the shared-memory lane was measured and rejected in PR68A), and no literal model-service crash injection exists. Reason: proof exists but was environment-gated in the recorded run.
-- **Inv 56** (23C.6, stale-review-rejection): Backend review-commit staleness is proven; UI screens, approvals, exports, and operational status exposing as-of revision/policy/completeness end-to-end (including frontend) is unproven. Reason: executed proof covers only part of the invariant wording.
 
 ### Type F — measurement/economics/operations closure missing
 
@@ -121,7 +120,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - 23C.2 Geometry, patches, and incrementality: 1 non-proven
 - 23C.3 Verification and routing: 1 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven
-- 23C.6 Agent and product behavior: 1 non-proven
 
 ## Reproduction
 

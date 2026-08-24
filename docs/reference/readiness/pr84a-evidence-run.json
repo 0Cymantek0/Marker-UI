@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-23T23:09:17+00:00",
-  "git_head": "4eb9f22d745791eb507a56f5e2bf429014816031",
+  "generated_at": "2026-08-24T00:24:05+00:00",
+  "git_head": "4d3f98ad69c4705b7e0b8bb7ef8b29f6583e8018",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -2132,17 +2132,109 @@
       "detail": ""
     },
     {
-      "binding_key": "56:test:backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected",
+      "binding_key": "56:measurement:docs/reference/measurements/pr90-as-of-evidence.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr90-as-of-evidence.json": "4555c01b67d1775eafc7600a516cb6683fd5b09d"
+      },
+      "artifact": "docs/reference/measurements/pr90-as-of-evidence.json",
+      "artifact_sha256": "7c74a2ce6fb045972ddef69764185340415b0dfbefe2dbbfa749a5ef73b84a48",
+      "checks": {
+        "backend.passed": {
+          "expected": 21,
+          "actual": 21,
+          "ok": true
+        },
+        "backend.failed": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        "frontend.failed": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        "scenarios.backend_toctou_stale_download": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.backend_forged_token": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.backend_cross_job_replay": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.backend_extraction_stale_review": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.frontend_stale_retry": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.frontend_history_stale_retry": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "verdict": {
+          "expected": "as_of_operational_contract_proven",
+          "actual": "as_of_operational_contract_proven",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "56:test:backend/tests/test_as_of_contract.py::test_status_exposes_as_of_contract_for_completed_job",
       "kind": "test",
       "scope_blobs": {
+        "backend/tests/test_as_of_contract.py": "d2a0c273ce99bf141bbb74ee2c51b1fa351220fb",
         "backend/tests/test_extraction_review.py": "79cbd8b7c21ba9a7075202afdf98df1a28bc1421"
       },
       "nodes": [
+        "backend/tests/test_as_of_contract.py::test_status_exposes_as_of_contract_for_completed_job",
+        "backend/tests/test_as_of_contract.py::test_status_completeness_tracks_lifecycle_not_just_currency",
+        "backend/tests/test_as_of_contract.py::test_history_rows_carry_the_same_as_of_contract",
+        "backend/tests/test_as_of_contract.py::test_download_with_matching_token_is_verified_and_serves_content",
+        "backend/tests/test_as_of_contract.py::test_download_without_token_is_explicitly_historical_and_labeled",
+        "backend/tests/test_as_of_contract.py::test_download_rejects_stale_token_after_real_state_change",
+        "backend/tests/test_as_of_contract.py::test_retrying_a_stale_download_stays_stale",
+        "backend/tests/test_as_of_contract.py::test_regenerate_honors_precondition_before_mutating",
+        "backend/tests/test_as_of_contract.py::test_forged_token_fails_closed",
+        "backend/tests/test_as_of_contract.py::test_cross_job_token_replay_fails_closed",
+        "backend/tests/test_as_of_contract.py::test_hostile_non_ascii_token_fails_closed_not_500",
+        "backend/tests/test_as_of_contract.py::test_state_token_rotation_covers_every_material_dimension",
+        "backend/tests/test_as_of_contract.py::test_state_token_ignores_operational_noise",
+        "backend/tests/test_as_of_contract.py::test_failed_job_download_still_blocked_and_status_carries_as_of",
         "backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected",
         "backend/tests/test_extraction_review.py::test_review_decision_bound_to_other_result_is_rejected",
         "backend/tests/test_extraction_review.py::test_review_actions_are_versioned_and_shape_checked"
       ],
       "node_outcomes": {
+        "backend/tests/test_as_of_contract.py::test_status_exposes_as_of_contract_for_completed_job": "passed",
+        "backend/tests/test_as_of_contract.py::test_status_completeness_tracks_lifecycle_not_just_currency": "passed",
+        "backend/tests/test_as_of_contract.py::test_history_rows_carry_the_same_as_of_contract": "passed",
+        "backend/tests/test_as_of_contract.py::test_download_with_matching_token_is_verified_and_serves_content": "passed",
+        "backend/tests/test_as_of_contract.py::test_download_without_token_is_explicitly_historical_and_labeled": "passed",
+        "backend/tests/test_as_of_contract.py::test_download_rejects_stale_token_after_real_state_change": "passed",
+        "backend/tests/test_as_of_contract.py::test_retrying_a_stale_download_stays_stale": "passed",
+        "backend/tests/test_as_of_contract.py::test_regenerate_honors_precondition_before_mutating": "passed",
+        "backend/tests/test_as_of_contract.py::test_forged_token_fails_closed": "passed",
+        "backend/tests/test_as_of_contract.py::test_cross_job_token_replay_fails_closed": "passed",
+        "backend/tests/test_as_of_contract.py::test_hostile_non_ascii_token_fails_closed_not_500": "passed",
+        "backend/tests/test_as_of_contract.py::test_state_token_rotation_covers_every_material_dimension": "passed",
+        "backend/tests/test_as_of_contract.py::test_state_token_ignores_operational_noise": "passed",
+        "backend/tests/test_as_of_contract.py::test_failed_job_download_still_blocked_and_status_carries_as_of": "passed",
         "backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected": "passed",
         "backend/tests/test_extraction_review.py::test_review_decision_bound_to_other_result_is_rejected": "passed",
         "backend/tests/test_extraction_review.py::test_review_actions_are_versioned_and_shape_checked": "passed"
