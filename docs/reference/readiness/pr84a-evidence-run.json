@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-24T00:24:05+00:00",
-  "git_head": "4d3f98ad69c4705b7e0b8bb7ef8b29f6583e8018",
+  "generated_at": "2026-08-24T01:21:24+00:00",
+  "git_head": "eb4a8f246777f6e585b9456200b3af467f36e120",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -2135,14 +2135,14 @@
       "binding_key": "56:measurement:docs/reference/measurements/pr90-as-of-evidence.json",
       "kind": "measurement",
       "scope_blobs": {
-        "docs/reference/measurements/pr90-as-of-evidence.json": "4555c01b67d1775eafc7600a516cb6683fd5b09d"
+        "docs/reference/measurements/pr90-as-of-evidence.json": "0d0f0575f0a34b4e4730746d396ce593ba9725da"
       },
       "artifact": "docs/reference/measurements/pr90-as-of-evidence.json",
-      "artifact_sha256": "7c74a2ce6fb045972ddef69764185340415b0dfbefe2dbbfa749a5ef73b84a48",
+      "artifact_sha256": "76d75b2e4701fd3723026b7043f97c74d2658fa661a87caed120bbd5802d09f1",
       "checks": {
         "backend.passed": {
-          "expected": 21,
-          "actual": 21,
+          "expected": 22,
+          "actual": 22,
           "ok": true
         },
         "backend.failed": {
@@ -2198,7 +2198,7 @@
       "binding_key": "56:test:backend/tests/test_as_of_contract.py::test_status_exposes_as_of_contract_for_completed_job",
       "kind": "test",
       "scope_blobs": {
-        "backend/tests/test_as_of_contract.py": "d2a0c273ce99bf141bbb74ee2c51b1fa351220fb",
+        "backend/tests/test_as_of_contract.py": "c269525f0b8ecfb735887f30656ea6e79f170382",
         "backend/tests/test_extraction_review.py": "79cbd8b7c21ba9a7075202afdf98df1a28bc1421"
       },
       "nodes": [
@@ -2215,6 +2215,7 @@
         "backend/tests/test_as_of_contract.py::test_hostile_non_ascii_token_fails_closed_not_500",
         "backend/tests/test_as_of_contract.py::test_state_token_rotation_covers_every_material_dimension",
         "backend/tests/test_as_of_contract.py::test_state_token_ignores_operational_noise",
+        "backend/tests/test_as_of_contract.py::test_as_of_derives_from_durable_row_not_live_progress",
         "backend/tests/test_as_of_contract.py::test_failed_job_download_still_blocked_and_status_carries_as_of",
         "backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected",
         "backend/tests/test_extraction_review.py::test_review_decision_bound_to_other_result_is_rejected",
@@ -2234,6 +2235,7 @@
         "backend/tests/test_as_of_contract.py::test_hostile_non_ascii_token_fails_closed_not_500": "passed",
         "backend/tests/test_as_of_contract.py::test_state_token_rotation_covers_every_material_dimension": "passed",
         "backend/tests/test_as_of_contract.py::test_state_token_ignores_operational_noise": "passed",
+        "backend/tests/test_as_of_contract.py::test_as_of_derives_from_durable_row_not_live_progress": "passed",
         "backend/tests/test_as_of_contract.py::test_failed_job_download_still_blocked_and_status_carries_as_of": "passed",
         "backend/tests/test_extraction_review.py::test_stale_review_after_publication_change_is_rejected": "passed",
         "backend/tests/test_extraction_review.py::test_review_decision_bound_to_other_result_is_rejected": "passed",
