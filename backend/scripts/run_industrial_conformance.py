@@ -273,6 +273,9 @@ def main(argv: list[str] | None = None) -> int:
     env[S3_ACCESS_ENV] = s3_access
     env[S3_SECRET_ENV] = s3_secret
     env[S3_STRICT_ENV] = "1"
+    # PostgreSQL and object-store services are shared by this topology.
+    # Keep it serial without requiring pytest-xdist to parse the command.
+    env["MARKER_TEST_WORKERS"] = "serial"
 
     cmd = [
         sys.executable, "-m", "pytest", *TEST_TARGETS,

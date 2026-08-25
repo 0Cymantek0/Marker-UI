@@ -118,8 +118,11 @@ async def _authenticated_session(url: str, token: str):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
+    # Startup has its own bounded readiness loop. Keep operation hangs bounded
+    # while allowing modest scheduling delay under parallel workers.
+    timeout = httpx.Timeout(30.0, connect=10.0, pool=10.0)
     async with httpx.AsyncClient(
-        headers={"Authorization": f"Bearer {token}"}
+        headers={"Authorization": f"Bearer {token}"}, timeout=timeout
     ) as http:
         async with streamable_http_client(url, http_client=http) as (
             read,

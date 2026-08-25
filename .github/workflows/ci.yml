@@ -214,6 +214,7 @@ jobs:
           MARKER_TEST_S3_ACCESS_KEY: marker
           MARKER_TEST_S3_SECRET_KEY: marker-marker
           MARKER_TEST_S3_STRICT: "1"
+          MARKER_TEST_WORKERS: serial
         run: |
           set -o pipefail
           python -m pytest \

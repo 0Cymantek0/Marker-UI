@@ -16,10 +16,8 @@ one vocabulary every control-plane subsystem consumes. These tests pin:
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import OperationalError
 
 from app.kernel.dialects import (
     advisory_lock_key,
@@ -202,13 +200,17 @@ def test_advisory_lock_key_same_value_in_separate_processes() -> None:
     import json
     import subprocess
     import sys
+    from pathlib import Path
 
     code = (
         "from app.kernel.dialects import advisory_lock_key;"
         "import json;print(json.dumps(advisory_lock_key('ws-a','work')))"
     )
     out = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, cwd="."
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parents[1]),
     )
     assert out.returncode == 0, out.stderr
     assert json.loads(out.stdout) == advisory_lock_key("ws-a", "work")

@@ -13,6 +13,13 @@ cd frontend
 npm test
 ```
 
+When `pytest-xdist` is installed, a broad backend run scales workers to CPU
+and memory capacity. Focused file/node, `-k`, `-m`, last-failed, stepwise, and
+collection-only commands stay serial to avoid worker startup dominating the
+test itself. Override deliberately with `MARKER_TEST_WORKERS=<count>`; use
+`MARKER_TEST_WORKERS=serial` (or `0`/`1`) to force serial execution. Worker
+requests remain capped by the suite's process and memory safety limits.
+
 ---
 
 ## Test Suites Overview

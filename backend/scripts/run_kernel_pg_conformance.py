@@ -242,6 +242,10 @@ def main(argv: list[str] | None = None) -> int:
     env = dict(os.environ)
     env[ADMIN_URL_ENV] = admin_url
     env[STRICT_ENV] = "1"
+    # Root pytest hooks auto-parallelize broad runs when xdist exists. This
+    # topology owns one shared database, so request serial execution through
+    # the hook's plugin-independent escape hatch.
+    env["MARKER_TEST_WORKERS"] = "serial"
 
     cmd = [
         sys.executable,

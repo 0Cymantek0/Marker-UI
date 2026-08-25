@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-24T01:21:24+00:00",
-  "git_head": "eb4a8f246777f6e585b9456200b3af467f36e120",
+  "generated_at": "2026-08-24T14:11:11+00:00",
+  "git_head": "ba5eb580c241dd82d01698016e774ef4b1572523",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -1312,7 +1312,7 @@
       "binding_key": "34:test:backend/tests/test_kernel_scheduler.py::test_cap_one_never_oversubscribes_under_concurrent_dispatchers",
       "kind": "test",
       "scope_blobs": {
-        "backend/tests/test_kernel_scheduler.py": "fbe0ae64b758532edd6367bb052b91cdc9a92987"
+        "backend/tests/test_kernel_scheduler.py": "0fefbc182c751f5f811b5680a920ac73e5d6f583"
       },
       "nodes": [
         "backend/tests/test_kernel_scheduler.py::test_cap_one_never_oversubscribes_under_concurrent_dispatchers",
@@ -2831,7 +2831,7 @@
       "kind": "test",
       "scope_blobs": {
         "backend/tests/test_context_runtime_cursor_migration.py": "127d7d7df51d30459254bdbd2b169d86c8061121",
-        "backend/tests/test_database_migration.py": "8a07e2617d7ff8a1c3ba745d024e9a3e4f28567e"
+        "backend/tests/test_database_migration.py": "f16d2b60e693c825a7c7992c955c9bdad8138b72"
       },
       "nodes": [
         "backend/tests/test_database_migration.py::test_no_production_self_heal_remains",

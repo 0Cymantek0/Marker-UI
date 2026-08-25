@@ -39,6 +39,7 @@ from app.db_migration import (
     IncompatibleDatabaseError,
     MigrationLockTimeoutError,
     _MigrationLock,
+    _pid_alive,
     migration_head,
     upgrade_database,
     verify_database_ready,
@@ -201,6 +202,20 @@ def _assert_sentinels(
 
 def _build_at_revision(url: str, revision: str) -> None:
     db_migration._run_upgrade(url, revision)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows process-probe regression")
+def test_pid_liveness_probe_does_not_terminate_process() -> None:
+    holder = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+    )
+    try:
+        assert _pid_alive(holder.pid) is True
+        assert holder.poll() is None
+    finally:
+        holder.terminate()
+        holder.wait(timeout=10)
+    assert _pid_alive(holder.pid) is False
 
 
 # ---------------------------------------------------------------------------

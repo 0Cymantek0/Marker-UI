@@ -706,7 +706,9 @@ async def test_cap_k_bounds_concurrent_dispatchers(payload_env) -> None:
     assert await _live_leases(factory, group_id="ws-capk") == 3
 
 
-async def test_lease_expiry_frees_capacity_under_concurrency(payload_env) -> None:
+async def test_lease_expiry_frees_capacity_under_concurrency(
+    payload_env, monkeypatch
+) -> None:
     """Wedged owners' lapsed leases must not consume capacity: after
     expiry the group admits fresh claims (takeover path)."""
     factory = payload_env[0]
@@ -719,15 +721,23 @@ async def test_lease_expiry_frees_capacity_under_concurrency(payload_env) -> Non
         policy=scheduler.GroupPolicy(max_in_flight=2),
     )
 
-    lease = 0.3
+    clock = [datetime.now(timezone.utc)]
+    from app.kernel import fencing
+
+    monkeypatch.setattr(scheduler, "_utcnow", lambda: clock[0])
+    monkeypatch.setattr(fencing, "_utcnow", lambda: clock[0])
+    lease_seconds = 300.0
     holders = [
-        await scheduler.claim_fair(factory, owner_id=f"w{i}", lease_seconds=lease)
+        await scheduler.claim_fair(factory, owner_id=f"w{i}", lease_seconds=lease_seconds)
         for i in range(2)
     ]
     assert all(h is not None for h in holders)
     assert await scheduler.claim_fair(factory, owner_id="w2") is None
 
-    await asyncio.sleep(lease + 0.15)
+    # Advance scheduler time beyond real lease deadlines. No direct row edits:
+    # claim eligibility and capacity accounting must both honor clock expiry.
+    clock[0] += timedelta(seconds=lease_seconds + 1)
+
     from app.kernel.outbox import reset_in_flight
 
     await reset_in_flight(factory)

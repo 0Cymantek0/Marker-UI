@@ -32,7 +32,6 @@ plus strict mode via the runner.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import pathlib
 import re
 from dataclasses import dataclass
@@ -41,7 +40,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select, text, update
-from sqlalchemy.exc import DBAPIError, InternalError, OperationalError
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db_migration import upgrade_database
@@ -68,7 +67,6 @@ from app.kernel.models import (
     KernelWorkLease,
 )
 from app.kernel.outbox import (
-    OUTBOX_STATE_DONE,
     OUTBOX_STATE_IN_FLIGHT,
     OUTBOX_STATE_PENDING,
     OutboxIntent,
@@ -814,13 +812,13 @@ async def test_renewal_requires_current_evidence_and_advancing_progress(control_
         )
 
 
-async def test_active_request_binding_and_expiry_rules(control_env) -> None:
+async def test_active_request_binding_and_expiry_rules(control_env, monkeypatch) -> None:
     env = control_env
     claim = await _claimed(env, owner_id="bound", tag="bind")
-    fresh_expiry = datetime.now(timezone.utc) + timedelta(seconds=300)
-    # Bind req-1 with a near-term expiry so the lapse transition is
-    # observable without a long sleep.
-    binding_expiry = datetime.now(timezone.utc) + timedelta(seconds=0.15)
+    clock = [datetime.now(timezone.utc)]
+    monkeypatch.setattr(liveness, "_utcnow", lambda: clock[0])
+    fresh_expiry = clock[0] + timedelta(seconds=300)
+    binding_expiry = clock[0] + timedelta(minutes=5)
     outcome = await liveness.renew_lease(
         env.session_factory,
         work_id=claim.work_id,
@@ -843,8 +841,9 @@ async def test_active_request_binding_and_expiry_rules(control_env) -> None:
             active_request_id="req-2",
             request_expires_at=fresh_expiry,
         )
-    # Once the bound request has lapsed, a stage switch is honest.
-    await asyncio.sleep(0.2)
+    # Advance service time past the durable deadline. This exercises the real
+    # clock-expiry branch without a scheduler-sensitive wall-clock sleep.
+    clock[0] = binding_expiry + timedelta(seconds=1)
     switched = await liveness.renew_lease(
         env.session_factory,
         work_id=claim.work_id,

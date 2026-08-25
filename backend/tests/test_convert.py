@@ -366,13 +366,13 @@ async def test_sse_stream_emits_progress_and_status_events(
 
 @pytest.mark.asyncio
 async def test_download_completed_job_returns_file(
-    client: AsyncClient, db_session
+    client: AsyncClient, db_session, tmp_path
 ):
     """Create a completed job in DB and verify download returns the file."""
     job_id = "test-download-job-id"
-    upload_dir = Path("data/uploads")
+    upload_dir = tmp_path / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
-    output_dir = Path("data/output")
+    output_dir = tmp_path / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     result_path = output_dir / f"{job_id}.md"

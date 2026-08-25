@@ -199,6 +199,9 @@ def main(argv: list[str] | None = None) -> int:
     env.setdefault(S3_SECRET_ENV, MINIO_PASSWORD)
     env[S3_STRICT_ENV] = "1"
     env[FAILOVER_STRICT_ENV] = "1"
+    # Failover tests share one managed object-store topology. Keep them serial
+    # through an env contract that also works when pytest-xdist is absent.
+    env["MARKER_TEST_WORKERS"] = "serial"
 
     cmd = [
         sys.executable,

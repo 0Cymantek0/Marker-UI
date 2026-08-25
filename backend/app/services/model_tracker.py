@@ -453,7 +453,32 @@ class ModelTracker:
                 }
             }
 
-tracker = ModelTracker()
+_tracker_instance: ModelTracker | None = None
+_tracker_instance_lock = threading.Lock()
+
+
+def get_tracker() -> ModelTracker:
+    """Return process-wide tracker, constructing it only when first needed."""
+    global _tracker_instance
+    instance = _tracker_instance
+    if instance is not None:
+        return instance
+    with _tracker_instance_lock:
+        instance = _tracker_instance
+        if instance is None:
+            instance = ModelTracker()
+            _tracker_instance = instance
+    return instance
+
+
+class _LazyTrackerProxy:
+    """Preserve existing tracker attribute API without eager model imports."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_tracker(), name)
+
+
+tracker = _LazyTrackerProxy()
 
 def get_model_key_from_url(url: str) -> str:
     parsed = url

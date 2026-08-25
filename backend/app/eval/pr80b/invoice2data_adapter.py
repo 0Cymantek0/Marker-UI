@@ -48,6 +48,14 @@ def _first(value: Any) -> Any:
     return value
 
 
+class _Utf8TextInput:
+    """Read adapter-owned UTF-8 files without process-locale dependence."""
+
+    @staticmethod
+    def to_text(path: str) -> str:
+        return Path(path).read_text(encoding="utf-8")
+
+
 class Invoice2DataAdapter:
     """Runs invoice2data over corpus documents in plain-text mode."""
 
@@ -62,7 +70,6 @@ class Invoice2DataAdapter:
 
     def extract(self, doc_id: str, doc_text: str, workdir: Path) -> SystemDocOutput:
         from invoice2data import extract_data
-        from invoice2data.input import text as text_reader
 
         run_dir = Path(workdir) / "invoice2data"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +80,7 @@ class Invoice2DataAdapter:
             result = extract_data(
                 str(doc_path),
                 templates=self.templates,
-                input_module=text_reader,
+                input_module=_Utf8TextInput,
                 raise_on_error=False,
             )
         except Exception as exc:  # honest adapter failure capture
