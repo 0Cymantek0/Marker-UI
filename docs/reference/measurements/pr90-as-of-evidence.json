@@ -1,6 +1,6 @@
 {
   "schema": "marker.pr90.as_of_evidence.v1",
-  "generated_at": "2026-08-24T01:12:57+00:00",
+  "generated_at": "2026-08-25T23:02:15+00:00",
   "backend": {
     "total": 22,
     "passed": 22,
@@ -8,8 +8,8 @@
     "skipped": 0
   },
   "frontend": {
-    "total": 69,
-    "passed": 69,
+    "total": 87,
+    "passed": 87,
     "failed": 0,
     "skipped": 0
   },
@@ -19,7 +19,9 @@
     "backend_cross_job_replay": "passed",
     "backend_extraction_stale_review": "passed",
     "frontend_stale_retry": "passed",
-    "frontend_history_stale_retry": "passed"
+    "frontend_history_stale_retry": "passed",
+    "integrity_page_stale_reconcile": "passed",
+    "revision_context_card": "passed"
   },
   "verdict": "as_of_operational_contract_proven"
 }

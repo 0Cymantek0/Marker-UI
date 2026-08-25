@@ -1,0 +1,61 @@
+{
+  "schema": "marker.pr91.integrity_e2e_evidence.v1",
+  "generated_at": "2026-08-25T23:03:29+00:00",
+  "commands": {
+    "vitest": {
+      "argv": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "src/__tests__/IntegrityPage.test.tsx",
+        "src/components/features/integrity/RevisionContextCard.test.tsx",
+        "--reporter=junit"
+      ],
+      "cwd": "frontend"
+    },
+    "playwright": {
+      "argv": [
+        "pnpm",
+        "exec",
+        "playwright",
+        "test",
+        "--reporter=json"
+      ],
+      "cwd": "frontend",
+      "config": "frontend/playwright.config.ts (boots backend/e2e/launch.py + vite dev; chromium)"
+    }
+  },
+  "vitest": {
+    "total": 15,
+    "passed": 15,
+    "failed": 0,
+    "skipped": 0
+  },
+  "e2e": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0
+  },
+  "e2e_playwright_stats": {
+    "reported_expected": 11,
+    "reported_unexpected": 0,
+    "reported_flaky": 0,
+    "reported_skipped": 0,
+    "reported_did_not_run": 0
+  },
+  "scenarios": {
+    "e2e_current_verified_export": "passed",
+    "e2e_stale_after_load_race_rejected": "passed",
+    "e2e_stale_before_load_bookmark": "passed",
+    "e2e_recovery_refresh_retry": "passed",
+    "e2e_no_false_success": "passed",
+    "e2e_entry_paths": "passed",
+    "e2e_failure_conservative": "passed",
+    "e2e_legacy_smoke": "passed",
+    "vitest_integrity_page": "passed",
+    "vitest_revision_context": "passed"
+  },
+  "verdict": "integrity_surface_browser_proven"
+}

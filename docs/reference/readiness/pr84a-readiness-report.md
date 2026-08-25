@@ -2,7 +2,7 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `ba5eb580c241dd82d01698016e774ef4b1572523`
+- Audited source head: `2bd30d78bb46d6f3d7ef3bd55bb5965f3f8bd17b`
 - Invariants proven: **49 / 62**
 - Failed: **0**
 - No acceptable evidence: **13**
@@ -78,7 +78,7 @@
 | 53 | 23C.6 | proven | sqlite-dev lane: real kernel commit spine, real immutable publication sets/generations, trusted local_v1 authorization resolution, durable Alembic-migrated cursors through head 20260823_0016, and the run_agent_query delivery seam |
 | 54 | 23C.6 | proven | deterministic local sqlite lane (migrated file DB through Alembic head 20260823_0015, real kernel commit spine, real publications/authorization, real EvidencePacket delivery chains) |
 | 55 | 23C.6 | proven | sqlite-dev |
-| 56 | 23C.6 | proven | sqlite-dev, sqlite-dev + vitest jsdom |
+| 56 | 23C.6 | proven | sqlite-dev, sqlite-dev + vitest jsdom, sqlite-dev + chromium |
 | 57 | 23C.7 | proven | local sqlite + docker postgres16/minio industrial + offline VLM replay |
 | 58 | 23C.7 | proven | offline decision-rule + artifact-honesty tests, offline same-workload OFF/ON + ACL experiment (VLM replay cache) |
 | 59 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |

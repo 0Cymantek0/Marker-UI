@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "ba5eb580c241dd82d01698016e774ef4b1572523"
+    "git_head": "2bd30d78bb46d6f3d7ef3bd55bb5965f3f8bd17b"
   },
   "verdict": "NOT_READY",
   "counts": {
@@ -718,7 +718,8 @@
       "reason": null,
       "environments": [
         "sqlite-dev",
-        "sqlite-dev + vitest jsdom"
+        "sqlite-dev + vitest jsdom",
+        "sqlite-dev + chromium"
       ],
       "gap_type": null,
       "gap_note": null

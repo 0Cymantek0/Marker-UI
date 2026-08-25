@@ -1,7 +1,7 @@
 {
   "schema": "marker.pr84a_evidence_run.v1",
-  "generated_at": "2026-08-24T14:11:11+00:00",
-  "git_head": "ba5eb580c241dd82d01698016e774ef4b1572523",
+  "generated_at": "2026-08-25T23:08:52+00:00",
+  "git_head": "2bd30d78bb46d6f3d7ef3bd55bb5965f3f8bd17b",
   "runner": {
     "python": "3.11.9",
     "platform": "Windows-10-10.0.26200-SP0"
@@ -2135,10 +2135,10 @@
       "binding_key": "56:measurement:docs/reference/measurements/pr90-as-of-evidence.json",
       "kind": "measurement",
       "scope_blobs": {
-        "docs/reference/measurements/pr90-as-of-evidence.json": "0d0f0575f0a34b4e4730746d396ce593ba9725da"
+        "docs/reference/measurements/pr90-as-of-evidence.json": "a6ad159eb8ca0f782047eafa153028717b4856cd"
       },
       "artifact": "docs/reference/measurements/pr90-as-of-evidence.json",
-      "artifact_sha256": "76d75b2e4701fd3723026b7043f97c74d2658fa661a87caed120bbd5802d09f1",
+      "artifact_sha256": "57f5d38eaa30722d04108152e34274e8f9dc28fb3dca9e0218d9368522e09130",
       "checks": {
         "backend.passed": {
           "expected": 22,
@@ -2185,9 +2185,117 @@
           "actual": "passed",
           "ok": true
         },
+        "scenarios.integrity_page_stale_reconcile": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.revision_context_card": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
         "verdict": {
           "expected": "as_of_operational_contract_proven",
           "actual": "as_of_operational_contract_proven",
+          "ok": true
+        }
+      },
+      "outcome": "passed",
+      "detail": ""
+    },
+    {
+      "binding_key": "56:measurement:docs/reference/measurements/pr91-integrity-e2e-evidence.json",
+      "kind": "measurement",
+      "scope_blobs": {
+        "docs/reference/measurements/pr91-integrity-e2e-evidence.json": "8df21de47eaad268961099e9f113bbe088cb42b0"
+      },
+      "artifact": "docs/reference/measurements/pr91-integrity-e2e-evidence.json",
+      "artifact_sha256": "e366d940a596b96b1a3225ffbbb6f9e366555a21c9e48c3ea30a85dc113ec311",
+      "checks": {
+        "e2e.failed": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        "e2e.passed": {
+          "expected": 11,
+          "actual": 11,
+          "ok": true
+        },
+        "e2e.skipped": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        "vitest.failed": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        "vitest.passed": {
+          "expected": 15,
+          "actual": 15,
+          "ok": true
+        },
+        "vitest.skipped": {
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        "scenarios.e2e_current_verified_export": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.e2e_stale_after_load_race_rejected": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.e2e_stale_before_load_bookmark": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.e2e_recovery_refresh_retry": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.e2e_no_false_success": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.e2e_entry_paths": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.e2e_failure_conservative": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.e2e_legacy_smoke": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.vitest_integrity_page": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "scenarios.vitest_revision_context": {
+          "expected": "passed",
+          "actual": "passed",
+          "ok": true
+        },
+        "verdict": {
+          "expected": "integrity_surface_browser_proven",
+          "actual": "integrity_surface_browser_proven",
           "ok": true
         }
       },

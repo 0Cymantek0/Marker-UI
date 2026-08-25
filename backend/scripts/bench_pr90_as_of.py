@@ -8,9 +8,9 @@ into one committed measurement artifact:
   forged/cross-job tokens) plus the extraction-review stale-rejection
   suite (the pre-existing authority for review commits);
 * frontend — vitest (JUnit output) over the typed-boundary, component,
-  history, and integration suites that prove the UI exposes the as-of
-  state, renders stale transitions accessibly, and retries with the
-  refreshed token.
+  history, integration, and dedicated integrity-surface suites that prove
+  the UI exposes the as-of state, renders stale transitions accessibly,
+  and retries with the refreshed token.
 
 The artifact records counts plus named end-to-end scenario outcomes so the
 readiness auditor can bind exact expectations instead of trusting prose.
@@ -45,6 +45,8 @@ FRONTEND_SPEC_FILES = [
     "src/__tests__/OutputViewer.test.tsx",
     "src/__tests__/HistoryPage.test.tsx",
     "src/__tests__/ConvertPageIntegration.test.tsx",
+    "src/__tests__/IntegrityPage.test.tsx",
+    "src/components/features/integrity/RevisionContextCard.test.tsx",
 ]
 
 # Named end-to-end scenarios the auditor binds as explicit expectations:
@@ -56,6 +58,11 @@ SCENARIOS = {
     "backend_extraction_stale_review": ("backend", "test_stale_review_after_publication_change_is_rejected"),
     "frontend_stale_retry": ("frontend", "surfaces a stale rejection from download and refreshes state"),
     "frontend_history_stale_retry": ("frontend", "flags stale, patches as_of from the 409 payload"),
+    "integrity_page_stale_reconcile": (
+        "frontend",
+        "reconciles a 409 stale rejection visibly without any false success",
+    ),
+    "revision_context_card": ("frontend", "RevisionContextCard.test.tsx"),
 }
 
 
