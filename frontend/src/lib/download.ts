@@ -42,6 +42,18 @@ function replaceExtension(filename: string, extension: string): string {
   return `${dirname}${stem}.${extension}`
 }
 
+/** Trigger a browser save of a fetched blob under the given filename. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 function stemFromFilename(filename: string): string {
   const basename = filename.split(/[\\/]/).pop() || 'converted'
   const dotIndex = basename.lastIndexOf('.')

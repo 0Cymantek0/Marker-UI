@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { extensionFromBlob, filenameForDownload } from '@/lib/download'
+import { describe, expect, it, vi } from 'vitest'
+import { extensionFromBlob, filenameForDownload, saveBlob } from '@/lib/download'
 
 describe('download filename helpers', () => {
   it('uses blob type to correct a stale response filename extension', () => {
@@ -24,5 +24,29 @@ describe('download filename helpers', () => {
     const blob = new Blob(['{}'], { type: 'application/manifest+json' })
 
     expect(extensionFromBlob(blob)).toBe('json')
+  })
+})
+
+describe('saveBlob', () => {
+  it('triggers an anchor save with the given filename and revokes the object URL', () => {
+    const anchor = document.createElement('a')
+    const click = vi.fn()
+    anchor.click = click
+    const createElement = vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
+      if (tagName.toLowerCase() === 'a') return anchor
+      return Document.prototype.createElement.call(document, tagName, options)
+    })
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:save-test')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    saveBlob(new Blob(['zip'], { type: 'application/zip' }), 'report.zip')
+
+    expect(anchor.download).toBe('report.zip')
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:save-test')
+
+    createElement.mockRestore()
+    createObjectURL.mockRestore()
+    revokeObjectURL.mockRestore()
   })
 })

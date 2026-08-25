@@ -125,6 +125,44 @@ describe('downloadResult', () => {
 
     await expect(downloadResult('job-dl-500')).rejects.toThrow(/Download failed \(500\)/)
   })
+
+  it('surfaces the as-of mode header from a verified export', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: () => Promise.resolve({}),
+      text: () => Promise.resolve(''),
+      blob: () => Promise.resolve(new Blob()),
+      headers: new Headers({ 'X-Marker-As-Of-Mode': 'verified' }),
+    } as Response)
+
+    const result = await downloadResult('job-dl-mode', 'markdown', 'sha256:tok')
+
+    expect(result.asOfMode).toBe('verified')
+  })
+
+  it('keeps a historical as-of mode readable for unclaimed downloads', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: () => Promise.resolve({}),
+      text: () => Promise.resolve(''),
+      blob: () => Promise.resolve(new Blob()),
+      headers: new Headers({ 'X-Marker-As-Of-Mode': 'historical' }),
+    } as Response)
+
+    const result = await downloadResult('job-dl-historical')
+
+    expect(result.asOfMode).toBe('historical')
+  })
+
+  it('omits asOfMode when the server sends no recognizable mode header', async () => {
+    mockFetchOnce(200, new Blob(), true)
+
+    const result = await downloadResult('job-dl-nomode')
+
+    expect(result.asOfMode).toBeUndefined()
+  })
 })
 
 describe('uploadFile', () => {

@@ -4,6 +4,7 @@ import {
   Upload,
   Settings,
   History,
+  ShieldCheck,
   FileText,
   PanelLeftClose,
   PanelLeft,
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Convert', icon: Upload },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/history', label: 'History', icon: History },
+  { to: '/integrity', label: 'Integrity', icon: ShieldCheck },
 ] as const
 
 interface SidebarProps {

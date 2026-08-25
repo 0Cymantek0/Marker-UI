@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { ConvertPage } from '@/pages/ConvertPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { HistoryPage } from '@/pages/HistoryPage'
+import { IntegrityPage } from '@/pages/IntegrityPage'
 import { OnboardingPage } from '@/pages/OnboardingPage'
 
 function OnboardingRoute() {
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/onboarding" element={<OnboardingRoute />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/integrity" element={<IntegrityPage />} />
       </Route>
     </Routes>
   )

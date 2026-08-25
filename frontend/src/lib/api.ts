@@ -626,7 +626,16 @@ export function getJobEvents(jobId: string): EventSource {
   return new EventSource(`${API_BASE}/convert/events/${jobId}`)
 }
 
-export async function downloadResult(jobId: string, format?: string, asOfToken?: string): Promise<{ blob: Blob; filename?: string }> {
+/** Export currency reported by the server via the X-Marker-As-Of-Mode header:
+ *  `verified` = the presented state token matched the current derivation;
+ *  `historical` = no currency claim was made. */
+export type AsOfMode = 'verified' | 'historical'
+
+export async function downloadResult(
+  jobId: string,
+  format?: string,
+  asOfToken?: string
+): Promise<{ blob: Blob; filename?: string; asOfMode?: AsOfMode }> {
   let url = format
     ? `${API_BASE}/convert/download/${jobId}?format=${format}`
     : `${API_BASE}/convert/download/${jobId}`
@@ -654,8 +663,12 @@ export async function downloadResult(jobId: string, format?: string, asOfToken?:
     }
   }
 
+  const modeHeader = res.headers.get('X-Marker-As-Of-Mode')
+  const asOfMode: AsOfMode | undefined =
+    modeHeader === 'verified' || modeHeader === 'historical' ? modeHeader : undefined
+
   const blob = await res.blob()
-  return { blob, filename }
+  return { blob, filename, asOfMode }
 }
 
 export interface RegenerateResult {
