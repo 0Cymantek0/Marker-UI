@@ -68,6 +68,11 @@ backend/alembic/versions/__pycache__/
 htmlcov/
 .pytest_cache/
 
+# Playwright E2E artifacts
+playwright-report/
+test-results/
+frontend/playwright/
+
 # Model cache (large files, repo-root only)
 /models/
 *.pt
