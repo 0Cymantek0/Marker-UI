@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "2bd30d78bb46d6f3d7ef3bd55bb5965f3f8bd17b"
+    "git_head": "5afb8feac30e1da524b2186cf78202c885ce8e54"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 49,
+    "proven": 52,
     "failed": 0,
-    "no_evidence": 13
+    "no_evidence": 10
   },
   "group_counts": {
     "23C.1": {
@@ -47,21 +47,19 @@
       "total": 8
     },
     "23C.7": {
-      "proven": 3,
+      "proven": 6,
       "failed": 0,
-      "no_evidence": 3,
+      "no_evidence": 0,
       "total": 6
     }
   },
   "gap_type_counts": {
     "B": 6,
-    "D": 4,
-    "F": 3
+    "D": 4
   },
   "residual_gap_ranking": [
     "23C.1",
     "23C.4",
-    "23C.7",
     "23C.2",
     "23C.3",
     "23C.5"
@@ -753,21 +751,27 @@
       "id": 59,
       "group": "23C.7",
       "label": "subsystem-owner-rollback-kill",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "F",
-      "gap_note": "Utility is measured per capability slice; the required per-subsystem support owner, rollback, expiry, and kill-condition matrix does not exist in any artifact."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev",
+        "offline-artifact (PR84C capability accountability audit)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 60,
       "group": "23C.7",
       "label": "leadership-claim-discipline",
-      "status": "no_evidence",
-      "reason": "docs_only_no_executable_binding",
-      "environments": [],
-      "gap_type": "F",
-      "gap_note": "No leadership-claim completeness fields or validators exist: workflow, competitors, catastrophic budget, and review burden are not named in any artifact schema or test."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev",
+        "offline-artifact (PR84C leadership claims audit)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 61,
@@ -787,11 +791,14 @@
       "id": 62,
       "group": "23C.7",
       "label": "final-displacement-test",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "F",
-      "gap_note": "Concession language and specialist comparisons exist; the final rational-user displacement test (better accepted end-to-end outcome by leaving Marker UI) has never been executed as such."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "sqlite-dev",
+        "offline-artifact (PR84C displacement decision replay)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     }
   ]
 }

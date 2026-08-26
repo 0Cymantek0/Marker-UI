@@ -1,0 +1,30 @@
+{
+  "schema": "marker.pr84c.displacement_decision_evidence.v1",
+  "generated_at": "2026-08-26T10:21:06+00:00",
+  "decision": {
+    "decision_id": "disp_dec_pr80b_invoice_displacement_study_2500dd914033",
+    "preregistration_id": "pr80b_invoice_displacement_study",
+    "workflow": "demo.invoice@1.0.0 extraction",
+    "outcome": "marker_retained",
+    "protocol_timing": "retrospective_frozen_replay",
+    "fairness_passed": true,
+    "supporting_artifact_sha256": "ef4f3f78cbc065f463da4369850ef8d94089e280de6283074de0e791d3ddbf66"
+  },
+  "counts": {
+    "comparators_evaluated": 3,
+    "reasons_integrated": 0,
+    "reasons_measured": 1,
+    "reasons_conceded": 0
+  },
+  "scenarios": {
+    "preregistration_frozen_before_interpretation": "passed",
+    "fairness_gate_passed": "passed",
+    "no_blockers": "passed",
+    "reason_ledger_terminal": "passed",
+    "rederivation_matches": "passed",
+    "supporting_artifact_bound": "passed"
+  },
+  "errors": [],
+  "as_of_date": "2026-08-26T00:00:00Z",
+  "verdict": "final_rational_user_displacement_test_executed"
+}

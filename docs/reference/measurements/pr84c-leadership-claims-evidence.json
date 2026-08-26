@@ -1,0 +1,22 @@
+{
+  "schema": "marker.pr84c.leadership_claims_evidence.v1",
+  "generated_at": "2026-08-26T10:21:06+00:00",
+  "counts": {
+    "claims_registered": 3,
+    "claims_withheld": 3,
+    "evidence_bindings_verified": 2,
+    "release_docs_scanned": 78,
+    "leadership_verbs_found": 19,
+    "verbs_allowlisted": 19
+  },
+  "scenarios": {
+    "registry_non_vacuous": "passed",
+    "all_claims_fully_scoped": "passed",
+    "fail_closed_withholding": "passed",
+    "evidence_bindings_sha256_verified": "passed",
+    "release_docs_verb_scan_clean": "passed"
+  },
+  "errors": [],
+  "as_of_date": "2026-08-26T00:00:00Z",
+  "verdict": "leadership_claim_registry_audit_proven"
+}

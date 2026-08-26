@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `2bd30d78bb46d6f3d7ef3bd55bb5965f3f8bd17b`
-- Invariants proven: **49 / 62**
+- Audited source head: `5afb8feac30e1da524b2186cf78202c885ce8e54`
+- Invariants proven: **52 / 62**
 - Failed: **0**
-- No acceptable evidence: **13**
+- No acceptable evidence: **10**
 
 ## Group summary
 
@@ -17,7 +17,7 @@
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
 | 23C.6 | Agent and product behavior | 8 | 0 | 0 |
-| 23C.7 | Economics and claim language | 3 | 0 | 3 |
+| 23C.7 | Economics and claim language | 6 | 0 | 0 |
 
 ## Invariant statuses
 
@@ -81,10 +81,10 @@
 | 56 | 23C.6 | proven | sqlite-dev, sqlite-dev + vitest jsdom, sqlite-dev + chromium |
 | 57 | 23C.7 | proven | local sqlite + docker postgres16/minio industrial + offline VLM replay |
 | 58 | 23C.7 | proven | offline decision-rule + artifact-honesty tests, offline same-workload OFF/ON + ACL experiment (VLM replay cache) |
-| 59 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |
-| 60 | 23C.7 | no-evidence | only non-executable context (docs/prose) bound |
+| 59 | 23C.7 | proven | sqlite-dev, offline-artifact (PR84C capability accountability audit) |
+| 60 | 23C.7 | proven | sqlite-dev, offline-artifact (PR84C leadership claims audit) |
 | 61 | 23C.7 | proven | offline decision-rule tests, offline-artifact (PR81A; VLM cache replay), offline-artifact (PR80B displacement replay) |
-| 62 | 23C.7 | no-evidence | executed proof covers only part of the invariant wording |
+| 62 | 23C.7 | proven | sqlite-dev, offline-artifact (PR84C displacement decision replay) |
 
 ## Residual gap map
 
@@ -106,17 +106,10 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 25** (23C.3, routing-stays-shadow-until-proven): Routing demonstrably stays shadow/offline, but the promotion condition has not been evaluated against truly held-out shift + catastrophic utility (same fixture trains and evaluates); evidence is fixture-scoped. Reason: executed proof covers only part of the invariant wording.
 - **Inv 38** (23C.4, failure-injection-truthful-outcomes): Cancellation/failover/disk/model-service(lease-lapse) classes are covered on the SQLite lane and DB-outage/WAL semantics on the PG failover lab; shared-memory pressure is not injected anywhere (the shared-memory lane was measured and rejected in PR68A), and no literal model-service crash injection exists. Reason: proof exists but was environment-gated in the recorded run.
 
-### Type F — measurement/economics/operations closure missing
-
-- **Inv 59** (23C.7, subsystem-owner-rollback-kill): Utility is measured per capability slice; the required per-subsystem support owner, rollback, expiry, and kill-condition matrix does not exist in any artifact. Reason: executed proof covers only part of the invariant wording.
-- **Inv 60** (23C.7, leadership-claim-discipline): No leadership-claim completeness fields or validators exist: workflow, competitors, catastrophic budget, and review burden are not named in any artifact schema or test. Reason: only non-executable context (docs/prose) bound.
-- **Inv 62** (23C.7, final-displacement-test): Concession language and specialist comparisons exist; the final rational-user displacement test (better accepted end-to-end outcome by leaving Marker UI) has never been executed as such. Reason: executed proof covers only part of the invariant wording.
-
 ### Next-slice ranking (groups with most non-proven invariants)
 
 - 23C.1 Truth and persistence: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
-- 23C.7 Economics and claim language: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 1 non-proven
 - 23C.3 Verification and routing: 1 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven

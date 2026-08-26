@@ -132,12 +132,17 @@ class EvidenceRunner:
     def _run_pytest(self, nodes: list[str]) -> dict[str, dict[str, str]]:
         with tempfile.TemporaryDirectory(prefix="pr84a-junit-") as tmp:
             junit_path = Path(tmp) / "junit.xml"
+            # The full bound-node population exceeds the Windows CreateProcess
+            # 32k command-line cap, so node ids travel via a pytest @argsfile
+            # (one argument per line) instead of inline argv.
+            args_path = Path(tmp) / "pytest-nodes.txt"
+            args_path.write_text("\n".join(nodes) + "\n", encoding="utf-8")
             proc = subprocess.run(
                 [
                     sys.executable,
                     "-m",
                     "pytest",
-                    *nodes,
+                    f"@{args_path}",
                     f"--junit-xml={junit_path}",
                     "-o",
                     "junit_family=xunit1",

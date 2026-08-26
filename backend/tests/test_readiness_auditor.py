@@ -465,3 +465,23 @@ def test_binding_outcome_aggregation_rules(tmp_path: Path) -> None:
     node_outcomes["tests/test_a.py::test_y"] = {"outcome": "skipped_env_gated", "detail": "no pg"}
     result = runner._result_for_binding(entry_ok, binding, node_outcomes, {})
     assert result["outcome"] == "skipped_env_gated"
+
+
+def test_run_pytest_handles_node_lists_beyond_command_line_limits() -> None:
+    """Regression: the full bound-node population exceeds the Windows
+    CreateProcess 32k command-line cap; nodes must travel via pytest
+    @argsfile, and every bound node still gets an outcome."""
+    from readiness.runner import EvidenceRunner
+
+    repo_root = Path(__file__).resolve().parents[2]
+    runner = EvidenceRunner.__new__(EvidenceRunner)
+    runner._repo_root = repo_root
+
+    node = (
+        "backend/tests/test_eval_capability_matrix.py"
+        "::test_mapping_input_requires_exact_schema_version"
+    )
+    # ~700 node ids far exceed any inline-argv cap; a large ledger's node
+    # population dwarfs the command-line budget the same way.
+    outcomes = runner._run_pytest([node] * 700)
+    assert outcomes[node]["outcome"] == "passed"

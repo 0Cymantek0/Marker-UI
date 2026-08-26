@@ -1,0 +1,22 @@
+{
+  "schema": "marker.pr84c.capability_accountability_evidence.v1",
+  "generated_at": "2026-08-26T10:21:06+00:00",
+  "counts": {
+    "inventory_subjects": 22,
+    "capability_records": 22,
+    "disposition_disabled": 1,
+    "disposition_experimental_shadow": 6,
+    "disposition_non_promoted": 4,
+    "disposition_promoted": 11,
+    "promoted_rollback_nodes": 11
+  },
+  "scenarios": {
+    "inventory_record_bijection": "passed",
+    "fail_closed_completeness": "passed",
+    "promoted_rollback_nodes_ast_verified": "passed",
+    "non_promotion_legitimate": "passed"
+  },
+  "errors": [],
+  "as_of_date": "2026-08-26T00:00:00Z",
+  "verdict": "capability_accountability_matrix_proven"
+}

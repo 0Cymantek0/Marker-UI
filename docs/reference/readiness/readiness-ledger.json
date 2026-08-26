@@ -2059,9 +2059,9 @@
   },
   {
    "id": 59,
-   "status_claim": "no_evidence",
-   "gap_type": "F",
-   "gap_note": "Utility is measured per capability slice; the required per-subsystem support owner, rollback, expiry, and kill-condition matrix does not exist in any artifact.",
+   "status_claim": "proven",
+   "gap_type": null,
+   "gap_note": null,
    "bindings": [
     {
      "kind": "measurement",
@@ -2088,19 +2088,188 @@
      "artifact_expect": {
       "recommendation.pr83": "ready_with_scoped_non_promotions"
      }
+    },
+    {
+     "kind": "test",
+     "coverage": "full",
+     "environment": "sqlite-dev",
+     "rationale": "The capability-accountability contract itself is executable: record validation rejects missing owner/rollback/expiry/kill/evidence dimensions, unknown dispositions, and non-finite metrics, while the inventory tests prove the 22-subject authoritative population, its excluded-category policy, and the inventory<->record bijection.",
+     "nodes": [
+      "backend/tests/test_eval_capability_matrix.py::test_valid_promoted_record_passes",
+      "backend/tests/test_eval_capability_matrix.py::test_mapping_input_requires_exact_schema_version",
+      "backend/tests/test_eval_capability_matrix.py::test_promoted_rollback_must_be_verified",
+      "backend/tests/test_eval_capability_matrix.py::test_promoted_rollback_requires_verification_binding",
+      "backend/tests/test_eval_capability_matrix.py::test_fictional_environment_flags_rejected_in_rollback",
+      "backend/tests/test_eval_capability_matrix.py::test_unsafe_fallback_language_rejected_in_rollback",
+      "backend/tests/test_eval_capability_matrix.py::test_promoted_kill_condition_triggered_fails",
+      "backend/tests/test_eval_capability_matrix.py::test_kill_condition_invalid_action_rejected",
+      "backend/tests/test_eval_capability_matrix.py::test_kill_threshold_finite_numeric_or_nonempty_string",
+      "backend/tests/test_eval_capability_matrix.py::test_evaluated_at_after_retest_deadline_fails",
+      "backend/tests/test_eval_capability_matrix.py::test_future_evaluated_at_fails_relative_to_as_of",
+      "backend/tests/test_eval_capability_matrix.py::test_reject_unknown_fields_in_record_and_nested",
+      "backend/tests/test_eval_capability_matrix.py::test_promoted_requires_complexity_adjusted_conclusion_and_operational_burden",
+      "backend/tests/test_eval_capability_matrix.py::test_quality_gain_finite_and_cost_delta_nonempty",
+      "backend/tests/test_eval_capability_matrix.py::test_unresolved_limits_typed_and_nonempty_for_active_records",
+      "backend/tests/test_eval_capability_matrix.py::test_promoted_record_requires_utility_basis",
+      "backend/tests/test_eval_capability_matrix.py::test_promoted_record_cannot_rest_on_stale_or_superseded_evidence",
+      "backend/tests/test_eval_capability_matrix.py::test_promoted_record_expired_deadline_fails",
+      "backend/tests/test_eval_capability_matrix.py::test_generic_rollback_placeholder_rejected",
+      "backend/tests/test_eval_capability_matrix.py::test_generic_kill_condition_placeholder_rejected",
+      "backend/tests/test_eval_capability_matrix.py::test_non_promoted_and_experimental_dispositions_require_evidence",
+      "backend/tests/test_eval_capability_matrix.py::test_disabled_disposition_requires_full_utility_or_explicit_rationale",
+      "backend/tests/test_eval_accountability_inventory.py::test_authoritative_inventory_and_population_validates_cleanly",
+      "backend/tests/test_eval_accountability_inventory.py::test_runner_facing_rollback_verification_nodes",
+      "backend/tests/test_eval_accountability_inventory.py::test_authoritative_raw_tuples_have_no_duplicates",
+      "backend/tests/test_eval_accountability_inventory.py::test_forbidden_overclaim_phrases_absent_from_procedures",
+      "backend/tests/test_eval_accountability_inventory.py::test_exact_promoted_procedure_semantic_alignment",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_duplicate_in_inventory_sequence_fails_before_dict",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_duplicate_in_records_sequence_fails_before_dict",
+      "backend/tests/test_eval_accountability_inventory.py::test_inventory_subject_validation",
+      "backend/tests/test_eval_accountability_inventory.py::test_inventory_subject_missing_source_path_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_excluded_category_policy_validation",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_remove_subject_fails_bijection",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_extra_record_fails_bijection",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_missing_source_path_fails_completeness",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_catalog_candidate_omission_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_tamper_evidence_digest_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_tamper_rollback_verification_digest_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_rollback_node_filename_only_rejected",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_rollback_node_unapproved_path_rejected",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_rollback_node_nonexistent_file_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_rollback_node_nonexistent_ast_function_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_promoted_expiry_deadline_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_promoted_triggered_kill_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_promoted_stale_or_superseded_evidence_fails",
+      "backend/tests/test_eval_accountability_inventory.py::test_adversarial_promoted_unverified_rollback_fails"
+     ],
+     "scope_files": [
+      "backend/tests/test_eval_accountability_inventory.py",
+      "backend/tests/test_eval_capability_matrix.py"
+     ]
+    },
+    {
+     "kind": "measurement",
+     "coverage": "full",
+     "environment": "offline-artifact (PR84C capability accountability audit)",
+     "rationale": "Executed accountability audit over the live tree: 22-subject inventory bijection, fail-closed completeness validation with SHA-256 evidence digest and AST rollback-node verification, 11 promoted capabilities each with an AST-verified rollback node, and non-promotion represented as a legitimate honest disposition.",
+     "scope_files": [
+      "docs/reference/measurements/pr84c-capability-accountability-evidence.json"
+     ],
+     "artifact": "docs/reference/measurements/pr84c-capability-accountability-evidence.json",
+     "artifact_expect": {
+      "counts.inventory_subjects": 22,
+      "counts.capability_records": 22,
+      "counts.disposition_promoted": 11,
+      "counts.disposition_experimental_shadow": 6,
+      "counts.disposition_non_promoted": 4,
+      "counts.disposition_disabled": 1,
+      "counts.promoted_rollback_nodes": 11,
+      "scenarios.inventory_record_bijection": "passed",
+      "scenarios.fail_closed_completeness": "passed",
+      "scenarios.promoted_rollback_nodes_ast_verified": "passed",
+      "scenarios.non_promotion_legitimate": "passed",
+      "verdict": "capability_accountability_matrix_proven"
+     }
     }
    ],
-   "context_docs": []
+   "context_docs": [
+    "docs/reference/readiness/pr84c-readiness-closure.md"
+   ]
   },
   {
    "id": 60,
-   "status_claim": "no_evidence",
-   "gap_type": "F",
-   "gap_note": "No leadership-claim completeness fields or validators exist: workflow, competitors, catastrophic budget, and review burden are not named in any artifact schema or test.",
-   "bindings": [],
+   "status_claim": "proven",
+   "gap_type": null,
+   "gap_note": null,
+   "bindings": [
+    {
+     "kind": "test",
+     "coverage": "full",
+     "environment": "sqlite-dev",
+     "rationale": "The leadership-claim contract is executable and adversarially tested: each mandatory dimension (workflow, source/policy/hardware profile, competitors, date, catastrophic budget, review burden, unresolved limits) is individually required, comparator scope must be exactly equal and present in the bound artifact's real system population, stale evidence cannot support affirmative claims, zero-risk and zero-review-burden fallacies are rejected, and the release-docs verb scanner fails on unregistered overstatement.",
+     "nodes": [
+      "backend/tests/test_eval_accountability_claims.py::test_authoritative_claims_inventory_non_empty_and_valid",
+      "backend/tests/test_eval_accountability_claims.py::test_claim_lookup_by_id",
+      "backend/tests/test_eval_accountability_claims.py::test_audit_leadership_claims_clean_run",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_empty_inventory_cannot_pass",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_duplicate_claim_id_rejected",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_broad_universalization_rejected",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_artifact_tamper_fails_sha256",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_missing_metric_pointer",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_comparator_mismatch",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_comparator_absent_from_artifact_population",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_artifact_without_population_cannot_verify_comparators",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_workflow_and_corpus_mismatch",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_stale_evidence_cannot_support_beats_or_routes",
+      "backend/tests/test_eval_accountability_claims.py::test_calculate_one_sided_95_upper_bound_methods",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_zero_risk_lie_rejected",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_wrong_upper_bound_rejected",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_unsupported_bound_method",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_review_burden_unavailable_requires_reason",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_review_burden_measured_requires_counts",
+      "backend/tests/test_eval_accountability_claims.py::test_adversarial_unregistered_verb_occurrence_fails_scan",
+      "backend/tests/test_eval_accountability_claims.py::test_inline_claim_marker_satisfies_source_scanner",
+      "backend/tests/test_eval_accountability_claims.py::test_resolve_metric_pointer_nested_dicts_and_lists",
+      "backend/tests/test_eval_leadership_claim.py::test_valid_leadership_claim_passes",
+      "backend/tests/test_eval_leadership_claim.py::test_mapping_input_requires_exact_schema_version",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[workflow]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[source_profile]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[policy_profile]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[hardware_profile]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[competitors]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[evidence_date]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[catastrophic_budget]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[review_burden]",
+      "backend/tests/test_eval_leadership_claim.py::test_each_mandatory_dimension_removal_fails[unresolved_limits]",
+      "backend/tests/test_eval_leadership_claim.py::test_probability_rates_must_be_in_range",
+      "backend/tests/test_eval_leadership_claim.py::test_observed_rate_cannot_exceed_upper_bound",
+      "backend/tests/test_eval_leadership_claim.py::test_upper_bound_cannot_exceed_max_acceptable_rate_for_beats_or_ties",
+      "backend/tests/test_eval_leadership_claim.py::test_reject_unknown_fields_in_leadership_claim",
+      "backend/tests/test_eval_leadership_claim.py::test_beats_ties_routes_require_nonempty_corpus_scope_and_binding_scopes",
+      "backend/tests/test_eval_leadership_claim.py::test_evidence_scope_mismatches_and_exact_comparator_equality_enforced",
+      "backend/tests/test_eval_leadership_claim.py::test_unresolved_limits_typed_and_nonempty",
+      "backend/tests/test_eval_leadership_claim.py::test_stale_or_superseded_evidence_cannot_support_routes_to",
+      "backend/tests/test_eval_leadership_claim.py::test_reject_negative_review_burden_counts_or_queue_times",
+      "backend/tests/test_eval_leadership_claim.py::test_zero_observed_catastrophes_cannot_have_zero_upper_bound",
+      "backend/tests/test_eval_leadership_claim.py::test_zero_observed_must_acknowledge_statistical_risk",
+      "backend/tests/test_eval_leadership_claim.py::test_stale_or_superseded_evidence_cannot_support_superiority_claim",
+      "backend/tests/test_eval_leadership_claim.py::test_review_burden_unavailable_requires_explicit_reason",
+      "backend/tests/test_eval_leadership_claim.py::test_future_evidence_date_fails",
+      "backend/tests/test_eval_leadership_claim.py::test_anti_universalization_disclaimer_enforced"
+     ],
+     "scope_files": [
+      "backend/tests/test_eval_accountability_claims.py",
+      "backend/tests/test_eval_leadership_claim.py"
+     ]
+    },
+    {
+     "kind": "measurement",
+     "coverage": "full",
+     "environment": "offline-artifact (PR84C leadership claims audit)",
+     "rationale": "Executed registry audit: 3 registered claims (all withheld under fail-closed discipline), 2 SHA-256-verified evidence bindings with metric-pointer resolution against committed measurement artifacts, and a clean leadership-verb scan of all release-facing documentation (19 occurrences, all explicitly allowlisted).",
+     "scope_files": [
+      "docs/reference/measurements/pr84c-leadership-claims-evidence.json"
+     ],
+     "artifact": "docs/reference/measurements/pr84c-leadership-claims-evidence.json",
+     "artifact_expect": {
+      "counts.claims_registered": 3,
+      "counts.claims_withheld": 3,
+      "counts.evidence_bindings_verified": 2,
+      "counts.leadership_verbs_found": 19,
+      "counts.verbs_allowlisted": 19,
+      "scenarios.registry_non_vacuous": "passed",
+      "scenarios.all_claims_fully_scoped": "passed",
+      "scenarios.fail_closed_withholding": "passed",
+      "scenarios.evidence_bindings_sha256_verified": "passed",
+      "scenarios.release_docs_verb_scan_clean": "passed",
+      "verdict": "leadership_claim_registry_audit_proven"
+     }
+    }
+   ],
    "context_docs": [
     "docs/reference/pr80b-direct-specialist-displacement.md",
-    "docs/reference/pr82-quality-lab.md"
+    "docs/reference/pr82-quality-lab.md",
+    "docs/reference/readiness/pr84c-readiness-closure.md"
    ]
   },
   {
@@ -2152,9 +2321,9 @@
   },
   {
    "id": 62,
-   "status_claim": "no_evidence",
-   "gap_type": "F",
-   "gap_note": "Concession language and specialist comparisons exist; the final rational-user displacement test (better accepted end-to-end outcome by leaving Marker UI) has never been executed as such.",
+   "status_claim": "proven",
+   "gap_type": null,
+   "gap_note": null,
    "bindings": [
     {
      "kind": "measurement",
@@ -2181,10 +2350,78 @@
      "artifact_expect": {
       "recommendation.pr83": "ready_with_scoped_non_promotions"
      }
+    },
+    {
+     "kind": "test",
+     "coverage": "full",
+     "environment": "sqlite-dev",
+     "rationale": "The displacement decision engine is executable and adversarially tested: preregistration freeze semantics, fail-closed PR80B parsing (no defaulted zeros), fairness gates, dangerous-failure budgets, reason-to-leave ledger terminality, tamper detection, and persisted-decision re-derivation are all asserted, including replay against the committed PR80B artifact.",
+     "nodes": [
+      "backend/tests/test_eval_accountability_displacement_contracts.py::test_preregistration_clean_validation",
+      "backend/tests/test_eval_accountability_displacement_contracts.py::test_preregistration_rejects_prospective_timing_lie",
+      "backend/tests/test_eval_accountability_displacement_contracts.py::test_retrospective_timing_disclosure_accepted_cleanly",
+      "backend/tests/test_eval_accountability_displacement_contracts.py::test_preregistration_fails_on_missing_or_duplicate_baseline",
+      "backend/tests/test_eval_accountability_displacement_contracts.py::test_measurement_tristate_preserves_unavailable_without_zero_conversion",
+      "backend/tests/test_eval_accountability_displacement_contracts.py::test_integration_verification_validation_rules",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_integrate_or_route_with_verified_temp_artifact",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_specialist_better_unintegrated_yields_measured_and_marker_retained",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_fake_or_missing_integration_digest_rejects_integration",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_explicit_concession_valid_negative_simplification",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_inconclusive_fairness_mismatch_inputs",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_inconclusive_fairness_mismatch_identity",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_inconclusive_fairness_false_acceptance",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_inconclusive_missing_material_dimension",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_inconclusive_unjustified_not_applicable_dimension",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_outcome_inconclusive_marker_dangerous_breach",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_specialist_better_nonintegrable_tradeoff_measured",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_persisted_decision_detects_manual_flip",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_persisted_decision_detects_digest_tamper",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_persisted_decision_detects_supporting_artifact_change",
+      "backend/tests/test_eval_accountability_displacement_decision.py::test_persisted_decision_detects_reason_ledger_tamper",
+      "backend/tests/test_eval_accountability_displacement_pr80b.py::test_pr80b_actual_artifact_replay",
+      "backend/tests/test_eval_accountability_displacement_pr80b.py::test_pr80b_parser_verifies_raw_bytes_sha",
+      "backend/tests/test_eval_accountability_displacement_pr80b.py::test_pr80b_parser_adversarial_missing_or_corrupt_fields",
+      "backend/tests/test_eval_accountability_displacement_compat.py::test_displacement_facade_and_package_compatibility_exports",
+      "backend/tests/test_eval_accountability_displacement_compat.py::test_displacement_accountability_package_reexports",
+      "backend/tests/test_eval_accountability_displacement_compat.py::test_displacement_import_cycle_absence"
+     ],
+     "scope_files": [
+      "backend/tests/test_eval_accountability_displacement_compat.py",
+      "backend/tests/test_eval_accountability_displacement_contracts.py",
+      "backend/tests/test_eval_accountability_displacement_decision.py",
+      "backend/tests/test_eval_accountability_displacement_pr80b.py"
+     ]
+    },
+    {
+     "kind": "measurement",
+     "coverage": "full",
+     "environment": "offline-artifact (PR84C displacement decision replay)",
+     "rationale": "Executed final rational-user displacement test on the declared invoice workflow via frozen retrospective replay of the committed PR80B evidence: fairness gate passed, zero blockers, outcome marker_retained with the LLM generative-coverage reason-to-leave explicitly measured (not conceded) on this corpus, decision cryptographically bound to the supporting artifact SHA-256 and re-derivation validated.",
+     "scope_files": [
+      "docs/reference/measurements/pr84c-displacement-decision-evidence.json"
+     ],
+     "artifact": "docs/reference/measurements/pr84c-displacement-decision-evidence.json",
+     "artifact_expect": {
+      "counts.comparators_evaluated": 3,
+      "counts.reasons_integrated": 0,
+      "counts.reasons_measured": 1,
+      "counts.reasons_conceded": 0,
+      "decision.fairness_passed": true,
+      "decision.outcome": "marker_retained",
+      "decision.protocol_timing": "retrospective_frozen_replay",
+      "scenarios.preregistration_frozen_before_interpretation": "passed",
+      "scenarios.fairness_gate_passed": "passed",
+      "scenarios.no_blockers": "passed",
+      "scenarios.reason_ledger_terminal": "passed",
+      "scenarios.rederivation_matches": "passed",
+      "scenarios.supporting_artifact_bound": "passed",
+      "verdict": "final_rational_user_displacement_test_executed"
+     }
     }
    ],
    "context_docs": [
-    "docs/reference/pr80b-direct-specialist-displacement.md"
+    "docs/reference/pr80b-direct-specialist-displacement.md",
+    "docs/reference/readiness/pr84c-readiness-closure.md"
    ]
   }
  ]
