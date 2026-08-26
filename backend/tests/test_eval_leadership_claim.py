@@ -58,7 +58,10 @@ def _valid_claim() -> LeadershipClaim:
                 lifecycle=EVIDENCE_CURRENT,
                 workflow_scope="invoice_extraction_demo_v1",
                 corpus_scope="pr80b_frozen_corpus_24_docs",
-                comparator_scope=("invoice2data_1.0.1", "llm_openai_poolside_laguna_s_2.1_free"),
+                comparator_scope=(
+                    "invoice2data_1.0.1",
+                    "llm_openai_poolside_laguna_s_2.1_free",
+                ),
                 metric_pointers={"metrics.marker-pr80a.evidence.coverage": 1.0},
             ),
         ),
@@ -81,7 +84,10 @@ def test_mapping_input_requires_exact_schema_version():
     claim_dict2 = _valid_claim().to_dict()
     claim_dict2["schema_version"] = "wrong.claim.v99"
     errors2 = validate_capability_record_or_claim(claim_dict2)
-    assert any(f"schema_version must be {LEADERSHIP_CLAIM_SCHEMA_VERSION!r}" in err for err in errors2)
+    assert any(
+        f"schema_version must be {LEADERSHIP_CLAIM_SCHEMA_VERSION!r}" in err
+        for err in errors2
+    )
 
 
 @pytest.mark.parametrize(
@@ -153,28 +159,40 @@ def test_beats_ties_routes_require_nonempty_corpus_scope_and_binding_scopes():
         claim_dict["disposition"] = disp
         claim_dict["corpus_scope"] = ""
         errors = validate_capability_record_or_claim(claim_dict)
-        assert any(f"claim disposition {disp!r} requires non-empty corpus_scope" in err for err in errors)
+        assert any(
+            f"claim disposition {disp!r} requires non-empty corpus_scope" in err
+            for err in errors
+        )
 
         # 2. Empty binding workflow_scope
         claim_dict2 = _valid_claim().to_dict()
         claim_dict2["disposition"] = disp
         claim_dict2["evidence_bindings"][0]["workflow_scope"] = ""
         errors2 = validate_capability_record_or_claim(claim_dict2)
-        assert any("evidence_binding #0 workflow_scope must be non-empty string" in err for err in errors2)
+        assert any(
+            "evidence_binding #0 workflow_scope must be non-empty string" in err
+            for err in errors2
+        )
 
         # 3. Empty binding corpus_scope
         claim_dict3 = _valid_claim().to_dict()
         claim_dict3["disposition"] = disp
         claim_dict3["evidence_bindings"][0]["corpus_scope"] = ""
         errors3 = validate_capability_record_or_claim(claim_dict3)
-        assert any("evidence_binding #0 corpus_scope must be non-empty string" in err for err in errors3)
+        assert any(
+            "evidence_binding #0 corpus_scope must be non-empty string" in err
+            for err in errors3
+        )
 
         # 4. Empty binding comparator_scope
         claim_dict4 = _valid_claim().to_dict()
         claim_dict4["disposition"] = disp
         claim_dict4["evidence_bindings"][0]["comparator_scope"] = []
         errors4 = validate_capability_record_or_claim(claim_dict4)
-        assert any("evidence_binding #0 comparator_scope must be a non-empty list" in err for err in errors4)
+        assert any(
+            "evidence_binding #0 comparator_scope must be a non-empty list" in err
+            for err in errors4
+        )
 
 
 def test_evidence_scope_mismatches_and_exact_comparator_equality_enforced():
@@ -182,31 +200,47 @@ def test_evidence_scope_mismatches_and_exact_comparator_equality_enforced():
     claim_dict = _valid_claim().to_dict()
     claim_dict["evidence_bindings"][0]["workflow_scope"] = "different_workflow"
     errors = validate_capability_record_or_claim(claim_dict)
-    assert any("workflow_scope 'different_workflow' does not match claim workflow" in err for err in errors)
+    assert any(
+        "workflow_scope 'different_workflow' does not match claim workflow" in err
+        for err in errors
+    )
 
     # 2. Corpus scope mismatch
     claim_dict2 = _valid_claim().to_dict()
     claim_dict2["evidence_bindings"][0]["corpus_scope"] = "unrelated_corpus"
     errors2 = validate_capability_record_or_claim(claim_dict2)
-    assert any("corpus_scope 'unrelated_corpus' does not match claim corpus_scope" in err for err in errors2)
+    assert any(
+        "corpus_scope 'unrelated_corpus' does not match claim corpus_scope" in err
+        for err in errors2
+    )
 
     # 3. Comparator subset (not exact equality) -> Must fail
     claim_dict3 = _valid_claim().to_dict()
-    claim_dict3["evidence_bindings"][0]["comparator_scope"] = ["invoice2data_1.0.1"]  # omitted LLM competitor
+    claim_dict3["evidence_bindings"][0]["comparator_scope"] = [
+        "invoice2data_1.0.1"
+    ]  # omitted LLM competitor
     errors3 = validate_capability_record_or_claim(claim_dict3)
-    assert any("comparator_scope must match claim competitors exactly" in err for err in errors3)
+    assert any(
+        "comparator_scope must match claim competitors exactly" in err
+        for err in errors3
+    )
 
 
 def test_unresolved_limits_typed_and_nonempty():
     claim_dict = _valid_claim().to_dict()
     claim_dict["unresolved_limits"] = []
     errors = validate_capability_record_or_claim(claim_dict)
-    assert any("unresolved_limits is mandatory and must be a non-empty list" in err for err in errors)
+    assert any(
+        "unresolved_limits is mandatory and must be a non-empty list" in err
+        for err in errors
+    )
 
     claim_dict2 = _valid_claim().to_dict()
     claim_dict2["unresolved_limits"] = [""]
     errors2 = validate_capability_record_or_claim(claim_dict2)
-    assert any("unresolved limit entry must be a non-empty string" in err for err in errors2)
+    assert any(
+        "unresolved limit entry must be a non-empty string" in err for err in errors2
+    )
 
 
 def test_stale_or_superseded_evidence_cannot_support_routes_to():
@@ -219,7 +253,11 @@ def test_stale_or_superseded_evidence_cannot_support_routes_to():
 
 
 def test_reject_negative_review_burden_counts_or_queue_times():
-    for neg_field in ("self_flagged_count", "unverified_emitted_count", "queue_time_ms_p50"):
+    for neg_field in (
+        "self_flagged_count",
+        "unverified_emitted_count",
+        "queue_time_ms_p50",
+    ):
         claim_dict = _valid_claim().to_dict()
         claim_dict["review_burden"][neg_field] = -1
         errors = validate_capability_record_or_claim(claim_dict)
@@ -237,7 +275,9 @@ def test_zero_observed_must_acknowledge_statistical_risk():
     claim_dict = _valid_claim().to_dict()
     claim_dict["catastrophic_budget"]["zero_is_not_zero_risk_acknowledged"] = False
     errors = validate_capability_record_or_claim(claim_dict)
-    assert any("zero_is_not_zero_risk_acknowledged must be True" in err for err in errors)
+    assert any(
+        "zero_is_not_zero_risk_acknowledged must be True" in err for err in errors
+    )
 
 
 def test_stale_or_superseded_evidence_cannot_support_superiority_claim():
@@ -272,11 +312,21 @@ def test_anti_universalization_disclaimer_enforced():
     assert any("universal_disclaimer is mandatory" in err for err in errors)
 
     # 2. Universal / global / best-overall overstatement in disclaimer
-    for bad_word in ("global superiority", "best overall extraction engine", "universal standard"):
+    for bad_word in (
+        "global superiority",
+        "best overall extraction engine",
+        "universal standard",
+    ):
         claim_dict2 = _valid_claim().to_dict()
-        claim_dict2["universal_disclaimer"] = f"Marker is {bad_word} across all benchmarks"
+        claim_dict2["universal_disclaimer"] = (
+            f"Marker is {bad_word} across all benchmarks"
+        )
         errors2 = validate_capability_record_or_claim(claim_dict2)
-        assert any("universal_disclaimer cannot make un-scoped universal/global superiority assertions" in err for err in errors2)
+        assert any(
+            "universal_disclaimer cannot make un-scoped universal/global superiority assertions"
+            in err
+            for err in errors2
+        )
 
     # 3. Exact canonical disclaimer passes
     claim_dict3 = _valid_claim().to_dict()

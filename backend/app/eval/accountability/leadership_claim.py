@@ -98,6 +98,108 @@ _TOP_LEVEL_CLAIM_KEYS = frozenset(
     }
 )
 
+ALLOWED_BOUND_METHODS = frozenset(
+    {
+        "rule_of_three",
+        "exact_binomial",
+        "clopper_pearson_exact",
+        "poisson_exact",
+        "wilson_score",
+        "one_sided_95_clopper_pearson_upper_bound",
+    }
+)
+
+
+def calculate_one_sided_95_upper_bound(
+    trials: int,
+    observed_events: int = 0,
+    method: str = "rule_of_three",
+) -> float:
+    """Derive an honest one-sided 95% upper confidence bound without external dependencies."""
+    import math
+
+    if not isinstance(trials, int) or isinstance(trials, bool) or trials <= 0:
+        raise ValueError(f"trials must be positive integer, got {trials!r}")
+    if (
+        not isinstance(observed_events, int)
+        or isinstance(observed_events, bool)
+        or observed_events < 0
+        or observed_events > trials
+    ):
+        raise ValueError(
+            f"observed_events must be integer in [0, {trials}], got {observed_events!r}"
+        )
+    if method not in ALLOWED_BOUND_METHODS:
+        raise ValueError(
+            f"unsupported bound method {method!r}, allowed: {sorted(ALLOWED_BOUND_METHODS)}"
+        )
+
+    if observed_events == 0:
+        if method in ("rule_of_three", "poisson_exact"):
+            return min(1.0, -math.log(0.05) / trials)
+        elif method in (
+            "exact_binomial",
+            "clopper_pearson_exact",
+            "one_sided_95_clopper_pearson_upper_bound",
+        ):
+            return min(1.0, 1.0 - (0.05 ** (1.0 / trials)))
+        elif method == "wilson_score":
+            z = 1.6448536269514722
+            return min(1.0, (z * z) / (trials + z * z))
+    else:
+        k = observed_events
+        n = trials
+        if method in (
+            "exact_binomial",
+            "clopper_pearson_exact",
+            "one_sided_95_clopper_pearson_upper_bound",
+        ):
+
+            def _bin_cdf(p: float) -> float:
+                if p <= 0.0:
+                    return 1.0
+                if p >= 1.0:
+                    return 0.0
+                total = 0.0
+                for j in range(k + 1):
+                    total += math.comb(n, j) * (p**j) * ((1.0 - p) ** (n - j))
+                return total
+
+            low, high = k / n, 1.0
+            for _ in range(60):
+                mid = (low + high) / 2.0
+                if _bin_cdf(mid) > 0.05:
+                    low = mid
+                else:
+                    high = mid
+            return (low + high) / 2.0
+        elif method in ("rule_of_three", "poisson_exact"):
+
+            def _pois_cdf(lam: float) -> float:
+                total = 0.0
+                for j in range(k + 1):
+                    total += (lam**j) / math.factorial(j)
+                return math.exp(-lam) * total
+
+            low_lam, high_lam = float(k), float(k + 15)
+            for _ in range(60):
+                mid = (low_lam + high_lam) / 2.0
+                if _pois_cdf(mid) > 0.05:
+                    low_lam = mid
+                else:
+                    high_lam = mid
+            return min(1.0, ((low_lam + high_lam) / 2.0) / n)
+        elif method == "wilson_score":
+            z = 1.6448536269514722
+            p_hat = k / n
+            denom = 1.0 + (z * z) / n
+            center = p_hat + (z * z) / (2.0 * n)
+            rad = z * math.sqrt((p_hat * (1.0 - p_hat) / n) + ((z * z) / (4.0 * n * n)))
+            return min(1.0, (center + rad) / denom)
+
+    return min(1.0, -math.log(0.05) / trials)
+
+
 _BUDGET_KEYS = frozenset(
     {
         "max_acceptable_rate",
@@ -106,6 +208,7 @@ _BUDGET_KEYS = frozenset(
         "upper_bound_95",
         "trials",
         "zero_is_not_zero_risk_acknowledged",
+        "unit",
     }
 )
 
@@ -144,6 +247,7 @@ class CatastrophicBudget:
     upper_bound_95: float
     trials: int
     zero_is_not_zero_risk_acknowledged: bool = True
+    unit: str = "documents"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -153,6 +257,7 @@ class CatastrophicBudget:
             "upper_bound_95": self.upper_bound_95,
             "trials": self.trials,
             "zero_is_not_zero_risk_acknowledged": self.zero_is_not_zero_risk_acknowledged,
+            "unit": self.unit,
         }
 
 
@@ -362,6 +467,17 @@ def validate_leadership_claim(
             errors.append(
                 "catastrophic_budget.bound_method must specify statistical bound method"
             )
+        elif method not in ALLOWED_BOUND_METHODS:
+            errors.append(
+                f"catastrophic_budget.bound_method {method!r} is unsupported; allowed methods: {sorted(ALLOWED_BOUND_METHODS)}"
+            )
+
+        unit = cb.get("unit")
+        if unit is not None and (not isinstance(unit, str) or not unit.strip()):
+            errors.append(
+                "catastrophic_budget.unit must be a non-empty string identifying unit of observation"
+            )
+
         if not isinstance(trials, int) or isinstance(trials, bool) or trials <= 0:
             errors.append("catastrophic_budget.trials must be a positive integer")
 
@@ -380,6 +496,24 @@ def validate_leadership_claim(
                     errors.append(
                         "catastrophic_budget.zero_is_not_zero_risk_acknowledged must be True"
                     )
+
+            if (
+                method in ALLOWED_BOUND_METHODS
+                and isinstance(trials, int)
+                and trials > 0
+            ):
+                obs_events = int(round(obs_rate * trials))
+                try:
+                    calc_ub = calculate_one_sided_95_upper_bound(
+                        trials, obs_events, method
+                    )
+                    # Reject if declared upper_bound_95 is significantly lower than honest mathematical bound
+                    if ub95 < calc_ub - 0.01:
+                        errors.append(
+                            f"catastrophic_budget violation: declared upper_bound_95 ({ub95}) is lower than derived mathematical bound ({calc_ub:.6f}) under method {method!r}"
+                        )
+                except Exception as exc:
+                    errors.append(f"catastrophic_budget bound calculation error: {exc}")
 
         if ok_max and ok_ub and max_rate is not None and ub95 is not None:
             if disp in (CLAIM_BEATS, CLAIM_TIES_REDUCING_BURDEN) and ub95 > max_rate:
