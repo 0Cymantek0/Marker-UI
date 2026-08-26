@@ -356,6 +356,66 @@ def _dependency_empirical_gate(
     return True, "ok", None
 
 
+@dataclass(frozen=True)
+class DependencyAwareEvaluation:
+    """Per-sample candidate-policy decisions for one slice.
+
+    ``evaluate_baselines`` aggregates exactly this computation into its
+    dependency-aware ``BaselineResult``; exposing it keeps the aggregate the
+    single authority while letting promotion gates reason about individual
+    catastrophic-opportunity decisions without re-implementing the policy.
+    """
+
+    slice_id: str | None
+    selected_witnesses: tuple[str, ...]
+    gate_passed: bool
+    gate_status: str
+    gate_reason: str | None
+    decisions: Mapping[str, tuple[Any | None, bool]]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "slice_id": self.slice_id,
+            "selected_witnesses": list(self.selected_witnesses),
+            "gate_passed": self.gate_passed,
+            "gate_status": self.gate_status,
+            "gate_reason": self.gate_reason,
+            "decisions": {
+                sample_id: {"vote": vote, "accepted": accepted}
+                for sample_id, (vote, accepted) in self.decisions.items()
+            },
+        }
+
+
+def dependency_aware_evaluation(
+    corpus: VerificationRiskCorpus,
+    *,
+    slice_id: str | None = None,
+) -> DependencyAwareEvaluation:
+    """Run the dependency-aware candidate policy per sample on one slice."""
+
+    samples = corpus.samples_for_slice(slice_id)
+    selected = tuple(
+        witness_id
+        for witness_id in _dependency_aware_ids(corpus)
+        if any(witness_id in sample.outcomes for sample in samples)
+    )
+    gate_passed, gate_status, gate_reason = _dependency_empirical_gate(
+        corpus, selected, slice_id=slice_id
+    )
+    decisions = _dependency_aware_decisions(
+        corpus, samples, selected, empirical_gate_passed=gate_passed
+    )
+    return DependencyAwareEvaluation(
+        slice_id=slice_id,
+        selected_witnesses=selected,
+        gate_passed=gate_passed,
+        gate_status=gate_status,
+        gate_reason=gate_reason,
+        decisions=decisions,
+    )
+
+
 def evaluate_baselines(
     corpus: VerificationRiskCorpus,
     *,
@@ -451,29 +511,14 @@ def evaluate_baselines(
         runtime_ms=runtime_ms,
     )
 
-    dependency_ids = tuple(
-        witness_id
-        for witness_id in _dependency_aware_ids(corpus)
-        if any(witness_id in sample.outcomes for sample in samples)
-    )
-    empirical_passed, dependency_status, dependency_reason = _dependency_empirical_gate(
-        corpus,
-        dependency_ids,
-        slice_id=slice_id,
-    )
-    dependency_decisions = _dependency_aware_decisions(
-        corpus,
-        samples,
-        dependency_ids,
-        empirical_gate_passed=empirical_passed,
-    )
+    evaluation = dependency_aware_evaluation(corpus, slice_id=slice_id)
     dependency = _baseline_result(
         BASELINE_NAMES[4],
         samples,
-        dependency_ids,
-        dependency_decisions,
-        status=dependency_status,
-        not_applicable_reason=dependency_reason,
+        evaluation.selected_witnesses,
+        evaluation.decisions,
+        status=evaluation.gate_status,
+        not_applicable_reason=evaluation.gate_reason,
         runtime_ms=runtime_ms,
     )
     results = {

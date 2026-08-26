@@ -48,6 +48,7 @@ DECISION_VOCABULARY: tuple[str, ...] = (
 # Closed reason vocabulary.  Every decision carries at least one reason and
 # may carry several; unknown reasons can never be serialized.
 REASON_CONTRACT_FROZEN_AFTER_EVALUATION = "contract_frozen_after_evaluation"
+REASON_EVALUATION_TIMESTAMP_UNPARSEABLE = "evaluation_timestamp_unparseable"
 REASON_DEVELOPMENT_EVIDENCE_OVERLAP = "development_evidence_overlap"
 REASON_EXCLUSION_MANIFEST_STALE = "exclusion_manifest_stale"
 REASON_POPULATION_SLICE_MISSING = "population_slice_missing"
@@ -64,6 +65,7 @@ REASON_SHIFT_INSTABILITY = "shift_instability"
 REASON_ALL_CRITERIA_MET = "all_frozen_criteria_met"
 REASON_VOCABULARY: tuple[str, ...] = (
     REASON_CONTRACT_FROZEN_AFTER_EVALUATION,
+    REASON_EVALUATION_TIMESTAMP_UNPARSEABLE,
     REASON_DEVELOPMENT_EVIDENCE_OVERLAP,
     REASON_EXCLUSION_MANIFEST_STALE,
     REASON_POPULATION_SLICE_MISSING,
