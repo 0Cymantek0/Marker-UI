@@ -5,9 +5,10 @@ Governing requirement:
 and has a support owner, rollback, expiry, and kill condition."
 
 Dispositions supported:
-- promoted: fully shipped in production workflow; requires support owner, verified viable rollback,
-  active expiry boundary (evaluated_at <= retest_deadline, no future date), objective un-triggered
-  kill condition, evidence identity, and complexity-adjusted utility proof with current evidence.
+- promoted: fully shipped in production workflow; requires support owner, verified viable rollback
+  with executable verification binding (test node or evidence artifact), active expiry boundary
+  (evaluated_at <= retest_deadline, no future date), objective un-triggered kill condition,
+  evidence identity, and complexity-adjusted utility proof with current evidence.
 - experimental_shadow: deployed in shadow/experimental mode; requires supporting evidence for disposition.
 - non_promoted: evaluated and intentionally not promoted per invariant 61 (valid outcome); requires evidence.
 - disabled: capability is turned off; requires full utility_basis or explicit non-empty disabled_rationale.
@@ -16,7 +17,9 @@ Fail-closed semantics:
 - Exact schema_version required on mapping inputs.
 - Stale or superseded evidence cannot support promoted status.
 - Expired retest deadlines or triggered kill conditions invalidate promoted status.
-- Rollback paths and kill conditions must be concrete and testable, not generic prose.
+- Rollback paths and kill conditions must be concrete and testable, not generic prose or fictional flags.
+- Rejects unsafe fallback language (unbounded context, unpinned review, disabled security).
+- Verification nodes must be exact pytest node IDs (path::test_name) in approved test suites.
 - Kill threshold must be a finite number or explicit non-empty string; rejects bool, NaN, inf, containers.
 - Unknown fields at top level or in nested objects fail closed.
 """
@@ -27,7 +30,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 CAPABILITY_MATRIX_SCHEMA_VERSION = "marker.capability_matrix.v1"
 
@@ -87,8 +90,30 @@ RETEST_TRIGGERS = frozenset(
     }
 )
 
+KNOWN_REPO_ENV_VARS = frozenset(
+    {
+        "MARKER_LLM_BASE_URL",
+        "MARKER_LLM_API_KEY",
+        "MARKER_LLM_CACHE",
+        "MARKER_GLM_OCR_ENDPOINT",
+        "MARKER_GLM_OCR_COMMAND",
+        "MARKER_PADDLE_OCR_VL_ENDPOINT",
+        "MARKER_PADDLE_OCR_VL_COMMAND",
+        "MARKER_GLM_PYTHON",
+        "MARKER_PADDLE_PYTHON",
+        "MARKER_HYBRID_OCR_ENABLE_NATIVE_TRANSFORMERS",
+        "MARKER_HYBRID_OCR_MODEL_ROOT",
+        "ENCRYPTION_KEY",
+        "DATABASE_URL",
+        "PATH",
+    }
+)
+
+APPROVED_TEST_PREFIXES = ("backend/tests/", "backend/conformance/")
+
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2}))?$")
+_ENV_FLAG_PATTERN = re.compile(r"\b[A-Z][A-Z0-9_]{3,}\b")
 
 _GENERIC_ROLLBACK_STRINGS = frozenset(
     {
@@ -98,6 +123,19 @@ _GENERIC_ROLLBACK_STRINGS = frozenset(
         "tbd",
         "none",
         "n/a",
+    }
+)
+
+_UNSAFE_ROLLBACK_SUBSTRINGS = frozenset(
+    {
+        "unbounded",
+        "unpinned",
+        "snapshot-unpinned",
+        "disable_security",
+        "ignore_acl",
+        "permissive_disclosure",
+        "skip_validation",
+        "corrupted_replay",
     }
 )
 
@@ -131,7 +169,16 @@ _TOP_LEVEL_KEYS = frozenset(
     }
 )
 
-_ROLLBACK_KEYS = frozenset({"mechanism", "procedure", "verified"})
+_ROLLBACK_KEYS = frozenset(
+    {
+        "mechanism",
+        "procedure",
+        "verified",
+        "verification_evidence",
+        "verification_node",
+        "verification_sha256",
+    }
+)
 _EXPIRY_KEYS = frozenset({"evaluated_at", "retest_deadline", "triggers"})
 _KILL_KEYS = frozenset(
     {"trigger_expression", "evaluation_metric", "threshold", "action", "triggered", "trigger_reason"}
@@ -187,16 +234,26 @@ class CapabilityUtilityBasis:
 
 @dataclass(frozen=True)
 class RollbackPath:
-    mechanism: str  # e.g., 'feature_flag', 'config_switch', 'route_fallback', 'adapter_fallback'
+    mechanism: str
     procedure: str
     verified: bool = False
+    verification_evidence: str | None = None
+    verification_node: str | None = None
+    verification_sha256: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "mechanism": self.mechanism,
             "procedure": self.procedure,
             "verified": self.verified,
         }
+        if self.verification_evidence is not None:
+            out["verification_evidence"] = self.verification_evidence
+        if self.verification_node is not None:
+            out["verification_node"] = self.verification_node
+        if self.verification_sha256 is not None:
+            out["verification_sha256"] = self.verification_sha256
+        return out
 
 
 @dataclass(frozen=True)
@@ -233,7 +290,7 @@ class KillCondition:
     trigger_expression: str
     evaluation_metric: str
     threshold: float | str
-    action: str  # e.g., 'demote_to_experimental', 'disable_route', 'fail_closed_and_disable'
+    action: str
     triggered: bool = False
     trigger_reason: str | None = None
 
@@ -359,16 +416,53 @@ def validate_capability_record(
         mech = rollback.get("mechanism")
         proc = rollback.get("procedure")
         ver = rollback.get("verified")
+        v_node = rollback.get("verification_node")
+        v_ev = rollback.get("verification_evidence")
+        v_sha = rollback.get("verification_sha256")
+
         if not isinstance(mech, str) or not mech.strip():
             errors.append("rollback.mechanism must be a non-empty string")
         if not isinstance(proc, str) or not proc.strip():
             errors.append("rollback.procedure must be a non-empty string")
-        elif proc.strip().lower() in _GENERIC_ROLLBACK_STRINGS:
-            errors.append(f"rollback.procedure cannot be generic placeholder {proc!r}")
+        else:
+            proc_lower = proc.strip().lower()
+            if proc_lower in _GENERIC_ROLLBACK_STRINGS:
+                errors.append(f"rollback.procedure cannot be generic placeholder {proc!r}")
+            # Reject unsafe fallback language
+            for unsafe in _UNSAFE_ROLLBACK_SUBSTRINGS:
+                if unsafe in proc_lower:
+                    errors.append(f"rollback.procedure cannot use unsafe fallback language {unsafe!r}: {proc!r}")
+            # Reject fictional environment variables
+            for token in _ENV_FLAG_PATTERN.findall(proc):
+                if token.startswith("MARKER_") or ("_" in token and token.isupper()):
+                    if token not in KNOWN_REPO_ENV_VARS:
+                        errors.append(f"rollback.procedure references fictional/nonexistent environment variable or flag {token!r}")
+
         if not isinstance(ver, bool):
             errors.append("rollback.verified must be a boolean")
-        elif disposition == DISPOSITION_PROMOTED and ver is not True:
-            errors.append(f"promoted capability {cid!r} requires verified rollback path (verified=True)")
+        elif disposition == DISPOSITION_PROMOTED:
+            if ver is not True:
+                errors.append(f"promoted capability {cid!r} requires verified rollback path (verified=True)")
+            if not v_node and not v_ev:
+                errors.append(f"promoted capability {cid!r} with verified=True requires verification_node or verification_evidence")
+
+        if v_node is not None:
+            if not isinstance(v_node, str) or not v_node.strip():
+                errors.append("rollback.verification_node must be a non-empty string")
+            elif "::" not in v_node:
+                errors.append(
+                    f"rollback.verification_node {v_node!r} must be an exact pytest node ID (path/to/file.py::test_name), not filename alone"
+                )
+            else:
+                fpath = v_node.split("::")[0]
+                if not any(fpath.startswith(prefix) for prefix in APPROVED_TEST_PREFIXES):
+                    errors.append(
+                        f"rollback.verification_node path {fpath!r} must start with one of {APPROVED_TEST_PREFIXES}"
+                    )
+
+        if v_sha is not None:
+            if not isinstance(v_sha, str) or not _HEX64.match(v_sha):
+                errors.append("rollback.verification_sha256 must be a 64-char hex SHA-256 digest")
 
     # Expiry validation
     expiry = rec_dict.get("expiry")
@@ -564,5 +658,31 @@ def validate_capability_record(
             dis_rat = rec_dict.get("disabled_rationale")
             if not isinstance(dis_rat, str) or not dis_rat.strip():
                 errors.append("disabled capability without utility_basis requires non-empty disabled_rationale")
+
+    return errors
+
+
+def validate_capability_records_sequence(
+    records: Sequence[CapabilityRecord | Mapping[str, Any]],
+    as_of_date: str | None = None,
+) -> list[str]:
+    """Validate a sequence of capability records, rejecting duplicate IDs before dict construction."""
+    errors: list[str] = []
+    if not isinstance(records, (list, tuple)):
+        return ["records sequence must be a list or tuple"]
+
+    seen_ids: set[str] = set()
+    for idx, rec in enumerate(records):
+        rec_id = rec.id if isinstance(rec, CapabilityRecord) else rec.get("id")
+        if not isinstance(rec_id, str) or not rec_id.strip():
+            errors.append(f"capability record at index {idx} has invalid/missing 'id'")
+            continue
+        if rec_id in seen_ids:
+            errors.append(f"duplicate capability record id in sequence: {rec_id!r}")
+        seen_ids.add(rec_id)
+
+        rec_errs = validate_capability_record(rec, as_of_date=as_of_date)
+        for r_err in rec_errs:
+            errors.append(f"capability {rec_id!r}: {r_err}")
 
     return errors
