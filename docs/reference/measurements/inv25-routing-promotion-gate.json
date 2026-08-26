@@ -1,0 +1,582 @@
+{
+  "actors": {
+    "containment": "the candidate policy has no import outside app/eval; no serving behavior is switched by this artifact",
+    "registry_identity": "sha256:e666ccdb593d18fe6b3f2842a252f70284e396885e8347f5c1dab59e94efb65a",
+    "roles": {
+      "best_single": {
+        "implementation_module": "app.eval.verification_risk.baselines",
+        "masterplan_references": [
+          "7B.4: fixed best-single-engine route is a baseline that must always remain runnable",
+          "14C.5: router evaluation reports best fixed-rule and best-single-engine baselines",
+          "23C.3 invariant 25: best single engine is a required comparator"
+        ],
+        "policy_id": "best_single_witness"
+      },
+      "candidate": {
+        "implementation_module": "app.eval.verification_risk.baselines",
+        "masterplan_references": [
+          "7B.2 level 3: EVC-based continuation from observed validator results",
+          "7C.1: a learned risk/EVC estimator is promoted only after shadow evaluation proves lower catastrophic, cost, and routing regret than simple rules",
+          "23C.3 invariant 25: EVC-style routing remains shadow/offline until it beats fixed rules and best-single-engine baselines"
+        ],
+        "policy_id": "dependency_aware_policy"
+      },
+      "fixed_rules": {
+        "implementation_module": "app.eval.verification_risk.baselines",
+        "masterplan_references": [
+          "7B.4: deterministic native-vs-OCR rule is a router baseline that must always remain runnable",
+          "7A.3 / 14C.5: if fixed rules provide at least 98% of the candidate's utility, keep the rules",
+          "23C.3 invariant 25: fixed rules are a required comparator"
+        ],
+        "policy_id": "deterministic_source_native_only"
+      }
+    }
+  },
+  "benchmark": "inv25-routing-promotion-gate",
+  "candidate_gate_status": {
+    "heldout-matched": "ok",
+    "heldout-shifted": "risk_bound_not_met",
+    "heldout-thin": "insufficient_support"
+  },
+  "catastrophic": {
+    "ceiling": 0.1,
+    "certifiable": false,
+    "comparator_catastrophic": {
+      "best_single_witness": 12,
+      "deterministic_source_native_only": 4
+    },
+    "evaluable": true,
+    "exposure_floor": 29,
+    "exposure_trials": 12,
+    "observed_failures": 0,
+    "opportunities_per_slice": {
+      "heldout-matched": 18,
+      "heldout-shifted": 4
+    },
+    "opportunities_total": 22,
+    "upper_bound_95": "0.2209221919",
+    "zero_observed_failures_implies_zero_risk": false
+  },
+  "contract": {
+    "best_single_policy": "best_single_witness",
+    "candidate_policy": "dependency_aware_policy",
+    "catastrophic_ceiling": 0.1,
+    "catastrophic_confidence": 0.95,
+    "catastrophic_exposure_floor": 29,
+    "contract_id": "inv25-routing-promotion-v1",
+    "control_slice": "heldout-thin",
+    "fixed_rule_policy": "deterministic_source_native_only",
+    "frozen_at": "2026-08-26T00:00:00+00:00",
+    "materiality_fixed_rule_capture_max": 0.98,
+    "required_slices": [
+      "heldout-matched",
+      "heldout-shifted"
+    ],
+    "schema_version": "marker.routing_promotion.contract.v1",
+    "semantic_identity": "sha256:0d1b256589860b98b4f2aca2acf22d8b8f8b2a2939ae1ee59b8e182bf6cc5fd4",
+    "support_floors": {
+      "catastrophic_opportunities": 29,
+      "matched": 30,
+      "shifted": 20
+    },
+    "utility_weights": {
+      "abstain": 0.0,
+      "catastrophic": -10.0,
+      "correct": 1.0,
+      "false_verified": -2.0
+    }
+  },
+  "criteria": [
+    {
+      "detail": "39 samples vs required 30",
+      "name": "support_matched",
+      "passed": true
+    },
+    {
+      "detail": "25 samples vs required 20",
+      "name": "support_shifted",
+      "passed": true
+    },
+    {
+      "detail": "22 catastrophic-opportunity samples vs required 29",
+      "name": "support_catastrophic_opportunities",
+      "passed": false
+    },
+    {
+      "detail": "candidate accepted 0 wrong catastrophic-opportunity samples",
+      "name": "catastrophic_failures_zero",
+      "passed": true
+    },
+    {
+      "detail": "exposure 12 trials (floor 29), upper_95 '0.2209221919' vs ceiling 0.1",
+      "name": "catastrophic_bound_certifiable",
+      "passed": false
+    },
+    {
+      "detail": "candidate catastrophic errors 0 vs comparators 4 (fixed rules) / 12 (best single)",
+      "name": "catastrophic_not_worse_than_comparators",
+      "passed": true
+    },
+    {
+      "detail": "matched utility 0.8461538461538461",
+      "name": "candidate_utility_positive",
+      "passed": true
+    },
+    {
+      "detail": "candidate 0.8461538461538461 vs best single -1.641025641025641 on matched slice",
+      "name": "beats_best_single",
+      "passed": true
+    },
+    {
+      "detail": "fixed-rules capture 0.8181818181818181 of candidate utility vs materiality bound 0.98",
+      "name": "material_gain_over_fixed_rules",
+      "passed": true
+    },
+    {
+      "detail": "shifted utility candidate 0.0 vs fixed -1.6 / best single -1.6",
+      "name": "shift_not_worse",
+      "passed": true
+    }
+  ],
+  "decision": {
+    "outcome": "insufficient_evidence",
+    "reason_details": [
+      "22 catastrophic-opportunity samples vs required 29",
+      "exposure 12 trials (floor 29), upper_95 '0.2209221919' vs ceiling 0.1",
+      "quantified next requirement: at least 29 catastrophic-opportunity samples and 29 zero-failure candidate exposure trials before the 0.1 ceiling can be certified"
+    ],
+    "reasons": [
+      "support_below_frozen_floor",
+      "catastrophic_bound_uncertifiable"
+    ]
+  },
+  "environment": {
+    "machine": "AMD64",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.9"
+  },
+  "evaluated_at": "2026-08-26T12:00:00+00:00",
+  "generated_at_utc": "2026-08-26T17:19:09+00:00",
+  "git_sha": "76c25719f97a271040d6497f9dce89a3d7ffb2df",
+  "identities": {
+    "actor_registry": "sha256:e666ccdb593d18fe6b3f2842a252f70284e396885e8347f5c1dab59e94efb65a",
+    "contract": "sha256:0d1b256589860b98b4f2aca2acf22d8b8f8b2a2939ae1ee59b8e182bf6cc5fd4",
+    "population": "sha256:bcb1ed0c063be78e71c1e24ba8e929f1dbd30d5db4ee165680c2a02dd7d31252"
+  },
+  "leakage": {
+    "checked_evidence": [
+      {
+        "declared_semantic_identity": "sha256:a6cde0976cdfb22daf1900ebaf6b5446db0f52c52e9c81181b9e1aecf6df7103",
+        "evidence_id": "pr75-verification-risk-corpus-v1",
+        "resolved_semantic_identity": "sha256:a6cde0976cdfb22daf1900ebaf6b5446db0f52c52e9c81181b9e1aecf6df7103",
+        "role": "development_tuning",
+        "sample_count": 19
+      },
+      {
+        "declared_semantic_identity": "sha256:b4853e7bec8321df4c4710db7e34382ec17f9963cac3de70c547d77aff5a13ae",
+        "evidence_id": "pr82a-adversarial-dependence-corpus",
+        "resolved_semantic_identity": "sha256:b4853e7bec8321df4c4710db7e34382ec17f9963cac3de70c547d77aff5a13ae",
+        "role": "consumed_adversarial_regression",
+        "sample_count": 25
+      }
+    ],
+    "clean": true,
+    "manifest_mismatches": [],
+    "population_identity": "sha256:bcb1ed0c063be78e71c1e24ba8e929f1dbd30d5db4ee165680c2a02dd7d31252",
+    "sample_content_overlaps": [],
+    "sample_id_overlaps": [],
+    "witness_dependency_overlaps": []
+  },
+  "limitations": [
+    "Single-session procedurally generated population (39 matched, 25 shifted, 3 thin samples): support sits below the frozen promotion floors, so the correct decision is insufficient_evidence, not a production claim.",
+    "The paired comparison itself is recorded (candidate beats both required comparators on matched utility and catastrophic counts under this population) but cannot certify the 0.10 catastrophic ceiling at 12 zero-failure exposure trials; 29 opportunities and 29 exposure trials are the quantified next requirement.",
+    "Evidence expires and must be regenerated whenever the population, the frozen contract, the actor registry, or the dependency-aware policy changes; the decision identity binds all four.",
+    "The candidate policy remains shadow/offline: this artifact grants no serving authority (see the offline-containment test)."
+  ],
+  "population": {
+    "baseline_best_single_witness": "ocr-p7",
+    "name": "inv25-final-holdout-v1",
+    "semantic_identity": "sha256:bcb1ed0c063be78e71c1e24ba8e929f1dbd30d5db4ee165680c2a02dd7d31252",
+    "slice_counts": {
+      "heldout-matched": 39,
+      "heldout-shifted": 25,
+      "heldout-thin": 3
+    },
+    "witnesses": [
+      "layout-k4",
+      "native-2",
+      "ocr-p7",
+      "pipe-q9"
+    ]
+  },
+  "reproduce": {
+    "conformance": "python -X utf8 -m pytest backend/conformance/test_routing_promotion_conformance.py -q",
+    "focused_tests": "python -X utf8 -m pytest backend/tests/test_eval_routing_promotion_contract.py backend/tests/test_eval_routing_promotion_actors.py backend/tests/test_eval_routing_promotion_population.py backend/tests/test_eval_routing_promotion_decision.py -q",
+    "regenerate": "python backend/scripts/bench_inv25_routing_promotion.py --write"
+  },
+  "reproducibility": {
+    "runtime_ms": {
+      "first": 19.943299999795272,
+      "second": 17.088299999159062
+    },
+    "semantic_identity_runs": [
+      "sha256:76256ce7e24a9e6a0d226203367730a80765c635839a5100c45b2eecca42f42c",
+      "sha256:76256ce7e24a9e6a0d226203367730a80765c635839a5100c45b2eecca42f42c"
+    ],
+    "stable": true
+  },
+  "schema_version": "marker.routing_promotion.evidence.v1",
+  "slices": {
+    "heldout-matched": {
+      "baselines": {
+        "best_single_witness": {
+          "accepted_count": 39,
+          "catastrophic_error_count": 8,
+          "coverage": {
+            "count": 39,
+            "denominator": 39,
+            "lower": 0.9103331462924287,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0,
+            "wilson_95": [
+              0.9103331462924287,
+              1.0
+            ]
+          },
+          "false_verified_count": 13,
+          "not_applicable_reason": null,
+          "sample_count": 39,
+          "semantic_identity": "sha256:57c3be50b1a25d0efe89148471fb4387f8c2d4ec0fdb37090eea10a7f7e54263",
+          "status": "ok",
+          "utility": -1.641025641025641
+        },
+        "correlation_blind_ensemble": {
+          "accepted_count": 39,
+          "catastrophic_error_count": 6,
+          "coverage": {
+            "count": 39,
+            "denominator": 39,
+            "lower": 0.9103331462924287,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0,
+            "wilson_95": [
+              0.9103331462924287,
+              1.0
+            ]
+          },
+          "false_verified_count": 6,
+          "not_applicable_reason": null,
+          "sample_count": 39,
+          "semantic_identity": "sha256:3a7cb2a782a108a8264b3dddd4d48d972fe268556c4ec99d5c430d3cb4017f1c",
+          "status": "ok",
+          "utility": -0.6923076923076923
+        },
+        "dependency_aware_policy": {
+          "accepted_count": 33,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 33,
+            "denominator": 39,
+            "lower": 0.7027053635107331,
+            "rate": 0.8461538461538461,
+            "status": "defined",
+            "upper": 0.927525276230179,
+            "wilson_95": [
+              0.7027053635107331,
+              0.927525276230179
+            ]
+          },
+          "false_verified_count": 0,
+          "not_applicable_reason": null,
+          "sample_count": 39,
+          "semantic_identity": "sha256:05da0dbdfee26dcef0405213901458e97c2ca8bfc392a8b47d2c3646915ad14f",
+          "status": "ok",
+          "utility": 0.8461538461538461
+        },
+        "deterministic_source_native_only": {
+          "accepted_count": 33,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 33,
+            "denominator": 39,
+            "lower": 0.7027053635107331,
+            "rate": 0.8461538461538461,
+            "status": "defined",
+            "upper": 0.927525276230179,
+            "wilson_95": [
+              0.7027053635107331,
+              0.927525276230179
+            ]
+          },
+          "false_verified_count": 2,
+          "not_applicable_reason": null,
+          "sample_count": 39,
+          "semantic_identity": "sha256:5b9bf9726e6d5220c01df4dbd3707fbe4480124b314419795b5cb719c7ded2a1",
+          "status": "ok",
+          "utility": 0.6923076923076923
+        },
+        "naive_majority_vote": {
+          "accepted_count": 35,
+          "catastrophic_error_count": 6,
+          "coverage": {
+            "count": 35,
+            "denominator": 39,
+            "lower": 0.7642114553714349,
+            "rate": 0.8974358974358975,
+            "status": "defined",
+            "upper": 0.9593866865533164,
+            "wilson_95": [
+              0.7642114553714349,
+              0.9593866865533164
+            ]
+          },
+          "false_verified_count": 6,
+          "not_applicable_reason": null,
+          "sample_count": 39,
+          "semantic_identity": "sha256:9006986814f48beb12c8100e7a545f514bfbc8c455032986d9bebb42d00831e5",
+          "status": "ok",
+          "utility": -0.7948717948717948
+        }
+      },
+      "catastrophic_opportunities": 18,
+      "sample_count": 39,
+      "slice_id": "heldout-matched"
+    },
+    "heldout-shifted": {
+      "baselines": {
+        "best_single_witness": {
+          "accepted_count": 25,
+          "catastrophic_error_count": 4,
+          "coverage": {
+            "count": 25,
+            "denominator": 25,
+            "lower": 0.8668077490609514,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999998,
+            "wilson_95": [
+              0.8668077490609514,
+              0.9999999999999998
+            ]
+          },
+          "false_verified_count": 11,
+          "not_applicable_reason": null,
+          "sample_count": 25,
+          "semantic_identity": "sha256:ab2ea0b1649352b7c329c40cf9eb1dac584d17f7a5e26406605f2a583e3d4215",
+          "status": "ok",
+          "utility": -1.6
+        },
+        "correlation_blind_ensemble": {
+          "accepted_count": 25,
+          "catastrophic_error_count": 4,
+          "coverage": {
+            "count": 25,
+            "denominator": 25,
+            "lower": 0.8668077490609514,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999998,
+            "wilson_95": [
+              0.8668077490609514,
+              0.9999999999999998
+            ]
+          },
+          "false_verified_count": 11,
+          "not_applicable_reason": null,
+          "sample_count": 25,
+          "semantic_identity": "sha256:a1054f0a3a8009861f2fdd797bf9a51fce0c214917b480c72f5ccb671c1a3808",
+          "status": "ok",
+          "utility": -1.6
+        },
+        "dependency_aware_policy": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 0,
+            "denominator": 25,
+            "lower": 1.2029374011637166e-17,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.1331922509390485,
+            "wilson_95": [
+              1.2029374011637166e-17,
+              0.1331922509390485
+            ]
+          },
+          "false_verified_count": 0,
+          "not_applicable_reason": "pair ('native-2', 'ocr-p7') joint-error Wilson upper 0.6293266813020122 exceeds policy bound 0.6",
+          "sample_count": 25,
+          "semantic_identity": "sha256:c26c307bbc3adc447f91c028c24840e6640f53e0ccd00ece5b54878ddc33836b",
+          "status": "risk_bound_not_met",
+          "utility": 0.0
+        },
+        "deterministic_source_native_only": {
+          "accepted_count": 25,
+          "catastrophic_error_count": 4,
+          "coverage": {
+            "count": 25,
+            "denominator": 25,
+            "lower": 0.8668077490609514,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999998,
+            "wilson_95": [
+              0.8668077490609514,
+              0.9999999999999998
+            ]
+          },
+          "false_verified_count": 11,
+          "not_applicable_reason": null,
+          "sample_count": 25,
+          "semantic_identity": "sha256:24b841a3f268d3131d75959bd11cba77ef42926816e776669757acface6f31ec",
+          "status": "ok",
+          "utility": -1.6
+        },
+        "naive_majority_vote": {
+          "accepted_count": 25,
+          "catastrophic_error_count": 4,
+          "coverage": {
+            "count": 25,
+            "denominator": 25,
+            "lower": 0.8668077490609514,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 0.9999999999999998,
+            "wilson_95": [
+              0.8668077490609514,
+              0.9999999999999998
+            ]
+          },
+          "false_verified_count": 11,
+          "not_applicable_reason": null,
+          "sample_count": 25,
+          "semantic_identity": "sha256:93f8a54bebe603fa44f77df504a44f2cc6c971ee36471fe9fcf201260f0a7c4c",
+          "status": "ok",
+          "utility": -1.6
+        }
+      },
+      "catastrophic_opportunities": 4,
+      "sample_count": 25,
+      "slice_id": "heldout-shifted"
+    },
+    "heldout-thin": {
+      "baselines": {
+        "best_single_witness": {
+          "accepted_count": 3,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 3,
+            "denominator": 3,
+            "lower": 0.4385029682449545,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0,
+            "wilson_95": [
+              0.4385029682449545,
+              1.0
+            ]
+          },
+          "false_verified_count": 0,
+          "not_applicable_reason": null,
+          "sample_count": 3,
+          "semantic_identity": "sha256:eccce172361203e8f0897a2b69668ce588223f5b25d68ab772f0c081a849b6c7",
+          "status": "ok",
+          "utility": 1.0
+        },
+        "correlation_blind_ensemble": {
+          "accepted_count": 3,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 3,
+            "denominator": 3,
+            "lower": 0.4385029682449545,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0,
+            "wilson_95": [
+              0.4385029682449545,
+              1.0
+            ]
+          },
+          "false_verified_count": 0,
+          "not_applicable_reason": null,
+          "sample_count": 3,
+          "semantic_identity": "sha256:83360d84f3f86d9e9c27b9cb7a7f763d827a4e5acefa55bddee0d6ce85ca47b0",
+          "status": "ok",
+          "utility": 1.0
+        },
+        "dependency_aware_policy": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 0,
+            "denominator": 3,
+            "lower": 4.8683609171202235e-17,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.5614970317550455,
+            "wilson_95": [
+              4.8683609171202235e-17,
+              0.5614970317550455
+            ]
+          },
+          "false_verified_count": 0,
+          "not_applicable_reason": "fewer than two dependency-diverse witnesses",
+          "sample_count": 3,
+          "semantic_identity": "sha256:4bec7b111fb4803d068dcd75f83ab38961e5a3899972d7bc80c5d3be4ce8b7a9",
+          "status": "insufficient_support",
+          "utility": 0.0
+        },
+        "deterministic_source_native_only": {
+          "accepted_count": 0,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 0,
+            "denominator": 3,
+            "lower": 4.8683609171202235e-17,
+            "rate": 0.0,
+            "status": "defined",
+            "upper": 0.5614970317550455,
+            "wilson_95": [
+              4.8683609171202235e-17,
+              0.5614970317550455
+            ]
+          },
+          "false_verified_count": 0,
+          "not_applicable_reason": "corpus has no source-native/deterministic witness",
+          "sample_count": 3,
+          "semantic_identity": "sha256:2fdc84c7bce06aff04f7a3a6d8b46a1df1e08cd9d689c3b27699c3f3783381c6",
+          "status": "not_applicable",
+          "utility": 0.0
+        },
+        "naive_majority_vote": {
+          "accepted_count": 3,
+          "catastrophic_error_count": 0,
+          "coverage": {
+            "count": 3,
+            "denominator": 3,
+            "lower": 0.4385029682449545,
+            "rate": 1.0,
+            "status": "defined",
+            "upper": 1.0,
+            "wilson_95": [
+              0.4385029682449545,
+              1.0
+            ]
+          },
+          "false_verified_count": 0,
+          "not_applicable_reason": null,
+          "sample_count": 3,
+          "semantic_identity": "sha256:a2298833ac3965a73b1f5e8c80eb64b501171105acf6bbb2e125612307ae64de",
+          "status": "ok",
+          "utility": 1.0
+        }
+      },
+      "catastrophic_opportunities": 0,
+      "sample_count": 3,
+      "slice_id": "heldout-thin"
+    }
+  }
+}
