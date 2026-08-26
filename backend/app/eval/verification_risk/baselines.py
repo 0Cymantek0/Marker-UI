@@ -58,6 +58,17 @@ def _dependency_aware_ids(corpus: VerificationRiskCorpus) -> tuple[str, ...]:
         selected.append(witness)
     return tuple(witness.witness_id for witness in selected)
 
+
+def witness_dependency_keys(witness: WitnessProfile) -> tuple[tuple[Any, ...], ...]:
+    """Public view of every dependency dimension a witness occupies.
+
+    Routing-promotion contamination checks use these keys to prove a
+    holdout population introduces dependency structures unseen in the
+    development corpora.
+    """
+
+    return _witness_group_keys(witness)
+
 @dataclass(frozen=True)
 class BaselineResult:
     name: str
