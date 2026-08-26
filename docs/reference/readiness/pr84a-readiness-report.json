@@ -1,13 +1,13 @@
 {
   "schema": "marker.pr84a_readiness_report.v1",
   "subject": {
-    "git_head": "5afb8feac30e1da524b2186cf78202c885ce8e54"
+    "git_head": "14535df068041137d9bf0b792b0bff9b93c753da"
   },
   "verdict": "NOT_READY",
   "counts": {
-    "proven": 52,
+    "proven": 53,
     "failed": 0,
-    "no_evidence": 10
+    "no_evidence": 9
   },
   "group_counts": {
     "23C.1": {
@@ -23,9 +23,9 @@
       "total": 9
     },
     "23C.3": {
-      "proven": 8,
+      "proven": 9,
       "failed": 0,
-      "no_evidence": 1,
+      "no_evidence": 0,
       "total": 9
     },
     "23C.4": {
@@ -55,13 +55,12 @@
   },
   "gap_type_counts": {
     "B": 6,
-    "D": 4
+    "D": 3
   },
   "residual_gap_ranking": [
     "23C.1",
     "23C.4",
     "23C.2",
-    "23C.3",
     "23C.5"
   ],
   "integrity_findings": [],
@@ -348,11 +347,14 @@
       "id": 25,
       "group": "23C.3",
       "label": "routing-stays-shadow-until-proven",
-      "status": "no_evidence",
-      "reason": "partial_coverage_only",
-      "environments": [],
-      "gap_type": "D",
-      "gap_note": "Routing demonstrably stays shadow/offline, but the promotion condition has not been evaluated against truly held-out shift + catastrophic utility (same fixture trains and evaluates); evidence is fixture-scoped."
+      "status": "proven",
+      "reason": null,
+      "environments": [
+        "conformance-local (single CI matrix cell)",
+        "offline-artifact (independent final holdout population)"
+      ],
+      "gap_type": null,
+      "gap_note": null
     },
     {
       "id": 26,

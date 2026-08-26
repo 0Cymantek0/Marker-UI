@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `5afb8feac30e1da524b2186cf78202c885ce8e54`
-- Invariants proven: **52 / 62**
+- Audited source head: `14535df068041137d9bf0b792b0bff9b93c753da`
+- Invariants proven: **53 / 62**
 - Failed: **0**
-- No acceptable evidence: **10**
+- No acceptable evidence: **9**
 
 ## Group summary
 
@@ -13,7 +13,7 @@
 |---|---|---:|---:|---:|
 | 23C.1 | Truth and persistence | 5 | 0 | 4 |
 | 23C.2 | Geometry, patches, and incrementality | 8 | 0 | 1 |
-| 23C.3 | Verification and routing | 8 | 0 | 1 |
+| 23C.3 | Verification and routing | 9 | 0 | 0 |
 | 23C.4 | Runtime and jobs | 8 | 0 | 3 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
 | 23C.6 | Agent and product behavior | 8 | 0 | 0 |
@@ -47,7 +47,7 @@
 | 22 | 23C.3 | proven | sqlite-dev |
 | 23 | 23C.3 | proven | sqlite-dev |
 | 24 | 23C.3 | proven | sqlite-dev |
-| 25 | 23C.3 | no-evidence | executed proof covers only part of the invariant wording |
+| 25 | 23C.3 | proven | conformance-local (single CI matrix cell), offline-artifact (independent final holdout population) |
 | 26 | 23C.3 | proven | sqlite-dev, sqlite-dev deterministic tracer (injected clocks, real seams) |
 | 27 | 23C.3 | proven | deterministic local lane (real kernel/publication/query authorities per document; specialist responses replayed offline from the committed PR80B cache - no network, no credentials) |
 | 28 | 23C.4 | proven | sqlite-dev, offline-artifact (PR68A measured comparison, frozen) |
@@ -103,7 +103,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 
 - **Inv 3** (23C.1, crash-injection-no-partial-state): Crash atomicity for mutations/decisions/publication pointers/effects is proven on SQLite; source-cursor and full recovery crash injection runs in the PG+S3 industrial environment (env-gated here). No cross-topology crash claim beyond the CI-grade lab. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 6** (23C.1, canonical-id-cross-platform): Determinism proven multi-OS × multi-Python on x86_64 with committed golden constants; the invariant's literal cross-language and ARM64 clauses have no executable fixture (no second-language implementation, no ARM64 runner). Reason: executed proof covers only part of the invariant wording.
-- **Inv 25** (23C.3, routing-stays-shadow-until-proven): Routing demonstrably stays shadow/offline, but the promotion condition has not been evaluated against truly held-out shift + catastrophic utility (same fixture trains and evaluates); evidence is fixture-scoped. Reason: executed proof covers only part of the invariant wording.
 - **Inv 38** (23C.4, failure-injection-truthful-outcomes): Cancellation/failover/disk/model-service(lease-lapse) classes are covered on the SQLite lane and DB-outage/WAL semantics on the PG failover lab; shared-memory pressure is not injected anywhere (the shared-memory lane was measured and rejected in PR68A), and no literal model-service crash injection exists. Reason: proof exists but was environment-gated in the recorded run.
 
 ### Next-slice ranking (groups with most non-proven invariants)
@@ -111,7 +110,6 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - 23C.1 Truth and persistence: 4 non-proven
 - 23C.4 Runtime and jobs: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 1 non-proven
-- 23C.3 Verification and routing: 1 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven
 
 ## Reproduction
