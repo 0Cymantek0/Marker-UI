@@ -138,21 +138,29 @@ def validate_inventory_subject(
     if not isinstance(name, str) or not name.strip():
         errors.append("inventory subject 'name' must be a non-empty string")
     if cat not in INVENTORY_CATEGORIES:
-        errors.append(f"inventory subject category must be one of {sorted(INVENTORY_CATEGORIES)}, got {cat!r}")
+        errors.append(
+            f"inventory subject category must be one of {sorted(INVENTORY_CATEGORIES)}, got {cat!r}"
+        )
     if not isinstance(desc, str) or not desc.strip():
         errors.append("inventory subject 'description' must be a non-empty string")
 
     if not isinstance(paths, (list, tuple)) or not paths:
-        errors.append(f"inventory subject {s_id!r} must declare a non-empty list of source_paths")
+        errors.append(
+            f"inventory subject {s_id!r} must declare a non-empty list of source_paths"
+        )
     else:
         root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[4]
         for sp in paths:
             if not isinstance(sp, str) or not sp.strip():
-                errors.append(f"inventory subject {s_id!r} contains invalid source path: {sp!r}")
+                errors.append(
+                    f"inventory subject {s_id!r} contains invalid source path: {sp!r}"
+                )
             else:
                 target = root / sp
                 if not target.exists():
-                    errors.append(f"inventory subject {s_id!r} source path does not exist: {sp}")
+                    errors.append(
+                        f"inventory subject {s_id!r} source path does not exist: {sp}"
+                    )
 
     return errors
 
@@ -547,9 +555,13 @@ def validate_excluded_category_policy(
         seen_cats: set[str] = set()
         for cat in cats:
             if not isinstance(cat, str) or not cat.strip():
-                errors.append("excluded_categories contains invalid/empty category string")
+                errors.append(
+                    "excluded_categories contains invalid/empty category string"
+                )
             elif cat in seen_cats:
-                errors.append(f"excluded_categories contains duplicate category: {cat!r}")
+                errors.append(
+                    f"excluded_categories contains duplicate category: {cat!r}"
+                )
             seen_cats.add(cat)
 
     reasons = p_dict.get("exclusion_reasons")
@@ -560,22 +572,32 @@ def validate_excluded_category_policy(
         # Check every key in exclusion_reasons is a known excluded category
         for rk in reasons:
             if rk not in cats_set:
-                errors.append(f"exclusion_reasons contains unknown category key: {rk!r}")
+                errors.append(
+                    f"exclusion_reasons contains unknown category key: {rk!r}"
+                )
 
         # Check every excluded category has a non-empty explanation
         for cat in cats or ():
             if cat not in reasons or not str(reasons[cat]).strip():
-                errors.append(f"excluded category {cat!r} requires non-empty explanation in exclusion_reasons")
+                errors.append(
+                    f"excluded category {cat!r} requires non-empty explanation in exclusion_reasons"
+                )
 
     # Check excluded_model_candidates
     ex_models = p_dict.get("excluded_model_candidates", {})
     if not isinstance(ex_models, Mapping):
-        errors.append("excluded_model_candidates must be a mapping of model_id to reason")
+        errors.append(
+            "excluded_model_candidates must be a mapping of model_id to reason"
+        )
     else:
         for m_id, m_reason in ex_models.items():
             if not isinstance(m_id, str) or not m_id.strip():
-                errors.append("excluded_model_candidates contains invalid/empty model ID")
+                errors.append(
+                    "excluded_model_candidates contains invalid/empty model ID"
+                )
             if not isinstance(m_reason, str) or not m_reason.strip():
-                errors.append(f"excluded_model_candidates entry {m_id!r} requires non-empty explanation string")
+                errors.append(
+                    f"excluded_model_candidates entry {m_id!r} requires non-empty explanation string"
+                )
 
     return errors

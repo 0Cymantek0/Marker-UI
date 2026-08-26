@@ -83,7 +83,10 @@ _AUTHORITATIVE_CAPABILITY_RECORDS: tuple[CapabilityRecord, ...] = (
             complexity_adjusted_conclusion="promoted_complexity_justified",
             operational_burden_status="measured",
             quality_gain=1.0,
-            operational_cost_delta={"transaction_overhead_ms": 1.2, "wal_amplification_ratio": 1.05},
+            operational_cost_delta={
+                "transaction_overhead_ms": 1.2,
+                "wal_amplification_ratio": 1.05,
+            },
             justification_summary="Provides crash-safe ACID state transitions and snapshot isolation across SQLite and PG backends.",
         ),
         unresolved_limits=(
@@ -606,7 +609,10 @@ _AUTHORITATIVE_CAPABILITY_RECORDS: tuple[CapabilityRecord, ...] = (
             complexity_adjusted_conclusion="shadow_experimental_retained",
             operational_burden_status="measured",
             quality_gain=0.18,
-            operational_cost_delta={"visual_storage_kb_per_page": 240, "vlm_inference_cost_factor": 1.4},
+            operational_cost_delta={
+                "visual_storage_kb_per_page": 240,
+                "vlm_inference_cost_factor": 1.4,
+            },
             justification_summary="Selective visual reranking justified on verified holder models (Sonnet 4.5, GPT-5.6, Gemini Flash); kept in shadow pending full routing.",
         ),
         unresolved_limits=(
@@ -648,9 +654,7 @@ _AUTHORITATIVE_CAPABILITY_RECORDS: tuple[CapabilityRecord, ...] = (
             operational_cost_delta={"storage_amplification_ratio": 12.4},
             justification_summary="Dense full-page visual indexing permanently disabled due to excessive 12.4x storage amplification and zero marginal accuracy over selective rerank.",
         ),
-        unresolved_limits=(
-            "Permanently decommissioned",
-        ),
+        unresolved_limits=("Permanently decommissioned",),
     ),
     CapabilityRecord(
         id="routing.specialist_hybrid_bridge",
@@ -770,9 +774,7 @@ _AUTHORITATIVE_CAPABILITY_RECORDS: tuple[CapabilityRecord, ...] = (
             quality_gain=-0.12,
             justification_summary="Breached text-easy control in PR81B; accepted negative research outcome per invariant 61.",
         ),
-        unresolved_limits=(
-            "Non-promoted due to control breach",
-        ),
+        unresolved_limits=("Non-promoted due to control breach",),
     ),
     CapabilityRecord(
         id="model.cx_gpt_5_6_luna",
@@ -889,9 +891,7 @@ _AUTHORITATIVE_CAPABILITY_RECORDS: tuple[CapabilityRecord, ...] = (
             quality_gain=0.0,
             justification_summary="Free tier probe rate limits prevented reliable capability verification; accepted negative result.",
         ),
-        unresolved_limits=(
-            "Non-promoted due to provider probe unreliability",
-        ),
+        unresolved_limits=("Non-promoted due to provider probe unreliability",),
     ),
     CapabilityRecord(
         id="model.google_gemma_4_26b",
@@ -928,17 +928,19 @@ _AUTHORITATIVE_CAPABILITY_RECORDS: tuple[CapabilityRecord, ...] = (
             quality_gain=0.0,
             justification_summary="PR81A initial reference baseline; non-promoted in favor of PR81B frontier lane candidates.",
         ),
-        unresolved_limits=(
-            "Reference baseline; non-promoted",
-        ),
+        unresolved_limits=("Reference baseline; non-promoted",),
     ),
 )
 
 
 # Validate the raw authoritative tuple at import time
-_record_seq_init_errors = validate_capability_records_sequence(_AUTHORITATIVE_CAPABILITY_RECORDS)
+_record_seq_init_errors = validate_capability_records_sequence(
+    _AUTHORITATIVE_CAPABILITY_RECORDS
+)
 if _record_seq_init_errors:
-    raise ValueError(f"Authoritative capability records tuple corrupt: {_record_seq_init_errors}")
+    raise ValueError(
+        f"Authoritative capability records tuple corrupt: {_record_seq_init_errors}"
+    )
 
 
 AUTHORITATIVE_CAPABILITY_MATRIX: dict[str, CapabilityRecord] = {
@@ -969,7 +971,11 @@ def get_promoted_rollback_verification_nodes() -> list[str]:
     """Return sorted list of rollback verification pytest node IDs for promoted capabilities."""
     nodes: set[str] = set()
     for rec in _AUTHORITATIVE_CAPABILITY_RECORDS:
-        if rec.disposition == DISPOSITION_PROMOTED and rec.rollback and rec.rollback.verification_node:
+        if (
+            rec.disposition == DISPOSITION_PROMOTED
+            and rec.rollback
+            and rec.rollback.verification_node
+        ):
             nodes.add(rec.rollback.verification_node)
     return sorted(nodes)
 
@@ -989,8 +995,12 @@ def _verify_ast_test_function(file_path: Path, func_name: str) -> bool:
 
 
 def validate_accountability_completeness(
-    inventory: Sequence[InventorySubject | Mapping[str, Any]] | Mapping[str, InventorySubject | Mapping[str, Any]] | None = None,
-    records: Sequence[CapabilityRecord | Mapping[str, Any]] | Mapping[str, CapabilityRecord | Mapping[str, Any]] | None = None,
+    inventory: Sequence[InventorySubject | Mapping[str, Any]]
+    | Mapping[str, InventorySubject | Mapping[str, Any]]
+    | None = None,
+    records: Sequence[CapabilityRecord | Mapping[str, Any]]
+    | Mapping[str, CapabilityRecord | Mapping[str, Any]]
+    | None = None,
     catalog: ModelCatalog | None = None,
     excluded_policy: ExcludedCategoryPolicy | None = None,
     repo_root: Path | str | None = None,
@@ -1025,7 +1035,11 @@ def validate_accountability_completeness(
         return errors
 
     # Resolve and validate excluded category policy
-    policy = excluded_policy if excluded_policy is not None else get_excluded_category_policy()
+    policy = (
+        excluded_policy
+        if excluded_policy is not None
+        else get_excluded_category_policy()
+    )
     pol_errs = validate_excluded_category_policy(policy)
     errors.extend(pol_errs)
 
@@ -1033,11 +1047,15 @@ def validate_accountability_completeness(
     rec_map: dict[str, CapabilityRecord | Mapping[str, Any]] = {}
     if records is None:
         raw_rec_tuple = get_authoritative_capability_records_tuple()
-        rec_seq_errs = validate_capability_records_sequence(raw_rec_tuple, as_of_date=as_of_date)
+        rec_seq_errs = validate_capability_records_sequence(
+            raw_rec_tuple, as_of_date=as_of_date
+        )
         errors.extend(rec_seq_errs)
         rec_map = {r.id: r for r in raw_rec_tuple}
     elif isinstance(records, (list, tuple)):
-        rec_seq_errs = validate_capability_records_sequence(records, as_of_date=as_of_date)
+        rec_seq_errs = validate_capability_records_sequence(
+            records, as_of_date=as_of_date
+        )
         errors.extend(rec_seq_errs)
         for r in records:
             r_id = r.id if isinstance(r, CapabilityRecord) else r.get("id")
@@ -1055,23 +1073,40 @@ def validate_accountability_completeness(
 
     # 1. Exact bijection check between in-scope inventory subjects and capability records
     in_scope_subj_ids = {
-        s_id for s_id, s in inv_map.items()
-        if (s.in_scope_v32 if isinstance(s, InventorySubject) else s.get("in_scope_v32", True))
+        s_id
+        for s_id, s in inv_map.items()
+        if (
+            s.in_scope_v32
+            if isinstance(s, InventorySubject)
+            else s.get("in_scope_v32", True)
+        )
     }
     rec_ids = set(rec_map.keys())
 
     missing_in_records = in_scope_subj_ids - rec_ids
     for mid in sorted(missing_in_records):
-        errors.append(f"missing accountability record for in-scope inventory subject: {mid!r}")
+        errors.append(
+            f"missing accountability record for in-scope inventory subject: {mid!r}"
+        )
 
     extra_in_records = rec_ids - in_scope_subj_ids
     for eid in sorted(extra_in_records):
-        errors.append(f"extra accountability record not declared in in-scope inventory: {eid!r}")
+        errors.append(
+            f"extra accountability record not declared in in-scope inventory: {eid!r}"
+        )
 
     # 2. Check individual capability records for filesystem existence & AST validity
     for cid, record in rec_map.items():
-        disp = record.disposition if isinstance(record, CapabilityRecord) else record.get("disposition")
-        rb = record.rollback if isinstance(record, CapabilityRecord) else record.get("rollback")
+        disp = (
+            record.disposition
+            if isinstance(record, CapabilityRecord)
+            else record.get("disposition")
+        )
+        rb = (
+            record.rollback
+            if isinstance(record, CapabilityRecord)
+            else record.get("rollback")
+        )
         if isinstance(rb, RollbackPath):
             v_node = rb.verification_node
             v_ev = rb.verification_evidence
@@ -1095,25 +1130,33 @@ def validate_accountability_completeness(
                 fpath_str = parts[0]
                 func_name = parts[-1]
 
-                if not any(fpath_str.startswith(prefix) for prefix in APPROVED_TEST_PREFIXES):
+                if not any(
+                    fpath_str.startswith(prefix) for prefix in APPROVED_TEST_PREFIXES
+                ):
                     errors.append(
                         f"capability {cid!r}: rollback verification node {fpath_str!r} must be in approved test directories {APPROVED_TEST_PREFIXES}"
                     )
                 node_file = root / fpath_str
                 if not node_file.exists():
-                    errors.append(f"capability {cid!r}: rollback verification node file not found: {fpath_str}")
+                    errors.append(
+                        f"capability {cid!r}: rollback verification node file not found: {fpath_str}"
+                    )
                 else:
                     if not _verify_ast_test_function(node_file, func_name):
                         errors.append(
                             f"capability {cid!r}: rollback verification node function {func_name!r} not found in AST of {fpath_str}"
                         )
         elif disp == DISPOSITION_PROMOTED:
-            errors.append(f"promoted capability {cid!r} missing required verification_node")
+            errors.append(
+                f"promoted capability {cid!r} missing required verification_node"
+            )
 
         if v_ev:
             ev_file = root / v_ev
             if not ev_file.exists():
-                errors.append(f"capability {cid!r}: rollback verification evidence artifact not found: {v_ev}")
+                errors.append(
+                    f"capability {cid!r}: rollback verification evidence artifact not found: {v_ev}"
+                )
             elif v_sha and verify_evidence_digests:
                 actual_ev_sha = hashlib.sha256(ev_file.read_bytes()).hexdigest()
                 if actual_ev_sha != v_sha:
@@ -1122,7 +1165,11 @@ def validate_accountability_completeness(
                     )
 
         # Check utility_basis evidence artifact existence and digest
-        util = record.utility_basis if isinstance(record, CapabilityRecord) else record.get("utility_basis")
+        util = (
+            record.utility_basis
+            if isinstance(record, CapabilityRecord)
+            else record.get("utility_basis")
+        )
         if isinstance(util, CapabilityUtilityBasis):
             art = util.evidence_artifact
             exp_sha = util.evidence_sha256
@@ -1150,7 +1197,9 @@ def validate_accountability_completeness(
     for s_id, s in inv_map.items():
         cat = s.category if isinstance(s, InventorySubject) else s.get("category")
         if cat == "evaluation_model_candidate":
-            meta = s.metadata if isinstance(s, InventorySubject) else s.get("metadata", {})
+            meta = (
+                s.metadata if isinstance(s, InventorySubject) else s.get("metadata", {})
+            )
             cat_m_id = meta.get("catalog_model_id")
             if cat_m_id:
                 inventory_model_ids.add(cat_m_id)

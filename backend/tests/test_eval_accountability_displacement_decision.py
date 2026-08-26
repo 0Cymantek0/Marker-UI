@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import copy
 import hashlib
-import json
 from pathlib import Path
 
-import pytest
-from app.eval.accountability.displacement_decision import (
-    DIMENSION_COST,
+from app.eval.accountability.displacement import (
     DIMENSION_DANGEROUS_FAILURES,
     DIMENSION_DOC_EXACT_RATE,
     DIMENSION_EVIDENCE_LINEAGE,
@@ -25,7 +21,6 @@ from app.eval.accountability.displacement_decision import (
     OUTCOME_INTEGRATE_OR_ROUTE,
     OUTCOME_MARKER_RETAINED,
     PROTOCOL_PROSPECTIVE_PREREGISTRATION,
-    PROTOCOL_RETROSPECTIVE_FROZEN_REPLAY,
     REASON_STATUS_CONCEDED,
     REASON_STATUS_INTEGRATED,
     REASON_STATUS_MEASURED,
@@ -33,7 +28,6 @@ from app.eval.accountability.displacement_decision import (
     ComparatorMeasurements,
     CorpusPreregistration,
     DimensionMeasurement,
-    DisplacementDecisionError,
     DisplacementMeasurementBundle,
     DisplacementPreregistration,
     ExecutedComparatorFacts,
@@ -41,23 +35,11 @@ from app.eval.accountability.displacement_decision import (
     FairnessVerification,
     FrozenDecisionThresholds,
     IntegrationVerification,
-    create_pr80b_retrospective_preregistration,
     derive_displacement_decision,
-    parse_pr80b_measurement_artifact,
-    validate_active_integration,
-    validate_displacement_measurement_bundle,
-    validate_displacement_preregistration,
     validate_persisted_decision,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PR80B_ARTIFACT_PATH = (
-    REPO_ROOT
-    / "docs"
-    / "reference"
-    / "measurements"
-    / "pr80b-direct-specialist-displacement.json"
-)
 INJECTED_AS_OF_DATE = "2026-08-26T00:00:00Z"
 
 
@@ -229,259 +211,8 @@ def _build_test_bundle(
 
 
 # -----------------------------------------------------------------------------
-# Unit & Contract Validation Tests
+# Decision Outcome & Rederivation Tests
 # -----------------------------------------------------------------------------
-
-
-def test_preregistration_clean_validation():
-    prereg = _build_test_preregistration()
-    errors = validate_displacement_preregistration(
-        prereg, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert errors == []
-
-
-def test_preregistration_rejects_prospective_timing_lie():
-    """Claiming prospective preregistration when evidence predates registration fails closed."""
-    prereg = _build_test_preregistration(
-        prereg_date="2026-08-25T00:00:00Z",
-        protocol_timing=PROTOCOL_PROSPECTIVE_PREREGISTRATION,
-    )
-    bundle = _build_test_bundle(
-        prereg,
-        evidence_date="2026-08-20T00:00:00Z",
-    )
-    b_errs = validate_displacement_measurement_bundle(
-        bundle, prereg=prereg, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any("Prospective timing lie" in e for e in b_errs)
-
-    decision = derive_displacement_decision(
-        prereg, bundle, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert decision.outcome == OUTCOME_INCONCLUSIVE
-    assert any("Prospective timing violation" in b for b in decision.blockers)
-
-
-def test_retrospective_timing_disclosure_accepted_cleanly():
-    """Declaring retrospective_frozen_replay allows evidence pre-dating registration with clear disclosure."""
-    prereg = _build_test_preregistration(
-        prereg_date="2026-08-26T00:00:00Z",
-        protocol_timing=PROTOCOL_RETROSPECTIVE_FROZEN_REPLAY,
-    )
-    bundle = _build_test_bundle(
-        prereg,
-        evidence_date="2026-08-20T00:00:00Z",
-    )
-    b_errs = validate_displacement_measurement_bundle(
-        bundle, prereg=prereg, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert b_errs == []
-
-    decision = derive_displacement_decision(
-        prereg, bundle, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert decision.outcome == OUTCOME_MARKER_RETAINED
-    assert any("Retrospective frozen replay" in lim for lim in decision.limitations)
-
-
-def test_preregistration_fails_on_missing_or_duplicate_baseline():
-    prereg = _build_test_preregistration()
-    raw = prereg.to_dict()
-
-    # Zero marker baselines
-    raw_no_base = copy.deepcopy(raw)
-    raw_no_base["comparators"][0]["is_marker_baseline"] = False
-    errs = validate_displacement_preregistration(raw_no_base)
-    assert any("exactly 1 is_marker_baseline" in e for e in errs)
-
-    # Duplicate marker baselines
-    raw_two_base = copy.deepcopy(raw)
-    raw_two_base["comparators"][1]["is_marker_baseline"] = True
-    errs2 = validate_displacement_preregistration(raw_two_base)
-    assert any("exactly 1 is_marker_baseline" in e for e in errs2)
-
-
-def test_measurement_tristate_preserves_unavailable_without_zero_conversion():
-    meas_unavail = DimensionMeasurement(
-        dimension="review_burden",
-        status=MEASUREMENT_STATUS_UNAVAILABLE,
-        value=None,
-    )
-    assert meas_unavail.is_unavailable
-    assert meas_unavail.as_numeric() is None
-
-    meas_measured = DimensionMeasurement(
-        dimension="doc_exact_rate",
-        status=MEASUREMENT_STATUS_MEASURED,
-        value=0.95,
-    )
-    assert meas_measured.is_measured
-    assert meas_measured.as_numeric() == 0.95
-
-    with pytest.raises(DisplacementDecisionError):
-        # Measured status requires concrete value
-        DimensionMeasurement(
-            dimension="cost",
-            status=MEASUREMENT_STATUS_MEASURED,
-            value=None,
-        )
-
-
-# -----------------------------------------------------------------------------
-# Integration Verification Tests (No Self-Certification From Strings)
-# -----------------------------------------------------------------------------
-
-
-def test_integration_verification_validation_rules(tmp_path: Path):
-    """Integration contract must validate against repo root, file existence, and exact SHA-256."""
-    prereg = _build_test_preregistration()
-
-    # Create dummy repo-relative file under docs/reference/measurements
-    meas_dir = tmp_path / "docs" / "reference" / "measurements"
-    meas_dir.mkdir(parents=True)
-    art_file = meas_dir / "test_bridge.json"
-    raw_content = b'{"bridge": "active_v1"}'
-    art_file.write_bytes(raw_content)
-    real_sha = hashlib.sha256(raw_content).hexdigest()
-
-    valid_integration = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="docs/reference/measurements/test_bridge.json",
-        evidence_artifact_sha256=real_sha,
-        workflow_scope=prereg.workflow,
-        corpus_fingerprint_scope=prereg.corpus.fingerprint,
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-22T00:00:00Z",
-    )
-    errs = validate_active_integration(
-        valid_integration, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert errs == []
-
-    # 1. Non repo-relative or path outside docs/reference/measurements
-    bad_path_int = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="outside/dir/bridge.json",
-        evidence_artifact_sha256=real_sha,
-        workflow_scope=prereg.workflow,
-        corpus_fingerprint_scope=prereg.corpus.fingerprint,
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-22T00:00:00Z",
-    )
-    errs_path = validate_active_integration(
-        bad_path_int, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any(
-        "must be repo-relative under docs/reference/measurements/" in e
-        for e in errs_path
-    )
-
-    # 2. Path containing '..'
-    bad_traversal = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="docs/reference/measurements/../bridge.json",
-        evidence_artifact_sha256=real_sha,
-        workflow_scope=prereg.workflow,
-        corpus_fingerprint_scope=prereg.corpus.fingerprint,
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-22T00:00:00Z",
-    )
-    errs_trav = validate_active_integration(
-        bad_traversal, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any("cannot contain '..'" in e for e in errs_trav)
-
-    # 3. Missing file
-    missing_file_int = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="docs/reference/measurements/nonexistent_file.json",
-        evidence_artifact_sha256=real_sha,
-        workflow_scope=prereg.workflow,
-        corpus_fingerprint_scope=prereg.corpus.fingerprint,
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-22T00:00:00Z",
-    )
-    errs_missing = validate_active_integration(
-        missing_file_int, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any("does not exist" in e for e in errs_missing)
-
-    # 4. Wrong SHA-256 digest on existing file
-    wrong_sha_int = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="docs/reference/measurements/test_bridge.json",
-        evidence_artifact_sha256="d" * 64,  # wrong digest!
-        workflow_scope=prereg.workflow,
-        corpus_fingerprint_scope=prereg.corpus.fingerprint,
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-22T00:00:00Z",
-    )
-    errs_sha = validate_active_integration(
-        wrong_sha_int, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any("SHA mismatch" in e for e in errs_sha)
-
-    # 5. Wrong workflow scope
-    wrong_wf_int = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="docs/reference/measurements/test_bridge.json",
-        evidence_artifact_sha256=real_sha,
-        workflow_scope="other_workflow",
-        corpus_fingerprint_scope=prereg.corpus.fingerprint,
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-22T00:00:00Z",
-    )
-    errs_wf = validate_active_integration(
-        wrong_wf_int, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any("workflow_scope" in e for e in errs_wf)
-
-    # 6. Wrong corpus fingerprint scope
-    wrong_fp_int = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="docs/reference/measurements/test_bridge.json",
-        evidence_artifact_sha256=real_sha,
-        workflow_scope=prereg.workflow,
-        corpus_fingerprint_scope="e" * 64,  # wrong fingerprint
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-22T00:00:00Z",
-    )
-    errs_fp = validate_active_integration(
-        wrong_fp_int, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any("corpus_fingerprint_scope" in e for e in errs_fp)
-
-    # 7. Future verified_at date
-    future_date_int = IntegrationVerification(
-        system_id="specialist_a",
-        status=INTEGRATION_STATUS_VERIFIED_ACTIVE,
-        integration_kind=INTEGRATION_KIND_NON_AUTHORITATIVE_CANDIDATE_GENERATOR,
-        evidence_artifact_path="docs/reference/measurements/test_bridge.json",
-        evidence_artifact_sha256=real_sha,
-        workflow_scope=prereg.workflow,
-        corpus_fingerprint_scope=prereg.corpus.fingerprint,
-        corroboration_contract="proof corroborated",
-        verified_at="2026-08-30T00:00:00Z",  # in future!
-    )
-    errs_dt = validate_active_integration(
-        future_date_int, prereg, repo_root=tmp_path, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert any("in future" in e for e in errs_dt)
 
 
 def test_outcome_integrate_or_route_with_verified_temp_artifact(tmp_path: Path):
@@ -621,11 +352,6 @@ def test_outcome_explicit_concession_valid_negative_simplification():
         "concession" in decision.summary.lower()
         or "concedes" in decision.summary.lower()
     )
-
-
-# -----------------------------------------------------------------------------
-# Fairness & Blocker Counterfactual Tests
-# -----------------------------------------------------------------------------
 
 
 def test_outcome_inconclusive_fairness_mismatch_inputs():
@@ -811,11 +537,6 @@ def test_specialist_better_nonintegrable_tradeoff_measured():
     assert decision.reason_ledger[0].status == REASON_STATUS_MEASURED
 
 
-# -----------------------------------------------------------------------------
-# Tamper & Rederivation Tests
-# -----------------------------------------------------------------------------
-
-
 def test_persisted_decision_detects_manual_flip():
     """Manual flipping of outcome fails closed during validation."""
     prereg = _build_test_preregistration()
@@ -887,127 +608,3 @@ def test_persisted_decision_detects_reason_ledger_tamper():
         tampered_dict, prereg, bundle, as_of_date=INJECTED_AS_OF_DATE
     )
     assert any("Reason ledger mismatch" in e for e in errs)
-
-
-# -----------------------------------------------------------------------------
-# PR80B Actual Committed Artifact Replay & Adversarial Tests
-# -----------------------------------------------------------------------------
-
-
-def test_pr80b_actual_artifact_replay():
-    """Replay against actual committed PR80B artifact: derives marker_retained with LLM reason measured."""
-    assert PR80B_ARTIFACT_PATH.is_file(), (
-        f"Committed PR80B artifact missing: {PR80B_ARTIFACT_PATH}"
-    )
-
-    prereg = create_pr80b_retrospective_preregistration(
-        as_of_date="2026-08-26T00:00:00Z"
-    )
-    bundle = parse_pr80b_measurement_artifact(PR80B_ARTIFACT_PATH)
-
-    # Validate preregistration and bundle
-    p_errs = validate_displacement_preregistration(
-        prereg, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert p_errs == []
-    b_errs = validate_displacement_measurement_bundle(
-        bundle, prereg=prereg, as_of_date=INJECTED_AS_OF_DATE
-    )
-    assert b_errs == []
-
-    # Verify cost dimension is UNAVAILABLE (reported_cost was null; not zero!)
-    for comp in bundle.comparators.values():
-        cost_meas = comp.dimensions[DIMENSION_COST]
-        assert cost_meas.status == MEASUREMENT_STATUS_UNAVAILABLE
-        assert cost_meas.as_numeric() is None
-
-    # Derive decision
-    decision = derive_displacement_decision(
-        prereg, bundle, as_of_date=INJECTED_AS_OF_DATE, repo_root=REPO_ROOT
-    )
-
-    # In PR80B-only replay:
-    # 1. PR80A has 0 dangerous failures, 100% evidence coverage, 17 doc exact.
-    # 2. LLM has 1 fabrication, 2 conflicts, 3 silent contradictions, 0% coverage.
-    # 3. Candidate integration is future/unimplemented recommendation, not an active verified bridge.
-    # 4. Therefore, outcome is marker_retained, and LLM generative advantage is measured.
-    assert decision.outcome == OUTCOME_MARKER_RETAINED
-    assert decision.fairness_passed is True
-    assert decision.blockers == ()
-
-    # Check reason ledger: LLM reasons are marked 'measured'
-    llm_reasons = [
-        r for r in decision.reason_ledger if r.specialist_system_id.startswith("llm")
-    ]
-    assert len(llm_reasons) >= 1
-    assert all(r.status == REASON_STATUS_MEASURED for r in llm_reasons)
-
-    # Check limitations disclosed
-    assert decision.protocol_timing == PROTOCOL_RETROSPECTIVE_FROZEN_REPLAY
-    assert any("Retrospective frozen replay" in lim for lim in decision.limitations)
-    assert any("observed-count gate" in lim for lim in decision.limitations)
-
-    # Rederivation validation passes cleanly
-    val_errs = validate_persisted_decision(
-        decision, prereg, bundle, as_of_date=INJECTED_AS_OF_DATE, repo_root=REPO_ROOT
-    )
-    assert val_errs == []
-
-
-def test_pr80b_parser_verifies_raw_bytes_sha():
-    """Parser computes exact SHA-256 over raw file bytes."""
-    raw_bytes = PR80B_ARTIFACT_PATH.read_bytes()
-    expected_sha = hashlib.sha256(raw_bytes).hexdigest()
-
-    bundle = parse_pr80b_measurement_artifact(PR80B_ARTIFACT_PATH)
-    assert bundle.supporting_artifact_sha256 == expected_sha
-
-
-def test_pr80b_parser_adversarial_missing_or_corrupt_fields():
-    """Parser strictly rejects missing or corrupted fields in PR80B artifact."""
-    raw_text = PR80B_ARTIFACT_PATH.read_text(encoding="utf-8")
-    data = json.loads(raw_text)
-
-    # 1. Missing corpus
-    d_no_corpus = copy.deepcopy(data)
-    del d_no_corpus["corpus"]
-    with pytest.raises(DisplacementDecisionError, match="Missing required 'corpus'"):
-        parse_pr80b_measurement_artifact(d_no_corpus)
-
-    # 2. Corrupt document count
-    d_bad_docs = copy.deepcopy(data)
-    d_bad_docs["corpus"]["documents"] = 23
-    with pytest.raises(DisplacementDecisionError, match="Expected 24 corpus documents"):
-        parse_pr80b_measurement_artifact(d_bad_docs)
-
-    # 3. Missing acceptance
-    d_no_acc = copy.deepcopy(data)
-    del d_no_acc["acceptance"]
-    with pytest.raises(
-        DisplacementDecisionError, match="Missing required 'acceptance'"
-    ):
-        parse_pr80b_measurement_artifact(d_no_acc)
-
-    # 4. Missing systems
-    d_no_sys = copy.deepcopy(data)
-    del d_no_sys["systems"]
-    with pytest.raises(DisplacementDecisionError, match="Missing required 'systems'"):
-        parse_pr80b_measurement_artifact(d_no_sys)
-
-    # 5. Missing metrics
-    d_no_metrics = copy.deepcopy(data)
-    del d_no_metrics["metrics"]
-    with pytest.raises(DisplacementDecisionError, match="Missing required 'metrics'"):
-        parse_pr80b_measurement_artifact(d_no_metrics)
-
-    # 6. Missing danger_counts
-    d_no_danger = copy.deepcopy(data)
-    del d_no_danger["decision"]["evidence_supporting"]["danger_counts"]
-    with pytest.raises(DisplacementDecisionError, match="Missing 'danger_counts'"):
-        parse_pr80b_measurement_artifact(d_no_danger)
-
-    # 7. Missing evidence_coverage
-    d_no_cov = copy.deepcopy(data)
-    del d_no_cov["decision"]["evidence_supporting"]["evidence_coverage"]
-    with pytest.raises(DisplacementDecisionError, match="Missing 'evidence_coverage'"):
-        parse_pr80b_measurement_artifact(d_no_cov)

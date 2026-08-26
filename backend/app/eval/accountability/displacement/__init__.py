@@ -1,11 +1,6 @@
-"""Compatibility facade for Invariant-62 rational-user displacement decision engine.
+"""Invariant-62 rational-user displacement decision package."""
 
-Re-exports all public symbols from app.eval.accountability.displacement.
-"""
-
-from __future__ import annotations
-
-from .displacement import (
+from .contracts import (
     ALLOWED_INTEGRATION_KINDS,
     DIMENSION_ABSENT_REJECTION,
     DIMENSION_COST,
@@ -60,10 +55,16 @@ from .displacement import (
     FrozenDecisionThresholds,
     IntegrationVerification,
     ReasonToLeaveItem,
+)
+from .engine import (
+    derive_displacement_decision,
+)
+from .pr80b_adapter import (
     create_pr80b_displacement_preregistration,
     create_pr80b_retrospective_preregistration,
-    derive_displacement_decision,
     parse_pr80b_measurement_artifact,
+)
+from .validation import (
     validate_active_integration,
     validate_displacement_measurement_bundle,
     validate_displacement_preregistration,

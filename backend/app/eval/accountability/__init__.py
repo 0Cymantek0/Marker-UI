@@ -26,7 +26,7 @@ from .capability_matrix import (
     validate_capability_record,
     validate_capability_records_sequence,
 )
-from .displacement_decision import (
+from .displacement import (
     ALLOWED_INTEGRATION_KINDS,
     DIMENSION_ABSENT_REJECTION,
     DIMENSION_COST,

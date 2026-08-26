@@ -112,7 +112,9 @@ KNOWN_REPO_ENV_VARS = frozenset(
 APPROVED_TEST_PREFIXES = ("backend/tests/", "backend/conformance/")
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
-_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2}))?$")
+_ISO_DATE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2}))?$"
+)
 _ENV_FLAG_PATTERN = re.compile(r"\b[A-Z][A-Z0-9_]{3,}\b")
 
 _GENERIC_ROLLBACK_STRINGS = frozenset(
@@ -181,7 +183,14 @@ _ROLLBACK_KEYS = frozenset(
 )
 _EXPIRY_KEYS = frozenset({"evaluated_at", "retest_deadline", "triggers"})
 _KILL_KEYS = frozenset(
-    {"trigger_expression", "evaluation_metric", "threshold", "action", "triggered", "trigger_reason"}
+    {
+        "trigger_expression",
+        "evaluation_metric",
+        "threshold",
+        "action",
+        "triggered",
+        "trigger_reason",
+    }
 )
 _UTILITY_KEYS = frozenset(
     {
@@ -399,7 +408,9 @@ def validate_capability_record(
 
     disposition = rec_dict.get("disposition")
     if disposition not in DISPOSITIONS:
-        errors.append(f"disposition must be one of {sorted(DISPOSITIONS)}, got {disposition!r}")
+        errors.append(
+            f"disposition must be one of {sorted(DISPOSITIONS)}, got {disposition!r}"
+        )
 
     owner = rec_dict.get("support_owner")
     if not isinstance(owner, str) or not owner.strip():
@@ -427,24 +438,34 @@ def validate_capability_record(
         else:
             proc_lower = proc.strip().lower()
             if proc_lower in _GENERIC_ROLLBACK_STRINGS:
-                errors.append(f"rollback.procedure cannot be generic placeholder {proc!r}")
+                errors.append(
+                    f"rollback.procedure cannot be generic placeholder {proc!r}"
+                )
             # Reject unsafe fallback language
             for unsafe in _UNSAFE_ROLLBACK_SUBSTRINGS:
                 if unsafe in proc_lower:
-                    errors.append(f"rollback.procedure cannot use unsafe fallback language {unsafe!r}: {proc!r}")
+                    errors.append(
+                        f"rollback.procedure cannot use unsafe fallback language {unsafe!r}: {proc!r}"
+                    )
             # Reject fictional environment variables
             for token in _ENV_FLAG_PATTERN.findall(proc):
                 if token.startswith("MARKER_") or ("_" in token and token.isupper()):
                     if token not in KNOWN_REPO_ENV_VARS:
-                        errors.append(f"rollback.procedure references fictional/nonexistent environment variable or flag {token!r}")
+                        errors.append(
+                            f"rollback.procedure references fictional/nonexistent environment variable or flag {token!r}"
+                        )
 
         if not isinstance(ver, bool):
             errors.append("rollback.verified must be a boolean")
         elif disposition == DISPOSITION_PROMOTED:
             if ver is not True:
-                errors.append(f"promoted capability {cid!r} requires verified rollback path (verified=True)")
+                errors.append(
+                    f"promoted capability {cid!r} requires verified rollback path (verified=True)"
+                )
             if not v_node and not v_ev:
-                errors.append(f"promoted capability {cid!r} with verified=True requires verification_node or verification_evidence")
+                errors.append(
+                    f"promoted capability {cid!r} with verified=True requires verification_node or verification_evidence"
+                )
 
         if v_node is not None:
             if not isinstance(v_node, str) or not v_node.strip():
@@ -455,14 +476,18 @@ def validate_capability_record(
                 )
             else:
                 fpath = v_node.split("::")[0]
-                if not any(fpath.startswith(prefix) for prefix in APPROVED_TEST_PREFIXES):
+                if not any(
+                    fpath.startswith(prefix) for prefix in APPROVED_TEST_PREFIXES
+                ):
                     errors.append(
                         f"rollback.verification_node path {fpath!r} must start with one of {APPROVED_TEST_PREFIXES}"
                     )
 
         if v_sha is not None:
             if not isinstance(v_sha, str) or not _HEX64.match(v_sha):
-                errors.append("rollback.verification_sha256 must be a 64-char hex SHA-256 digest")
+                errors.append(
+                    "rollback.verification_sha256 must be a 64-char hex SHA-256 digest"
+                )
 
     # Expiry validation
     expiry = rec_dict.get("expiry")
@@ -493,7 +518,9 @@ def validate_capability_record(
                 )
 
         if not isinstance(triggers, (list, tuple)) or not triggers:
-            errors.append("expiry.triggers must be a non-empty list of retest trigger conditions")
+            errors.append(
+                "expiry.triggers must be a non-empty list of retest trigger conditions"
+            )
         else:
             for trg in triggers:
                 if trg not in RETEST_TRIGGERS:
@@ -528,9 +555,13 @@ def validate_capability_record(
         trig_reason = kill.get("trigger_reason")
 
         if not isinstance(expr, str) or not expr.strip():
-            errors.append("kill_condition.trigger_expression must be a non-empty string")
+            errors.append(
+                "kill_condition.trigger_expression must be a non-empty string"
+            )
         elif expr.strip().lower() in _GENERIC_KILL_STRINGS:
-            errors.append(f"kill_condition.trigger_expression cannot be placeholder {expr!r}")
+            errors.append(
+                f"kill_condition.trigger_expression cannot be placeholder {expr!r}"
+            )
         if not isinstance(metric, str) or not metric.strip():
             errors.append("kill_condition.evaluation_metric must be a non-empty string")
 
@@ -543,10 +574,14 @@ def validate_capability_record(
             if not thresh.strip():
                 errors.append("kill_condition.threshold string cannot be empty")
         else:
-            errors.append("kill_condition.threshold must be a finite number or non-empty string")
+            errors.append(
+                "kill_condition.threshold must be a finite number or non-empty string"
+            )
 
         if act not in KILL_ACTIONS:
-            errors.append(f"kill_condition.action must be one of {sorted(KILL_ACTIONS)}, got {act!r}")
+            errors.append(
+                f"kill_condition.action must be one of {sorted(KILL_ACTIONS)}, got {act!r}"
+            )
         if not isinstance(trigd, bool):
             errors.append("kill_condition.triggered must be a boolean")
         elif trigd is True:
@@ -555,7 +590,9 @@ def validate_capability_record(
                     f"promoted capability {cid!r} has kill condition is triggered ({trig_reason or expr}) and cannot remain promoted"
                 )
             if not isinstance(trig_reason, str) or not trig_reason.strip():
-                errors.append("triggered kill_condition requires non-empty trigger_reason")
+                errors.append(
+                    "triggered kill_condition requires non-empty trigger_reason"
+                )
 
     # Limits validation
     limits = rec_dict.get("unresolved_limits")
@@ -565,13 +602,23 @@ def validate_capability_record(
         for lim in limits:
             if not isinstance(lim, str) or not lim.strip():
                 errors.append("unresolved limit entry must be a non-empty string")
-        if disposition in (DISPOSITION_PROMOTED, DISPOSITION_EXPERIMENTAL_SHADOW, DISPOSITION_NON_PROMOTED):
+        if disposition in (
+            DISPOSITION_PROMOTED,
+            DISPOSITION_EXPERIMENTAL_SHADOW,
+            DISPOSITION_NON_PROMOTED,
+        ):
             if not limits:
-                errors.append(f"{disposition} capability cannot declare empty unresolved_limits")
+                errors.append(
+                    f"{disposition} capability cannot declare empty unresolved_limits"
+                )
 
     # Utility basis validation
     utility = rec_dict.get("utility_basis")
-    if disposition in (DISPOSITION_PROMOTED, DISPOSITION_NON_PROMOTED, DISPOSITION_EXPERIMENTAL_SHADOW):
+    if disposition in (
+        DISPOSITION_PROMOTED,
+        DISPOSITION_NON_PROMOTED,
+        DISPOSITION_EXPERIMENTAL_SHADOW,
+    ):
         if not isinstance(utility, Mapping) or not utility:
             errors.append(
                 f"{disposition} capability {cid!r} requires utility_basis demonstrating complexity-adjusted utility or disposition justification"
@@ -591,14 +638,21 @@ def validate_capability_record(
             just = utility.get("justification_summary")
 
             if not isinstance(art, str) or not art.strip():
-                errors.append("utility_basis.evidence_artifact must be a valid path string")
+                errors.append(
+                    "utility_basis.evidence_artifact must be a valid path string"
+                )
             if not isinstance(sha, str) or not _HEX64.match(sha):
-                errors.append("utility_basis.evidence_sha256 must be a 64-char hex SHA-256 digest")
+                errors.append(
+                    "utility_basis.evidence_sha256 must be a 64-char hex SHA-256 digest"
+                )
             if lc not in EVIDENCE_LIFECYCLES:
                 errors.append(
                     f"utility_basis.lifecycle must be one of {sorted(EVIDENCE_LIFECYCLES)}, got {lc!r}"
                 )
-            elif disposition == DISPOSITION_PROMOTED and lc in (EVIDENCE_STALE, EVIDENCE_SUPERSEDED):
+            elif disposition == DISPOSITION_PROMOTED and lc in (
+                EVIDENCE_STALE,
+                EVIDENCE_SUPERSEDED,
+            ):
                 errors.append(
                     f"promoted capability {cid!r} cannot rest on {lc} evidence ({art})"
                 )
@@ -619,7 +673,12 @@ def validate_capability_record(
                     )
 
             if q_gain is not None:
-                if not isinstance(q_gain, (int, float)) or isinstance(q_gain, bool) or math.isnan(q_gain) or math.isinf(q_gain):
+                if (
+                    not isinstance(q_gain, (int, float))
+                    or isinstance(q_gain, bool)
+                    or math.isnan(q_gain)
+                    or math.isinf(q_gain)
+                ):
                     errors.append("quality_gain must be a finite float")
 
             if cost_delta is not None:
@@ -627,7 +686,9 @@ def validate_capability_record(
                     errors.append("operational_cost_delta must be a non-empty mapping")
 
             if not isinstance(just, str) or not just.strip():
-                errors.append("utility_basis.justification_summary must be a non-empty string")
+                errors.append(
+                    "utility_basis.justification_summary must be a non-empty string"
+                )
     elif disposition == DISPOSITION_DISABLED:
         if utility is not None and isinstance(utility, Mapping):
             for uk in utility:
@@ -641,23 +702,37 @@ def validate_capability_record(
             op_reason = utility.get("operational_burden_reason")
 
             if not isinstance(art, str) or not art.strip():
-                errors.append("utility_basis.evidence_artifact must be a valid path string")
+                errors.append(
+                    "utility_basis.evidence_artifact must be a valid path string"
+                )
             if not isinstance(sha, str) or not _HEX64.match(sha):
-                errors.append("utility_basis.evidence_sha256 must be a 64-char hex SHA-256 digest")
+                errors.append(
+                    "utility_basis.evidence_sha256 must be a 64-char hex SHA-256 digest"
+                )
             if lc not in EVIDENCE_LIFECYCLES:
-                errors.append(f"utility_basis.lifecycle must be one of {sorted(EVIDENCE_LIFECYCLES)}")
+                errors.append(
+                    f"utility_basis.lifecycle must be one of {sorted(EVIDENCE_LIFECYCLES)}"
+                )
             if conc not in UTILITY_CONCLUSIONS:
-                errors.append(f"utility_basis.complexity_adjusted_conclusion must be one of {sorted(UTILITY_CONCLUSIONS)}")
+                errors.append(
+                    f"utility_basis.complexity_adjusted_conclusion must be one of {sorted(UTILITY_CONCLUSIONS)}"
+                )
             if op_status not in OPERATIONAL_BURDEN_STATUSES:
-                errors.append(f"utility_basis.operational_burden_status must be one of {sorted(OPERATIONAL_BURDEN_STATUSES)}")
-            elif op_status in ("unavailable", "not_applicable") and (not isinstance(op_reason, str) or not op_reason.strip()):
+                errors.append(
+                    f"utility_basis.operational_burden_status must be one of {sorted(OPERATIONAL_BURDEN_STATUSES)}"
+                )
+            elif op_status in ("unavailable", "not_applicable") and (
+                not isinstance(op_reason, str) or not op_reason.strip()
+            ):
                 errors.append(
                     f"operational_burden_status {op_status!r} requires non-empty reason explaining absence"
                 )
         else:
             dis_rat = rec_dict.get("disabled_rationale")
             if not isinstance(dis_rat, str) or not dis_rat.strip():
-                errors.append("disabled capability without utility_basis requires non-empty disabled_rationale")
+                errors.append(
+                    "disabled capability without utility_basis requires non-empty disabled_rationale"
+                )
 
     return errors
 
