@@ -1320,9 +1320,9 @@
   },
   {
    "id": 37,
-   "status_claim": "no_evidence",
-   "gap_type": "B",
-   "gap_note": "Local exactly-once acceptance and truthful refusal/reconciliation are proven; the per-destination external-effect semantics declaration driven by real destination primitives is absent.",
+   "status_claim": "proven",
+   "gap_type": null,
+   "gap_note": null,
    "bindings": [
     {
      "kind": "measurement",
@@ -1350,17 +1350,48 @@
      "scope_files": [
       "backend/tests/test_kernel_recovery_failover.py"
      ]
+    },
+    {
+     "kind": "test",
+     "coverage": "full",
+     "environment": "sqlite-dev (local execution; postgresql parameterizations execute in provisioned CI lanes)",
+     "rationale": "The per-destination external-effect semantics declaration now exists and is driven by real destination primitives: app/kernel/effect_semantics.py derives each label from capability facts, and this suite proves every fact against the real primitives \u2014 fenced acceptance (one-transaction linearization, same-result convergence, divergent rejection, stale-token rejection) on the kernel DB, the output writer's per-file atomicity, partial-set interruption, and collision-avoiding redelivery, and the compatibility projection's guarded replay. Registry semantics must equal derive_semantics(facts) and every declared primitive path must resolve against real code.",
+     "nodes": [
+      "backend/tests/test_kernel_effect_semantics.py::TestDerivationRules::test_every_semantics_label_is_reachable",
+      "backend/tests/test_kernel_effect_semantics.py::TestDerivationRules::test_reconciliation_requirement_dominates_all_other_strengths",
+      "backend/tests/test_kernel_effect_semantics.py::TestDerivationRules::test_atomic_without_identity_primitives_is_at_most_once",
+      "backend/tests/test_kernel_effect_semantics.py::TestDerivationRules::test_non_atomic_without_reconciliation_needs_is_at_least_once",
+      "backend/tests/test_kernel_effect_semantics.py::TestDerivationRules::test_real_destination_vectors_map_to_declared_labels",
+      "backend/tests/test_kernel_effect_semantics.py::TestRegistryIntegrity::test_registry_semantics_always_match_derivation",
+      "backend/tests/test_kernel_effect_semantics.py::TestRegistryIntegrity::test_destination_ids_are_unique_and_lookup_is_exact",
+      "backend/tests/test_kernel_effect_semantics.py::TestRegistryIntegrity::test_declared_primitives_resolve_against_real_code",
+      "backend/tests/test_kernel_effect_semantics.py::TestRegistryIntegrity::test_reconciliation_note_required_exactly_when_orphans_possible",
+      "backend/tests/test_kernel_effect_semantics.py::TestAcceptedPublicationCapabilityFacts::test_linearizes_in_transaction_single_publication_row[sqlite]",
+      "backend/tests/test_kernel_effect_semantics.py::TestAcceptedPublicationCapabilityFacts::test_suppresses_duplicate_delivery_same_result_converges[sqlite]",
+      "backend/tests/test_kernel_effect_semantics.py::TestAcceptedPublicationCapabilityFacts::test_rejects_divergent_effect_state_unchanged[sqlite]",
+      "backend/tests/test_kernel_effect_semantics.py::TestAcceptedPublicationCapabilityFacts::test_stale_fencing_token_never_reaches_comparison[sqlite]",
+      "backend/tests/test_kernel_effect_semantics.py::TestFilesystemOutputCapabilityFacts::test_redelivery_writes_new_collision_avoided_set",
+      "backend/tests/test_kernel_effect_semantics.py::TestFilesystemOutputCapabilityFacts::test_interrupted_set_surfaces_error_and_leaves_partial_bytes",
+      "backend/tests/test_kernel_effect_semantics.py::TestFilesystemOutputCapabilityFacts::test_per_file_writes_leave_no_temporary_residue",
+      "backend/tests/test_kernel_effect_semantics.py::TestCompatibilityProjectionCapabilityFacts::test_projection_projects_accepted_truth_once[sqlite]",
+      "backend/tests/test_kernel_effect_semantics.py::TestCompatibilityProjectionCapabilityFacts::test_replay_on_terminal_row_is_a_guarded_no_op[sqlite]",
+      "backend/tests/test_kernel_effect_semantics.py::TestCompatibilityProjectionCapabilityFacts::test_projection_refuses_to_overwrite_terminal_failure[sqlite]"
+     ],
+     "scope_files": [
+      "backend/tests/test_kernel_effect_semantics.py"
+     ]
     }
    ],
    "context_docs": [
-    "docs/reference/kernel-runtime-integration.md"
+    "docs/reference/kernel-runtime-integration.md",
+    "docs/reference/readiness/inv37-38-runtime-failure-plane-closure.md"
    ]
   },
   {
    "id": 38,
-   "status_claim": "no_evidence",
-   "gap_type": "D",
-   "gap_note": "Cancellation/failover/disk/model-service(lease-lapse) classes are covered on the SQLite lane and DB-outage/WAL semantics on the PG failover lab; shared-memory pressure is not injected anywhere (the shared-memory lane was measured and rejected in PR68A), and no literal model-service crash injection exists.",
+   "status_claim": "proven",
+   "gap_type": null,
+   "gap_note": null,
    "bindings": [
     {
      "kind": "test",
@@ -1393,11 +1424,44 @@
       "backend/tests/test_kernel_pg_failover_promotion.py",
       "backend/tests/test_kernel_recovery_failover.py"
      ]
+    },
+    {
+     "kind": "failure_injection",
+     "coverage": "full",
+     "environment": "sqlite-dev (local failure-injection lane; postgresql parameterizations execute in provisioned CI lanes)",
+     "rationale": "Every failure class of the invariant produces truthful terminal or recovery outcomes on the live production path: cancellation (race with late results and durability across full manager recreation), coordinator failover (owner-death takeover, natural lease-lapse takeover under a hung destination, competing dispatch loops), disk corruption (degraded/corrupt-not-complete), database outage at the acceptance boundary (bounded and persistent), model-service crash (a real child process killed mid-work), and shared-memory pressure (MemoryError from the converter). Pressure runs exceed the fan-out cap and mix fast/slow/transient/hard/cancelled work under one coordinator with exact retry accounting, publication uniqueness, and no contamination of healthy work.",
+     "nodes": [
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestDestinationIsolation::test_hung_destination_does_not_block_unrelated_work[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestDestinationIsolation::test_deterministic_destination_failure_is_terminal_truth[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestDestinationIsolation::test_transient_destination_failure_retries_and_converges[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestDestinationIsolation::test_natural_lease_lapse_during_hung_destination",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestAcceptanceBoundaryInterruptions::test_acceptance_outage_then_recovery_converges[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestAcceptanceBoundaryInterruptions::test_persistent_acceptance_outage_is_terminal_not_fake_success[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestCancellationDurability::test_cancelled_work_survives_manager_recreation",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestModelServiceCrash::test_external_model_service_kill_is_truthful_and_isolated",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestModelServiceCrash::test_crash_then_retry_converges_exactly_once",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestSharedMemoryPressure::test_shared_memory_exhaustion_fails_truthfully[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestPressure::test_max_in_flight_cap_never_oversubscribes[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestPressure::test_mixed_workload_confluence[sqlite]",
+      "backend/tests/test_kernel_runtime_failure_plane.py::TestPressure::test_renewals_hold_under_concurrent_activity",
+      "backend/tests/test_kernel_runtime.py::TestCancellation::test_cancel_during_execution_beats_late_result[sqlite]",
+      "backend/tests/test_kernel_runtime.py::TestCrashRestartMatrix::test_boundary_claimed_then_owner_died_takeover[sqlite]",
+      "backend/tests/test_kernel_runtime.py::TestCrashRestartMatrix::test_boundary_lapse_budget_exhausted_fails_terminal[sqlite]",
+      "backend/tests/test_kernel_runtime.py::TestStaleWorker::test_late_success_cannot_complete_or_renew[sqlite]",
+      "backend/tests/test_kernel_reconcile.py::test_removed_committed_payload_is_degraded_not_complete",
+      "backend/tests/test_kernel_reconcile.py::test_modified_committed_payload_is_corrupt_not_complete"
+     ],
+     "scope_files": [
+      "backend/tests/test_kernel_runtime_failure_plane.py",
+      "backend/tests/test_kernel_runtime.py",
+      "backend/tests/test_kernel_reconcile.py"
+     ]
     }
    ],
    "context_docs": [
     "docs/reference/pr83c1-industrial-recovery.md",
-    "docs/reference/pr83c2-pg-failover.md"
+    "docs/reference/pr83c2-pg-failover.md",
+    "docs/reference/readiness/inv37-38-runtime-failure-plane-closure.md"
    ]
   },
   {

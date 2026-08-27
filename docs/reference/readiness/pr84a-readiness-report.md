@@ -2,10 +2,10 @@
 
 **Overall verdict: NOT_READY** (mechanically derived; never hand-set)
 
-- Audited source head: `14535df068041137d9bf0b792b0bff9b93c753da`
-- Invariants proven: **53 / 62**
+- Audited source head: `6734d110e69c8d2ed29d0d9813f1a01571391512`
+- Invariants proven: **55 / 62**
 - Failed: **0**
-- No acceptable evidence: **9**
+- No acceptable evidence: **7**
 
 ## Group summary
 
@@ -14,7 +14,7 @@
 | 23C.1 | Truth and persistence | 5 | 0 | 4 |
 | 23C.2 | Geometry, patches, and incrementality | 8 | 0 | 1 |
 | 23C.3 | Verification and routing | 9 | 0 | 0 |
-| 23C.4 | Runtime and jobs | 8 | 0 | 3 |
+| 23C.4 | Runtime and jobs | 10 | 0 | 1 |
 | 23C.5 | Source, authorization, and retrieval | 9 | 0 | 1 |
 | 23C.6 | Agent and product behavior | 8 | 0 | 0 |
 | 23C.7 | Economics and claim language | 6 | 0 | 0 |
@@ -59,8 +59,8 @@
 | 34 | 23C.4 | proven | sqlite-dev |
 | 35 | 23C.4 | proven | sqlite-dev |
 | 36 | 23C.4 | proven | sqlite-dev |
-| 37 | 23C.4 | no-evidence | proof exists but was environment-gated in the recorded run |
-| 38 | 23C.4 | no-evidence | proof exists but was environment-gated in the recorded run |
+| 37 | 23C.4 | proven | sqlite-dev (local execution; postgresql parameterizations execute in provisioned CI lanes) |
+| 38 | 23C.4 | proven | sqlite-dev (local failure-injection lane; postgresql parameterizations execute in provisioned CI lanes) |
 | 39 | 23C.5 | proven | sqlite-dev |
 | 40 | 23C.5 | proven | sqlite-dev |
 | 41 | 23C.5 | proven | sqlite-dev |
@@ -96,20 +96,18 @@ Gap types: **A** — implementation missing; **B** — behavior appears present,
 - **Inv 4** (23C.1, blob-vs-observation-identity): Separation is demonstrated indirectly (GC rescue keys on blob_key; evidence classes are distinct record identities); a direct dedup-collision test naming both identities is missing. Reason: executed proof covers only part of the invariant wording.
 - **Inv 13** (23C.2, cross-page-fragment-preservation): Continuation-edge and alternative-preservation semantics exist; the all-fragments + full-provenance preservation property for cross-page continuations and multi-page tables has no executable assertion. Reason: executed proof covers only part of the invariant wording.
 - **Inv 30** (23C.4, admission-memory-envelope): PR69 landed the admission subsystem keyed to the pinned preprocessor's visual-token/memory envelope (runtime_capacity.py + worker/thread gates) with deterministic, race, worker-integration, and OOM-injection suites green and a committed estimate-mode characterization artifact; the invariant's full wording additionally requires dynamic-resolution GPU OOM-stress evidence on real CUDA hardware, which has not been executed yet, so coverage stays partial. Reason: executed proof covers only part of the invariant wording.
-- **Inv 37** (23C.4, external-effect-semantics-declared): Local exactly-once acceptance and truthful refusal/reconciliation are proven; the per-destination external-effect semantics declaration driven by real destination primitives is absent. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 43** (23C.5, revocation-slo): Revocation effectiveness without content events is proven and measured; a declared numeric SLO (bound/latency) is neither declared nor asserted. Reason: executed proof covers only part of the invariant wording.
 
 ### Type D — evidence valid but narrower than the invariant
 
 - **Inv 3** (23C.1, crash-injection-no-partial-state): Crash atomicity for mutations/decisions/publication pointers/effects is proven on SQLite; source-cursor and full recovery crash injection runs in the PG+S3 industrial environment (env-gated here). No cross-topology crash claim beyond the CI-grade lab. Reason: proof exists but was environment-gated in the recorded run.
 - **Inv 6** (23C.1, canonical-id-cross-platform): Determinism proven multi-OS × multi-Python on x86_64 with committed golden constants; the invariant's literal cross-language and ARM64 clauses have no executable fixture (no second-language implementation, no ARM64 runner). Reason: executed proof covers only part of the invariant wording.
-- **Inv 38** (23C.4, failure-injection-truthful-outcomes): Cancellation/failover/disk/model-service(lease-lapse) classes are covered on the SQLite lane and DB-outage/WAL semantics on the PG failover lab; shared-memory pressure is not injected anywhere (the shared-memory lane was measured and rejected in PR68A), and no literal model-service crash injection exists. Reason: proof exists but was environment-gated in the recorded run.
 
 ### Next-slice ranking (groups with most non-proven invariants)
 
 - 23C.1 Truth and persistence: 4 non-proven
-- 23C.4 Runtime and jobs: 3 non-proven
 - 23C.2 Geometry, patches, and incrementality: 1 non-proven
+- 23C.4 Runtime and jobs: 1 non-proven
 - 23C.5 Source, authorization, and retrieval: 1 non-proven
 
 ## Reproduction
