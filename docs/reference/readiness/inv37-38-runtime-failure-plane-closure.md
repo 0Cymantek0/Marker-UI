@@ -120,6 +120,12 @@ python backend/scripts/readiness_audit.py --mode integrity
 
 # broad regression
 cd backend && python -m pytest tests conformance -q
+# 3917 passed / 3 failed / 224 skipped in 24m06s
+# The 3 failures are PR84C displacement-eval tests outside this slice's
+# diff surface; each passed standalone in three consecutive isolated
+# runs (18/18 per run) — the same under-load transient class the two
+# previous closure records documented (§5.1). Skip delta +16 vs the
+# prior closure = this slice's [postgresql] parameterizations.
 ```
 
 Skips are the PostgreSQL parameterizations without a provisioned admin URL —
