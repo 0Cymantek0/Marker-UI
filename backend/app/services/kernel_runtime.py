@@ -19,7 +19,10 @@ execution:
   the real control loop produced fresh activity (progress/log/status
   evidence). A wedged converter stops producing evidence, stops
   renewing, and becomes takeover-eligible. There is no detached
-  heartbeat that can outlive the work it claims to represent.
+  heartbeat that can outlive the work it claims to represent. The
+  claim-to-start gap is bounded structurally instead: executor
+  parallelism is aligned with ``max_in_flight`` so claimed work starts
+  without a liveness-blind queue wait.
 * **acceptance** — success is linearized by ``scheduler.accept_work``
   (PR66 fence + publication). The compatibility ``ConversionJob`` row
   may only read ``completed`` AFTER acceptance commits. The accepted
@@ -660,6 +663,9 @@ class KernelRuntimeCoordinator:
                 # No real control-loop evidence since the last renewal:
                 # renewing anyway would be a heartbeat lie. Let the lease
                 # lapse; the watchdog makes the work takeover-eligible.
+                # (Claim-to-start latency is bounded structurally: the
+                # runtime aligns executor parallelism with max_in_flight
+                # so claimed work starts without a queue wait.)
                 continue
             try:
                 outcome = await liveness.renew_lease(
@@ -999,6 +1005,16 @@ class KernelRuntimeCoordinator:
                     logger.warning("lost-ack repair failed for work %d", work_id)
                 continue
             if lease is None:
+                # The fence is gone, but the in_flight snapshot this
+                # pass iterates may predate a concurrent release by the
+                # live owner (the fail/retry path releases the fence
+                # before the outbox row). Re-read the CURRENT durable
+                # outbox state: only genuinely stranded in_flight work
+                # is requeued here — never work the owner already
+                # returned to pending or completed.
+                fresh = await self._outbox_view(work_id)
+                if fresh is not None and fresh.state != "in_flight":
+                    continue
                 await kernel_outbox.release(self._sf, work_id)
                 continue
             if lease.state == "leased" and lease.lease_expires_at is not None:
@@ -1035,6 +1051,16 @@ class KernelRuntimeCoordinator:
         if not job_id:
             await kernel_outbox.release(self._sf, work_id)
             return
+        # Decisions must come from CURRENT durable state, never from the
+        # caller's snapshot: the owner's fail/retry/cancel paths release
+        # the fence BEFORE the outbox row, so a watchdog iterating a
+        # stale in_flight list can reach this point for work the owner
+        # is already returning to pending (or finishing). Re-read the
+        # outbox: only genuinely stranded in_flight work is requeued or
+        # terminal-failed here.
+        view = await self._outbox_view(work_id)
+        if view is None or view.state != "in_flight":
+            return
         max_retries = 0
         async with self._sf() as session:
             row = await session.get(ConversionJob, job_id)
@@ -1043,8 +1069,7 @@ class KernelRuntimeCoordinator:
                 return
             if row is not None:
                 max_retries = int(row.max_retries or 0)
-        view = await self._outbox_view(work_id)
-        attempts = int(view.attempts) if view is not None else 0
+        attempts = int(view.attempts)
         # A lapsed lease is a crash, not an executed failure: one lapse
         # retry is always allowed (legacy recovery parity), then the
         # explicit retry budget governs.
@@ -1205,7 +1230,14 @@ class KernelRuntimeCoordinator:
         result_text: str | None = None
         if result_path and Path(result_path).is_file():
             try:
-                result_text = Path(result_path).read_text(encoding="utf-8", errors="replace")
+                # Off the runtime loop: the accepted primary output can
+                # be large, and this coroutine shares the loop with
+                # dispatch/renewal/watchdog during recovery.
+                result_text = await asyncio.to_thread(
+                    Path(result_path).read_text,
+                    encoding="utf-8",
+                    errors="replace",
+                )
             except OSError:
                 result_text = None
         output_format = str(descriptor.get("output_format") or row.output_format or "markdown")

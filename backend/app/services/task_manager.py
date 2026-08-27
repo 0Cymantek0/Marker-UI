@@ -646,6 +646,21 @@ class TaskManager:
         )
         coordinator.set_conversion_service(conversion_service)
         self._kernel_runtime = coordinator
+        cpu_workers = getattr(self._cpu_backend, "max_workers", None)
+        if cpu_workers is not None and cpu_workers < coordinator.max_in_flight:
+            # Liveness is evidence-only once execution starts, so a
+            # claimed job queued behind a smaller executor pool cannot
+            # renew its lease. Aligning executor parallelism with the
+            # fan-out cap keeps the claim-to-start gap bounded; leaving
+            # them misaligned lets healthy queued work ride out its
+            # whole lease window with no activity evidence.
+            logger.warning(
+                "kernel runtime max_in_flight=%d exceeds cpu executor "
+                "workers=%d; claimed work may queue liveness-blind behind "
+                "the pool — align executor parallelism with the fan-out cap",
+                coordinator.max_in_flight,
+                cpu_workers,
+            )
         return coordinator
 
     async def submit_conversion(
@@ -1940,7 +1955,16 @@ class TaskManager:
         else:
             target_dir = Path("data/output")
 
-        written = write_conversion_output(
+        # The destination write is blocking filesystem IO (atomic temp +
+        # rename per file). It must run OFF the shared runtime event
+        # loop: this coroutine executes on the loop that also owns
+        # dispatch, lease renewal, and the watchdog, so a slow or hung
+        # destination (network stall, full disk) parked on the loop
+        # would freeze every unrelated job's finalization and lapse
+        # healthy leases. asyncio.to_thread keeps the loop live while
+        # the worker thread blocks on the write.
+        written = await asyncio.to_thread(
+            write_conversion_output,
             result,
             source_name=original_name or job_id,
             output_base=target_dir,
